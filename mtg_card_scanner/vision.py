@@ -4,11 +4,13 @@ import base64
 import json
 import re
 from dataclasses import dataclass, field
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 import cv2
 import numpy as np
-from openai import OpenAI
+
+if TYPE_CHECKING:
+    from openai import OpenAI as _OpenAI
 
 ConditionGrade = Literal["NM", "LP", "MP", "HP", "DMG"]
 
@@ -76,6 +78,13 @@ class VisionModel:
         model: str = "qwen2.5-vl:7b",
     ) -> None:
         self.model = model
+        try:
+            from openai import OpenAI
+        except ImportError as exc:
+            raise ImportError(
+                "The 'openai' package is required for live scanning. "
+                "Install it with: pip install openai"
+            ) from exc
         self.client = OpenAI(base_url=endpoint, api_key="ollama")
 
     def read_card(self, frame: np.ndarray) -> CardRead:

@@ -82,7 +82,7 @@ class TestLookupFallback:
 
     def test_raises_when_no_set_or_name(self):
         client = ScryfallClient()
-        with pytest.raises(ScryfallError, match="no set_code"):
+        with pytest.raises(ScryfallError, match="no name available"):
             client.lookup("", "", "")
 
     def test_raises_when_both_attempts_fail(self):
