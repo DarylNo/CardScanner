@@ -1,4 +1,4 @@
-"""Scryfall API client with rate-limiting and fuzzy-name fallback."""
+"""Scryfall API client with rate-limiting and a 3-tier lookup strategy."""
 
 import time
 from typing import Any
@@ -37,26 +37,71 @@ class ScryfallClient:
         return resp.json()
 
     def lookup_by_set_collector(self, set_code: str, collector_number: str) -> dict[str, Any]:
-        """Exact lookup — the most reliable path when set_code + collector_number are known."""
+        """Exact lookup by set code + collector number."""
         url = f"{SCRYFALL_BASE}/cards/{set_code.lower()}/{collector_number}"
         return self._get(url)
 
+    def lookup_by_set_name(self, set_code: str, name: str) -> dict[str, Any]:
+        """
+        Search by exact card name within a specific set.
+        Handles collector-number digit misreads (e.g. 6 misread as 8).
+        """
+        data = self._get(
+            f"{SCRYFALL_BASE}/cards/search",
+            q=f'!"{name}" set:{set_code.lower()}',
+        )
+        cards = data.get("data", [])
+        if not cards:
+            raise ScryfallError(f"No card '{name}' in set '{set_code}'")
+        return cards[0]
+
     def lookup_by_name(self, name: str) -> dict[str, Any]:
-        """Fuzzy name search — fallback for older cards or when collector info is unreadable."""
+        """Global fuzzy name search — last resort, may return a different printing."""
         return self._get(f"{SCRYFALL_BASE}/cards/named", fuzzy=name)
 
     def lookup(self, set_code: str, collector_number: str, name: str) -> dict[str, Any]:
         """
-        Try exact set+collector lookup first; fall back to fuzzy name search.
-        Raises ScryfallError if both attempts fail.
+        3-tier lookup strategy:
+
+        1. Exact set + collector_number.  If it returns a DIFFERENT card name than
+           the model read, we treat it as a digit-misread and fall through.
+        2. Exact name within the set (set_code + name search).  Survives digit
+           misreads in the collector number.
+        3. Global fuzzy name search — last resort.  May return a different printing.
+
+        Raises ScryfallError if all three tiers fail.
         """
+        # Tier 1 — exact set + collector
         if set_code and collector_number:
             try:
-                return self.lookup_by_set_collector(set_code, collector_number)
+                card = self.lookup_by_set_collector(set_code, collector_number)
+                scryfall_name = card.get("name", "").strip().lower()
+                model_name    = name.strip().lower() if name else ""
+                if not model_name or scryfall_name == model_name:
+                    return card
+                # Names don't match — digit misread likely.  Log and fall through.
+                print(
+                    f"  [scryfall] Tier-1 name mismatch: got '{card.get('name')}', "
+                    f"expected '{name}' — trying set+name search"
+                )
             except ScryfallError as exc:
-                print(f"  Set/collector lookup failed ({exc}), trying name search…")
+                print(f"  [scryfall] Tier-1 failed: {exc}")
 
+        # Tier 2 — exact name within set
+        if set_code and name:
+            try:
+                card = self.lookup_by_set_name(set_code, name)
+                print(
+                    f"  [scryfall] Tier-2 hit: {card.get('name')} "
+                    f"({set_code.upper()} #{card.get('collector_number')})"
+                )
+                return card
+            except ScryfallError as exc:
+                print(f"  [scryfall] Tier-2 failed: {exc}")
+
+        # Tier 3 — global fuzzy name
         if name:
+            print(f"  [scryfall] Tier-3: global fuzzy search for '{name}'")
             return self.lookup_by_name(name)
 
         raise ScryfallError(

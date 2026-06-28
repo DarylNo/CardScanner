@@ -63,15 +63,15 @@ def format_listing(result: ScanResult) -> str:
     lang = result.language.upper()
 
     lines = [
-        "─" * 60,
+        "-" * 60,
         f"  {result.scryfall_name}{foil_tag}",
-        f"  {result.scryfall_set_name}  ·  #{result.collector_number}  ({lang})",
+        f"  {result.scryfall_set_name}  |  #{result.collector_number}  ({lang})",
         f"  {result.scryfall_type}",
         f"  {result.scryfall_rarity.title()}",
-        f"  Condition : {result.condition}  —  {result.condition_reason}",
+        f"  Condition : {result.condition}  --  {result.condition_reason}",
         f"  Price (USD): {price_str}",
         f"  Scryfall  : {result.scryfall_uri}",
-        "─" * 60,
+        "-" * 60,
     ]
     return "\n".join(lines)
 
