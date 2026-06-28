@@ -46,13 +46,19 @@ pip install -r requirements.txt
 
 ```bash
 # Recommended — good balance of speed and accuracy on a 3090
-ollama pull qwen2.5-vl:7b
+# NOTE: Ollama uses qwen2.5vl (no hyphen between 2.5 and vl)
+ollama pull qwen2.5vl:7b
 
 # Higher accuracy (needs ~20 GB VRAM)
-ollama pull qwen2.5-vl:32b
+ollama pull qwen2.5vl:32b
 
 # Lighter option
-ollama pull qwen2.5-vl:3b
+ollama pull qwen2.5vl:3b
+```
+
+If Ollama is running in Docker:
+```bash
+docker exec ollama ollama pull qwen2.5vl:7b
 ```
 
 Verify Ollama is serving at `http://localhost:11434`:
@@ -158,10 +164,10 @@ Edit `.env` (or pass `--model`):
 
 ```env
 # Lighter — faster, less accurate
-VISION_MODEL=qwen2.5-vl:3b
+VISION_MODEL=qwen2.5vl:3b
 
 # Heavier — slower, more accurate
-VISION_MODEL=qwen2.5-vl:32b
+VISION_MODEL=qwen2.5vl:32b
 
 # Any other Ollama vision model
 VISION_MODEL=llava:13b

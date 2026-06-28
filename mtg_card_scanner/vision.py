@@ -75,7 +75,7 @@ class VisionModel:
     def __init__(
         self,
         endpoint: str = "http://localhost:11434/v1",
-        model: str = "qwen2.5-vl:7b",
+        model: str = "qwen2.5vl:7b",
     ) -> None:
         self.model = model
         try:

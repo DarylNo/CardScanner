@@ -5,6 +5,7 @@ import argparse
 import os
 import sys
 from pathlib import Path
+from typing import Optional
 
 from dotenv import load_dotenv
 
@@ -19,16 +20,16 @@ def _build_parser() -> argparse.ArgumentParser:
         epilog="""
 Examples:
   python main.py --demo                    # test pipeline without camera/model
-  python main.py                           # ENTER to capture each card
-  python main.py --auto                    # auto-capture when card is steady
-  python main.py --output results.json     # save to JSON instead of CSV
+  python main.py                           # live preview, SPACE/S to capture
+  python main.py --auto                    # live preview, auto-capture on steady
+  python main.py --output results.json     # save to JSON
   python main.py --model qwen2.5-vl:32b   # use a larger model
         """,
     )
     p.add_argument(
         "--demo",
         action="store_true",
-        help="Demo mode — runs Scryfall + output pipeline against a sample card read (no camera or model needed).",
+        help="Demo mode — Scryfall + output pipeline against a sample card (no camera/model).",
     )
     p.add_argument(
         "--camera",
@@ -40,16 +41,11 @@ Examples:
     p.add_argument(
         "--auto",
         action="store_true",
-        help="Auto-capture when the card image is steady (no keypress needed).",
-    )
-    p.add_argument(
-        "--once",
-        action="store_true",
-        help="Scan exactly one card then exit.",
+        help="Auto-capture when the card image is steady.",
     )
     p.add_argument(
         "--model",
-        default=os.getenv("VISION_MODEL", "qwen2.5-vl:7b"),
+        default=os.getenv("VISION_MODEL", "qwen2.5vl:7b"),
         help="Ollama model name (default: %(default)s).",
     )
     p.add_argument(
@@ -75,9 +71,9 @@ def main() -> None:
     from mtg_card_scanner.pipeline import Pipeline
 
     scryfall = ScryfallClient()
-    writer = OutputWriter(args.output)
+    writer   = OutputWriter(args.output)
 
-    # ── Demo mode ────────────────────────────────────────────────────────────
+    # ── Demo mode ─────────────────────────────────────────────────────────────
     if args.demo:
         pipeline = Pipeline(model=None, scryfall=scryfall, writer=writer)
         try:
@@ -91,45 +87,38 @@ def main() -> None:
 
     # ── Live mode ─────────────────────────────────────────────────────────────
     from mtg_card_scanner.vision import VisionModel
-    from mtg_card_scanner.capture import capture_frame, wait_for_steady_frame
+    from mtg_card_scanner.preview import ScannerPreview
 
-    model = VisionModel(endpoint=args.endpoint, model=args.model)
+    model    = VisionModel(endpoint=args.endpoint, model=args.model)
     pipeline = Pipeline(model=model, scryfall=scryfall, writer=writer)
 
     print(f"MTG Card Scanner")
     print(f"  Model   : {args.model} @ {args.endpoint}")
     print(f"  Camera  : {args.camera}")
     print(f"  Output  : {args.output}")
-    if args.auto:
-        print("  Mode    : auto-capture (hold card steady)")
-    else:
-        print("  Mode    : manual (press ENTER to capture)")
+    print(f"  Mode    : {'auto-capture (steady)' if args.auto else 'manual (S/SPACE)'}")
     print()
 
-    while True:
+    def scan_callback(frame):
+        """Called by the preview window when a capture is triggered."""
         try:
-            if args.auto:
-                frame = wait_for_steady_frame(camera_index=args.camera)
-            else:
-                try:
-                    input("Press ENTER to capture card (Ctrl-C to quit)… ")
-                except EOFError:
-                    break
-                frame = capture_frame(camera_index=args.camera)
-
             result = pipeline.run_once(frame)
+            # Print listing to console as well as showing it on the overlay
             print(format_listing(result))
             print(f"Appended to {args.output}\n")
-
-            if args.once:
-                break
-
-        except KeyboardInterrupt:
-            print("\nExiting.")
-            break
+            return result
         except Exception as exc:
-            print(f"\nError: {exc}", file=sys.stderr)
-            print("Press ENTER to try again, or Ctrl-C to quit.\n")
+            print(f"Scan error: {exc}", file=sys.stderr)
+            return None
+
+    preview = ScannerPreview(camera_index=args.camera)
+    try:
+        preview.run(callback=scan_callback, auto_mode=args.auto)
+    except KeyboardInterrupt:
+        pass
+    except RuntimeError as exc:
+        print(f"\nError: {exc}", file=sys.stderr)
+        sys.exit(1)
 
 
 if __name__ == "__main__":
