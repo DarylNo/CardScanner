@@ -9,6 +9,27 @@ SCRYFALL_BASE = "https://api.scryfall.com"
 USER_AGENT = "MTGCardScanner/1.0 (contact: your-email@example.com)"
 _MIN_DELAY = 0.11  # ~9 req/s, safely under the 10 req/s limit
 
+# Map common OCR language-code variants to Scryfall canonical codes.
+_LANG_NORMALIZE: dict[str, str] = {
+    "jp":  "ja",   # Japanese (common OCR output)
+    "jap": "ja",
+    "cn":  "zhs",  # Simplified Chinese
+    "chi": "zhs",
+    "tw":  "zht",  # Traditional Chinese
+    "cht": "zht",
+}
+
+
+def _normalize_lang(lang: str) -> str:
+    """Return the Scryfall-canonical language code for *lang*."""
+    clean = (lang or "").lower().strip()
+    return _LANG_NORMALIZE.get(clean, clean)
+
+
+def _safe_print(s: str) -> str:
+    """Return *s* with non-ASCII characters replaced so Windows console won't crash."""
+    return str(s).encode("ascii", errors="replace").decode("ascii")
+
 
 class ScryfallError(Exception):
     pass
@@ -36,10 +57,24 @@ class ScryfallClient:
         resp.raise_for_status()
         return resp.json()
 
-    def lookup_by_set_collector(self, set_code: str, collector_number: str) -> dict[str, Any]:
-        """Exact lookup by set code + collector number."""
-        url = f"{SCRYFALL_BASE}/cards/{set_code.lower()}/{collector_number}"
-        return self._get(url)
+    def lookup_by_set_collector(self, set_code: str, collector_number: str,
+                                language: str = "") -> dict[str, Any]:
+        """Exact lookup by set code + collector number.
+
+        When *language* is provided and is not English, tries the language-specific
+        endpoint (/cards/{set}/{num}/{lang}) first so prices and the Scryfall URI
+        point to the correct printing.  Falls back to the default (English) endpoint
+        on 404.
+        """
+        lang = _normalize_lang(language)
+        if lang and lang != "en":
+            try:
+                return self._get(
+                    f"{SCRYFALL_BASE}/cards/{set_code.lower()}/{collector_number}/{lang}"
+                )
+            except ScryfallError:
+                pass  # language-specific printing not found — fall back to English
+        return self._get(f"{SCRYFALL_BASE}/cards/{set_code.lower()}/{collector_number}")
 
     def lookup_by_set_name(self, set_code: str, name: str) -> dict[str, Any]:
         """
@@ -59,27 +94,105 @@ class ScryfallClient:
         """Global fuzzy name search — last resort, may return a different printing."""
         return self._get(f"{SCRYFALL_BASE}/cards/named", fuzzy=name)
 
-    def lookup(self, set_code: str, collector_number: str, name: str) -> dict[str, Any]:
+    def lookup_old_card(self, name: str, artist: str = "") -> dict[str, Any]:
+        """
+        Find the correct printing of a pre-Exodus card (no collector number on card).
+
+        Strategy:
+          1. Fetch all printings with unique=prints, sorted oldest first.
+          2. Filter to old-frame cards (frame "1993" or "1997").
+          3. If an artist name was read from the card, pick the printing whose artist
+             name contains the read string (case-insensitive substring match).
+          4. Fall back to the oldest old-frame printing if no artist match.
+        """
+        print(f"  [scryfall] Old-card search: all printings of '{_safe_print(name)}'")
+        data = self._get(
+            f"{SCRYFALL_BASE}/cards/search",
+            q=f'!"{name}"',
+            unique="prints",
+            order="released",
+            dir="asc",
+            include_extras="true",
+        )
+        cards = data.get("data", [])
+        if not cards:
+            raise ScryfallError(f"No printings found for '{name}'")
+
+        # Prefer old-frame printings
+        old_frame = [c for c in cards if c.get("frame") in ("1993", "1997")]
+        candidates = old_frame if old_frame else cards
+
+        if artist:
+            artist_lc = artist.lower().strip()
+            matched = [c for c in candidates
+                       if artist_lc in c.get("artist", "").lower()]
+            if matched:
+                chosen = matched[0]
+                print(
+                    f"  [scryfall] Old-card artist match: {chosen.get('name')} "
+                    f"({chosen.get('set', '').upper()} #{chosen.get('collector_number')}) "
+                    f"artist={chosen.get('artist')}"
+                )
+                return chosen
+
+        chosen = candidates[0]
+        print(
+            f"  [scryfall] Old-card oldest-frame pick: {chosen.get('name')} "
+            f"({chosen.get('set', '').upper()} #{chosen.get('collector_number')}) "
+            f"frame={chosen.get('frame')} artist={chosen.get('artist')}"
+        )
+        return chosen
+
+    def get_all_printings(self, name: str) -> list[dict[str, Any]]:
+        """
+        Fetch all printings of a card by exact name, sorted oldest-first.
+
+        Returns only cards that have image_uris (needed for pHash comparison).
+        Raises ScryfallError if the card name is not found at all.
+        """
+        print(f"  [scryfall] Fetching all printings of '{_safe_print(name)}'...")
+        data = self._get(
+            f"{SCRYFALL_BASE}/cards/search",
+            q=f'!"{name}"',
+            unique="prints",
+            order="released",
+            dir="asc",
+            include_extras="true",
+        )
+        cards = data.get("data", [])
+        with_images = [c for c in cards if c.get("image_uris")]
+        print(f"  [scryfall] {len(with_images)} printings with images (of {len(cards)} total)")
+        return with_images
+
+    def lookup(self, set_code: str, collector_number: str, name: str,
+               language: str = "") -> dict[str, Any]:
         """
         3-tier lookup strategy:
 
-        1. Exact set + collector_number.  If it returns a DIFFERENT card name than
-           the model read, we treat it as a digit-misread and fall through.
+        1. Exact set + collector_number (language-aware).  If it returns a DIFFERENT
+           card name than the model read AND the card is English, we treat it as a
+           digit-misread and fall through.  For non-English cards the localized name
+           won't match the English oracle name, so we skip the name-match check.
         2. Exact name within the set (set_code + name search).  Survives digit
            misreads in the collector number.
         3. Global fuzzy name search — last resort.  May return a different printing.
 
         Raises ScryfallError if all three tiers fail.
         """
+        lang = _normalize_lang(language)
+        is_non_english = bool(lang and lang != "en")
+
         # Tier 1 — exact set + collector
         if set_code and collector_number:
             try:
-                card = self.lookup_by_set_collector(set_code, collector_number)
+                card = self.lookup_by_set_collector(set_code, collector_number, language)
                 scryfall_name = card.get("name", "").strip().lower()
                 model_name    = name.strip().lower() if name else ""
-                if not model_name or scryfall_name == model_name:
+                # Accept if: no model name to compare, names match, or card is
+                # non-English (localized name won't equal the English oracle name).
+                if not model_name or scryfall_name == model_name or is_non_english:
                     return card
-                # Names don't match — digit misread likely.  Log and fall through.
+                # English names don't match — likely a digit misread.
                 print(
                     f"  [scryfall] Tier-1 name mismatch: got '{card.get('name')}', "
                     f"expected '{name}' — trying set+name search"
@@ -87,8 +200,8 @@ class ScryfallClient:
             except ScryfallError as exc:
                 print(f"  [scryfall] Tier-1 failed: {exc}")
 
-        # Tier 2 — exact name within set
-        if set_code and name:
+        # Tier 2 — exact name within set (English name only; non-English falls through)
+        if set_code and name and not is_non_english:
             try:
                 card = self.lookup_by_set_name(set_code, name)
                 print(
@@ -99,8 +212,8 @@ class ScryfallClient:
             except ScryfallError as exc:
                 print(f"  [scryfall] Tier-2 failed: {exc}")
 
-        # Tier 3 — global fuzzy name
-        if name:
+        # Tier 3 — global fuzzy name (English name only; skip if name is localized)
+        if name and not is_non_english:
             print(f"  [scryfall] Tier-3: global fuzzy search for '{name}'")
             return self.lookup_by_name(name)
 

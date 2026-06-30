@@ -99,10 +99,10 @@ def main() -> None:
     print(f"  Mode    : {'auto-capture (steady)' if args.auto else 'manual (S/SPACE)'}")
     print()
 
-    def scan_callback(frame):
-        """Called by the preview window when a capture is triggered."""
+    def scan_callback(frames):
+        """Called by the preview window with a list of burst frames."""
         try:
-            result = pipeline.run_once(frame)
+            result = pipeline.run_once(frames)
             # Print listing to console as well as showing it on the overlay
             print(format_listing(result))
             print(f"Appended to {args.output}\n")

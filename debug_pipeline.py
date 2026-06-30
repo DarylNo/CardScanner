@@ -46,7 +46,11 @@ print(f"    raw: {read.raw_response[:120]!r}")
 # Scryfall
 sf = ScryfallClient()
 print("[4] Scryfall lookup...")
-card_data = sf.lookup(read.set_code, read.collector_number, read.name)
+if read.is_old_card:
+    print(f"    (old-card path, artist={read.artist!r})")
+    card_data = sf.lookup_old_card(read.name, read.artist)
+else:
+    card_data = sf.lookup(read.set_code, read.collector_number, read.name)
 
 # Result
 result = build_result(read, card_data)

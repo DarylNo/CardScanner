@@ -12,3 +12,16 @@ build/
 *.json
 !.env.example
 scan_results.*
+
+# Debug captures / scan images / verification snapshots — personal card
+# photos and local camera frames, not project source.
+debug/
+*.jpg
+*.jpeg
+*.png
+
+# Local Scryfall card-image cache (downloaded at runtime; lives under the
+# user's home cache dir by default, but ignore defensively in case it's
+# ever pointed at a project-local path).
+.cache/
+card_images/

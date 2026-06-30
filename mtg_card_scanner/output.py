@@ -5,7 +5,7 @@ import json
 from dataclasses import dataclass, asdict, fields
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 from mtg_card_scanner.vision import CardRead
 
@@ -29,15 +29,33 @@ class ScanResult:
     price_usd: str | None
     price_usd_foil: str | None
     scryfall_uri: str
+    # Visual match metadata (optional — populated when pHash was used)
+    match_method: str = ""          # "phash" | "scryfall" | ""
+    phash_distance: Optional[int] = None
+    name_confidence: str = ""       # "high" | "medium" | "low" from consensus vote
+    printing_uncertain: bool = False   # True for basic lands with near-tied art
+    printing_candidates: str = ""      # comma-separated top candidate set codes
 
 
-def build_result(card_read: CardRead, scryfall_card: dict[str, Any]) -> ScanResult:
+def build_result(
+    card_read: CardRead,
+    scryfall_card: dict[str, Any],
+    match_method: str = "",
+    phash_distance: Optional[int] = None,
+    name_confidence: str = "",
+    printing_uncertain: bool = False,
+    printing_candidates: str = "",
+) -> ScanResult:
     prices = scryfall_card.get("prices", {})
     return ScanResult(
         timestamp=datetime.now().isoformat(timespec="seconds"),
         name=card_read.name,
         set_code=card_read.set_code,
-        collector_number=card_read.collector_number,
+        # Prefer the RESOLVED printing's collector number — the vision-read
+        # value can be a misread (or pure OCR garbage); once Scryfall has
+        # matched a real card, its collector number is ground truth. Only
+        # fall back to the raw read when the lookup found nothing at all.
+        collector_number=scryfall_card.get("collector_number") or card_read.collector_number,
         foil=card_read.foil,
         language=card_read.language,
         condition=card_read.condition_estimate,
@@ -49,6 +67,11 @@ def build_result(card_read: CardRead, scryfall_card: dict[str, Any]) -> ScanResu
         price_usd=prices.get("usd"),
         price_usd_foil=prices.get("usd_foil"),
         scryfall_uri=scryfall_card.get("scryfall_uri", ""),
+        match_method=match_method,
+        phash_distance=phash_distance,
+        name_confidence=name_confidence,
+        printing_uncertain=printing_uncertain,
+        printing_candidates=printing_candidates,
     )
 
 
@@ -62,8 +85,18 @@ def format_listing(result: ScanResult) -> str:
     price_str = f"${effective_price}" if effective_price else "N/A"
     lang = result.language.upper()
 
+    # Build match/confidence line
+    match_parts = []
+    if result.match_method == "phash" and result.phash_distance is not None:
+        match_parts.append(f"pHash dist={result.phash_distance}")
+    elif result.match_method:
+        match_parts.append(result.match_method)
+    if result.name_confidence:
+        match_parts.append(f"conf={result.name_confidence}")
+    match_info = f"  Match     : {' | '.join(match_parts)}" if match_parts else ""
+
     lines = [
-        "-" * 60,
+        "=" * 60,
         f"  {result.scryfall_name}{foil_tag}",
         f"  {result.scryfall_set_name}  |  #{result.collector_number}  ({lang})",
         f"  {result.scryfall_type}",
@@ -71,8 +104,14 @@ def format_listing(result: ScanResult) -> str:
         f"  Condition : {result.condition}  --  {result.condition_reason}",
         f"  Price (USD): {price_str}",
         f"  Scryfall  : {result.scryfall_uri}",
-        "-" * 60,
     ]
+    if match_info:
+        lines.append(match_info)
+    if result.printing_uncertain:
+        lines.append("  *** PRINTING UNCERTAIN — art match only; multiple near-tied printings")
+        if result.printing_candidates:
+            lines.append(f"  Top candidates: {result.printing_candidates}")
+    lines.append("=" * 60)
     return "\n".join(lines)
 
 

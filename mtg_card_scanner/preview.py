@@ -20,13 +20,15 @@ import numpy as np
 from mtg_card_scanner.output import ScanResult
 
 # ── tunables ──────────────────────────────────────────────────────────────────
-_STEADY_THRESHOLD = 1.5   # mean-pixel diff below this = steady frame
-_STEADY_NEEDED    = 10    # consecutive steady frames before auto-trigger
-_RESULT_TTL       = 9.0   # seconds to display last scan result
-_FONT             = cv2.FONT_HERSHEY_SIMPLEX
-_WINDOW           = "MTG Card Scanner"
+_STEADY_THRESHOLD  = 1.5   # mean-pixel diff below this = steady frame
+_STEADY_NEEDED     = 10    # consecutive steady frames before auto-trigger
+_RESULT_TTL        = 9.0   # seconds to display last scan result
+_FONT              = cv2.FONT_HERSHEY_SIMPLEX
+_WINDOW            = "MTG Card Scanner"
+_BURST_FRAMES      = 3     # number of frames captured per scan trigger
+_BURST_INTERVAL_MS = 80    # ms between burst frames
 
-ScanCallback = Callable[[np.ndarray], Optional[ScanResult]]
+ScanCallback = Callable[[list], Optional[ScanResult]]
 
 
 @dataclass
@@ -42,9 +44,11 @@ class ScannerPreview:
     and freezes briefly during the model call (typically a few seconds).
     """
 
-    def __init__(self, camera_index: int = 0) -> None:
+    def __init__(self, camera_index: int = 0, burst_frames: int = _BURST_FRAMES) -> None:
         self.camera_index = camera_index
+        self.burst_frames = burst_frames
         self._overlay: Optional[_ResultOverlay] = None
+        self._cap: Optional[cv2.VideoCapture] = None
 
     # ── public ────────────────────────────────────────────────────────────────
 
@@ -66,6 +70,7 @@ class ScannerPreview:
 
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+        self._cap = cap
 
         cv2.namedWindow(_WINDOW, cv2.WINDOW_NORMAL)
         cv2.resizeWindow(_WINDOW, 1280, 720)
@@ -123,25 +128,38 @@ class ScannerPreview:
                     self._do_scan(frame, callback)
 
         finally:
+            self._cap = None
             cap.release()
             cv2.destroyAllWindows()
             print("[preview] Window closed.")
 
     # ── private ───────────────────────────────────────────────────────────────
 
-    def _do_scan(self, frame: np.ndarray, callback: ScanCallback) -> None:
-        """Show a freeze-frame with 'SCANNING' overlay, then call callback."""
-        h, w = frame.shape[:2]
+    def _do_scan(self, trigger_frame: np.ndarray, callback: ScanCallback) -> None:
+        """
+        Capture a burst of frames, show a freeze-frame with 'SCANNING' overlay,
+        then call callback with the list of frames.
+        """
+        h, w = trigger_frame.shape[:2]
 
         # Paint a feedback frame immediately so the user knows it started
-        scanning = frame.copy()
+        scanning = trigger_frame.copy()
         _top_bar(scanning, "SCANNING — please wait...", (0, 200, 255))
         cv2.rectangle(scanning, (0, 0), (w - 1, h - 1), (0, 200, 255), 5)
         cv2.imshow(_WINDOW, scanning)
         cv2.waitKey(1)          # flush to display
 
+        # Capture burst frames (trigger frame + N-1 more)
+        frames = [trigger_frame]
+        for _ in range(self.burst_frames - 1):
+            time.sleep(_BURST_INTERVAL_MS / 1000.0)
+            if self._cap is not None and self._cap.isOpened():
+                ret, f = self._cap.read()
+                if ret and f is not None:
+                    frames.append(f)
+
         try:
-            result = callback(frame)
+            result = callback(frames)
             if result is not None:
                 self._overlay = _ResultOverlay(
                     result=result,
@@ -172,12 +190,24 @@ def _result_panel(img: np.ndarray, overlay: _ResultOverlay) -> None:
     price_val = r.price_usd_foil if (r.foil and r.price_usd_foil) else r.price_usd
     price_str = f"${price_val}" if price_val else "N/A"
 
+    # Build match/confidence summary for 4th line
+    match_parts = []
+    if r.match_method == "phash" and r.phash_distance is not None:
+        match_parts.append(f"pHash d={r.phash_distance}")
+    elif r.match_method:
+        match_parts.append(r.match_method)
+    if r.name_confidence:
+        match_parts.append(f"conf:{r.name_confidence}")
+    match_line = "  ·  ".join(match_parts) if match_parts else ""
+
     lines = [
         (f"{r.scryfall_name}{foil_tag}",                                        (100, 255, 100)),
         (f"{r.scryfall_set_name}  ·  #{r.collector_number}  ·  {r.language.upper()}",  (215, 215, 215)),
         (f"{r.condition}  ·  {r.scryfall_rarity.title()}  ·  {price_str} USD  [{remaining}s]",
          (100, 220, 255)),
     ]
+    if match_line:
+        lines.append((match_line, (180, 180, 100)))
 
     line_h   = 40
     panel_h  = line_h * len(lines) + 16
