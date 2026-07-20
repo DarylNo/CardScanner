@@ -9,7 +9,7 @@
 #   Desktop UI : https://<this-machine-ip>:8443/
 #   Phone camera: https://<this-machine-ip>:8443/phone
 #
-# Env overrides: PORT, OLLAMA_ENDPOINT, VISION_MODEL, SCAN_DB, HOST
+# Env overrides: PORT, SCAN_DB, HOST
 set -euo pipefail
 cd "$(dirname "$0")"
 

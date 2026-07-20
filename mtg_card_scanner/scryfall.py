@@ -94,55 +94,6 @@ class ScryfallClient:
         """Global fuzzy name search — last resort, may return a different printing."""
         return self._get(f"{SCRYFALL_BASE}/cards/named", fuzzy=name)
 
-    def lookup_old_card(self, name: str, artist: str = "") -> dict[str, Any]:
-        """
-        Find the correct printing of a pre-Exodus card (no collector number on card).
-
-        Strategy:
-          1. Fetch all printings with unique=prints, sorted oldest first.
-          2. Filter to old-frame cards (frame "1993" or "1997").
-          3. If an artist name was read from the card, pick the printing whose artist
-             name contains the read string (case-insensitive substring match).
-          4. Fall back to the oldest old-frame printing if no artist match.
-        """
-        print(f"  [scryfall] Old-card search: all printings of '{_safe_print(name)}'")
-        data = self._get(
-            f"{SCRYFALL_BASE}/cards/search",
-            q=f'!"{name}"',
-            unique="prints",
-            order="released",
-            dir="asc",
-            include_extras="true",
-        )
-        cards = data.get("data", [])
-        if not cards:
-            raise ScryfallError(f"No printings found for '{name}'")
-
-        # Prefer old-frame printings
-        old_frame = [c for c in cards if c.get("frame") in ("1993", "1997")]
-        candidates = old_frame if old_frame else cards
-
-        if artist:
-            artist_lc = artist.lower().strip()
-            matched = [c for c in candidates
-                       if artist_lc in c.get("artist", "").lower()]
-            if matched:
-                chosen = matched[0]
-                print(
-                    f"  [scryfall] Old-card artist match: {chosen.get('name')} "
-                    f"({chosen.get('set', '').upper()} #{chosen.get('collector_number')}) "
-                    f"artist={chosen.get('artist')}"
-                )
-                return chosen
-
-        chosen = candidates[0]
-        print(
-            f"  [scryfall] Old-card oldest-frame pick: {chosen.get('name')} "
-            f"({chosen.get('set', '').upper()} #{chosen.get('collector_number')}) "
-            f"frame={chosen.get('frame')} artist={chosen.get('artist')}"
-        )
-        return chosen
-
     def get_all_printings(self, name: str) -> list[dict[str, Any]]:
         """
         Fetch all printings of a card by exact name, sorted oldest-first.

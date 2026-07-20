@@ -5,29 +5,6 @@ from unittest.mock import patch, MagicMock
 
 from mtg_card_scanner.scryfall import ScryfallClient, ScryfallError, _normalize_lang
 
-_OLD_CARD_ICE_AGE = {
-    "name": "Kjeldoran Dead",
-    "set": "ice",
-    "set_name": "Ice Age",
-    "collector_number": "143",
-    "type_line": "Creature — Zombie",
-    "rarity": "common",
-    "frame": "1993",
-    "artist": "Anson Maddocks",
-    "prices": {"usd": "0.25", "usd_foil": None},
-    "scryfall_uri": "https://scryfall.com/card/ice/143/kjeldoran-dead",
-}
-
-_OLD_CARD_REPRINT = {
-    **_OLD_CARD_ICE_AGE,
-    "set": "v14",
-    "set_name": "From the Vault: Annihilation",
-    "collector_number": "4",
-    "frame": "2015",
-    "artist": "Anson Maddocks",
-    "prices": {"usd": "1.00", "usd_foil": "3.00"},
-}
-
 _SAMPLE_CARD = {
     "name": "Lightning Bolt",
     "set": "m10",
@@ -84,63 +61,6 @@ class TestLookupByName:
         with patch.object(client._session, "get", return_value=_not_found()):
             with pytest.raises(ScryfallError):
                 client.lookup_by_name("Nonexistent Card XYZ")
-
-
-class TestLookupOldCard:
-    def _search_response(self, *cards) -> MagicMock:
-        r = MagicMock()
-        r.status_code = 200
-        r.json.return_value = {"data": list(cards), "total_cards": len(cards), "has_more": False}
-        r.raise_for_status = MagicMock()
-        r.headers = {"content-type": "application/json"}
-        return r
-
-    def test_picks_old_frame_over_reprint(self):
-        # Returns reprint first, Ice Age second — should prefer old frame
-        client = ScryfallClient()
-        with patch.object(
-            client._session, "get",
-            return_value=self._search_response(_OLD_CARD_ICE_AGE, _OLD_CARD_REPRINT),
-        ):
-            result = client.lookup_old_card("Kjeldoran Dead")
-        assert result["frame"] == "1993"
-        assert result["set"] == "ice"
-
-    def test_artist_match_wins_over_frame_order(self):
-        # Two old-frame cards; artist match picks the right one
-        other_old = {**_OLD_CARD_ICE_AGE, "set": "drk", "artist": "Christopher Rush", "frame": "1993"}
-        client = ScryfallClient()
-        with patch.object(
-            client._session, "get",
-            return_value=self._search_response(other_old, _OLD_CARD_ICE_AGE),
-        ):
-            result = client.lookup_old_card("Kjeldoran Dead", artist="Anson Maddocks")
-        assert result["artist"] == "Anson Maddocks"
-
-    def test_no_artist_falls_back_to_oldest_old_frame(self):
-        client = ScryfallClient()
-        with patch.object(
-            client._session, "get",
-            return_value=self._search_response(_OLD_CARD_ICE_AGE, _OLD_CARD_REPRINT),
-        ):
-            result = client.lookup_old_card("Kjeldoran Dead", artist="")
-        assert result["set"] == "ice"
-
-    def test_partial_artist_name_matches(self):
-        # Camera reads "Anson" but real name is "Anson Maddocks" — partial match ok
-        client = ScryfallClient()
-        with patch.object(
-            client._session, "get",
-            return_value=self._search_response(_OLD_CARD_ICE_AGE),
-        ):
-            result = client.lookup_old_card("Kjeldoran Dead", artist="anson")
-        assert result["artist"] == "Anson Maddocks"
-
-    def test_raises_when_not_found(self):
-        client = ScryfallClient()
-        with patch.object(client._session, "get", return_value=_not_found()):
-            with pytest.raises(ScryfallError):
-                client.lookup_old_card("Nonexistent Card XYZ")
 
 
 class TestLookupFallback:

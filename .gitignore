@@ -34,3 +34,4 @@ scans.db
 # Test fixtures are source — keep them despite the *.json / image ignores above.
 !tests/fixtures/
 !tests/fixtures/**
+server.log

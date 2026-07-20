@@ -1,4 +1,4 @@
-"""End-to-end API tests using a fake pipeline + fake F2F (no camera/GPU/Ollama)."""
+"""End-to-end API tests using a fake pipeline + fake F2F (no camera or art index)."""
 
 import cv2
 import numpy as np
