@@ -1,4 +1,4 @@
-opencv-python>=4.8.0
+opencv-python>=4.8.0        # desktop w/ camera; use opencv-python-headless on a headless server
 numpy>=1.24.0
 requests>=2.31.0
 python-dotenv>=1.0.0
@@ -6,3 +6,8 @@ openai>=1.0.0
 pytest>=7.4.0
 imagehash>=4.3.2
 Pillow>=9.0.0
+
+# Web app (phone camera + desktop control UI)
+fastapi>=0.110.0
+uvicorn[standard]>=0.29.0
+python-multipart>=0.0.9     # multipart image upload from the phone

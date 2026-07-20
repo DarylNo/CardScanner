@@ -2,7 +2,64 @@
 
 A live, one-card-at-a-time Magic: The Gathering card scanner. A local vision LLM (via Ollama) reads the card like a human, then Scryfall provides the canonical printing and price. No local card-image library needed.
 
-## Architecture
+---
+
+## Web app (phone camera + desktop control)
+
+The scanner runs as a **local web app** with two roles open at the same time:
+
+- **Phone** (`/phone`) is the **camera** — point at a card, tap, and it uploads the image.
+- **Desktop** (`/`) is the **control surface** — it shows the card's printings **ranked by
+  artwork**, you **pick the exact printing**, it fetches **Face to Face Games** pricing for
+  that printing, and you **review/filter all scans** and **export** the ones you want.
+
+Because a card's art is shared across many printings, art-matching intentionally returns a
+*ranked set of candidates* rather than one guess — you choose the correct printing (set +
+collector number), which is what downstream pricing and export depend on.
+
+### Run it
+
+```bash
+pip install -r requirements.txt      # includes fastapi/uvicorn
+./run_server.sh                      # serves HTTPS on :8443 (generates a self-signed cert)
+```
+
+Then open, on the same LAN:
+
+- Desktop: `https://<this-machine-ip>:8443/`
+- Phone:   `https://<this-machine-ip>:8443/phone`
+
+> **HTTPS is required for the phone camera.** Browsers only allow camera access
+> (`getUserMedia`) in a secure context — `https://` or `localhost`. `run_server.sh` generates a
+> self-signed certificate; accept the one-time security warning on the phone. (On the desktop
+> alone you could use plain `http://localhost`, but the phone needs HTTPS.)
+
+Ollama must be running on the machine that serves the app (it has the GPU). Config via env:
+`OLLAMA_ENDPOINT`, `VISION_MODEL`, `PORT`, `SCAN_DB`.
+
+### Face to Face pricing
+
+`mtg_card_scanner/facetoface.py` looks up live prices from Face to Face Games' public Shopify
+JSON endpoints (no API key) for the exact printing you select, by condition and foil. It's shown
+as **decision support** while you review — a transient F2F outage just shows "no listing", never
+breaks a scan.
+
+### Export to Mana Exchange
+
+The **Export** button downloads a text file in Mana Exchange's admin **mass-entry** format —
+one line per card, `Qty SetCode CollectorNumber Condition Finish` (e.g. `2 OTJ 200 NM Foil`).
+Paste it into Mana Exchange → Admin → Add Cards. Mana Exchange derives name, images, and its own
+pricing from Scryfall via set + collector number, so only these five columns are needed.
+
+### Testing without a phone or GPU
+
+The pipeline and API are covered by `pytest` (Face to Face matching, art-ranked candidates, the
+SQLite store, the export format, and the full API path via a mocked vision model). You can also
+`curl` an image straight at `POST /api/scan` to drive a real scan without the phone.
+
+---
+
+## Architecture (vision pipeline)
 
 ```
 Webcam → capture.py → vision.py (Ollama/Qwen2.5-VL) → scryfall.py → output.py

@@ -1,0 +1,306 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Card Scanner — Control</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, sans-serif; background: #0f1115; color: #e8eaed; }
+  header {
+    display: flex; align-items: center; gap: 14px; padding: 10px 16px;
+    border-bottom: 1px solid #23262e; position: sticky; top: 0; background: #12141a; z-index: 5;
+  }
+  header h1 { font-size: 16px; margin: 0; font-weight: 700; }
+  header .sp { flex: 1; }
+  .btn { font: inherit; padding: 8px 14px; border: 0; border-radius: 8px; background: #3b82f6; color: #fff; cursor: pointer; }
+  .btn.ghost { background: #23262e; color: #cbd2dc; }
+  .btn:disabled { opacity: .5; cursor: default; }
+  main { display: grid; grid-template-columns: 380px 1fr; gap: 0; height: calc(100dvh - 53px); }
+  #left { border-right: 1px solid #23262e; overflow-y: auto; }
+  #right { overflow-y: auto; padding: 16px; }
+  .toolbar { padding: 10px 12px; position: sticky; top: 0; background: #12141a; border-bottom: 1px solid #23262e; }
+  .toolbar input { width: 100%; padding: 8px 10px; border-radius: 8px; border: 1px solid #2a2f3a; background: #0f1115; color: #e8eaed; }
+  .row {
+    display: flex; gap: 10px; padding: 10px 12px; border-bottom: 1px solid #1b1e26; cursor: pointer; align-items: center;
+  }
+  .row:hover { background: #171a21; }
+  .row.active { background: #1c2740; }
+  .row img { width: 40px; height: 56px; object-fit: cover; border-radius: 4px; background: #23262e; }
+  .row .meta { flex: 1; min-width: 0; }
+  .row .nm { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row .sub { font-size: 12px; color: #8b93a1; }
+  .pill { font-size: 11px; padding: 1px 7px; border-radius: 999px; background: #23262e; color: #aeb4bf; }
+  .pill.sel { background: #14532d; color: #86efac; }
+  .pill.cand { background: #3f2d10; color: #fbbf24; }
+  .row input[type=checkbox] { width: 18px; height: 18px; }
+  h2 { font-size: 15px; margin: 4px 0 12px; }
+  .muted { color: #8b93a1; }
+  .controls { display: flex; gap: 12px; align-items: end; flex-wrap: wrap; margin: 8px 0 16px; }
+  .field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: #8b93a1; }
+  select, .qty { padding: 7px 9px; border-radius: 8px; border: 1px solid #2a2f3a; background: #0f1115; color: #e8eaed; font: inherit; }
+  .qty { width: 70px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+  .card { border: 2px solid transparent; border-radius: 10px; background: #171a21; padding: 8px; cursor: pointer; transition: border-color .1s; }
+  .card:hover { border-color: #3b82f6; }
+  .card.chosen { border-color: #22c55e; }
+  .card img { width: 100%; border-radius: 6px; display: block; background: #23262e; aspect-ratio: 5/7; object-fit: cover; }
+  .card .t { font-size: 12px; margin-top: 6px; line-height: 1.3; }
+  .card .t b { display: block; }
+  .badges { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px; }
+  table.prices { border-collapse: collapse; margin: 10px 0; }
+  table.prices td { padding: 3px 12px 3px 0; }
+  .big-price { font-size: 22px; font-weight: 700; color: #6ee7a0; }
+  .sec { margin-top: 22px; padding-top: 14px; border-top: 1px solid #23262e; }
+  a { color: #7cc4ff; }
+  .empty { color: #6b7280; text-align: center; padding: 40px 20px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🃏 MTG Card Scanner</h1>
+  <span class="pill" id="phoneLink"></span>
+  <span class="sp"></span>
+  <span class="muted" id="count">0 to export</span>
+  <button class="btn" id="exportBtn">Export to Mana Exchange</button>
+</header>
+<main>
+  <div id="left">
+    <div class="toolbar"><input id="filter" placeholder="Filter scans by name / set…"></div>
+    <div id="list"></div>
+  </div>
+  <div id="right"><div class="empty">Scan a card on your phone to begin.</div></div>
+</main>
+
+<script>
+const CONDITIONS = ["NM","LP","MP","HP","DMG"];
+const FINISHES = ["Non-Foil","Foil","Etched"];
+let scans = [], focusedId = null, lastMaxId = 0, detailSig = "", filterText = "";
+
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+async function jget(u){ return (await fetch(u)).json(); }
+async function jsend(u,m,b){ return (await fetch(u,{method:m,headers:{'Content-Type':'application/json'},body:JSON.stringify(b)})).json(); }
+
+function thumbFor(scan){
+  if (scan.selection?.image_normal) return scan.selection.image_normal;
+  return scan.candidates?.[0]?.image_small || scan.candidates?.[0]?.image_normal || "";
+}
+function titleFor(scan){
+  return scan.selection?.name || scan.card_read?.name || "(unread)";
+}
+
+function renderList(){
+  const q = filterText.toLowerCase();
+  const rows = scans.filter(s => {
+    if (!q) return true;
+    const hay = (titleFor(s)+" "+(s.selection?.set||s.card_read?.set_code||"")).toLowerCase();
+    return hay.includes(q);
+  });
+  $("#list").innerHTML = rows.map(s => {
+    const sel = s.status === "selected";
+    const price = sel && s.f2f ? f2fBest(s) : null;
+    const sub = sel
+      ? `${(s.selection.set||"").toUpperCase()} #${s.selection.collector_number} · ${s.selection.condition} · ${s.selection.finish}`
+      : `${(s.candidates||[]).length} printings`;
+    return `<div class="row ${s.id===focusedId?'active':''}" data-id="${s.id}">
+      <img src="${esc(thumbFor(s))}" onerror="this.style.visibility='hidden'">
+      <div class="meta">
+        <div class="nm">${esc(titleFor(s))}</div>
+        <div class="sub">${esc(sub)}${price!=null?` · <b style="color:#6ee7a0">$${price}</b>`:''}</div>
+        <div style="margin-top:4px"><span class="pill ${sel?'sel':'cand'}">${sel?'selected':'pick printing'}</span>
+          ${sel?`<span class="pill">×${s.selection.quantity}</span>`:''}</div>
+      </div>
+      ${sel?`<input type="checkbox" title="include in export" ${s.included?'checked':''} data-inc="${s.id}">`:''}
+    </div>`;
+  }).join("") || `<div class="empty">No scans yet.</div>`;
+
+  $("#list").querySelectorAll(".row").forEach(r =>
+    r.addEventListener("click", e => {
+      if (e.target.dataset.inc) return;
+      focusScan(Number(r.dataset.id));
+    }));
+  $("#list").querySelectorAll("[data-inc]").forEach(cb =>
+    cb.addEventListener("change", async e => {
+      await jsend(`/api/scans/${cb.dataset.inc}`, "PATCH", { included: cb.checked });
+      poll();
+    }));
+  updateCount();
+}
+
+function f2fBest(scan){
+  const c = scan.f2f?.conditions || {};
+  const cond = scan.selection?.condition || "NM";
+  const order = { NM:["NM","PL"], LP:["PL","NM"], MP:["MP","PL","NM"], HP:["HP","PL","NM"], DMG:["DMG","HP","PL","NM"] }[cond] || ["NM"];
+  for (const k of order) if (c[k]!=null) return c[k];
+  const vals = Object.values(c); return vals.length ? Math.min(...vals) : null;
+}
+function updateCount(){
+  const n = scans.filter(s => s.status==="selected" && s.included).length;
+  $("#count").textContent = `${n} to export`;
+}
+
+function focusScan(id){ focusedId = id; detailSig = ""; renderDetail(); renderList(); }
+
+function candCard(scan, c, chosenId){
+  const badges = (c.finishes||[]).map(f=>`<span class="pill">${esc(f)}</span>`).join("");
+  const dist = c.phash_distance!=null ? `<span class="pill">art Δ${c.phash_distance}</span>` : "";
+  return `<div class="card ${c.id===chosenId?'chosen':''}" data-pick='${esc(JSON.stringify(c))}'>
+    <img src="${esc(c.image_normal||c.image_small)}" loading="lazy" onerror="this.style.visibility='hidden'">
+    <div class="t"><b>${esc(c.set_name)}</b>#${esc(c.collector_number)} · ${esc(c.rarity||"")}</div>
+    <div class="badges">${dist}${badges}</div>
+  </div>`;
+}
+
+function controlsHtml(scan){
+  const condDefault = (scan.selection?.condition
+    || (scan.card_read?.condition_estimate||"").toUpperCase()) ;
+  const cond = CONDITIONS.includes(condDefault) ? condDefault : "NM";
+  const finDefault = scan.selection?.finish || (scan.card_read?.foil ? "Foil" : "Non-Foil");
+  const qty = scan.selection?.quantity || 1;
+  return `<div class="controls">
+    <div class="field">Condition
+      <select id="c-cond">${CONDITIONS.map(c=>`<option ${c===cond?'selected':''}>${c}</option>`).join("")}</select></div>
+    <div class="field">Finish
+      <select id="c-fin">${FINISHES.map(f=>`<option ${f===finDefault?'selected':''}>${f}</option>`).join("")}</select></div>
+    <div class="field">Qty <input class="qty" id="c-qty" type="number" min="1" value="${qty}"></div>
+  </div>`;
+}
+
+function renderDetail(){
+  const scan = scans.find(s => s.id === focusedId);
+  const right = $("#right");
+  if (!scan){ right.innerHTML = `<div class="empty">Scan a card on your phone to begin.</div>`; return; }
+  const cr = scan.card_read || {};
+  const chosenId = scan.selection?.scryfall_id;
+
+  let html = `<h2>${esc(titleFor(scan))}
+    <span class="muted" style="font-weight:400">— read as ${esc(cr.name||"?")}
+    ${cr.foil?'· foil':''} · est. ${esc(cr.condition_estimate||"?")}
+    ${cr.condition_reason?`(${esc(cr.condition_reason)})`:''}</span></h2>`;
+
+  if (scan.error) html += `<p class="muted">⚠ ${esc(scan.error)}</p>`;
+
+  html += controlsHtml(scan);
+
+  if (scan.status === "selected"){
+    const s = scan.selection, prices = scan.f2f?.conditions || {};
+    const rows = Object.entries(prices).map(([k,v])=>`<tr><td>${esc(k)}</td><td>$${v}</td></tr>`).join("")
+      || `<tr><td class="muted" colspan=2>No Face to Face listing found.</td></tr>`;
+    html += `<div class="sec"><h2>Selected printing</h2>
+      <div style="display:flex;gap:16px">
+        <img src="${esc(s.image_normal)}" style="width:150px;border-radius:8px" onerror="this.style.visibility='hidden'">
+        <div>
+          <div><b>${esc(s.name)}</b></div>
+          <div class="muted">${esc(s.set_name)} · ${(s.set||'').toUpperCase()} #${esc(s.collector_number)}</div>
+          <div style="margin:8px 0">${esc(s.condition)} · ${esc(s.finish)} · ×${s.quantity}</div>
+          <div class="big-price">Face to Face: $${f2fBest(scan) ?? '—'}</div>
+          <table class="prices">${rows}</table>
+          ${scan.f2f?.url?`<a href="${esc(scan.f2f.url)}" target="_blank">View on Face to Face ↗</a>`:''}
+        </div>
+      </div>
+      <p class="muted">Change condition/finish/qty above and it updates. Re-pick below to change the printing.</p>
+    </div>`;
+  }
+
+  html += `<div class="sec"><h2>${scan.status==="selected"?"Re-pick printing":"Pick the correct printing"}</h2>`;
+  if ((scan.candidates||[]).length){
+    html += `<div class="grid">${scan.candidates.map(c=>candCard(scan,c,chosenId)).join("")}</div>`;
+  } else {
+    html += `<p class="muted">No art candidates. Use manual search below.</p>`;
+  }
+  html += `</div>`;
+
+  html += `<div class="sec"><h2>Manual search (wrong card?)</h2>
+    <div style="display:flex;gap:8px;max-width:420px">
+      <input id="msearch" placeholder="Card name…" style="flex:1;padding:8px;border-radius:8px;border:1px solid #2a2f3a;background:#0f1115;color:#e8eaed">
+      <button class="btn ghost" id="msearchBtn">Search</button>
+    </div>
+    <div class="grid" id="msearchResults" style="margin-top:12px"></div>
+  </div>`;
+
+  html += `<div class="sec"><button class="btn ghost" id="delBtn">Delete this scan</button></div>`;
+
+  right.innerHTML = html;
+  wireDetail(scan);
+}
+
+function currentControls(){
+  return {
+    condition: $("#c-cond")?.value || "NM",
+    finish: $("#c-fin")?.value || "Non-Foil",
+    quantity: Number($("#c-qty")?.value || 1),
+  };
+}
+
+function wireDetail(scan){
+  $("#right").querySelectorAll(".card[data-pick]").forEach(el =>
+    el.addEventListener("click", async () => {
+      const printing = JSON.parse(el.dataset.pick);
+      const ctl = currentControls();
+      await jsend(`/api/scans/${scan.id}/select`, "POST", { printing, ...ctl });
+      await poll(); detailSig=""; renderDetail();
+    }));
+
+  // Live edit of an already-selected scan when controls change.
+  if (scan.status === "selected"){
+    ["c-cond","c-fin","c-qty"].forEach(id => {
+      const el = document.getElementById(id);
+      el?.addEventListener("change", async () => {
+        await jsend(`/api/scans/${scan.id}`, "PATCH", currentControls());
+        await poll(); detailSig=""; renderList();
+      });
+    });
+  }
+
+  const doSearch = async () => {
+    const q = $("#msearch").value.trim(); if (!q) return;
+    $("#msearchResults").innerHTML = `<p class="muted">Searching…</p>`;
+    const { candidates } = await jget(`/api/search?q=${encodeURIComponent(q)}`);
+    $("#msearchResults").innerHTML = candidates.map(c=>candCard(scan,c,scan.selection?.scryfall_id)).join("")
+      || `<p class="muted">No results.</p>`;
+    $("#msearchResults").querySelectorAll(".card[data-pick]").forEach(el =>
+      el.addEventListener("click", async () => {
+        await jsend(`/api/scans/${scan.id}/select`, "POST", { printing: JSON.parse(el.dataset.pick), ...currentControls() });
+        await poll(); detailSig=""; renderDetail();
+      }));
+  };
+  $("#msearchBtn")?.addEventListener("click", doSearch);
+  $("#msearch")?.addEventListener("keydown", e => { if (e.key==="Enter") doSearch(); });
+
+  $("#delBtn")?.addEventListener("click", async () => {
+    await fetch(`/api/scans/${scan.id}`, { method: "DELETE" });
+    focusedId = null; await poll(); renderDetail();
+  });
+}
+
+function sigOf(scan){
+  if (!scan) return "none";
+  return [scan.id, scan.status, (scan.candidates||[]).length,
+          scan.selection?.scryfall_id, scan.selection?.condition, scan.selection?.finish,
+          scan.selection?.quantity, JSON.stringify(scan.f2f?.conditions||{}), scan.included].join("|");
+}
+
+async function poll(){
+  try {
+    scans = await jget("/api/scans");
+    const maxId = scans.reduce((m,s)=>Math.max(m,s.id), 0);
+    // Auto-advance focus to a freshly scanned card.
+    if (maxId > lastMaxId){ focusedId = maxId; lastMaxId = maxId; detailSig = ""; }
+    renderList();
+    const focused = scans.find(s => s.id === focusedId);
+    const sig = sigOf(focused);
+    if (sig !== detailSig){ detailSig = sig; renderDetail(); }
+  } catch (e) { /* server momentarily unreachable */ }
+}
+
+$("#filter").addEventListener("input", e => { filterText = e.target.value; renderList(); });
+$("#exportBtn").addEventListener("click", () => { window.location = "/api/export"; });
+$("#phoneLink").textContent = "Phone: " + location.origin + "/phone";
+
+poll();
+setInterval(poll, 1500);
+</script>
+</body>
+</html>
