@@ -62,6 +62,10 @@ const guide = document.getElementById('guide');
 const shoot = document.getElementById('shoot');
 const autoBtn = document.getElementById('autoBtn');
 const BURST = 3, BURST_GAP_MS = 120;
+// Upload size cap: identification pHashes downsample to 32×32, and the
+// printing ranker works from Scryfall `normal` images — 1280px q0.85 uploads
+// are hash-equivalent to full-res but ~3× smaller (faster over Wi-Fi).
+const MAX_UPLOAD_DIM = 1280, JPEG_QUALITY = 0.85;
 
 // ── auto-scan tunables ────────────────────────────────────────────────────────
 // The rig is a fixed mount over a tray, so the scene is static except when a
@@ -72,7 +76,8 @@ const BURST = 3, BURST_GAP_MS = 120;
 const MOTION_W = 64, MOTION_H = 48, SAMPLE_MS = 200;
 const DIFF_TRIGGER = 9;    // vs settledRef: scene meaningfully changed
 const DIFF_STABLE = 3;     // vs previous sample: motion has stopped
-const STABLE_FRAMES = 6;   // ~1.2 s of stillness before scanning
+const STABLE_FRAMES = 4;   // ~0.8 s of stillness before scanning — raise if it
+                           // ever fires while your hand is still in frame
 const COOLDOWN_MS = 1000;
 
 let autoEnabled = true;
@@ -116,10 +121,11 @@ acquireWakeLock();
 
 // ── frame capture (full-res burst for the server) ────────────────────────────
 function grabFrame() {
-  const w = video.videoWidth, h = video.videoHeight;
+  const scale = Math.min(1, MAX_UPLOAD_DIM / Math.max(video.videoWidth, video.videoHeight));
+  const w = Math.round(video.videoWidth * scale), h = Math.round(video.videoHeight * scale);
   canvas.width = w; canvas.height = h;
   canvas.getContext('2d').drawImage(video, 0, 0, w, h);
-  return new Promise(res => canvas.toBlob(b => res(b), 'image/jpeg', 0.92));
+  return new Promise(res => canvas.toBlob(b => res(b), 'image/jpeg', JPEG_QUALITY));
 }
 
 async function captureBurst() {

@@ -266,6 +266,9 @@ class ArtMatcher:
         self._session.headers["User-Agent"] = _USER_AGENT
         self._last_request: float = 0.0
         self._delay = request_delay
+        # Per-printing region hashes are content-addressed by scryfall id and
+        # never change — memoize them so repeat scans skip image open + 4 pHashes.
+        self._hash_cache: dict[str, tuple] = {}
         # Populated by rank_printings / best_match for the pipeline to inspect.
         self._last_scan_border_color: str = "unknown"
         self._last_scan_is_basic: bool = False
@@ -356,16 +359,26 @@ class ArtMatcher:
             if not url or not sid:
                 continue
             try:
-                cand_pil = self._fetch_image(url, sid)
-                cand_art_hash = imagehash.phash(crop_art_region(cand_pil))
+                cached = self._hash_cache.get(sid)
+                if cached is None:
+                    cand_pil = self._fetch_image(url, sid)
+                    cached = (
+                        imagehash.phash(crop_art_region(cand_pil)),
+                        imagehash.phash(crop_list_corner_region(cand_pil)),
+                        imagehash.phash(crop_title_region(cand_pil)),
+                        imagehash.phash(crop_textbox_region(cand_pil)),
+                    )
+                    self._hash_cache[sid] = cached
+                cand_art_hash, cand_corner_hash, cand_title_hash, cand_textbox_hash = cached
+
                 art_d = int(scan_art_hash - cand_art_hash)
-                corner_d = int(scan_corner_hash - imagehash.phash(crop_list_corner_region(cand_pil)))
+                corner_d = int(scan_corner_hash - cand_corner_hash)
 
                 if is_basic:
                     multi_d = art_d  # title/textbox add noise for basics
                 else:
-                    title_d   = int(scan_title_hash   - imagehash.phash(crop_title_region(cand_pil)))
-                    textbox_d = int(scan_textbox_hash - imagehash.phash(crop_textbox_region(cand_pil)))
+                    title_d   = int(scan_title_hash   - cand_title_hash)
+                    textbox_d = int(scan_textbox_hash - cand_textbox_hash)
                     multi_d   = (art_d   * _WEIGHT_ART
                                  + title_d   * _WEIGHT_TITLE
                                  + textbox_d * _WEIGHT_TEXTBOX)

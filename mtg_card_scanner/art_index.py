@@ -60,9 +60,26 @@ _HIGH_CONFIDENCE_DISTANCE = 125  # combined score: at/below this → "high"
 # imperfect card-quad warps, and (b) different printings cropping the SAME
 # artwork differently (frame eras shift/zoom the art window — e.g. a 7ED
 # artwork rescanned from an ORI-frame card needs an outset to line up).
-# ~80 in-bounds variants ≈ 0.2 s per identify() over the full index.
+#
+# identify() is TIERED for speed: the small core grid runs first and the rest
+# of the full grid only runs when the core result isn't confident (adding
+# variants can only lower scores, so early-exit at the threshold is safe).
 _JITTER_SHIFTS = (-0.06, -0.03, 0.0, 0.03, 0.06)
 _JITTER_INSETS = (-0.06, 0.0, 0.06, 0.12)
+_CORE_SHIFTS = (-0.03, 0.0, 0.03)
+_CORE_INSETS = (0.0, 0.06)
+
+
+def _variant_params(shifts, insets) -> list[tuple[float, float, float]]:
+    return [(dy, dx, ins) for dy in shifts for dx in shifts for ins in insets]
+
+
+_CORE_PARAMS = _variant_params(_CORE_SHIFTS, _CORE_INSETS)
+_EXT_PARAMS = [
+    p for p in _variant_params(_JITTER_SHIFTS, _JITTER_INSETS)
+    if p not in set(_CORE_PARAMS)
+]
+
 
 _REQUEST_DELAY = 0.12          # seconds — stays under Scryfall CDN ~10 req/s limit
 _IMAGE_FETCH_TIMEOUT = 8       # seconds — fail fast on a stalled download
@@ -204,29 +221,46 @@ class ArtIndex:
             pass
         return frame
 
-    def _hash_variants(self, frame: np.ndarray) -> list[tuple[int, list[int]]]:
+    def _hash_variants(
+        self,
+        frame: np.ndarray,
+        params: Optional[list[tuple[float, float, float]]] = None,
+    ) -> list[tuple[int, list[int]]]:
         """Return (h64, h256-words) for each jittered art crop of the card."""
+        import cv2
         import imagehash
+        from PIL import Image as PILImage
         from mtg_card_scanner.visual_match import (
             _crop_region, _ART_Y0, _ART_Y1, _ART_X0, _ART_X1,
         )
         card = self._warp(frame)
+        # One BGR→PIL conversion, then cheap crops from it.  (No downscale:
+        # resizing before hashing measurably shifts the fine hash and eats
+        # 20-30 points of the correct card's margin — not worth ~0.1s.)
+        card_pil = PILImage.fromarray(cv2.cvtColor(card, cv2.COLOR_BGR2RGB))
         art_h, art_w = _ART_Y1 - _ART_Y0, _ART_X1 - _ART_X0
         variants: list[tuple[int, list[int]]] = []
-        for dy in _JITTER_SHIFTS:
-            for dx in _JITTER_SHIFTS:
-                for inset in _JITTER_INSETS:
-                    y0 = _ART_Y0 + dy + inset * art_h / 2
-                    y1 = _ART_Y1 + dy - inset * art_h / 2
-                    x0 = _ART_X0 + dx + inset * art_w / 2
-                    x1 = _ART_X1 + dx - inset * art_w / 2
-                    if y0 < 0 or x0 < 0 or y1 > 1 or x1 > 1:
-                        continue
-                    crop = _crop_region(card, y0, y1, x0, x1)
-                    h64 = int(str(imagehash.phash(crop)), 16)
-                    h256 = _split_u64(str(imagehash.phash(crop, hash_size=16)), 4)
-                    variants.append((h64, h256))
+        for dy, dx, inset in (params if params is not None else _CORE_PARAMS + _EXT_PARAMS):
+            y0 = _ART_Y0 + dy + inset * art_h / 2
+            y1 = _ART_Y1 + dy - inset * art_h / 2
+            x0 = _ART_X0 + dx + inset * art_w / 2
+            x1 = _ART_X1 + dx - inset * art_w / 2
+            if y0 < 0 or x0 < 0 or y1 > 1 or x1 > 1:
+                continue
+            crop = _crop_region(card_pil, y0, y1, x0, x1)
+            h64 = int(str(imagehash.phash(crop)), 16)
+            h256 = _split_u64(str(imagehash.phash(crop, hash_size=16)), 4)
+            variants.append((h64, h256))
         return variants
+
+    def _accumulate(self, best: np.ndarray, variants) -> None:
+        assert self._h64 is not None and self._h256 is not None
+        for h64, h256 in variants:
+            d = 4 * np.bitwise_count(self._h64 ^ np.uint64(h64)).astype(np.uint16)
+            d += np.bitwise_count(
+                self._h256 ^ np.array(h256, dtype=np.uint64)
+            ).sum(axis=1).astype(np.uint16)
+            np.minimum(best, d, out=best)
 
     def identify(self, frame: np.ndarray, top_n: int = 5) -> list[dict[str, Any]]:
         """
@@ -238,18 +272,21 @@ class ArtIndex:
             [{"name", "scryfall_id", "set", "collector_number", "artist",
               "distance"}, ...]
 
+        Tiered: the core jitter grid runs first; the extended grid is skipped
+        only when the core best is CLEARLY confident (≤ the high-confidence
+        line).  Exiting at the mere confident threshold is NOT safe — a wrong
+        card can squeak under it on the core grid while the true card needs an
+        extended (outset) crop to reveal its lower score.
+
         No thresholding here — callers decide what score is "confident"
         (see _MAX_CONFIDENT_DISTANCE).
         """
         self._load()
-        assert self._h64 is not None and self._h256 is not None
+        assert self._h64 is not None
         best = np.full(len(self._h64), 4096, dtype=np.uint16)
-        for h64, h256 in self._hash_variants(frame):
-            d = 4 * np.bitwise_count(self._h64 ^ np.uint64(h64)).astype(np.uint16)
-            d += np.bitwise_count(
-                self._h256 ^ np.array(h256, dtype=np.uint64)
-            ).sum(axis=1).astype(np.uint16)
-            np.minimum(best, d, out=best)
+        self._accumulate(best, self._hash_variants(frame, _CORE_PARAMS))
+        if int(best.min()) > _HIGH_CONFIDENCE_DISTANCE:
+            self._accumulate(best, self._hash_variants(frame, _EXT_PARAMS))
         order = np.argsort(best, kind="stable")
 
         results: list[dict[str, Any]] = []
