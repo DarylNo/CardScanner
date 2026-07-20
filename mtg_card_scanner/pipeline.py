@@ -22,6 +22,28 @@ def _safe(s: str) -> str:
     return str(s).encode("ascii", errors="replace").decode("ascii")
 
 
+def _candidate_dict(p: dict) -> dict:
+    """Project a Scryfall printing (+pHash fields) to a UI-friendly candidate."""
+    images = p.get("image_uris") or {}
+    return {
+        "id": p.get("id", ""),
+        "name": p.get("name", ""),
+        "set": p.get("set", ""),
+        "set_name": p.get("set_name", ""),
+        "collector_number": p.get("collector_number", ""),
+        "rarity": p.get("rarity", ""),
+        "released_at": p.get("released_at", ""),
+        "border_color": p.get("border_color", ""),
+        "frame": p.get("frame", ""),
+        "promo": bool(p.get("promo", False)),
+        "finishes": p.get("finishes", []),  # e.g. ["nonfoil","foil","etched"]
+        "image_small": images.get("small", ""),
+        "image_normal": images.get("normal", "") or images.get("large", ""),
+        "phash_distance": p.get("phash_distance"),
+        "multi_distance": p.get("multi_distance"),
+    }
+
+
 _DEMO_CARD = CardRead(
     name="Lightning Bolt",
     set_code="m10",
@@ -323,6 +345,123 @@ class Pipeline:
             self.writer.append(result)
 
         return result
+
+    def scan_candidates(
+        self,
+        frames: Union[np.ndarray, list],
+        top_n: int = 12,
+    ) -> dict:
+        """
+        Identify a card and return ART-RANKED printing CANDIDATES for the user to
+        choose from — the web-app flow's core call.
+
+        Unlike ``run_once`` (which auto-resolves to a single printing), this reads
+        the card, fetches every printing of that name, ranks them by perceptual-hash
+        art distance, and returns the ranked list so the desktop UI can present
+        candidates for the user to pick the exact printing.
+
+        Returns a JSON-serialisable dict:
+            {
+              "identified": bool,          # a card name was read
+              "card_read": {name,set_code,collector_number,foil,language,
+                            condition_estimate,condition_reason,artist,is_old_card},
+              "confidence": {name,set,collector},
+              "candidates": [ {id,name,set,set_name,collector_number,rarity,
+                               released_at,border_color,frame,promo,finishes,
+                               image_small,image_normal,phash_distance,
+                               multi_distance}... ],
+              "error": str | None,
+            }
+        """
+        if self.model is None:
+            raise RuntimeError("No vision model configured.")
+
+        if isinstance(frames, np.ndarray):
+            frames = [frames]
+
+        # ── read / consensus ──────────────────────────────────────────────────
+        try:
+            if len(frames) > 1:
+                from mtg_card_scanner.consensus import consensus_read
+                cr = consensus_read(frames, self.model)
+                card_read = cr.card_read
+                sharpest_frame = cr.sharpest_frame
+                confidence = {
+                    "name": cr.name_confidence,
+                    "set": cr.set_confidence,
+                    "collector": cr.collector_confidence,
+                }
+            else:
+                card_read = self.model.read_card(frames[0])
+                sharpest_frame = frames[0]
+                confidence = {"name": "high", "set": "high", "collector": "high"}
+        except Exception as exc:
+            return {
+                "identified": False,
+                "card_read": {},
+                "confidence": {"name": "low", "set": "low", "collector": "low"},
+                "candidates": [],
+                "error": f"Vision read failed: {_safe(str(exc))}",
+            }
+
+        canonical_lang = _normalize_lang(card_read.language)
+        if canonical_lang != card_read.language:
+            card_read = dataclasses.replace(card_read, language=canonical_lang)
+
+        read_dict = {
+            "name": card_read.name,
+            "set_code": card_read.set_code,
+            "collector_number": card_read.collector_number,
+            "foil": card_read.foil,
+            "language": card_read.language,
+            "condition_estimate": card_read.condition_estimate,
+            "condition_reason": card_read.condition_reason,
+            "artist": card_read.artist,
+            "is_old_card": card_read.is_old_card,
+        }
+
+        if not card_read.name:
+            return {
+                "identified": False,
+                "card_read": read_dict,
+                "confidence": confidence,
+                "candidates": [],
+                "error": "No card name could be read.",
+            }
+
+        # ── fetch printings + rank by art ─────────────────────────────────────
+        try:
+            printings = self.scryfall.get_all_printings(card_read.name)
+        except ScryfallError as exc:
+            return {
+                "identified": True,
+                "card_read": read_dict,
+                "confidence": confidence,
+                "candidates": [],
+                "error": f"No printings found for '{_safe(card_read.name)}': {_safe(str(exc))}",
+            }
+
+        ranked = self.art_matcher.rank_printings(sharpest_frame, printings)
+        candidates = [_candidate_dict(p) for p in ranked[:top_n]]
+
+        return {
+            "identified": True,
+            "card_read": read_dict,
+            "confidence": confidence,
+            "candidates": candidates,
+            "error": None,
+        }
+
+    def search_candidates(self, name: str, top_n: int = 40) -> list[dict]:
+        """
+        Manual re-identification: return all printings of *name* (no art ranking,
+        newest first) for when the vision read misidentified the card.
+        """
+        printings = self.scryfall.get_all_printings(name)
+        printings = sorted(
+            printings, key=lambda p: p.get("released_at", ""), reverse=True
+        )
+        return [_candidate_dict(p) for p in printings[:top_n]]
 
     def run_demo(self, sample_read: Optional[CardRead] = None) -> ScanResult:
         """

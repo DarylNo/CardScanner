@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Card Scanner — Camera</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: system-ui, sans-serif; background: #0f1115; color: #e8eaed;
+    display: flex; flex-direction: column; height: 100dvh; overflow: hidden;
+  }
+  header { padding: 10px 14px; font-weight: 600; border-bottom: 1px solid #23262e; }
+  #stage { position: relative; flex: 1; background: #000; overflow: hidden; }
+  video { width: 100%; height: 100%; object-fit: cover; }
+  /* Card framing guide (2.5 : 3.5 aspect) */
+  #guide {
+    position: absolute; inset: 0; margin: auto; width: 72%; max-width: 340px;
+    aspect-ratio: 5 / 7; border: 3px solid rgba(120,200,255,.8); border-radius: 14px;
+    box-shadow: 0 0 0 100vmax rgba(0,0,0,.35); pointer-events: none;
+  }
+  footer { padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+  #status { min-height: 1.3em; text-align: center; font-size: 14px; color: #aeb4bf; }
+  #status.ok { color: #6ee7a0; } #status.err { color: #ff8a8a; }
+  button {
+    font-size: 19px; font-weight: 600; padding: 16px; border: 0; border-radius: 12px;
+    background: #3b82f6; color: #fff; width: 100%;
+  }
+  button:disabled { background: #2a2f3a; color: #7b8290; }
+  .hint { font-size: 12px; color: #7b8290; text-align: center; }
+</style>
+</head>
+<body>
+  <header>📷 Scanner — point at a card</header>
+  <div id="stage">
+    <video id="video" autoplay playsinline muted></video>
+    <div id="guide"></div>
+  </div>
+  <footer>
+    <div id="status">Starting camera…</div>
+    <button id="shoot" disabled>Scan Card</button>
+    <div class="hint">Fill the frame with one card, hold steady, then tap.</div>
+  </footer>
+  <canvas id="canvas" hidden></canvas>
+
+<script>
+const video = document.getElementById('video');
+const canvas = document.getElementById('canvas');
+const statusEl = document.getElementById('status');
+const shoot = document.getElementById('shoot');
+const BURST = 3, BURST_GAP_MS = 120;
+
+function setStatus(msg, cls='') { statusEl.textContent = msg; statusEl.className = cls; }
+
+async function startCamera() {
+  if (!navigator.mediaDevices?.getUserMedia) {
+    setStatus('Camera needs HTTPS. Open this page over https:// (see README).', 'err');
+    return;
+  }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+      audio: false,
+    });
+    video.srcObject = stream;
+    await video.play();
+    shoot.disabled = false;
+    setStatus('Ready.', 'ok');
+  } catch (e) {
+    setStatus('Camera blocked: ' + e.message + ' (HTTPS required on phones).', 'err');
+  }
+}
+
+function grabFrame() {
+  const w = video.videoWidth, h = video.videoHeight;
+  canvas.width = w; canvas.height = h;
+  canvas.getContext('2d').drawImage(video, 0, 0, w, h);
+  return new Promise(res => canvas.toBlob(b => res(b), 'image/jpeg', 0.92));
+}
+
+async function captureBurst() {
+  const frames = [];
+  for (let i = 0; i < BURST; i++) {
+    frames.push(await grabFrame());
+    if (i < BURST - 1) await new Promise(r => setTimeout(r, BURST_GAP_MS));
+  }
+  return frames;
+}
+
+shoot.addEventListener('click', async () => {
+  shoot.disabled = true;
+  setStatus('Capturing…');
+  try {
+    const frames = await captureBurst();
+    setStatus('Scanning…');
+    const fd = new FormData();
+    frames.forEach((b, i) => fd.append('files', b, `frame${i}.jpg`));
+    const r = await fetch('/api/scan', { method: 'POST', body: fd });
+    const data = await r.json();
+    if (data.identified) {
+      const n = (data.candidates || []).length;
+      setStatus(`✓ ${data.card_read.name} — ${n} printings. Pick it on the desktop.`, 'ok');
+    } else {
+      setStatus('✗ ' + (data.error || 'Could not read card. Try again.'), 'err');
+    }
+  } catch (e) {
+    setStatus('Upload failed: ' + e.message, 'err');
+  } finally {
+    setTimeout(() => { shoot.disabled = false; }, 400);
+  }
+});
+
+startCamera();
+</script>
+</body>
+</html>

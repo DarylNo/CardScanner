@@ -25,3 +25,12 @@ debug/
 # ever pointed at a project-local path).
 .cache/
 card_images/
+
+# Web-app runtime artifacts
+scans.db
+*.db
+.certs/
+
+# Test fixtures are source — keep them despite the *.json / image ignores above.
+!tests/fixtures/
+!tests/fixtures/**
