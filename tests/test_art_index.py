@@ -414,3 +414,45 @@ def test_hash_frame_roundtrip_matches_indexed_image(tmp_path, monkeypatch):
     results = idx.identify(card, top_n=1)
     assert results[0]["name"] == "Round Trip"
     assert results[0]["distance"] == 0
+
+
+# ── prefetch-printings ────────────────────────────────────────────────────────
+
+def test_prefetch_printings_downloads_and_resumes(tmp_path, monkeypatch):
+    import mtg_card_scanner.visual_match as vm
+    cache = tmp_path / "card_images"
+    monkeypatch.setattr(vm, "_DEFAULT_CACHE_DIR", cache)
+
+    entries = [
+        {"id": "p1", "image_uris": {"normal": "https://img/p1.jpg"}},
+        {"id": "p2", "image_uris": {"large": "https://img/p2.jpg"}},   # no normal → large
+        {"id": "p3", "image_uris": None,
+         "card_faces": [{"image_uris": {"normal": "https://img/p3.jpg"}}]},  # DFC
+        {"id": "p4"},                                                  # no image at all
+    ]
+    bulk_url = "https://bulk/default-cards.json"
+    manifest = FakeResponse(json_data={"data": [{
+        "type": "default_cards", "updated_at": "2026-07-20T00:00:00Z",
+        "size": 1000, "download_uri": bulk_url,
+    }]})
+    responses = {_MANIFEST_URL: manifest,
+                 bulk_url: FakeResponse(content=json.dumps(entries).encode())}
+    jpeg = _jpeg_bytes()
+    for e in entries[:3]:
+        for holder in (e, *(e.get("card_faces") or [])[:1]):
+            uris = holder.get("image_uris") or {}
+            u = uris.get("normal") or uris.get("large")
+            if u:
+                responses[u] = FakeResponse(content=jpeg)
+    session = FakeSession(responses)
+    builder = ArtIndexBuilder(index_dir=tmp_path, request_delay=0, session=session)
+    builder.prefetch_printings()
+
+    assert sorted(p.name for p in cache.glob("*.jpg")) == ["p1.jpg", "p2.jpg", "p3.jpg"]
+
+    # Resume: nothing re-fetched.
+    builder2, session2 = ArtIndexBuilder(index_dir=tmp_path, request_delay=0,
+                                         session=FakeSession(responses)), None
+    builder2.prefetch_printings()
+    # only manifest hit again (bulk file + all images already present)
+    assert [u for u in builder2._session.fetched if u.startswith("https://img/")] == []

@@ -334,32 +334,40 @@ class ArtIndexBuilder:
         if elapsed < self._delay:
             time.sleep(self._delay - elapsed)
 
-    def _fetch_manifest(self) -> dict[str, Any]:
+    def _fetch_manifest(self, bulk_type: str = _BULK_TYPE) -> dict[str, Any]:
         resp = self._session.get(SCRYFALL_BULK_MANIFEST, timeout=30)
         resp.raise_for_status()
         for entry in resp.json().get("data", []):
-            if entry.get("type") == _BULK_TYPE:
+            if entry.get("type") == bulk_type:
                 return entry
-        raise ArtIndexError(f"Scryfall bulk manifest has no '{_BULK_TYPE}' entry")
+        raise ArtIndexError(f"Scryfall bulk manifest has no '{bulk_type}' entry")
 
-    def _download_bulk(self, manifest: dict[str, Any], force: bool) -> None:
-        """Download the bulk JSON unless a copy from this bulk revision exists."""
+    def _download_bulk(
+        self,
+        manifest: dict[str, Any],
+        force: bool,
+        dest: Optional[Path] = None,
+        meta_key: str = "bulk_updated_at",
+    ) -> None:
+        """Download a bulk JSON unless a copy from this bulk revision exists."""
+        dest = dest or self.bulk_path
+        bulk_type = manifest.get("type", _BULK_TYPE)
         updated_at = manifest.get("updated_at", "")
         size_mb = manifest.get("size", 0) / 1e6
         with _connect(self.db_path) as conn:
             row = conn.execute(
-                "SELECT value FROM meta WHERE key='bulk_updated_at'"
+                "SELECT value FROM meta WHERE key=?", (meta_key,)
             ).fetchone()
         have = row[0] if row else ""
-        if self.bulk_path.exists() and have == updated_at and not force:
-            print(f"  [art_index] bulk file current ({updated_at}) — skipping download")
+        if dest.exists() and have == updated_at and not force:
+            print(f"  [art_index] {bulk_type} bulk current ({updated_at}) — skipping download")
             return
 
-        print(f"  [art_index] downloading {_BULK_TYPE} bulk ({size_mb:.0f} MB, {updated_at}) ...")
+        print(f"  [art_index] downloading {bulk_type} bulk ({size_mb:.0f} MB, {updated_at}) ...")
         resp = self._session.get(manifest["download_uri"], stream=True, timeout=60)
         resp.raise_for_status()
         done = 0
-        with open(self.bulk_path, "wb") as fh:
+        with open(dest, "wb") as fh:
             for chunk in resp.iter_content(chunk_size=1 << 20):
                 fh.write(chunk)
                 done += len(chunk)
@@ -367,8 +375,8 @@ class ArtIndexBuilder:
                     print(f"  [art_index] downloaded {done / 1e6:.0f}/{size_mb:.0f} MB")
         with _connect(self.db_path) as conn:
             conn.execute(
-                "INSERT OR REPLACE INTO meta (key, value) VALUES ('bulk_updated_at', ?)",
-                (updated_at,),
+                "INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)",
+                (meta_key, updated_at),
             )
         print(f"  [art_index] bulk file saved ({done / 1e6:.0f} MB)")
 
@@ -493,6 +501,79 @@ class ArtIndexBuilder:
             f"{self.status()['indexed']} total indexed"
         )
 
+    def prefetch_printings(self, limit: Optional[int] = None, force: bool = False) -> None:
+        """
+        Predownload the ranking image of EVERY printing into ArtMatcher's disk
+        cache so rank_printings never waits on Scryfall at scan time.
+
+        Uses the `default_cards` bulk (one entry per printing) and the same
+        `normal`-size URL preference as rank_printings.  ~115k images ≈ 10 GB,
+        ~4 h at the rate limit; resumable (existing files are skipped) and
+        incremental — re-run after new set releases to top up.
+        """
+        from mtg_card_scanner.visual_match import _DEFAULT_CACHE_DIR
+
+        manifest = self._fetch_manifest("default_cards")
+        bulk_dest = self.index_dir / "default-cards.json"
+        self._download_bulk(manifest, force, dest=bulk_dest,
+                            meta_key="printings_bulk_updated_at")
+
+        print("  [art_index] parsing printings bulk (large — one-off memory spike is expected) ...")
+        with open(bulk_dest, encoding="utf-8") as fh:
+            entries = json.load(fh)
+
+        def rank_url(e: dict[str, Any]) -> Optional[str]:
+            # Mirror rank_printings: image_uris.normal, else large; DFC front face.
+            for holder in (e, *(e.get("card_faces") or [])[:1]):
+                uris = holder.get("image_uris") or {}
+                url = uris.get("normal") or uris.get("large")
+                if url:
+                    return url
+            return None
+
+        cache_dir = Path(_DEFAULT_CACHE_DIR)
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        wanted = [(e["id"], url) for e in entries if (url := rank_url(e))]
+        del entries
+        todo = [(sid, url) for sid, url in wanted
+                if not (cache_dir / f"{sid}.jpg").exists()]
+        print(
+            f"  [art_index] {len(wanted)} printings with images — "
+            f"{len(wanted) - len(todo)} already cached, {len(todo)} to fetch"
+        )
+        if limit is not None:
+            todo = todo[:limit]
+            print(f"  [art_index] --limit {limit}: fetching {len(todo)} this run")
+
+        started = time.monotonic()
+        fetched = 0
+        failures = 0
+        for sid, url in todo:
+            dest = cache_dir / f"{sid}.jpg"
+            try:
+                self._throttle()
+                resp = self._session.get(url, timeout=_IMAGE_FETCH_TIMEOUT)
+                self._last_request = time.monotonic()
+                resp.raise_for_status()
+                dest.write_bytes(resp.content)
+            except Exception as exc:
+                failures += 1
+                print(f"  [art_index] skip {sid}: {exc}")
+                continue
+            fetched += 1
+            if fetched % 500 == 0:
+                elapsed = time.monotonic() - started
+                rate = fetched / elapsed if elapsed > 0 else 0.0
+                eta_min = (len(todo) - fetched) / rate / 60 if rate > 0 else 0.0
+                print(
+                    f"  [art_index] prefetched {fetched}/{len(todo)}"
+                    f"  ({rate:.1f}/s, ETA {eta_min:.0f} min)"
+                )
+        print(
+            f"  [art_index] prefetch done: {fetched} fetched, {failures} failures, "
+            f"cache now {sum(1 for _ in cache_dir.glob('*.jpg'))} images"
+        )
+
 
 # ── CLI ───────────────────────────────────────────────────────────────────────
 
@@ -509,6 +590,15 @@ def _cli() -> None:
     p_build.add_argument("--force", action="store_true",
                          help="re-download the bulk JSON even if current")
 
+    p_pref = sub.add_parser(
+        "prefetch-printings",
+        help="predownload every printing's ranking image (~10 GB, ~4 h, resumable)",
+    )
+    p_pref.add_argument("--limit", type=int, default=None,
+                        help="stop after N newly fetched images")
+    p_pref.add_argument("--force", action="store_true",
+                        help="re-download the bulk JSON even if current")
+
     sub.add_parser("status", help="show index row count and bulk revision")
 
     p_query = sub.add_parser("query", help="identify a card photo (debug/threshold tuning)")
@@ -519,6 +609,8 @@ def _cli() -> None:
 
     if args.cmd == "build":
         ArtIndexBuilder().build(limit=args.limit, force=args.force)
+    elif args.cmd == "prefetch-printings":
+        ArtIndexBuilder().prefetch_printings(limit=args.limit, force=args.force)
     elif args.cmd == "status":
         for k, v in ArtIndexBuilder().status().items():
             print(f"  {k}: {v}")
