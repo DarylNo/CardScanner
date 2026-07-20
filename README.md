@@ -148,6 +148,14 @@ python -m mtg_card_scanner.art_index status              # row count / bulk revi
 python -m mtg_card_scanner.art_index query photo.jpg     # identify a saved photo (tuning/debug)
 ```
 
+**Optional but recommended:** predownload every printing's ranking image so the first scan
+of a new card name is as fast as a repeat scan (otherwise that first scan waits up to ~5 s
+while the name's printing images download):
+
+```bash
+python -m mtg_card_scanner.art_index prefetch-printings   # ~116k images, ~10 GB, ~4 h, resumable
+```
+
 The server runs fine before the index is built — scans just return "Art index not built" until
 then.
 
