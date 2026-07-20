@@ -20,14 +20,19 @@
     aspect-ratio: 5 / 7; border: 3px solid rgba(120,200,255,.8); border-radius: 14px;
     box-shadow: 0 0 0 100vmax rgba(0,0,0,.35); pointer-events: none;
   }
+  #guide.armed { border-color: rgba(110,231,160,.9); }
+  #guide.busy  { border-color: rgba(251,191,36,.9); }
   footer { padding: 14px; display: flex; flex-direction: column; gap: 10px; }
   #status { min-height: 1.3em; text-align: center; font-size: 14px; color: #aeb4bf; }
   #status.ok { color: #6ee7a0; } #status.err { color: #ff8a8a; }
+  .btnrow { display: flex; gap: 10px; }
   button {
     font-size: 19px; font-weight: 600; padding: 16px; border: 0; border-radius: 12px;
-    background: #3b82f6; color: #fff; width: 100%;
+    background: #3b82f6; color: #fff; flex: 1;
   }
   button:disabled { background: #2a2f3a; color: #7b8290; }
+  #autoBtn { flex: 0 0 34%; background: #14532d; color: #86efac; }
+  #autoBtn.off { background: #23262e; color: #7b8290; }
   .hint { font-size: 12px; color: #7b8290; text-align: center; }
 </style>
 </head>
@@ -39,19 +44,46 @@
   </div>
   <footer>
     <div id="status">Starting camera…</div>
-    <button id="shoot" disabled>Scan Card</button>
-    <div class="hint">Fill the frame with one card, hold steady, then tap.</div>
+    <div class="btnrow">
+      <button id="autoBtn">Auto: ON</button>
+      <button id="shoot" disabled>Scan Card</button>
+    </div>
+    <div class="hint">Place a card in the frame — it scans by itself. Swap cards to scan the next.</div>
   </footer>
   <canvas id="canvas" hidden></canvas>
+  <canvas id="motion" hidden></canvas>
 
 <script>
 const video = document.getElementById('video');
 const canvas = document.getElementById('canvas');
+const motion = document.getElementById('motion');
 const statusEl = document.getElementById('status');
+const guide = document.getElementById('guide');
 const shoot = document.getElementById('shoot');
+const autoBtn = document.getElementById('autoBtn');
 const BURST = 3, BURST_GAP_MS = 120;
 
+// ── auto-scan tunables ────────────────────────────────────────────────────────
+// The rig is a fixed mount over a tray, so the scene is static except when a
+// hand places/removes a card. We watch a 64×48 grayscale downsample at 5 fps:
+// a mean-abs-diff spike vs the last SETTLED scene arms the machine, N
+// consecutive stable frames fire the scan, and the settled reference then
+// re-seeds so the same card is never rescanned until the scene changes again.
+const MOTION_W = 64, MOTION_H = 48, SAMPLE_MS = 200;
+const DIFF_TRIGGER = 9;    // vs settledRef: scene meaningfully changed
+const DIFF_STABLE = 3;     // vs previous sample: motion has stopped
+const STABLE_FRAMES = 6;   // ~1.2 s of stillness before scanning
+const COOLDOWN_MS = 1000;
+
+let autoEnabled = true;
+let mode = 'idle';         // idle | settling | scanning | cooldown
+let settledRef = null;     // last settled scene (Uint8ClampedArray gray)
+let emptyRef = null;       // the empty tray, seeded at startup
+let prevFrame = null;
+let stableCount = 0;
+
 function setStatus(msg, cls='') { statusEl.textContent = msg; statusEl.className = cls; }
+function setGuide(state) { guide.className = state; }
 
 async function startCamera() {
   if (!navigator.mediaDevices?.getUserMedia) {
@@ -66,12 +98,23 @@ async function startCamera() {
     video.srcObject = stream;
     await video.play();
     shoot.disabled = false;
-    setStatus('Ready.', 'ok');
+    setStatus('Auto: waiting for a steady view…');
   } catch (e) {
     setStatus('Camera blocked: ' + e.message + ' (HTTPS required on phones).', 'err');
   }
 }
 
+// ── screen wake lock — a hands-free mount dies if the screen sleeps ──────────
+let wakeLock = null;
+async function acquireWakeLock() {
+  try { wakeLock = await navigator.wakeLock?.request('screen'); } catch (e) { /* unsupported */ }
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') acquireWakeLock();
+});
+acquireWakeLock();
+
+// ── frame capture (full-res burst for the server) ────────────────────────────
 function grabFrame() {
   const w = video.videoWidth, h = video.videoHeight;
   canvas.width = w; canvas.height = h;
@@ -88,8 +131,8 @@ async function captureBurst() {
   return frames;
 }
 
-shoot.addEventListener('click', async () => {
-  shoot.disabled = true;
+async function scanOnce() {
+  setGuide('busy');
   setStatus('Capturing…');
   try {
     const frames = await captureBurst();
@@ -107,6 +150,95 @@ shoot.addEventListener('click', async () => {
   } catch (e) {
     setStatus('Upload failed: ' + e.message, 'err');
   } finally {
+    setGuide(autoEnabled ? 'armed' : '');
+  }
+}
+
+// ── motion detection ─────────────────────────────────────────────────────────
+function sampleSmallGray() {
+  if (!video.videoWidth) return null;
+  motion.width = MOTION_W; motion.height = MOTION_H;
+  const ctx = motion.getContext('2d', { willReadFrequently: true });
+  ctx.drawImage(video, 0, 0, MOTION_W, MOTION_H);
+  const { data } = ctx.getImageData(0, 0, MOTION_W, MOTION_H);
+  const gray = new Uint8ClampedArray(MOTION_W * MOTION_H);
+  for (let i = 0, j = 0; j < gray.length; i += 4, j++) {
+    gray[j] = (data[i] + 2 * data[i + 1] + data[i + 2]) >> 2;
+  }
+  return gray;
+}
+
+function meanDiff(a, b) {
+  let sum = 0;
+  for (let i = 0; i < a.length; i++) sum += Math.abs(a[i] - b[i]);
+  return sum / a.length;
+}
+
+function tick() {
+  if (!autoEnabled || mode === 'scanning' || mode === 'cooldown') return;
+  const cur = sampleSmallGray();
+  if (!cur) return;
+
+  if (settledRef === null) {
+    // Bootstrap: wait for the first steady second, seed both references.
+    // The mount points at an EMPTY tray at startup, so this also learns
+    // what "no card" looks like (card removal then never triggers a scan).
+    if (prevFrame && meanDiff(cur, prevFrame) < DIFF_STABLE) stableCount++;
+    else stableCount = 0;
+    if (stableCount >= STABLE_FRAMES) {
+      settledRef = cur; emptyRef = cur; stableCount = 0;
+      setGuide('armed');
+      setStatus('Auto: watching…');
+    }
+  } else if (mode === 'idle') {
+    if (meanDiff(cur, settledRef) > DIFF_TRIGGER) {
+      mode = 'settling'; stableCount = 0;
+      setStatus('Change detected — hold still…');
+    }
+  } else if (mode === 'settling') {
+    if (meanDiff(cur, prevFrame) < DIFF_STABLE) stableCount++;
+    else stableCount = 0;
+
+    if (meanDiff(cur, settledRef) <= DIFF_TRIGGER) {
+      mode = 'idle';                      // transient (hand wave) — scene unchanged
+      setStatus('Auto: watching…');
+    } else if (stableCount >= STABLE_FRAMES) {
+      settledRef = cur; stableCount = 0;
+      if (emptyRef && meanDiff(cur, emptyRef) <= DIFF_TRIGGER) {
+        mode = 'idle';                    // card was REMOVED — silently re-arm
+        setStatus('Auto: watching…');
+      } else {
+        mode = 'scanning';
+        scanOnce().finally(() => {
+          mode = 'cooldown';
+          setTimeout(() => { mode = 'idle'; }, COOLDOWN_MS);
+        });
+      }
+    }
+  }
+  prevFrame = cur;
+}
+setInterval(tick, SAMPLE_MS);
+
+// ── controls ─────────────────────────────────────────────────────────────────
+autoBtn.addEventListener('click', () => {
+  autoEnabled = !autoEnabled;
+  autoBtn.textContent = autoEnabled ? 'Auto: ON' : 'Auto: OFF';
+  autoBtn.classList.toggle('off', !autoEnabled);
+  setGuide(autoEnabled && settledRef ? 'armed' : '');
+  if (autoEnabled) { mode = 'idle'; settledRef = null; prevFrame = null; stableCount = 0;
+                     setStatus('Auto: waiting for a steady view…'); }
+  else setStatus('Auto off — tap Scan Card.');
+});
+
+shoot.addEventListener('click', async () => {
+  shoot.disabled = true;
+  mode = 'scanning';
+  try {
+    await scanOnce();
+  } finally {
+    settledRef = sampleSmallGray() || settledRef;  // don't auto-refire on this scene
+    mode = 'idle';
     setTimeout(() => { shoot.disabled = false; }, 400);
   }
 });

@@ -67,7 +67,14 @@
 </header>
 <main>
   <div id="left">
-    <div class="toolbar"><input id="filter" placeholder="Filter scans by name / set…"></div>
+    <div class="toolbar">
+      <input id="filter" placeholder="Filter scans by name / set…">
+      <div style="display:flex;gap:8px;margin-top:8px;align-items:center">
+        <input id="pmin" type="number" min="0" step="0.25" placeholder="Min $" style="width:80px">
+        <input id="pmax" type="number" min="0" step="0.25" placeholder="Max $" style="width:80px">
+        <button class="btn ghost" id="exclBtn" title="Mark every priced card outside the range as not-included in the export (reversible per card)">Exclude filtered</button>
+      </div>
+    </div>
     <div id="list"></div>
   </div>
   <div id="right"><div class="empty">Scan a card on your phone to begin.</div></div>
@@ -91,9 +98,29 @@ function titleFor(scan){
   return scan.selection?.name || scan.card_read?.name || "(unread)";
 }
 
+// ── price filter ──────────────────────────────────────────────────────────────
+// Applies to scans with a fetched F2F price; unpriced scans (still awaiting a
+// printing pick) always stay visible so they don't silently disappear.
+let priceMin = null, priceMax = null;
+
+function priceOf(scan){
+  if (scan.status !== "selected" || !scan.f2f) return null;
+  const p = f2fBest(scan);
+  return p == null ? null : Number(p);
+}
+function inPriceRange(scan){
+  if (priceMin == null && priceMax == null) return true;
+  const p = priceOf(scan);
+  if (p == null) return true;
+  if (priceMin != null && p < priceMin) return false;
+  if (priceMax != null && p > priceMax) return false;
+  return true;
+}
+
 function renderList(){
   const q = filterText.toLowerCase();
   const rows = scans.filter(s => {
+    if (!inPriceRange(s)) return false;
     if (!q) return true;
     const hay = (titleFor(s)+" "+(s.selection?.set||s.card_read?.set_code||"")).toLowerCase();
     return hay.includes(q);
@@ -176,9 +203,16 @@ function renderDetail(){
   const chosenId = scan.selection?.scryfall_id;
 
   let html = `<h2>${esc(titleFor(scan))}
-    <span class="muted" style="font-weight:400">— read as ${esc(cr.name||"?")}
+    <span class="muted" style="font-weight:400">— matched as ${esc(cr.name||"?")}
     ${cr.foil?'· foil':''} · est. ${esc(cr.condition_estimate||"?")}
     ${cr.condition_reason?`(${esc(cr.condition_reason)})`:''}</span></h2>`;
+
+  if ((cr.alternates||[]).length){
+    const alts = cr.alternates.map(a =>
+      `<a href="#" class="alt-name" data-name="${esc(a.name)}">${esc(a.name)}</a> <span class="muted">(Δ${a.distance})</span>`
+    ).join(" · ");
+    html += `<p class="muted">Also possible: ${alts}</p>`;
+  }
 
   if (scan.error) html += `<p class="muted">⚠ ${esc(scan.error)}</p>`;
 
@@ -269,6 +303,14 @@ function wireDetail(scan){
   $("#msearchBtn")?.addEventListener("click", doSearch);
   $("#msearch")?.addEventListener("keydown", e => { if (e.key==="Enter") doSearch(); });
 
+  // Alternate name guesses from the art index → one click reruns the search.
+  $("#right").querySelectorAll(".alt-name").forEach(a =>
+    a.addEventListener("click", e => {
+      e.preventDefault();
+      $("#msearch").value = a.dataset.name;
+      doSearch();
+    }));
+
   $("#delBtn")?.addEventListener("click", async () => {
     await fetch(`/api/scans/${scan.id}`, { method: "DELETE" });
     focusedId = null; await poll(); renderDetail();
@@ -296,6 +338,17 @@ async function poll(){
 }
 
 $("#filter").addEventListener("input", e => { filterText = e.target.value; renderList(); });
+$("#pmin").addEventListener("input", e => { priceMin = e.target.value === "" ? null : Number(e.target.value); renderList(); });
+$("#pmax").addEventListener("input", e => { priceMax = e.target.value === "" ? null : Number(e.target.value); renderList(); });
+$("#exclBtn").addEventListener("click", async () => {
+  // Bulk-exclude everything the price filter currently hides (priced, out of
+  // range, still included). Reversible per card via its include checkbox.
+  const targets = scans.filter(s =>
+    s.status === "selected" && s.included && priceOf(s) != null && !inPriceRange(s));
+  if (!targets.length) return;
+  for (const s of targets) await jsend(`/api/scans/${s.id}`, "PATCH", { included: false });
+  poll();
+});
 $("#exportBtn").addEventListener("click", () => { window.location = "/api/export"; });
 $("#phoneLink").textContent = "Phone: " + location.origin + "/phone";
 
