@@ -1,6 +1,9 @@
 # MTG Card Scanner
 
-A live, one-card-at-a-time Magic: The Gathering card scanner. A local vision LLM (via Ollama) reads the card like a human, then Scryfall provides the canonical printing and price. No local card-image library needed.
+A hands-free, one-card-at-a-time Magic: The Gathering card scanner. A **local
+perceptual-hash art index** (built once from Scryfall bulk data) identifies each card by its
+artwork — no LLM, no GPU, no cloud vision — then Scryfall provides the canonical printings
+and price.
 
 ---
 
@@ -8,7 +11,8 @@ A live, one-card-at-a-time Magic: The Gathering card scanner. A local vision LLM
 
 The scanner runs as a **local web app** with two roles open at the same time:
 
-- **Phone** (`/phone`) is the **camera** — point at a card, tap, and it uploads the image.
+- **Phone** (`/phone`) is the **camera** — put it on a mount over a tray. Place a card and it
+  **scans automatically**; swap the card to scan the next one.
 - **Desktop** (`/`) is the **control surface** — it shows the card's printings **ranked by
   artwork**, you **pick the exact printing**, it fetches **Face to Face Games** pricing for
   that printing, and you **review/filter all scans** and **export** the ones you want.
@@ -20,8 +24,9 @@ collector number), which is what downstream pricing and export depend on.
 ### Run it
 
 ```bash
-pip install -r requirements.txt      # includes fastapi/uvicorn
-./run_server.sh                      # serves HTTPS on :8443 (generates a self-signed cert)
+pip install -r requirements.txt                # includes fastapi/uvicorn
+python -m mtg_card_scanner.art_index build     # one-time art index build (see below)
+./run_server.sh                                # serves HTTPS on :8443 (generates a self-signed cert)
 ```
 
 Then open, on the same LAN:
@@ -34,15 +39,29 @@ Then open, on the same LAN:
 > self-signed certificate; accept the one-time security warning on the phone. (On the desktop
 > alone you could use plain `http://localhost`, but the phone needs HTTPS.)
 
-Ollama must be running on the machine that serves the app (it has the GPU). Config via env:
-`OLLAMA_ENDPOINT`, `VISION_MODEL`, `PORT`, `SCAN_DB`.
+Config via env: `PORT`, `SCAN_DB`, `HOST`.
 
-### Face to Face pricing
+### Auto-scan (hands-free)
+
+The phone page watches the camera at 5 fps. When the scene changes (a card is placed or
+swapped) and then holds still for ~1 second, it captures a burst and scans — no tap needed.
+The empty tray is learned at startup, so *removing* a card never triggers a scan, and a card
+is never rescanned until the scene changes again. The **Auto** toggle turns this off; the
+**Scan Card** button always works manually. The page holds a screen wake-lock so a mounted
+phone doesn't sleep.
+
+Start the page with the tray **empty** — the first steady second seeds the "empty" reference.
+
+### Face to Face pricing + price filter
 
 `mtg_card_scanner/facetoface.py` looks up live prices from Face to Face Games' public Shopify
 JSON endpoints (no API key) for the exact printing you select, by condition and foil. It's shown
 as **decision support** while you review — a transient F2F outage just shows "no listing", never
 breaks a scan.
+
+The scan list has **Min $ / Max $** filters on the fetched F2F price. Cards outside the range
+are hidden from the list; **Exclude filtered** marks them all as not-included in the export in
+one click (reversible per card via its checkbox). Unpriced scans always stay visible.
 
 ### Export to Mana Exchange
 
@@ -51,36 +70,45 @@ one line per card, `Qty SetCode CollectorNumber Condition Finish` (e.g. `2 OTJ 2
 Paste it into Mana Exchange → Admin → Add Cards. Mana Exchange derives name, images, and its own
 pricing from Scryfall via set + collector number, so only these five columns are needed.
 
-### Testing without a phone or GPU
+### Testing without a phone
 
 The pipeline and API are covered by `pytest` (Face to Face matching, art-ranked candidates, the
-SQLite store, the export format, and the full API path via a mocked vision model). You can also
+SQLite store, the export format, and the full API path via a fake pipeline). You can also
 `curl` an image straight at `POST /api/scan` to drive a real scan without the phone.
 
 ---
 
-## Architecture (vision pipeline)
+## Architecture
 
 ```
-Webcam → capture.py → vision.py (Ollama/Qwen2.5-VL) → scryfall.py → output.py
+Phone camera → POST /api/scan → card_detect.py (find + warp card)
                                        ↓
-                              pipeline.py / main.py
+                              art_index.py  (pHash art region → nearest of ~47k artworks → NAME)
+                                       ↓
+                              scryfall.py   (all printings of that name)
+                                       ↓
+                              visual_match.py (rank printings by art distance)
+                                       ↓
+                              desktop UI: pick printing → facetoface.py price → export.py
 ```
 
-- **capture.py** — OpenCV webcam frame capture (on-demand keypress or auto-capture when steady)
-- **vision.py** — Sends frame(s) to a local vision LLM; parses strict JSON response
-- **scryfall.py** — Scryfall API lookup by set + collector number, falls back to fuzzy name search
-- **output.py** — Builds `ScanResult`, pretty-prints listing, appends to CSV/JSON
-- **pipeline.py** — Orchestrates the full flow; includes demo mode for testing without a camera/model
+- **card_detect.py** — finds the card quad in the frame, perspective-warps to 630×880; frame
+  sharpness scoring for burst selection
+- **art_index.py** — the identifier: a local SQLite index of the 64-bit pHash of every unique
+  Magic artwork (Scryfall `unique_artwork` bulk data); nearest-neighbour Hamming query
+- **scryfall.py** — Scryfall API client (printings by name, set+collector lookup, rate-limited)
+- **visual_match.py** — ranks a name's printings against the scan by multi-region pHash
+- **pipeline.py** — orchestrates identify → printings → rank; graceful "use manual search"
+  result when the art match isn't confident
+- **server/** — FastAPI app, SQLite scan store, F2F client, Mana Exchange export
 
 ---
 
 ## Prerequisites
 
 - Python 3.10+
-- [Ollama](https://ollama.com) installed and running
-- An NVIDIA GPU with enough VRAM (RTX 3090 24 GB handles Qwen2.5-VL-7B easily)
-- A webcam
+- ~2 GB free disk for the art index build (bulk JSON + cached images + index)
+- No GPU, no Ollama, no API keys
 
 ---
 
@@ -89,7 +117,7 @@ Webcam → capture.py → vision.py (Ollama/Qwen2.5-VL) → scryfall.py → outp
 ### 1. Clone and install dependencies
 
 ```bash
-cd mtg-card-scanner
+cd CardScanner
 python -m venv .venv
 # Windows
 .venv\Scripts\activate
@@ -99,109 +127,45 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 2. Pull the vision model in Ollama
+### 2. Build the art index (one-time)
 
 ```bash
-# Recommended — good balance of speed and accuracy on a 3090
-# NOTE: Ollama uses qwen2.5vl (no hyphen between 2.5 and vl)
-ollama pull qwen2.5vl:7b
-
-# Higher accuracy (needs ~20 GB VRAM)
-ollama pull qwen2.5vl:32b
-
-# Lighter option
-ollama pull qwen2.5vl:3b
+python -m mtg_card_scanner.art_index build
 ```
 
-If Ollama is running in Docker:
-```bash
-docker exec ollama ollama pull qwen2.5vl:7b
-```
+This downloads Scryfall's `unique_artwork` bulk file (~265 MB) and a small image of every
+unique artwork (~47k images, ~0.5 GB), hashing each into
+`~/.cache/mtg-card-scanner/art_index/`. It is **throttled to Scryfall's rate limits**, takes
+**1–3 hours**, and is **safe to interrupt — re-running resumes** where it left off. Re-run it
+occasionally (e.g. after new set releases): only new artworks are fetched.
 
-Verify Ollama is serving at `http://localhost:11434`:
+Useful subcommands:
 
 ```bash
-ollama list
-curl http://localhost:11434/api/tags
+python -m mtg_card_scanner.art_index build --limit 200   # quick smoke build
+python -m mtg_card_scanner.art_index status              # row count / bulk revision
+python -m mtg_card_scanner.art_index query photo.jpg     # identify a saved photo (tuning/debug)
 ```
 
-### 3. Configure environment
+The server runs fine before the index is built — scans just return "Art index not built" until
+then.
+
+### 3. Launch
 
 ```bash
-cp .env.example .env
-# Edit .env with your settings if needed
-```
-
-Default `.env` values work if Ollama is running locally with `qwen2.5-vl:7b`.
-
----
-
-## Usage
-
-### Demo mode (no camera or model needed — tests Scryfall + output pipeline)
-
-```bash
-python main.py --demo
-```
-
-### Live scanning — press ENTER to capture each card
-
-```bash
-python main.py
-```
-
-### Auto-capture — captures automatically when the card is held steady
-
-```bash
-python main.py --auto
-```
-
-### Options
-
-```
---demo              Run demo mode (sample card read → Scryfall → listing)
---camera INT        Webcam index (default: 0)
---auto              Auto-capture when image is steady
---once              Capture one card then exit
---model STR         Ollama model name (default: qwen2.5-vl:7b)
---endpoint URL      Ollama API endpoint (default: http://localhost:11434/v1)
---output PATH       Output file — .csv or .json (default: scan_results.csv)
-```
-
-### Examples
-
-```bash
-# Scan to JSON output
-python main.py --output results.json
-
-# Use a different model
-python main.py --model qwen2.5-vl:32b
-
-# Use camera index 1, auto-capture, output to JSON
-python main.py --auto --camera 1 --output scan_results.json
-
-# One-shot scan then exit
-python main.py --once
+./run_server.sh
 ```
 
 ---
 
-## Output
+## CLI
 
-Each scanned card produces a console listing and an appended row/entry in the output file:
+`main.py` is a demo/diagnostic entry point only (the web app is the scanner):
 
+```bash
+python main.py --demo                    # sample card → Scryfall → listing/CSV
+python main.py --demo --output out.json  # JSON output
 ```
-────────────────────────────────────────────────────────────
-  Lightning Bolt
-  Magic 2010  #146  (EN)
-  Instant  ·  Common
-  Condition: LP  —  Minor edge wear on two corners.
-  Price (USD): $0.50
-  Scryfall: https://scryfall.com/card/m10/146/lightning-bolt
-────────────────────────────────────────────────────────────
-```
-
-CSV fields: `timestamp, name, set_code, collector_number, foil, language, condition, condition_reason, scryfall_name, scryfall_set_name, scryfall_type, scryfall_rarity, price_usd, price_usd_foil, scryfall_uri`
 
 ---
 
@@ -211,27 +175,17 @@ CSV fields: `timestamp, name, set_code, collector_number, foil, language, condit
 pytest
 ```
 
-Tests cover: JSON parsing (with markdown fences, extra text), Scryfall lookup + fallback, result building, and listing formatting — all without requiring a camera or model.
+Tests cover: the art index (hashing, dedupe, resume, filtering), the pipeline (confidence
+thresholds, multi-frame retry, error paths), Scryfall lookup + fallback, F2F price matching,
+the scan store, the export format, and the full API path — all without network or a camera.
 
 ---
 
-## Swapping models
+## Accuracy tuning
 
-Edit `.env` (or pass `--model`):
-
-```env
-# Lighter — faster, less accurate
-VISION_MODEL=qwen2.5vl:3b
-
-# Heavier — slower, more accurate
-VISION_MODEL=qwen2.5vl:32b
-
-# Any other Ollama vision model
-VISION_MODEL=llava:13b
-```
-
-The endpoint can point at any OpenAI-compatible vision API:
-
-```env
-OLLAMA_ENDPOINT=http://192.168.1.100:11434/v1
-```
+Identification confidence is a Hamming-distance threshold in `mtg_card_scanner/art_index.py`
+(`_MAX_CONFIDENT_DISTANCE`, default 16 of 64 bits). If too many scans come back "no confident
+match", raise it slightly; if wrong names are confidently matched, lower it. Use
+`python -m mtg_card_scanner.art_index query <photo.jpg>` against saved photos from your rig to
+see real distances. Foils, sleeves, and glare raise distances — the failure mode is always the
+graceful manual-search path, never a silent wrong export.
