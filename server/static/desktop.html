@@ -172,7 +172,10 @@ function focusScan(id){ focusedId = id; detailSig = ""; renderDetail(); renderLi
 
 function candCard(scan, c, chosenId){
   const badges = (c.finishes||[]).map(f=>`<span class="pill">${esc(f)}</span>`).join("");
-  const dist = c.phash_distance!=null ? `<span class="pill">art Δ${c.phash_distance}</span>` : "";
+  // multi = art×4 + title×1 + textbox×1 — the order candidates are shown in.
+  const dist = c.multi_distance!=null
+    ? `<span class="pill" title="combined match: art×4 + title + textbox (lower = better)">Δ${c.multi_distance}</span>`
+    : (c.phash_distance!=null ? `<span class="pill">art Δ${c.phash_distance}</span>` : "");
   return `<div class="card ${c.id===chosenId?'chosen':''}" data-pick='${esc(JSON.stringify(c))}'>
     <img src="${esc(c.image_normal||c.image_small)}" loading="lazy" onerror="this.style.visibility='hidden'">
     <div class="t"><b>${esc(c.set_name)}</b>#${esc(c.collector_number)} · ${esc(c.rarity||"")}</div>

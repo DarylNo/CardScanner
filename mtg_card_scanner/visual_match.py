@@ -79,16 +79,12 @@ _USER_AGENT = "MTGCardScanner/1.0 visual-match (contact: your-email@example.com)
 _REQUEST_DELAY = 0.12   # seconds — stays under Scryfall CDN ~10 req/s limit
 _IMAGE_FETCH_TIMEOUT = 8   # seconds — fail fast on a stalled download rather than hang the scan
 
-# Hard cap on how many printings rank_printings() will download/hash per scan.
-# Heavily-reprinted staples (Shivan Dragon, Lightning Bolt, ...) can have 50+
-# printings; downloading and hashing every single one turns one scan into a
-# multi-minute network crawl that feels like the scanner is permanently stuck.
-# Now that pipeline.py resolves confidently-read cards via direct collector-
-# number lookup BEFORE this ever runs, this fallback only needs to find a
-# reasonable match, not exhaustively search every printing ever made — so we
-# keep the oldest half (best for vintage/old-card identification) and newest
-# half (best for recently-acquired modern cards) and drop the middle.
-_MAX_CANDIDATES_PER_SCAN = 40
+# Hard cap on how many printings rank_printings() will hash per scan.  With
+# every printing's image prefetched locally (art_index prefetch-printings) the
+# old network-crawl concern is gone; the cap now only bounds hash time for
+# extreme cases (basic lands have 500+ printings).  120 covers every non-basic
+# card in the game; beyond it we keep the oldest half + newest half.
+_MAX_CANDIDATES_PER_SCAN = 120
 
 
 def _cap_candidates(printings: list[dict[str, Any]]) -> list[dict[str, Any]]:

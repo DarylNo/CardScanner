@@ -211,6 +211,16 @@ class Pipeline:
             }
 
         ranked = self.art_matcher.rank_printings(frames[0], printings)
+        # Secondary printing verification: order candidates by the multi-region
+        # distance (art×4 + title×1 + textbox×1).  Same-artwork reprints tie on
+        # art alone; the title/textbox regions — valid here because each
+        # printing is compared against its OWN image — break those ties toward
+        # the actual frame/typesetting in front of the camera.
+        ranked = sorted(
+            ranked,
+            key=lambda p: p["multi_distance"] if p.get("multi_distance") is not None
+            else p.get("phash_distance", 1 << 30),
+        )
         candidates = [_candidate_dict(p) for p in ranked[:top_n]]
 
         return {
