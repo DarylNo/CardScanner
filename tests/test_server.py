@@ -47,7 +47,8 @@ class FakeF2F:
 @pytest.fixture
 def client(tmp_path):
     app = create_app(pipeline_factory=lambda: FakePipeline(),
-                     store=ScanStore(tmp_path / "s.db"), f2f=FakeF2F())
+                     store=ScanStore(tmp_path / "s.db"), f2f=FakeF2F(),
+                     scan_images_dir=tmp_path / "scan_images")
     return TestClient(app)
 
 
@@ -131,3 +132,22 @@ def test_delete_scan(client):
                        files={"files": ("c.jpg", _jpeg_bytes(), "image/jpeg")}).json()
     assert client.delete(f"/api/scans/{scan['id']}").json() == {"deleted": True}
     assert client.get(f"/api/scans/{scan['id']}").status_code == 404
+
+
+def test_scan_image_saved_served_and_deleted(client):
+    scan = client.post(
+        "/api/scan", files={"files": ("card.jpg", _jpeg_bytes(), "image/jpeg")}
+    ).json()
+    sid = scan["id"]
+
+    r = client.get(f"/api/scans/{sid}/image")
+    assert r.status_code == 200
+    assert r.headers["content-type"] == "image/jpeg"
+    assert len(r.content) > 100  # a real JPEG, not an error body
+
+    client.delete(f"/api/scans/{sid}")
+    assert client.get(f"/api/scans/{sid}/image").status_code == 404
+
+
+def test_scan_image_404_for_unknown_scan(client):
+    assert client.get("/api/scans/9999/image").status_code == 404

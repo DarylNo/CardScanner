@@ -35,3 +35,4 @@ scans.db
 !tests/fixtures/
 !tests/fixtures/**
 server.log
+scan_images/

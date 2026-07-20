@@ -57,10 +57,14 @@ def create_app(
     pipeline_factory: Optional[Callable[[], Any]] = None,
     store: Optional[ScanStore] = None,
     f2f: Optional[Any] = None,
+    scan_images_dir: Optional[Path] = None,
 ) -> FastAPI:
     app = FastAPI(title="MTG Card Scanner")
 
     store = store or ScanStore(os.getenv("SCAN_DB", "scans.db"))
+    # Warped photo of each physical scan, kept so the user can compare their
+    # actual card against the candidate printings while reviewing.
+    scan_images_dir = Path(scan_images_dir or os.getenv("SCAN_IMAGES_DIR", "scan_images"))
     if f2f is None:
         from mtg_card_scanner.facetoface import FaceToFaceClient
         f2f = FaceToFaceClient()
@@ -99,13 +103,31 @@ def create_app(
         if not frames:
             return JSONResponse({"error": "no decodable image uploaded"}, status_code=400)
         result = await run_in_threadpool(get_pipeline().scan_candidates, frames)
-        return store.create_scan(
+        scan = store.create_scan(
             identified=result["identified"],
             card_read=result["card_read"],
             confidence=result["confidence"],
             candidates=result["candidates"],
             error=result.get("error"),
         )
+        # Keep the warped photo of the physical card for later review.  A save
+        # failure must never break the scan itself.
+        try:
+            from mtg_card_scanner.card_detect import extract_card, pick_sharpest
+            card_img, _ = extract_card(pick_sharpest(frames))
+            scan_images_dir.mkdir(parents=True, exist_ok=True)
+            cv2.imwrite(str(scan_images_dir / f"{scan['id']}.jpg"), card_img,
+                        [cv2.IMWRITE_JPEG_QUALITY, 90])
+        except Exception as exc:
+            print(f"  [server] could not save scan image for #{scan['id']}: {exc}")
+        return scan
+
+    @app.get("/api/scans/{scan_id}/image")
+    def scan_image(scan_id: int):
+        path = scan_images_dir / f"{scan_id}.jpg"
+        if not path.exists():
+            return JSONResponse({"error": "no image"}, status_code=404)
+        return FileResponse(path, media_type="image/jpeg")
 
     # ── review (desktop) ───────────────────────────────────────────────────────
     @app.get("/api/scans")
@@ -188,6 +210,7 @@ def create_app(
 
     @app.delete("/api/scans/{scan_id}")
     def delete_scan(scan_id: int):
+        (scan_images_dir / f"{scan_id}.jpg").unlink(missing_ok=True)
         return {"deleted": store.delete_scan(scan_id)}
 
     # ── manual re-identification ────────────────────────────────────────────────

@@ -238,13 +238,20 @@ function renderDetail(){
     </div>`;
   }
 
-  html += `<div class="sec"><h2>${scan.status==="selected"?"Re-pick printing":"Pick the correct printing"}</h2>`;
+  html += `<div class="sec"><h2>${scan.status==="selected"?"Re-pick printing":"Pick the correct printing"}</h2>
+    <div style="display:flex;gap:16px;align-items:flex-start">
+      <div style="flex:0 0 190px;position:sticky;top:8px">
+        <img src="/api/scans/${scan.id}/image" style="width:190px;border-radius:10px;background:#23262e"
+             onerror="this.parentNode.style.display='none'">
+        <div class="muted" style="font-size:12px;text-align:center;margin-top:4px">your card</div>
+      </div>
+      <div style="flex:1">`;
   if ((scan.candidates||[]).length){
     html += `<div class="grid">${scan.candidates.map(c=>candCard(scan,c,chosenId)).join("")}</div>`;
   } else {
     html += `<p class="muted">No art candidates. Use manual search below.</p>`;
   }
-  html += `</div>`;
+  html += `</div></div></div>`;
 
   html += `<div class="sec"><h2>Manual search (wrong card?)</h2>
     <div style="display:flex;gap:8px;max-width:420px">
