@@ -83,7 +83,7 @@ SQLite store, the export format, and the full API path via a fake pipeline). You
 ```
 Phone camera → POST /api/scan → card_detect.py (find + warp card)
                                        ↓
-                              art_index.py  (pHash art region → nearest of ~47k artworks → NAME)
+                              art_index.py  (pHash art region → nearest of ~49k artworks → NAME)
                                        ↓
                               scryfall.py   (all printings of that name)
                                        ↓

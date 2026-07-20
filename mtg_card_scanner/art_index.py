@@ -55,10 +55,14 @@ _DEFAULT_INDEX_DIR = Path.home() / ".cache" / "mtg-card-scanner" / "art_index"
 _MAX_CONFIDENT_DISTANCE = 140   # combined score: above this → manual search
 _HIGH_CONFIDENCE_DISTANCE = 125  # combined score: at/below this → "high"
 
-# Scan-side crop jitter grid (fractions of the card): ±shift on both axes,
-# plus a slight inward inset, to absorb imperfect card-quad warps.
-_JITTER_SHIFTS = (-0.03, 0.0, 0.03)
-_JITTER_INSETS = (0.0, 0.05)
+# Scan-side crop jitter grid (fractions of the card): ±shift on both axes plus
+# inward AND outward insets.  This absorbs two distinct error sources: (a)
+# imperfect card-quad warps, and (b) different printings cropping the SAME
+# artwork differently (frame eras shift/zoom the art window — e.g. a 7ED
+# artwork rescanned from an ORI-frame card needs an outset to line up).
+# ~80 in-bounds variants ≈ 0.2 s per identify() over the full index.
+_JITTER_SHIFTS = (-0.06, -0.03, 0.0, 0.03, 0.06)
+_JITTER_INSETS = (-0.06, 0.0, 0.06, 0.12)
 
 _REQUEST_DELAY = 0.12          # seconds — stays under Scryfall CDN ~10 req/s limit
 _IMAGE_FETCH_TIMEOUT = 8       # seconds — fail fast on a stalled download
