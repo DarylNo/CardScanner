@@ -94,8 +94,9 @@ Phone camera → POST /api/scan → card_detect.py (find + warp card)
 
 - **card_detect.py** — finds the card quad in the frame, perspective-warps to 630×880; frame
   sharpness scoring for burst selection
-- **art_index.py** — the identifier: a local SQLite index of the 64-bit pHash of every unique
-  Magic artwork (Scryfall `unique_artwork` bulk data); nearest-neighbour Hamming query
+- **art_index.py** — the identifier: a local SQLite index of dual-scale pHashes (64-bit
+  coarse + 256-bit fine) of every unique Magic artwork (Scryfall `unique_artwork` bulk
+  data); nearest-neighbour query over jittered scan crops, scored `4·d64 + d256`
 - **scryfall.py** — Scryfall API client (printings by name, set+collector lookup, rate-limited)
 - **visual_match.py** — ranks a name's printings against the scan by multi-region pHash
 - **pipeline.py** — orchestrates identify → printings → rank; graceful "use manual search"
@@ -134,7 +135,7 @@ python -m mtg_card_scanner.art_index build
 ```
 
 This downloads Scryfall's `unique_artwork` bulk file (~265 MB) and a small image of every
-unique artwork (~47k images, ~0.5 GB), hashing each into
+unique artwork (~49k images, ~0.5 GB), hashing each into
 `~/.cache/mtg-card-scanner/art_index/`. It is **throttled to Scryfall's rate limits**, takes
 **1–3 hours**, and is **safe to interrupt — re-running resumes** where it left off. Re-run it
 occasionally (e.g. after new set releases): only new artworks are fetched.
@@ -183,9 +184,10 @@ the scan store, the export format, and the full API path — all without network
 
 ## Accuracy tuning
 
-Identification confidence is a Hamming-distance threshold in `mtg_card_scanner/art_index.py`
-(`_MAX_CONFIDENT_DISTANCE`, default 16 of 64 bits). If too many scans come back "no confident
-match", raise it slightly; if wrong names are confidently matched, lower it. Use
+Identification confidence is a combined-score threshold in `mtg_card_scanner/art_index.py`
+(`_MAX_CONFIDENT_DISTANCE`, default 140 on the `4·d64 + d256` scale; correct artworks measure
+~110–125 on real rig photos, the noise floor starts ~150). If too many scans come back "no
+confident match", raise it slightly; if wrong names are confidently matched, lower it. Use
 `python -m mtg_card_scanner.art_index query <photo.jpg>` against saved photos from your rig to
-see real distances. Foils, sleeves, and glare raise distances — the failure mode is always the
+see real scores. Foils, sleeves, and glare raise scores — the failure mode is always the
 graceful manual-search path, never a silent wrong export.
