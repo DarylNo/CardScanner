@@ -3,7 +3,7 @@
 import pytest
 
 from mtg_card_scanner.output import ScanResult, build_result, format_listing
-from mtg_card_scanner.vision import CardRead
+from mtg_card_scanner.card_read import CardRead
 
 
 def _card_read(**overrides) -> CardRead:

@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
-"""MTG Card Scanner — entry point."""
+"""MTG Card Scanner — CLI entry point (demo/diagnostics only).
+
+Scanning happens through the web app: run ``./run_server.sh`` and open
+``https://<this-machine-ip>:8443/phone`` on the phone (camera) and
+``https://<this-machine-ip>:8443/`` on the desktop (control UI).
+"""
 
 import argparse
 import os
 import sys
 from pathlib import Path
-from typing import Optional
 
 from dotenv import load_dotenv
 
@@ -15,43 +19,20 @@ load_dotenv()
 def _build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="mtg-scanner",
-        description="Live MTG card scanner: local vision LLM + Scryfall lookup.",
+        description="MTG card scanner: art-hash identification + Scryfall lookup.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python main.py --demo                    # test pipeline without camera/model
-  python main.py                           # live preview, SPACE/S to capture
-  python main.py --auto                    # live preview, auto-capture on steady
-  python main.py --output results.json     # save to JSON
-  python main.py --model qwen2.5-vl:32b   # use a larger model
+  python main.py --demo                    # test Scryfall + output pipeline
+  ./run_server.sh                          # launch the web app (the real scanner)
+  python -m mtg_card_scanner.art_index build   # one-time art-index build
         """,
     )
     p.add_argument(
         "--demo",
         action="store_true",
-        help="Demo mode — Scryfall + output pipeline against a sample card (no camera/model).",
-    )
-    p.add_argument(
-        "--camera",
-        type=int,
-        default=int(os.getenv("CAMERA_INDEX", "0")),
-        metavar="N",
-        help="Webcam device index (default: %(default)s).",
-    )
-    p.add_argument(
-        "--auto",
-        action="store_true",
-        help="Auto-capture when the card image is steady.",
-    )
-    p.add_argument(
-        "--model",
-        default=os.getenv("VISION_MODEL", "qwen2.5vl:7b"),
-        help="Ollama model name (default: %(default)s).",
-    )
-    p.add_argument(
-        "--endpoint",
-        default=os.getenv("OLLAMA_ENDPOINT", "http://localhost:11434/v1"),
-        help="Ollama API endpoint (default: %(default)s).",
+        required=True,
+        help="Demo mode — Scryfall + output pipeline against a sample card.",
     )
     p.add_argument(
         "--output",
@@ -70,55 +51,15 @@ def main() -> None:
     from mtg_card_scanner.output import OutputWriter, format_listing
     from mtg_card_scanner.pipeline import Pipeline
 
-    scryfall = ScryfallClient()
-    writer   = OutputWriter(args.output)
-
-    # ── Demo mode ─────────────────────────────────────────────────────────────
-    if args.demo:
-        pipeline = Pipeline(model=None, scryfall=scryfall, writer=writer)
-        try:
-            result = pipeline.run_demo()
-        except Exception as exc:
-            print(f"Demo failed: {exc}", file=sys.stderr)
-            sys.exit(1)
-        print(format_listing(result))
-        print(f"\nAppended to {args.output}")
-        return
-
-    # ── Live mode ─────────────────────────────────────────────────────────────
-    from mtg_card_scanner.vision import VisionModel
-    from mtg_card_scanner.preview import ScannerPreview
-
-    model    = VisionModel(endpoint=args.endpoint, model=args.model)
-    pipeline = Pipeline(model=model, scryfall=scryfall, writer=writer)
-
-    print(f"MTG Card Scanner")
-    print(f"  Model   : {args.model} @ {args.endpoint}")
-    print(f"  Camera  : {args.camera}")
-    print(f"  Output  : {args.output}")
-    print(f"  Mode    : {'auto-capture (steady)' if args.auto else 'manual (S/SPACE)'}")
-    print()
-
-    def scan_callback(frames):
-        """Called by the preview window with a list of burst frames."""
-        try:
-            result = pipeline.run_once(frames)
-            # Print listing to console as well as showing it on the overlay
-            print(format_listing(result))
-            print(f"Appended to {args.output}\n")
-            return result
-        except Exception as exc:
-            print(f"Scan error: {exc}", file=sys.stderr)
-            return None
-
-    preview = ScannerPreview(camera_index=args.camera)
+    pipeline = Pipeline(index=None, scryfall=ScryfallClient(),
+                        writer=OutputWriter(args.output))
     try:
-        preview.run(callback=scan_callback, auto_mode=args.auto)
-    except KeyboardInterrupt:
-        pass
-    except RuntimeError as exc:
-        print(f"\nError: {exc}", file=sys.stderr)
+        result = pipeline.run_demo()
+    except Exception as exc:
+        print(f"Demo failed: {exc}", file=sys.stderr)
         sys.exit(1)
+    print(format_listing(result))
+    print(f"\nAppended to {args.output}")
 
 
 if __name__ == "__main__":

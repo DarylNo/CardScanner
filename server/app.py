@@ -6,9 +6,9 @@ Two browsers talk to this one server on the LAN:
   * the DESKTOP (``/``) is the control UI — it polls scans, shows art-ranked
     printing candidates to pick from, fetches Face to Face prices, and exports.
 
-The heavy vision + art-matching pipeline (`Pipeline`) is built once and reused.
-Dependencies are injectable via ``create_app`` so the server is testable without
-a camera, a GPU, or Ollama (inject a fake pipeline).
+The art-matching pipeline (`Pipeline`) is built once and reused.  Dependencies
+are injectable via ``create_app`` so the server is testable without a camera or
+a built art index (inject a fake pipeline).
 """
 
 from __future__ import annotations
@@ -40,15 +40,12 @@ def _decode_image(data: bytes) -> Optional[np.ndarray]:
 
 
 def _default_pipeline_factory() -> Callable[[], Any]:
-    """Build the real vision+Scryfall pipeline lazily (defers Ollama/Scryfall setup)."""
+    """Build the real art-index+Scryfall pipeline lazily (defers index load)."""
     def factory():
-        from mtg_card_scanner.vision import VisionModel
+        from mtg_card_scanner.art_index import ArtIndex
         from mtg_card_scanner.scryfall import ScryfallClient
         from mtg_card_scanner.pipeline import Pipeline
-        endpoint = os.getenv("OLLAMA_ENDPOINT", "http://localhost:11434/v1")
-        model = os.getenv("VISION_MODEL", "qwen2.5vl:7b")
-        return Pipeline(model=VisionModel(endpoint=endpoint, model=model),
-                        scryfall=ScryfallClient())
+        return Pipeline(index=ArtIndex(), scryfall=ScryfallClient())
     return factory
 
 

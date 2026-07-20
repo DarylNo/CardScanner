@@ -4,6 +4,7 @@ Card detection and perspective correction.
 find_card_quad()  — locates the largest card-shaped quadrilateral in a frame
 warp_card()       — perspective-warps the detected quad to a standard 630×880 px upright card
 extract_card()    — convenience wrapper: detect + warp, with fallback to a centre crop
+frame_sharpness() / pick_sharpest() — Laplacian-variance blur scoring for burst frames
 """
 
 import cv2
@@ -93,30 +94,14 @@ def extract_card(frame: np.ndarray, min_area_frac: float = 0.04) -> tuple[np.nda
     return _centre_crop_fallback(frame), False
 
 
-def card_sub_crops(card: np.ndarray) -> dict[str, np.ndarray]:
-    """
-    Given a perspective-corrected card image (CARD_W × CARD_H),
-    return named sub-crops with upscaling and sharpening applied.
-    """
-    h, w = card.shape[:2]
+# ── sharpness ─────────────────────────────────────────────────────────────────
 
-    def up_sharp(img: np.ndarray, scale: float = 2.5, sharp: float = 1.2) -> np.ndarray:
-        up   = cv2.resize(img, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
-        blur = cv2.GaussianBlur(up, (0, 0), 3)
-        return cv2.addWeighted(up, 1 + sharp, blur, -sharp, 0)
+def frame_sharpness(frame: np.ndarray) -> float:
+    """Laplacian variance — higher means sharper (less blur)."""
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    return float(cv2.Laplacian(gray, cv2.CV_64F).var())
 
-    # Title bar: top ~12% of the card (name text lives here)
-    title = card[:int(h * 0.12), :]
 
-    # Bottom strip: bottom ~16% (collector info line)
-    strip = card[int(h * 0.84):, :]
-
-    # Bottom-left collector number: bottom 14%, left 65%
-    # (collector number + set code are on the left side of the bottom line)
-    bl = card[int(h * 0.86):, :int(w * 0.65)]
-
-    return {
-        "title_bar":              up_sharp(title, scale=3.0),
-        "bottom_strip":           up_sharp(strip, scale=2.5),
-        "bottom_left_collector":  up_sharp(bl,    scale=4.0, sharp=1.8),
-    }
+def pick_sharpest(frames: list[np.ndarray]) -> np.ndarray:
+    """Return the frame with the highest Laplacian variance."""
+    return max(frames, key=frame_sharpness)

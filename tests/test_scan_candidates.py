@@ -1,19 +1,29 @@
-"""Tests for Pipeline.scan_candidates() with a mocked vision model + art matcher."""
+"""Tests for Pipeline.scan_candidates() with a fake art index + art matcher."""
 
 import numpy as np
 import pytest
 
+from mtg_card_scanner.art_index import ArtIndexError
 from mtg_card_scanner.pipeline import Pipeline
-from mtg_card_scanner.vision import CardRead
 from mtg_card_scanner.scryfall import ScryfallError
 
 
-class FakeModel:
-    def __init__(self, card_read):
-        self._cr = card_read
+class FakeIndex:
+    """Returns canned identify() matches; optionally different per call."""
 
-    def read_card(self, frame):
-        return self._cr
+    def __init__(self, matches=None, per_call=None, raise_exc=None):
+        self._matches = matches or []
+        self._per_call = list(per_call) if per_call else None
+        self._raise = raise_exc
+        self.calls = 0
+
+    def identify(self, frame, top_n=5):
+        self.calls += 1
+        if self._raise:
+            raise self._raise
+        if self._per_call is not None:
+            return self._per_call.pop(0) if self._per_call else []
+        return self._matches
 
 
 class FakeScryfall:
@@ -36,6 +46,19 @@ class FakeArtMatcher:
         ]
 
 
+def _match(name="Lightning Bolt", distance=4, **over):
+    m = {
+        "name": name,
+        "scryfall_id": "sid-1",
+        "set": "m10",
+        "collector_number": "146",
+        "artist": "Christopher Moeller",
+        "distance": distance,
+    }
+    m.update(over)
+    return m
+
+
 def _printing(pid, set_code, num, set_name):
     return {
         "id": pid,
@@ -53,8 +76,8 @@ def _printing(pid, set_code, num, set_name):
     }
 
 
-def _pipeline(model, scryfall):
-    p = Pipeline(model=model, scryfall=scryfall)
+def _pipeline(index, scryfall):
+    p = Pipeline(index=index, scryfall=scryfall)
     p._cached_art_matcher = FakeArtMatcher()  # avoid real network/pHash
     return p
 
@@ -63,13 +86,12 @@ FRAME = np.zeros((10, 10, 3), dtype=np.uint8)
 
 
 def test_scan_candidates_returns_ranked_candidates():
-    cr = CardRead(name="Lightning Bolt", set_code="m10", collector_number="146",
-                  foil=False, language="en", condition_estimate="NM", condition_reason="")
     printings = [
         _printing("id-m10", "m10", "146", "Magic 2010"),
         _printing("id-m11", "m11", "149", "Magic 2011"),
     ]
-    p = _pipeline(FakeModel(cr), FakeScryfall(printings))
+    idx = FakeIndex([_match(distance=4), _match(name="Chain Lightning", distance=19)])
+    p = _pipeline(idx, FakeScryfall(printings))
 
     out = p.scan_candidates(FRAME)
 
@@ -77,6 +99,9 @@ def test_scan_candidates_returns_ranked_candidates():
     assert out["error"] is None
     assert out["card_read"]["name"] == "Lightning Bolt"
     assert out["card_read"]["condition_estimate"] == "NM"
+    assert out["card_read"]["foil"] is False
+    assert out["card_read"]["artist"] == "Christopher Moeller"
+    assert out["confidence"]["name"] == "high"  # d=4 <= 8
     assert [c["set"] for c in out["candidates"]] == ["m10", "m11"]
     # ranked best-first by pHash distance
     assert out["candidates"][0]["phash_distance"] == 0
@@ -84,32 +109,101 @@ def test_scan_candidates_returns_ranked_candidates():
     assert "finishes" in out["candidates"][0]
 
 
-def test_scan_candidates_no_name_read():
-    cr = CardRead(name="", set_code="", collector_number="", foil=False,
-                  language="en", condition_estimate="NM", condition_reason="")
-    p = _pipeline(FakeModel(cr), FakeScryfall([]))
+def test_scan_candidates_medium_confidence():
+    idx = FakeIndex([_match(distance=12)])
+    p = _pipeline(idx, FakeScryfall([_printing("id", "m10", "146", "Magic 2010")]))
+    out = p.scan_candidates(FRAME)
+    assert out["identified"] is True
+    assert out["confidence"]["name"] == "medium"  # 8 < d=12 <= 16
+
+
+def test_scan_candidates_alternates_populated():
+    idx = FakeIndex([
+        _match(distance=4),
+        _match(name="Chain Lightning", distance=18),
+        _match(name="Firebolt", distance=21),
+        _match(name="Shock", distance=25),
+    ])
+    p = _pipeline(idx, FakeScryfall([_printing("id", "m10", "146", "Magic 2010")]))
+    out = p.scan_candidates(FRAME)
+    assert out["card_read"]["alternates"] == [
+        {"name": "Chain Lightning", "distance": 18},
+        {"name": "Firebolt", "distance": 21},
+    ]
+
+
+def test_scan_candidates_over_threshold_not_identified():
+    idx = FakeIndex([_match(distance=21), _match(name="Chain Lightning", distance=24)])
+    p = _pipeline(idx, FakeScryfall([]))
 
     out = p.scan_candidates(FRAME)
     assert out["identified"] is False
     assert out["candidates"] == []
-    assert "No card name" in out["error"]
+    assert "No confident art match" in out["error"]
+    assert "Lightning Bolt" in out["error"]   # guesses surfaced for the user
+    assert "manual search" in out["error"].lower()
+    # nearest guess still exposed for the UI
+    assert out["card_read"]["name"] == "Lightning Bolt"
+    assert out["confidence"]["name"] == "low"
 
 
-def test_scan_candidates_vision_failure():
-    class Boom:
-        def read_card(self, frame):
-            raise RuntimeError("ollama down")
-    p = _pipeline(Boom(), FakeScryfall([]))
+def test_scan_candidates_multi_frame_retry():
+    """First (sharpest) frame over threshold, second frame confident → identified."""
+    first = [_match(distance=30)]
+    second = [_match(distance=5)]
+    idx = FakeIndex(per_call=[first, second])
+    p = _pipeline(idx, FakeScryfall([_printing("id", "m10", "146", "Magic 2010")]))
+
+    out = p.scan_candidates([FRAME, FRAME.copy()])
+    assert idx.calls == 2
+    assert out["identified"] is True
+    assert out["confidence"]["name"] == "high"
+
+
+def test_scan_candidates_no_retry_when_confident():
+    idx = FakeIndex([_match(distance=3)])
+    p = _pipeline(idx, FakeScryfall([_printing("id", "m10", "146", "Magic 2010")]))
+    p.scan_candidates([FRAME, FRAME.copy(), FRAME.copy()])
+    assert idx.calls == 1  # confident on the first frame — no retries
+
+
+def test_scan_candidates_index_not_built():
+    idx = FakeIndex(raise_exc=ArtIndexError(
+        "Art index not built — run: python -m mtg_card_scanner.art_index build"))
+    p = _pipeline(idx, FakeScryfall([]))
 
     out = p.scan_candidates(FRAME)
     assert out["identified"] is False
-    assert "Vision read failed" in out["error"]
+    assert "art_index build" in out["error"]
+
+
+def test_scan_candidates_index_unexpected_failure():
+    idx = FakeIndex(raise_exc=RuntimeError("sqlite exploded"))
+    p = _pipeline(idx, FakeScryfall([]))
+
+    out = p.scan_candidates(FRAME)
+    assert out["identified"] is False
+    assert "Art identification failed" in out["error"]
+
+
+def test_scan_candidates_no_index_configured():
+    p = _pipeline(None, FakeScryfall([]))
+    out = p.scan_candidates(FRAME)
+    assert out["identified"] is False
+    assert "No art index" in out["error"]
+
+
+def test_scan_candidates_empty_matches():
+    idx = FakeIndex([])
+    p = _pipeline(idx, FakeScryfall([]))
+    out = p.scan_candidates(FRAME)
+    assert out["identified"] is False
+    assert "no matches" in out["error"]
 
 
 def test_scan_candidates_no_printings_found():
-    cr = CardRead(name="Fake Card", set_code="", collector_number="", foil=False,
-                  language="en", condition_estimate="NM", condition_reason="")
-    p = _pipeline(FakeModel(cr), FakeScryfall(raise_exc=ScryfallError("not found")))
+    idx = FakeIndex([_match(name="Fake Card", distance=4)])
+    p = _pipeline(idx, FakeScryfall(raise_exc=ScryfallError("not found")))
 
     out = p.scan_candidates(FRAME)
     assert out["identified"] is True
@@ -122,6 +216,6 @@ def test_search_candidates_sorts_newest_first():
         {**_printing("old", "lea", "161", "Limited Edition Alpha"), "released_at": "1993-08-05"},
         {**_printing("new", "m11", "149", "Magic 2011"), "released_at": "2010-07-16"},
     ]
-    p = _pipeline(FakeModel(None), FakeScryfall(printings))
+    p = _pipeline(FakeIndex([]), FakeScryfall(printings))
     out = p.search_candidates("Lightning Bolt")
     assert [c["set"] for c in out] == ["m11", "lea"]  # newest first

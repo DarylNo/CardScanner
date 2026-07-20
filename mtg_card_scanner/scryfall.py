@@ -160,6 +160,14 @@ class ScryfallClient:
             include_extras="true",
         )
         cards = data.get("data", [])
+        # Double-faced cards keep their images on card_faces, not top-level —
+        # graft the front face's image_uris on so pHash ranking and the UI
+        # treat them like any other printing.
+        for c in cards:
+            if not c.get("image_uris"):
+                faces = c.get("card_faces") or []
+                if faces and faces[0].get("image_uris"):
+                    c["image_uris"] = faces[0]["image_uris"]
         with_images = [c for c in cards if c.get("image_uris")]
         print(f"  [scryfall] {len(with_images)} printings with images (of {len(cards)} total)")
         return with_images

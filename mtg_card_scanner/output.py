@@ -7,7 +7,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
 
-from mtg_card_scanner.vision import CardRead
+from mtg_card_scanner.card_read import CardRead
 
 
 @dataclass
@@ -32,7 +32,7 @@ class ScanResult:
     # Visual match metadata (optional — populated when pHash was used)
     match_method: str = ""          # "phash" | "scryfall" | ""
     phash_distance: Optional[int] = None
-    name_confidence: str = ""       # "high" | "medium" | "low" from consensus vote
+    name_confidence: str = ""       # "high" | "medium" | "low" from art-match distance
     printing_uncertain: bool = False   # True for basic lands with near-tied art
     printing_candidates: str = ""      # comma-separated top candidate set codes
 
