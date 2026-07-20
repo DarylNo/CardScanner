@@ -90,7 +90,7 @@ def test_scan_candidates_returns_ranked_candidates():
         _printing("id-m10", "m10", "146", "Magic 2010"),
         _printing("id-m11", "m11", "149", "Magic 2011"),
     ]
-    idx = FakeIndex([_match(distance=4), _match(name="Chain Lightning", distance=19)])
+    idx = FakeIndex([_match(distance=100), _match(name="Chain Lightning", distance=170)])
     p = _pipeline(idx, FakeScryfall(printings))
 
     out = p.scan_candidates(FRAME)
@@ -101,7 +101,7 @@ def test_scan_candidates_returns_ranked_candidates():
     assert out["card_read"]["condition_estimate"] == "NM"
     assert out["card_read"]["foil"] is False
     assert out["card_read"]["artist"] == "Christopher Moeller"
-    assert out["confidence"]["name"] == "high"  # d=4 <= 8
+    assert out["confidence"]["name"] == "high"  # s=100 <= 125
     assert [c["set"] for c in out["candidates"]] == ["m10", "m11"]
     # ranked best-first by pHash distance
     assert out["candidates"][0]["phash_distance"] == 0
@@ -110,30 +110,30 @@ def test_scan_candidates_returns_ranked_candidates():
 
 
 def test_scan_candidates_medium_confidence():
-    idx = FakeIndex([_match(distance=12)])
+    idx = FakeIndex([_match(distance=132)])
     p = _pipeline(idx, FakeScryfall([_printing("id", "m10", "146", "Magic 2010")]))
     out = p.scan_candidates(FRAME)
     assert out["identified"] is True
-    assert out["confidence"]["name"] == "medium"  # 8 < d=12 <= 16
+    assert out["confidence"]["name"] == "medium"  # 125 < s=132 <= 140
 
 
 def test_scan_candidates_alternates_populated():
     idx = FakeIndex([
-        _match(distance=4),
-        _match(name="Chain Lightning", distance=18),
-        _match(name="Firebolt", distance=21),
-        _match(name="Shock", distance=25),
+        _match(distance=100),
+        _match(name="Chain Lightning", distance=168),
+        _match(name="Firebolt", distance=175),
+        _match(name="Shock", distance=190),
     ])
     p = _pipeline(idx, FakeScryfall([_printing("id", "m10", "146", "Magic 2010")]))
     out = p.scan_candidates(FRAME)
     assert out["card_read"]["alternates"] == [
-        {"name": "Chain Lightning", "distance": 18},
-        {"name": "Firebolt", "distance": 21},
+        {"name": "Chain Lightning", "distance": 168},
+        {"name": "Firebolt", "distance": 175},
     ]
 
 
 def test_scan_candidates_over_threshold_not_identified():
-    idx = FakeIndex([_match(distance=21), _match(name="Chain Lightning", distance=24)])
+    idx = FakeIndex([_match(distance=150), _match(name="Chain Lightning", distance=160)])
     p = _pipeline(idx, FakeScryfall([]))
 
     out = p.scan_candidates(FRAME)
@@ -149,8 +149,8 @@ def test_scan_candidates_over_threshold_not_identified():
 
 def test_scan_candidates_multi_frame_retry():
     """First (sharpest) frame over threshold, second frame confident → identified."""
-    first = [_match(distance=30)]
-    second = [_match(distance=5)]
+    first = [_match(distance=200)]
+    second = [_match(distance=110)]
     idx = FakeIndex(per_call=[first, second])
     p = _pipeline(idx, FakeScryfall([_printing("id", "m10", "146", "Magic 2010")]))
 
@@ -161,7 +161,7 @@ def test_scan_candidates_multi_frame_retry():
 
 
 def test_scan_candidates_no_retry_when_confident():
-    idx = FakeIndex([_match(distance=3)])
+    idx = FakeIndex([_match(distance=95)])
     p = _pipeline(idx, FakeScryfall([_printing("id", "m10", "146", "Magic 2010")]))
     p.scan_candidates([FRAME, FRAME.copy(), FRAME.copy()])
     assert idx.calls == 1  # confident on the first frame — no retries
@@ -202,7 +202,7 @@ def test_scan_candidates_empty_matches():
 
 
 def test_scan_candidates_no_printings_found():
-    idx = FakeIndex([_match(name="Fake Card", distance=4)])
+    idx = FakeIndex([_match(name="Fake Card", distance=100)])
     p = _pipeline(idx, FakeScryfall(raise_exc=ScryfallError("not found")))
 
     out = p.scan_candidates(FRAME)

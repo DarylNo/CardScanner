@@ -10,15 +10,16 @@ from typing import Any, Optional, Union
 
 import numpy as np
 
-from mtg_card_scanner.art_index import ArtIndex, ArtIndexError, _MAX_CONFIDENT_DISTANCE
+from mtg_card_scanner.art_index import (
+    ArtIndex,
+    ArtIndexError,
+    _HIGH_CONFIDENCE_DISTANCE,
+    _MAX_CONFIDENT_DISTANCE,
+)
 from mtg_card_scanner.card_read import CardRead
 from mtg_card_scanner.card_detect import frame_sharpness
 from mtg_card_scanner.scryfall import ScryfallClient, ScryfallError
 from mtg_card_scanner.output import ScanResult, OutputWriter, build_result, format_listing
-
-# Distance at or below which the name identification is "high" confidence;
-# between this and _MAX_CONFIDENT_DISTANCE it is "medium" (still trusted).
-_HIGH_CONFIDENCE_DISTANCE = 8
 
 
 def _safe(s: str) -> str:
