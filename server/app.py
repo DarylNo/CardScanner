@@ -19,7 +19,7 @@ from typing import Any, Callable, Optional
 
 import cv2
 import numpy as np
-from fastapi import Body, FastAPI, File, UploadFile
+from fastapi import BackgroundTasks, Body, FastAPI, File, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
@@ -94,7 +94,7 @@ def create_app(
 
     # ── scan (phone → server) ──────────────────────────────────────────────────
     @app.post("/api/scan")
-    async def scan(files: list[UploadFile] = File(...)):
+    async def scan(background_tasks: BackgroundTasks, files: list[UploadFile] = File(...)):
         frames = []
         for f in files:
             img = _decode_image(await f.read())
@@ -103,6 +103,10 @@ def create_app(
         if not frames:
             return JSONResponse({"error": "no decodable image uploaded"}, status_code=400)
         result = await run_in_threadpool(get_pipeline().scan_candidates, frames)
+        if result.get("no_card"):
+            # Empty tray / nothing card-like — report it but never store a row.
+            return {"no_card": True, "identified": False,
+                    "error": result.get("error", "No card detected.")}
         scan = store.create_scan(
             identified=result["identified"],
             card_read=result["card_read"],
@@ -120,6 +124,25 @@ def create_app(
                         [cv2.IMWRITE_JPEG_QUALITY, 90])
         except Exception as exc:
             print(f"  [server] could not save scan image for #{scan['id']}: {exc}")
+
+        # Price the TOP-RANKED printing in the background so the review lists
+        # can show an F2F low-high range before a printing is even picked.
+        # Selecting a printing later overwrites this with the exact price.
+        cands = result.get("candidates") or []
+        if result["identified"] and cands:
+            top = cands[0]
+
+            def _price_top(scan_id: int, c: dict) -> None:
+                try:
+                    p = f2f.get_price(c.get("name", ""), c.get("set", ""),
+                                      c.get("collector_number", ""), False,
+                                      c.get("set_name", ""))
+                    if p:
+                        store.update_scan(scan_id, f2f=p.to_dict())
+                except Exception as exc:
+                    print(f"  [server] top-candidate pricing failed for #{scan_id}: {exc}")
+
+            background_tasks.add_task(_price_top, scan["id"], top)
         return scan
 
     @app.get("/api/scans/{scan_id}/image")

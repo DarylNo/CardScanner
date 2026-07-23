@@ -151,3 +151,35 @@ def test_scan_image_saved_served_and_deleted(client):
 
 def test_scan_image_404_for_unknown_scan(client):
     assert client.get("/api/scans/9999/image").status_code == 404
+
+
+class NoCardPipeline:
+    def scan_candidates(self, frames, top_n=12):
+        return {"identified": False, "no_card": True, "card_read": {},
+                "confidence": {"name": "low", "set": "low", "collector": "low"},
+                "candidates": [], "error": "No card detected (best art score 240)."}
+
+    def search_candidates(self, name, top_n=40):
+        return []
+
+
+def test_no_card_scan_is_not_stored(tmp_path):
+    store = ScanStore(tmp_path / "s.db")
+    app = create_app(pipeline_factory=lambda: NoCardPipeline(), store=store,
+                     f2f=FakeF2F(), scan_images_dir=tmp_path / "imgs")
+    client = TestClient(app)
+    r = client.post("/api/scan", files={"files": ("card.jpg", _jpeg_bytes(), "image/jpeg")})
+    assert r.status_code == 200
+    assert r.json()["no_card"] is True
+    assert client.get("/api/scans").json() == []          # nothing persisted
+
+
+def test_scan_background_prices_top_candidate(client):
+    scan = client.post(
+        "/api/scan", files={"files": ("card.jpg", _jpeg_bytes(), "image/jpeg")}
+    ).json()
+    # TestClient runs background tasks before returning — the pending scan
+    # should now carry the top candidate's F2F conditions.
+    stored = client.get(f"/api/scans/{scan['id']}").json()
+    assert stored["status"] == "candidates"               # still unselected
+    assert stored["f2f"]["conditions"] == {"NM": 3.49, "PL": 2.79}

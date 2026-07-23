@@ -54,6 +54,11 @@ _DEFAULT_INDEX_DIR = Path.home() / ".cache" / "mtg-card-scanner" / "art_index"
 # tune these constants against real rig photos.
 _MAX_CONFIDENT_DISTANCE = 140   # combined score: above this → manual search
 _HIGH_CONFIDENCE_DISTANCE = 125  # combined score: at/below this → "high"
+# Above this, the frame almost certainly contains NO card at all (empty tray /
+# lens cap): measured empty scenes score ≥236 while even badly-glared real
+# cards stay ≤~170. Scans in this band are rejected outright rather than
+# stored as junk "unidentified" rows.
+_NO_CARD_DISTANCE = 210
 
 # Scan-side crop jitter grid (fractions of the card): ±shift on both axes plus
 # inward AND outward insets.  This absorbs two distinct error sources: (a)

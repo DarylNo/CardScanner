@@ -60,15 +60,20 @@
   .subhead { font-size: 13px; color: #8b93a1; margin: 14px 0 8px; font-weight: 600; }
   .dangerbtn { background: #3a1c1c; color: #fca5a5; font-size: 14px; padding: 10px; margin-top: 18px; }
   #stage { position: relative; flex: 1; background: #000; overflow: hidden; }
-  video { width: 100%; height: 100%; object-fit: cover; }
-  /* Card framing guide (2.5 : 3.5 aspect) */
-  #guide {
-    position: absolute; inset: 0; margin: auto; width: 72%; max-width: 340px;
-    aspect-ratio: 5 / 7; border: 3px solid rgba(120,200,255,.8); border-radius: 14px;
-    box-shadow: 0 0 0 100vmax rgba(0,0,0,.35); pointer-events: none;
-  }
-  #guide.armed { border-color: rgba(110,231,160,.9); }
-  #guide.busy  { border-color: rgba(251,191,36,.9); }
+  /* contain, not cover: the preview must show EXACTLY the frame that gets
+     captured — cover was hiding parts of the card that the scan then saw */
+  video { width: 100%; height: 100%; object-fit: contain; }
+  #overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  /* recent-scan chips over the bottom of the camera view */
+  #recent { display: flex; gap: 6px; padding: 4px 10px; overflow-x: auto; }
+  .chip { font-size: 12px; padding: 3px 10px; border-radius: 999px; background: #23262e;
+          color: #cbd2dc; white-space: nowrap; flex: 0 0 auto; }
+  .chip.selchip { background: #14532d; color: #86efac; }
+  /* full-screen image viewer */
+  #lightbox { position: fixed; inset: 0; background: rgba(0,0,0,.92); z-index: 40;
+              display: none; align-items: center; justify-content: center; }
+  #lightbox.open { display: flex; }
+  #lightbox img { max-width: 96vw; max-height: 92vh; border-radius: 10px; }
   footer { padding: 14px; display: flex; flex-direction: column; gap: 10px; }
   #status { min-height: 1.3em; text-align: center; font-size: 14px; color: #aeb4bf; }
   #status.ok { color: #6ee7a0; } #status.err { color: #ff8a8a; }
@@ -99,11 +104,13 @@
     </header>
     <div id="detailBody"></div>
   </div>
+  <div id="lightbox"><img id="lightboxImg" alt=""></div>
   <div id="stage">
     <video id="video" autoplay playsinline muted></video>
-    <div id="guide"></div>
+    <canvas id="overlay"></canvas>
   </div>
   <footer>
+    <div id="recent"></div>
     <div id="status">Starting camera…</div>
     <div class="btnrow">
       <button id="autoBtn">Auto: ON</button>
@@ -119,7 +126,7 @@ const video = document.getElementById('video');
 const canvas = document.getElementById('canvas');
 const motion = document.getElementById('motion');
 const statusEl = document.getElementById('status');
-const guide = document.getElementById('guide');
+const overlay = document.getElementById('overlay');
 const shoot = document.getElementById('shoot');
 const autoBtn = document.getElementById('autoBtn');
 const BURST = 3, BURST_GAP_MS = 120;
@@ -128,40 +135,31 @@ const BURST = 3, BURST_GAP_MS = 120;
 // are hash-equivalent to full-res but ~3× smaller (faster over Wi-Fi).
 const MAX_UPLOAD_DIM = 1280, JPEG_QUALITY = 0.85;
 
-// ── auto-scan tunables ────────────────────────────────────────────────────────
-// The rig is a fixed mount over a tray, so the scene is static except when a
-// hand places/removes a card. We watch a 64×48 grayscale downsample at 5 fps.
+// ── card detection & auto-scan ───────────────────────────────────────────────
+// The rig is a fixed mount over a tray. Every tick (5 fps) we downsample the
+// frame to 96×72 gray and find the BOUNDING BOX of pixels that differ from the
+// learned empty-tray reference — i.e. the card's actual boundary, which is
+// drawn live on the preview. When that box looks card-shaped and holds still,
+// the scan fires; then we wait for the card to be removed or swapped before
+// arming again. Detection is diff-vs-empty (not darkness), so white-bordered
+// cards work as well as black.
 //
-// The change metric is the FRACTION OF PIXELS whose gray value moved by more
-// than PIX_DELTA — not a mean difference. A card occupies only ~10-15% of the
-// full camera frame, so a mean-based metric reads "card placed" as barely
-// above noise once the hand leaves (this exact failure: change sensed, then
-// back to watching with the card unscanned). An area-based metric is
-// proportional to the card's footprint regardless of how subtle its pixels
-// are. TRIGGER vs REVERT are deliberately different (hysteresis) so a change
-// that fires the trigger can never be re-classified as "nothing happened".
-//
-// Debug: open the page as /phone?debug to see the live percentages on-screen
-// and tune the *_FRAC constants for your rig.
-const MOTION_W = 64, MOTION_H = 48, SAMPLE_MS = 200;
+// Debug: open /phone?debug to see the live numbers and tune constants.
+const MW = 96, MH = 72, SAMPLE_MS = 200;
 const PIX_DELTA = 25;        // gray levels — per-pixel "really changed" bar
-const TRIGGER_FRAC = 0.04;   // vs settledRef: ≥4% of pixels changed → something happened
-const REVERT_FRAC = 0.015;   // vs settledRef: <1.5% changed → scene truly reverted
 const STABLE_FRAC = 0.010;   // vs previous sample: <1% changed → motion stopped
-const EMPTY_FRAC = 0.02;     // vs emptyRef: <2% changed → tray is empty (card removed)
-const STABLE_FRAMES = 4;     // ~0.8 s of stillness before scanning
-const COOLDOWN_MS = 1000;
+const EMPTY_FRAC = 0.015;    // box area below this → tray is empty
+const SWAP_FRAC = 0.06;      // vs frame at last scan: enough change = new card
+const STABLE_FRAMES = 3;     // ~0.6 s of steady card before scanning
 const DEBUG = new URLSearchParams(location.search).has('debug');
 
 let autoEnabled = true;
-let mode = 'idle';         // idle | settling | scanning | cooldown
-let settledRef = null;     // last settled scene (Uint8ClampedArray gray)
-let emptyRef = null;       // the empty tray, seeded at startup
-let prevFrame = null;
-let stableCount = 0;
+let mode = 'watching';       // watching | scanning | awaitNext
+let emptyRef = null;         // the empty tray (adaptive — refreshed when idle)
+let prevFrame = null, prevBox = null, scannedFrame = null;
+let stableCount = 0, bootCount = 0, emptyRefreshTick = 0;
 
 function setStatus(msg, cls='') { statusEl.textContent = msg; statusEl.className = cls; }
-function setGuide(state) { guide.className = state; }
 
 async function startCamera() {
   if (!navigator.mediaDevices?.getUserMedia) {
@@ -211,7 +209,6 @@ async function captureBurst() {
 }
 
 async function scanOnce() {
-  setGuide('busy');
   setStatus('Capturing…');
   try {
     const frames = await captureBurst();
@@ -220,27 +217,31 @@ async function scanOnce() {
     frames.forEach((b, i) => fd.append('files', b, `frame${i}.jpg`));
     const r = await fetch('/api/scan', { method: 'POST', body: fd });
     const data = await r.json();
-    if (data.identified) {
+    if (data.no_card) {
+      // Server saw nothing card-like — whatever we thought was a card isn't.
+      // Adopt the current scene as the new "empty" so we stop firing on it.
+      setStatus('No card detected.', 'err');
+      emptyRef = sampleSmallGray() || emptyRef;
+    } else if (data.identified) {
       const n = (data.candidates || []).length;
-      setStatus(`✓ ${data.card_read.name} — ${n} printings. Pick it on the desktop.`, 'ok');
+      setStatus(`✓ ${data.card_read.name} — ${n} printings. Swap card for the next.`, 'ok');
     } else {
       setStatus('✗ ' + (data.error || 'Could not read card. Try again.'), 'err');
     }
+    refreshScans();
   } catch (e) {
     setStatus('Upload failed: ' + e.message, 'err');
-  } finally {
-    setGuide(autoEnabled ? 'armed' : '');
   }
 }
 
-// ── motion detection ─────────────────────────────────────────────────────────
+// ── frame sampling + card boundary detection ─────────────────────────────────
 function sampleSmallGray() {
   if (!video.videoWidth) return null;
-  motion.width = MOTION_W; motion.height = MOTION_H;
+  motion.width = MW; motion.height = MH;
   const ctx = motion.getContext('2d', { willReadFrequently: true });
-  ctx.drawImage(video, 0, 0, MOTION_W, MOTION_H);
-  const { data } = ctx.getImageData(0, 0, MOTION_W, MOTION_H);
-  const gray = new Uint8ClampedArray(MOTION_W * MOTION_H);
+  ctx.drawImage(video, 0, 0, MW, MH);
+  const { data } = ctx.getImageData(0, 0, MW, MH);
+  const gray = new Uint8ClampedArray(MW * MH);
   for (let i = 0, j = 0; j < gray.length; i += 4, j++) {
     gray[j] = (data[i] + 2 * data[i + 1] + data[i + 2]) >> 2;
   }
@@ -253,62 +254,124 @@ function changedFrac(a, b) {
   return n / a.length;
 }
 
-function dbg(msg) {
-  if (DEBUG) setStatus(msg);
-}
-
-function tick() {
-  if (!autoEnabled || mode === 'scanning' || mode === 'cooldown') return;
-  const cur = sampleSmallGray();
-  if (!cur) return;
-
-  if (settledRef === null) {
-    // Bootstrap: wait for the first steady second, seed both references.
-    // The mount points at an EMPTY tray at startup, so this also learns
-    // what "no card" looks like (card removal then never triggers a scan).
-    if (prevFrame && changedFrac(cur, prevFrame) < STABLE_FRAC) stableCount++;
-    else stableCount = 0;
-    if (stableCount >= STABLE_FRAMES) {
-      settledRef = cur; emptyRef = cur; stableCount = 0;
-      setGuide('armed');
-      setStatus('Auto: watching…');
-    }
-  } else if (mode === 'idle') {
-    const chg = changedFrac(cur, settledRef);
-    dbg(`watching — chg ${(chg*100).toFixed(1)}% (fires at ${(TRIGGER_FRAC*100).toFixed(0)}%)`);
-    if (chg > TRIGGER_FRAC) {
-      mode = 'settling'; stableCount = 0;
-      setStatus('Change detected — hold still…');
-    }
-  } else if (mode === 'settling') {
-    const stab = changedFrac(cur, prevFrame);
-    const chg = changedFrac(cur, settledRef);
-    if (stab < STABLE_FRAC) stableCount++;
-    else stableCount = 0;
-    dbg(`settling — chg ${(chg*100).toFixed(1)}%  motion ${(stab*100).toFixed(1)}%  steady ${stableCount}/${STABLE_FRAMES}`);
-
-    // Hysteresis: only revert to idle when the scene REALLY matches the old
-    // settled reference again (well below the trigger bar) — a small change
-    // like a card's footprint must fall through to the scan, never be
-    // reclassified as "nothing happened".
-    if (chg < REVERT_FRAC) {
-      mode = 'idle';
-      setStatus('Auto: watching…');
-    } else if (stableCount >= STABLE_FRAMES) {
-      settledRef = cur; stableCount = 0;
-      if (emptyRef && changedFrac(cur, emptyRef) < EMPTY_FRAC) {
-        mode = 'idle';                    // card was REMOVED — silently re-arm
-        setStatus('Auto: watching…');
-      } else {
-        mode = 'scanning';
-        scanOnce().finally(() => {
-          mode = 'cooldown';
-          setTimeout(() => { mode = 'idle'; }, COOLDOWN_MS);
-        });
+function detectBox(cur, ref) {
+  // Bounding box of pixels that differ from the empty tray.
+  let minX = MW, minY = MH, maxX = -1, maxY = -1, n = 0;
+  for (let y = 0; y < MH; y++) {
+    for (let x = 0; x < MW; x++) {
+      if (Math.abs(cur[y * MW + x] - ref[y * MW + x]) > PIX_DELTA) {
+        n++;
+        if (x < minX) minX = x; if (x > maxX) maxX = x;
+        if (y < minY) minY = y; if (y > maxY) maxY = y;
       }
     }
   }
-  prevFrame = cur;
+  if (maxX < 0) return null;
+  const w = maxX - minX + 1, h = maxY - minY + 1;
+  return {
+    x: minX, y: minY, w, h,
+    areaFrac: n / (MW * MH),          // fraction of frame that changed
+    density: n / (w * h),             // how solid the box is (card ≈ solid)
+    aspect: w / h,
+  };
+}
+
+function looksLikeCard(b) {
+  // Portrait card on the tray: solid box, plausible aspect (with tilt slack),
+  // occupying a sane share of the frame.
+  return !!b && b.areaFrac > 0.03 && b.areaFrac < 0.85
+      && b.density > 0.55
+      && b.aspect > 0.45 && b.aspect < 1.1;
+}
+
+function boxStable(a, b) {
+  if (!a || !b) return false;
+  return Math.abs(a.x - b.x) + Math.abs(a.y - b.y)
+       + Math.abs(a.w - b.w) + Math.abs(a.h - b.h) <= 4;
+}
+
+// Draw the detected boundary on the preview (video is object-fit: contain,
+// so map sample coords → video coords → letterboxed display coords).
+function drawOverlay(box, color) {
+  const cw = overlay.clientWidth, ch = overlay.clientHeight;
+  if (overlay.width !== cw) overlay.width = cw;
+  if (overlay.height !== ch) overlay.height = ch;
+  const ctx = overlay.getContext('2d');
+  ctx.clearRect(0, 0, cw, ch);
+  if (!box || !video.videoWidth) return;
+  const s = Math.min(cw / video.videoWidth, ch / video.videoHeight);
+  const ox = (cw - video.videoWidth * s) / 2, oy = (ch - video.videoHeight * s) / 2;
+  const fx = video.videoWidth / MW * s, fy = video.videoHeight / MH * s;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.roundRect(ox + box.x * fx, oy + box.y * fy, box.w * fx, box.h * fy, 10);
+  ctx.stroke();
+}
+
+function dbg(msg) { if (DEBUG) setStatus(msg); }
+
+// ── state machine: detect → show boundary → capture → analyze → await next ──
+function tick() {
+  if (!autoEnabled || mode === 'scanning') return;
+  const cur = sampleSmallGray();
+  if (!cur) return;
+
+  if (!emptyRef) {
+    // Bootstrap: the first steady second teaches us the empty tray.
+    if (prevFrame && changedFrac(cur, prevFrame) < STABLE_FRAC) bootCount++;
+    else bootCount = 0;
+    if (bootCount >= STABLE_FRAMES + 1) {
+      emptyRef = cur; bootCount = 0;
+      setStatus('Auto: watching for a card…');
+    }
+    prevFrame = cur; return;
+  }
+
+  const box = detectBox(cur, emptyRef);
+  const cardish = looksLikeCard(box);
+
+  if (mode === 'watching') {
+    drawOverlay(box, cardish ? '#6ee7a0' : '#fbbf24');
+    if (cardish && boxStable(box, prevBox) && changedFrac(cur, prevFrame) < STABLE_FRAC) {
+      stableCount++;
+      dbg(`card ${(box.areaFrac*100).toFixed(0)}% asp ${box.aspect.toFixed(2)} dens ${(box.density*100).toFixed(0)}% steady ${stableCount}/${STABLE_FRAMES}`);
+      if (!DEBUG) setStatus('Card detected — hold still…');
+      if (stableCount >= STABLE_FRAMES) {
+        stableCount = 0;
+        scannedFrame = cur;
+        mode = 'scanning';
+        drawOverlay(box, '#3b82f6');
+        scanOnce().finally(() => { mode = 'awaitNext'; });
+      }
+    } else {
+      stableCount = 0;
+      if (box && !cardish) {
+        dbg(`not card-like: area ${(box.areaFrac*100).toFixed(0)}% asp ${box.aspect.toFixed(2)} dens ${(box.density*100).toFixed(0)}%`);
+      } else if (!box) {
+        dbg('watching — tray empty');
+      }
+      // Adaptive empty reference: truly empty and calm → slowly re-learn the
+      // tray so lighting drift never accumulates into phantom boxes.
+      if ((!box || box.areaFrac < EMPTY_FRAC) && prevFrame && changedFrac(cur, prevFrame) < STABLE_FRAC) {
+        if (++emptyRefreshTick >= 25) { emptyRef = cur; emptyRefreshTick = 0; }
+      } else emptyRefreshTick = 0;
+    }
+  } else if (mode === 'awaitNext') {
+    drawOverlay(box, '#8b93a1');
+    const removed = !box || box.areaFrac < EMPTY_FRAC;
+    const swapped = scannedFrame && cardish
+                 && changedFrac(cur, scannedFrame) > SWAP_FRAC
+                 && changedFrac(cur, prevFrame) < STABLE_FRAC;
+    if (removed || swapped) {
+      mode = 'watching'; stableCount = 0;
+      setStatus(removed ? 'Auto: watching for a card…' : 'New card…');
+    } else {
+      dbg('awaiting next card (remove or swap)');
+    }
+  }
+
+  prevBox = box; prevFrame = cur;
 }
 setInterval(tick, SAMPLE_MS);
 
@@ -317,10 +380,9 @@ autoBtn.addEventListener('click', () => {
   autoEnabled = !autoEnabled;
   autoBtn.textContent = autoEnabled ? 'Auto: ON' : 'Auto: OFF';
   autoBtn.classList.toggle('off', !autoEnabled);
-  setGuide(autoEnabled && settledRef ? 'armed' : '');
-  if (autoEnabled) { mode = 'idle'; settledRef = null; prevFrame = null; stableCount = 0;
-                     setStatus('Auto: waiting for a steady view…'); }
-  else setStatus('Auto off — tap Scan Card.');
+  if (autoEnabled) { mode = 'watching'; stableCount = 0;
+                     setStatus('Auto: watching for a card…'); }
+  else { drawOverlay(null); setStatus('Auto off — tap Scan Card.'); }
 });
 
 shoot.addEventListener('click', async () => {
@@ -329,8 +391,8 @@ shoot.addEventListener('click', async () => {
   try {
     await scanOnce();
   } finally {
-    settledRef = sampleSmallGray() || settledRef;  // don't auto-refire on this scene
-    mode = 'idle';
+    scannedFrame = sampleSmallGray() || scannedFrame;  // don't auto-refire on this scene
+    mode = 'awaitNext';
     setTimeout(() => { shoot.disabled = false; }, 400);
   }
 });
@@ -353,27 +415,48 @@ function f2fBest(scan) {
   const vals = Object.values(c); return vals.length ? Math.min(...vals) : null;
 }
 
+// F2F low–high across all listed conditions (works for pending scans too —
+// the server prices the top-ranked printing in the background at scan time).
+function priceRange(s) {
+  const c = s.f2f?.conditions || {};
+  const vals = Object.values(c);
+  if (!vals.length) return null;
+  const lo = Math.min(...vals), hi = Math.max(...vals);
+  return lo === hi ? `$${lo}` : `$${lo}–$${hi}`;
+}
+
+function renderRecent(scans) {
+  const el = document.getElementById('recent');
+  el.innerHTML = scans.slice(-3).reverse().map(s => {
+    const sel = s.status === 'selected';
+    const name = s.selection?.name || s.card_read?.name || '?';
+    const pr = priceRange(s);
+    return `<span class="chip ${sel?'selchip':''}">${escHtml(name)}${pr ? ' · ' + pr : ''}</span>`;
+  }).join('');
+}
+
 async function refreshScans() {
   try {
     const scans = await (await fetch('/api/scans')).json();
     scansBtn.textContent = `Scans (${scans.length})`;
+    renderRecent(scans);
     if (!scansPanel.classList.contains('open')) return;
     scansList.innerHTML = scans.map(s => {
       const sel = s.status === 'selected';
       const name = s.selection?.name || s.card_read?.name || '(unread)';
       const thumb = s.selection?.image_normal || s.candidates?.[0]?.image_small
                     || `/api/scans/${s.id}/image`;
-      const price = sel ? f2fBest(s) : null;
+      const pr = priceRange(s);
       const sub = sel
         ? `${(s.selection.set||'').toUpperCase()} #${s.selection.collector_number} · ${s.selection.condition} · ${s.selection.finish} · ×${s.selection.quantity}`
-        : `${(s.candidates||[]).length} printings — pick on desktop`;
+        : `${(s.candidates||[]).length} printings — tap to pick`;
       return `<div class="srow" data-sid="${s.id}">
         <img src="${escHtml(thumb)}" loading="lazy" onerror="this.style.visibility='hidden'">
         <div class="meta">
           <div class="nm">${escHtml(name)}</div>
           <div class="sub">${escHtml(sub)}</div>
         </div>
-        ${price != null ? `<div class="sprice">$${price}</div>` : ''}
+        ${pr ? `<div class="sprice">${pr}</div>` : ''}
         <span class="spill ${sel?'sel':''}">${sel?'selected':'pending'}</span>
       </div>`;
     }).join('') || `<div style="padding:40px;text-align:center;color:#6b7280">No scans yet.</div>`;
@@ -456,7 +539,8 @@ async function renderScanDetail() {
         <div style="font-size:13px;color:#8b93a1">${escHtml(sel.set_name)} · ${escHtml((sel.set||'').toUpperCase())} #${escHtml(sel.collector_number)}</div>
         <div class="pprice">F2F: $${f2fBest(scan) ?? '—'}</div>`
       : `<div><b>${escHtml(cr.name||'(unread)')}</b></div>
-        <div style="font-size:13px;color:#8b93a1">tap a printing below to select it</div>`}
+        <div style="font-size:13px;color:#8b93a1">tap a printing below to select it</div>
+        ${priceRange(scan) ? `<div class="pprice">~${priceRange(scan)} <span style="font-size:12px;color:#8b93a1;font-weight:400">(top match)</span></div>` : ''}`}
       ${scan.error ? `<div style="font-size:12px;color:#ff8a8a;margin-top:6px">${escHtml(scan.error)}</div>` : ''}
     </div>
   </div>`;
@@ -472,6 +556,10 @@ async function renderScanDetail() {
     <div class="pgrid" id="psearchResults" style="margin-top:8px"></div>`;
   html += `<button class="dangerbtn" id="p-delete" style="width:100%">Delete this scan</button>`;
   detailBody.innerHTML = html;
+
+  // Tap the scan photo to inspect it full-screen.
+  const scanImg = detailBody.querySelector('.prow img');
+  scanImg?.addEventListener('click', () => openLightbox(scanImg.src));
 
   // data-pick carries only the candidate id; objects come from memory
   // (embedding JSON in attributes broke on apostrophes — same fix as desktop).
@@ -522,6 +610,15 @@ document.getElementById('detailBack').addEventListener('click', () => {
   detailScanId = null;
   refreshScans();
 });
+
+// ── full-screen image viewer ─────────────────────────────────────────────────
+const lightbox = document.getElementById('lightbox');
+const lightboxImg = document.getElementById('lightboxImg');
+function openLightbox(src) {
+  lightboxImg.src = src;
+  lightbox.classList.add('open');
+}
+lightbox.addEventListener('click', () => lightbox.classList.remove('open'));
 
 startCamera();
 </script>

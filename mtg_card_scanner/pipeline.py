@@ -15,6 +15,7 @@ from mtg_card_scanner.art_index import (
     ArtIndexError,
     _HIGH_CONFIDENCE_DISTANCE,
     _MAX_CONFIDENT_DISTANCE,
+    _NO_CARD_DISTANCE,
 )
 from mtg_card_scanner.card_read import CardRead
 from mtg_card_scanner.card_detect import frame_sharpness
@@ -167,6 +168,15 @@ class Pipeline:
 
         best = matches[0]
         distance = best["distance"]
+        if distance > _NO_CARD_DISTANCE:
+            # Nothing card-like in frame (empty tray, lens cap) — reject the
+            # scan entirely so it never becomes a junk row in the store.
+            print(f"  [pipeline] no card detected (best score {distance})")
+            return {
+                "identified": False, "no_card": True, "card_read": {},
+                "confidence": low_conf, "candidates": [],
+                "error": f"No card detected (best art score {distance}).",
+            }
         conf = _confidence_for(distance)
         confidence = {"name": conf, "set": conf, "collector": conf}
         guesses = "  ".join(

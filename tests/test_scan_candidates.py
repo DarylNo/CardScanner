@@ -219,3 +219,23 @@ def test_search_candidates_sorts_newest_first():
     p = _pipeline(FakeIndex([]), FakeScryfall(printings))
     out = p.search_candidates("Lightning Bolt")
     assert [c["set"] for c in out] == ["m11", "lea"]  # newest first
+
+
+def test_scan_candidates_no_card_detected():
+    """Scores above the no-card bar mean an empty frame — reject outright."""
+    idx = FakeIndex([_match(distance=240)])
+    p = _pipeline(idx, FakeScryfall([]))
+    out = p.scan_candidates(FRAME)
+    assert out["identified"] is False
+    assert out.get("no_card") is True
+    assert "No card detected" in out["error"]
+
+
+def test_scan_candidates_unconfident_is_not_no_card():
+    """A real-but-glared card (over confident bar, under no-card bar) is kept."""
+    idx = FakeIndex([_match(distance=170)])
+    p = _pipeline(idx, FakeScryfall([]))
+    out = p.scan_candidates(FRAME)
+    assert out["identified"] is False
+    assert out.get("no_card") is None
+    assert "manual search" in out["error"].lower()
