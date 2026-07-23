@@ -33,6 +33,32 @@
   .spill { font-size: 11px; padding: 1px 7px; border-radius: 999px; background: #3f2d10; color: #fbbf24; }
   .spill.sel { background: #14532d; color: #86efac; }
   .sprice { color: #6ee7a0; font-weight: 700; }
+  /* scan detail: pick a printing on the phone */
+  #detailPanel {
+    position: fixed; inset: 0; background: #0f1115; z-index: 30; display: none;
+    flex-direction: column;
+  }
+  #detailPanel.open { display: flex; }
+  #detailBody { flex: 1; overflow-y: auto; padding: 12px 14px 24px; }
+  .prow { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 12px; }
+  .prow img { width: 110px; border-radius: 8px; background: #23262e; }
+  .pctl { display: flex; gap: 8px; margin: 10px 0 14px; flex-wrap: wrap; }
+  .pctl select, .pctl input {
+    padding: 8px 10px; border-radius: 8px; border: 1px solid #2a2f3a;
+    background: #0f1115; color: #e8eaed; font: inherit;
+  }
+  .pctl input { width: 64px; }
+  .pgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .pcard { border: 2px solid transparent; border-radius: 8px; background: #171a21; padding: 5px; }
+  .pcard.chosen { border-color: #22c55e; }
+  .pcard img { width: 100%; border-radius: 5px; aspect-ratio: 5/7; object-fit: cover; background: #23262e; display: block; }
+  .pcard .pt { font-size: 11px; margin-top: 4px; line-height: 1.25; color: #cbd2dc; }
+  .pprice { font-size: 18px; font-weight: 700; color: #6ee7a0; margin: 6px 0; }
+  .msrow { display: flex; gap: 8px; margin-top: 8px; }
+  .msrow input { flex: 1; padding: 8px 10px; border-radius: 8px; border: 1px solid #2a2f3a; background: #0f1115; color: #e8eaed; font: inherit; }
+  .msrow button { flex: 0 0 auto; width: auto; font-size: 14px; padding: 8px 14px; background: #23262e; color: #cbd2dc; }
+  .subhead { font-size: 13px; color: #8b93a1; margin: 14px 0 8px; font-weight: 600; }
+  .dangerbtn { background: #3a1c1c; color: #fca5a5; font-size: 14px; padding: 10px; margin-top: 18px; }
   #stage { position: relative; flex: 1; background: #000; overflow: hidden; }
   video { width: 100%; height: 100%; object-fit: cover; }
   /* Card framing guide (2.5 : 3.5 aspect) */
@@ -66,6 +92,12 @@
       <button id="scansClose" style="font-size:14px;font-weight:600;padding:6px 12px;border:0;border-radius:8px;background:#23262e;color:#cbd2dc;width:auto">Close</button>
     </header>
     <div id="scansList"></div>
+  </div>
+  <div id="detailPanel">
+    <header><span id="detailTitle">Card</span>
+      <button id="detailBack" style="font-size:14px;font-weight:600;padding:6px 12px;border:0;border-radius:8px;background:#23262e;color:#cbd2dc;width:auto">Back</button>
+    </header>
+    <div id="detailBody"></div>
   </div>
   <div id="stage">
     <video id="video" autoplay playsinline muted></video>
@@ -310,7 +342,7 @@ async function refreshScans() {
       const sub = sel
         ? `${(s.selection.set||'').toUpperCase()} #${s.selection.collector_number} · ${s.selection.condition} · ${s.selection.finish} · ×${s.selection.quantity}`
         : `${(s.candidates||[]).length} printings — pick on desktop`;
-      return `<div class="srow">
+      return `<div class="srow" data-sid="${s.id}">
         <img src="${escHtml(thumb)}" loading="lazy" onerror="this.style.visibility='hidden'">
         <div class="meta">
           <div class="nm">${escHtml(name)}</div>
@@ -320,6 +352,8 @@ async function refreshScans() {
         <span class="spill ${sel?'sel':''}">${sel?'selected':'pending'}</span>
       </div>`;
     }).join('') || `<div style="padding:40px;text-align:center;color:#6b7280">No scans yet.</div>`;
+    scansList.querySelectorAll('.srow[data-sid]').forEach(row =>
+      row.addEventListener('click', () => openDetail(Number(row.dataset.sid))));
   } catch (e) { /* server momentarily unreachable */ }
 }
 
@@ -334,6 +368,135 @@ document.getElementById('scansClose').addEventListener('click', () => {
 });
 setInterval(() => { if (!scansPanel.classList.contains('open')) refreshScans(); }, 5000);
 refreshScans();
+
+// ── scan detail: pick a printing from the phone ──────────────────────────────
+const detailPanel = document.getElementById('detailPanel');
+const detailBody = document.getElementById('detailBody');
+const detailTitle = document.getElementById('detailTitle');
+const CONDITIONS = ['NM','LP','MP','HP','DMG'];
+const FINISHES = ['Non-Foil','Foil','Etched'];
+let detailScanId = null;
+
+async function jsend(url, method, body) {
+  return (await fetch(url, { method, headers: {'Content-Type':'application/json'},
+                             body: JSON.stringify(body) })).json();
+}
+
+function pcandCard(c, chosenId) {
+  return `<div class="pcard ${c.id===chosenId?'chosen':''}" data-pick="${escHtml(c.id)}">
+    <img src="${escHtml(c.image_normal||c.image_small)}" loading="lazy" onerror="this.style.visibility='hidden'">
+    <div class="pt"><b>${escHtml((c.set||'').toUpperCase())}</b> #${escHtml(c.collector_number)}
+      ${c.multi_distance!=null?`· Δ${c.multi_distance}`:''}</div>
+  </div>`;
+}
+
+function detailControls(scan) {
+  const cr = scan.card_read || {};
+  const condDefault = scan.selection?.condition || (cr.condition_estimate||'NM').toUpperCase();
+  const cond = CONDITIONS.includes(condDefault) ? condDefault : 'NM';
+  const fin = scan.selection?.finish || (cr.foil ? 'Foil' : 'Non-Foil');
+  const qty = scan.selection?.quantity || 1;
+  return `<div class="pctl">
+    <select id="p-cond">${CONDITIONS.map(c=>`<option ${c===cond?'selected':''}>${c}</option>`).join('')}</select>
+    <select id="p-fin">${FINISHES.map(f=>`<option ${f===fin?'selected':''}>${f}</option>`).join('')}</select>
+    <input id="p-qty" type="number" min="1" value="${qty}">
+  </div>`;
+}
+
+function detailCtl() {
+  return {
+    condition: document.getElementById('p-cond')?.value || 'NM',
+    finish: document.getElementById('p-fin')?.value || 'Non-Foil',
+    quantity: Number(document.getElementById('p-qty')?.value || 1),
+  };
+}
+
+async function openDetail(id) {
+  detailScanId = id;
+  detailPanel.classList.add('open');
+  await renderScanDetail();
+}
+
+async function renderScanDetail() {
+  const scan = await (await fetch(`/api/scans/${detailScanId}`)).json();
+  if (scan.error && !scan.id) { detailBody.innerHTML = `<p>${escHtml(scan.error)}</p>`; return; }
+  const sel = scan.selection || null;
+  const cr = scan.card_read || {};
+  detailTitle.textContent = sel?.name || cr.name || '(unread)';
+
+  let html = `<div class="prow">
+    <img src="/api/scans/${scan.id}/image" onerror="this.style.display='none'">
+    <div>
+      ${sel ? `<div><b>${escHtml(sel.name)}</b></div>
+        <div style="font-size:13px;color:#8b93a1">${escHtml(sel.set_name)} · ${escHtml((sel.set||'').toUpperCase())} #${escHtml(sel.collector_number)}</div>
+        <div class="pprice">F2F: $${f2fBest(scan) ?? '—'}</div>`
+      : `<div><b>${escHtml(cr.name||'(unread)')}</b></div>
+        <div style="font-size:13px;color:#8b93a1">tap a printing below to select it</div>`}
+      ${scan.error ? `<div style="font-size:12px;color:#ff8a8a;margin-top:6px">${escHtml(scan.error)}</div>` : ''}
+    </div>
+  </div>`;
+
+  html += detailControls(scan);
+  html += `<div class="subhead">${sel ? 'Re-pick printing' : 'Pick the printing'} — closest first</div>`;
+  html += (scan.candidates||[]).length
+    ? `<div class="pgrid" id="pcands">${scan.candidates.map(c=>pcandCard(c, sel?.scryfall_id)).join('')}</div>`
+    : `<p style="color:#8b93a1;font-size:13px">No candidates — search below.</p>`;
+
+  html += `<div class="subhead">Wrong card? Search</div>
+    <div class="msrow"><input id="p-search" placeholder="Card name…"><button id="p-searchBtn">Search</button></div>
+    <div class="pgrid" id="psearchResults" style="margin-top:8px"></div>`;
+  html += `<button class="dangerbtn" id="p-delete" style="width:100%">Delete this scan</button>`;
+  detailBody.innerHTML = html;
+
+  // data-pick carries only the candidate id; objects come from memory
+  // (embedding JSON in attributes broke on apostrophes — same fix as desktop).
+  const pickFrom = (pool) => async (el) => {
+    const printing = (pool || []).find(c => c.id === el.dataset.pick);
+    if (!printing) return;
+    el.style.opacity = '0.5';
+    await jsend(`/api/scans/${scan.id}/select`, 'POST', { printing, ...detailCtl() });
+    await renderScanDetail(); refreshScans();
+  };
+  const candPick = pickFrom(scan.candidates);
+  detailBody.querySelectorAll('#pcands .pcard[data-pick]').forEach(el =>
+    el.addEventListener('click', () => candPick(el)));
+
+  // live condition/finish/qty edits on an already-selected scan
+  if (scan.status === 'selected') {
+    ['p-cond','p-fin','p-qty'].forEach(cid => {
+      document.getElementById(cid)?.addEventListener('change', async () => {
+        await jsend(`/api/scans/${scan.id}`, 'PATCH', detailCtl());
+        await renderScanDetail(); refreshScans();
+      });
+    });
+  }
+
+  const doSearch = async () => {
+    const q = document.getElementById('p-search').value.trim(); if (!q) return;
+    const res = document.getElementById('psearchResults');
+    res.innerHTML = `<p style="color:#8b93a1">Searching…</p>`;
+    const { candidates } = await (await fetch(`/api/search?q=${encodeURIComponent(q)}`)).json();
+    res.innerHTML = candidates.map(c=>pcandCard(c, sel?.scryfall_id)).join('')
+      || `<p style="color:#8b93a1">No results.</p>`;
+    const searchPick = pickFrom(candidates);
+    res.querySelectorAll('.pcard[data-pick]').forEach(el =>
+      el.addEventListener('click', () => searchPick(el)));
+  };
+  document.getElementById('p-searchBtn').addEventListener('click', doSearch);
+  document.getElementById('p-search').addEventListener('keydown', e => { if (e.key==='Enter') doSearch(); });
+
+  document.getElementById('p-delete').addEventListener('click', async () => {
+    await fetch(`/api/scans/${scan.id}`, { method: 'DELETE' });
+    detailPanel.classList.remove('open');
+    refreshScans();
+  });
+}
+
+document.getElementById('detailBack').addEventListener('click', () => {
+  detailPanel.classList.remove('open');
+  detailScanId = null;
+  refreshScans();
+});
 
 startCamera();
 </script>
