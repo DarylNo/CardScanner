@@ -283,6 +283,19 @@ function mainBand(counts, thr) {
   return best;
 }
 
+function expandBand(counts, band, lowThr) {
+  // Grow the dense core outward through rows/columns that still carry SOME
+  // mass. A card's pale textbox rows register only the thin dark borders
+  // (~a few pixels) — far below the core threshold but well above a clean
+  // tray row — so the core (the art block) must extend through them to the
+  // card's true edge, while an isolated shadow band beyond clean tray rows
+  // still can't join.
+  let { a, b } = band;
+  while (a > 0 && counts[a - 1] >= lowThr) a--;
+  while (b < counts.length - 1 && counts[b + 1] >= lowThr) b++;
+  return { a, b };
+}
+
 function detectBox(cur, ref) {
   // Changed-pixel mass per row/column vs the empty tray.
   const rows = new Uint16Array(MH), cols = new Uint16Array(MW);
@@ -296,9 +309,11 @@ function detectBox(cur, ref) {
   }
   if (!n) return null;
   const rMax = Math.max(...rows), cMax = Math.max(...cols);
-  const rband = mainBand(rows, Math.max(2, rMax * 0.25));
-  const cband = mainBand(cols, Math.max(2, cMax * 0.25));
+  let rband = mainBand(rows, Math.max(2, rMax * 0.25));
+  let cband = mainBand(cols, Math.max(2, cMax * 0.25));
   if (!rband || !cband) return null;
+  rband = expandBand(rows, rband, Math.max(2, rMax * 0.05));
+  cband = expandBand(cols, cband, Math.max(2, cMax * 0.05));
   // Density measured inside the trimmed box only.
   let m = 0;
   for (let y = rband.a; y <= rband.b; y++)
