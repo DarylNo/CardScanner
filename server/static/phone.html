@@ -130,16 +130,28 @@ const MAX_UPLOAD_DIM = 1280, JPEG_QUALITY = 0.85;
 
 // ── auto-scan tunables ────────────────────────────────────────────────────────
 // The rig is a fixed mount over a tray, so the scene is static except when a
-// hand places/removes a card. We watch a 64×48 grayscale downsample at 5 fps:
-// a mean-abs-diff spike vs the last SETTLED scene arms the machine, N
-// consecutive stable frames fire the scan, and the settled reference then
-// re-seeds so the same card is never rescanned until the scene changes again.
+// hand places/removes a card. We watch a 64×48 grayscale downsample at 5 fps.
+//
+// The change metric is the FRACTION OF PIXELS whose gray value moved by more
+// than PIX_DELTA — not a mean difference. A card occupies only ~10-15% of the
+// full camera frame, so a mean-based metric reads "card placed" as barely
+// above noise once the hand leaves (this exact failure: change sensed, then
+// back to watching with the card unscanned). An area-based metric is
+// proportional to the card's footprint regardless of how subtle its pixels
+// are. TRIGGER vs REVERT are deliberately different (hysteresis) so a change
+// that fires the trigger can never be re-classified as "nothing happened".
+//
+// Debug: open the page as /phone?debug to see the live percentages on-screen
+// and tune the *_FRAC constants for your rig.
 const MOTION_W = 64, MOTION_H = 48, SAMPLE_MS = 200;
-const DIFF_TRIGGER = 9;    // vs settledRef: scene meaningfully changed
-const DIFF_STABLE = 3;     // vs previous sample: motion has stopped
-const STABLE_FRAMES = 4;   // ~0.8 s of stillness before scanning — raise if it
-                           // ever fires while your hand is still in frame
+const PIX_DELTA = 25;        // gray levels — per-pixel "really changed" bar
+const TRIGGER_FRAC = 0.04;   // vs settledRef: ≥4% of pixels changed → something happened
+const REVERT_FRAC = 0.015;   // vs settledRef: <1.5% changed → scene truly reverted
+const STABLE_FRAC = 0.010;   // vs previous sample: <1% changed → motion stopped
+const EMPTY_FRAC = 0.02;     // vs emptyRef: <2% changed → tray is empty (card removed)
+const STABLE_FRAMES = 4;     // ~0.8 s of stillness before scanning
 const COOLDOWN_MS = 1000;
+const DEBUG = new URLSearchParams(location.search).has('debug');
 
 let autoEnabled = true;
 let mode = 'idle';         // idle | settling | scanning | cooldown
@@ -235,10 +247,14 @@ function sampleSmallGray() {
   return gray;
 }
 
-function meanDiff(a, b) {
-  let sum = 0;
-  for (let i = 0; i < a.length; i++) sum += Math.abs(a[i] - b[i]);
-  return sum / a.length;
+function changedFrac(a, b) {
+  let n = 0;
+  for (let i = 0; i < a.length; i++) if (Math.abs(a[i] - b[i]) > PIX_DELTA) n++;
+  return n / a.length;
+}
+
+function dbg(msg) {
+  if (DEBUG) setStatus(msg);
 }
 
 function tick() {
@@ -250,7 +266,7 @@ function tick() {
     // Bootstrap: wait for the first steady second, seed both references.
     // The mount points at an EMPTY tray at startup, so this also learns
     // what "no card" looks like (card removal then never triggers a scan).
-    if (prevFrame && meanDiff(cur, prevFrame) < DIFF_STABLE) stableCount++;
+    if (prevFrame && changedFrac(cur, prevFrame) < STABLE_FRAC) stableCount++;
     else stableCount = 0;
     if (stableCount >= STABLE_FRAMES) {
       settledRef = cur; emptyRef = cur; stableCount = 0;
@@ -258,20 +274,29 @@ function tick() {
       setStatus('Auto: watching…');
     }
   } else if (mode === 'idle') {
-    if (meanDiff(cur, settledRef) > DIFF_TRIGGER) {
+    const chg = changedFrac(cur, settledRef);
+    dbg(`watching — chg ${(chg*100).toFixed(1)}% (fires at ${(TRIGGER_FRAC*100).toFixed(0)}%)`);
+    if (chg > TRIGGER_FRAC) {
       mode = 'settling'; stableCount = 0;
       setStatus('Change detected — hold still…');
     }
   } else if (mode === 'settling') {
-    if (meanDiff(cur, prevFrame) < DIFF_STABLE) stableCount++;
+    const stab = changedFrac(cur, prevFrame);
+    const chg = changedFrac(cur, settledRef);
+    if (stab < STABLE_FRAC) stableCount++;
     else stableCount = 0;
+    dbg(`settling — chg ${(chg*100).toFixed(1)}%  motion ${(stab*100).toFixed(1)}%  steady ${stableCount}/${STABLE_FRAMES}`);
 
-    if (meanDiff(cur, settledRef) <= DIFF_TRIGGER) {
-      mode = 'idle';                      // transient (hand wave) — scene unchanged
+    // Hysteresis: only revert to idle when the scene REALLY matches the old
+    // settled reference again (well below the trigger bar) — a small change
+    // like a card's footprint must fall through to the scan, never be
+    // reclassified as "nothing happened".
+    if (chg < REVERT_FRAC) {
+      mode = 'idle';
       setStatus('Auto: watching…');
     } else if (stableCount >= STABLE_FRAMES) {
       settledRef = cur; stableCount = 0;
-      if (emptyRef && meanDiff(cur, emptyRef) <= DIFF_TRIGGER) {
+      if (emptyRef && changedFrac(cur, emptyRef) < EMPTY_FRAC) {
         mode = 'idle';                    // card was REMOVED — silently re-arm
         setStatus('Auto: watching…');
       } else {
