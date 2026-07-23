@@ -120,10 +120,17 @@ def _parse_title_brackets(title: str) -> dict[str, str]:
     return out
 
 
-def _sku_set_code(sku: str) -> str:
-    """Return the set-code segment of a variant SKU (``M-M11-...`` -> ``m11``)."""
-    parts = str(sku or "").split("-")
-    return parts[1].lower() if len(parts) >= 2 else ""
+def _sku_matches_set(sku: str, set_code: str) -> bool:
+    """True if *set_code* appears as a hyphen-separated segment of the SKU.
+
+    F2F's SKU format has drifted over time — ``M-M11-Lightning_-149-NM-NF``
+    (set at segment 2) vs ``SIN-MTG-CLB-309-ENG-NM-NF`` (set at segment 3) —
+    so the set code is matched positionally-agnostic.  The other segments
+    (SIN/MTG/ENG, conditions, finishes, collector digits) don't collide with
+    real Scryfall set codes.
+    """
+    want = (set_code or "").lower()
+    return bool(want) and want in (p.lower() for p in str(sku or "").split("-"))
 
 
 def _variants_to_conditions(variants: list[dict[str, Any]]) -> dict[str, float]:
@@ -152,22 +159,33 @@ def _default_get_json(cache_dir: Path) -> Callable[[str], Any]:
         cached = cache_dir / f"{key}.json"
         if cached.exists():
             return json.loads(cached.read_text(encoding="utf-8"))
-        elapsed = time.monotonic() - state["last"]
-        if elapsed < _MIN_DELAY:
-            time.sleep(_MIN_DELAY - elapsed)
-        try:
-            resp = session.get(url, timeout=_TIMEOUT)
-            state["last"] = time.monotonic()
-            resp.raise_for_status()
-            data = resp.json()
-        except requests.RequestException:
-            # Pricing is a side feature: a transient F2F error (timeout, 5xx,
-            # rate-limit) degrades to "no listing", never crashes a scan/select.
-            # Not cached, so it retries next time.
-            state["last"] = time.monotonic()
-            return None
-        cached.write_text(json.dumps(data), encoding="utf-8")
-        return data
+        # The storefront intermittently rejects a request (bot protection,
+        # blips) — observed live returning fine on the very next attempt. One
+        # retry turns most of those into a hit; failures are LOGGED, because a
+        # silent None here reads as "card not listed" in the UI, which is
+        # misleading when the card is in fact in stock.
+        last_error = ""
+        for attempt in (1, 2):
+            elapsed = time.monotonic() - state["last"]
+            if elapsed < _MIN_DELAY:
+                time.sleep(_MIN_DELAY - elapsed)
+            try:
+                resp = session.get(url, timeout=_TIMEOUT)
+                state["last"] = time.monotonic()
+                resp.raise_for_status()
+                data = resp.json()
+            except (requests.RequestException, ValueError) as exc:
+                state["last"] = time.monotonic()
+                last_error = f"{type(exc).__name__}: {exc}"
+                if attempt == 1:
+                    time.sleep(0.8)
+                continue
+            cached.write_text(json.dumps(data), encoding="utf-8")
+            return data
+        # Pricing is a side feature: degrade to "no listing", never crash a
+        # scan/select. Not cached, so a later reprice retries for real.
+        print(f"  [facetoface] GET failed after retry: {url} ({last_error})")
+        return None
 
     return get_json
 
@@ -307,8 +325,7 @@ class FaceToFaceClient:
             variants = self._product(cand.get("handle", "")).get("variants", []) or []
             if not variants:
                 continue
-            sku_set = _sku_set_code(variants[0].get("sku", ""))
-            if not want_set or sku_set == want_set:
+            if not want_set or _sku_matches_set(variants[0].get("sku", ""), want_set):
                 return cand, variants
 
         # 4) Collector/set-name matched but the SKU set code disagreed. Collector

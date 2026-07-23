@@ -9,7 +9,7 @@ from mtg_card_scanner.facetoface import (
     FaceToFaceClient,
     F2FPrice,
     _parse_title_brackets,
-    _sku_set_code,
+    _sku_matches_set,
 )
 
 _FIX = Path(__file__).parent / "fixtures" / "facetoface"
@@ -45,9 +45,14 @@ def test_parse_title_brackets_promo_without_collector():
     assert parts["foil_label"] == "Foil"
 
 
-def test_sku_set_code():
-    assert _sku_set_code("M-M11-Lightning_-149-NM-NF") == "m11"
-    assert _sku_set_code("") == ""
+def test_sku_matches_set():
+    # old format: set code at segment 2
+    assert _sku_matches_set("M-M11-Lightning_-149-NM-NF", "m11")
+    # current format: set code at segment 3
+    assert _sku_matches_set("SIN-MTG-CLB-309-ENG-NM-NF", "clb")
+    assert not _sku_matches_set("SIN-MTG-CLB-309-ENG-NM-NF", "m11")
+    assert not _sku_matches_set("", "clb")
+    assert not _sku_matches_set("SIN-MTG-CLB-309-ENG-NM-NF", "")
 
 
 def test_get_price_matches_exact_printing_by_set_and_collector(client):

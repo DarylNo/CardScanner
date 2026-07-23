@@ -11,7 +11,28 @@
     margin: 0; font-family: system-ui, sans-serif; background: #0f1115; color: #e8eaed;
     display: flex; flex-direction: column; height: 100dvh; overflow: hidden;
   }
-  header { padding: 10px 14px; font-weight: 600; border-bottom: 1px solid #23262e; }
+  header { padding: 10px 14px; font-weight: 600; border-bottom: 1px solid #23262e;
+           display: flex; align-items: center; justify-content: space-between; }
+  #scansBtn {
+    font-size: 14px; font-weight: 600; padding: 6px 12px; border: 0; border-radius: 8px;
+    background: #23262e; color: #cbd2dc; flex: 0 0 auto; width: auto;
+  }
+  /* slide-over scans list */
+  #scansPanel {
+    position: fixed; inset: 0; background: #0f1115; z-index: 20; display: none;
+    flex-direction: column;
+  }
+  #scansPanel.open { display: flex; }
+  #scansPanel header { flex: 0 0 auto; }
+  #scansList { flex: 1; overflow-y: auto; }
+  .srow { display: flex; gap: 10px; padding: 10px 14px; border-bottom: 1px solid #1b1e26; align-items: center; }
+  .srow img { width: 44px; height: 62px; object-fit: cover; border-radius: 4px; background: #23262e; }
+  .srow .meta { flex: 1; min-width: 0; }
+  .srow .nm { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .srow .sub { font-size: 12px; color: #8b93a1; }
+  .spill { font-size: 11px; padding: 1px 7px; border-radius: 999px; background: #3f2d10; color: #fbbf24; }
+  .spill.sel { background: #14532d; color: #86efac; }
+  .sprice { color: #6ee7a0; font-weight: 700; }
   #stage { position: relative; flex: 1; background: #000; overflow: hidden; }
   video { width: 100%; height: 100%; object-fit: cover; }
   /* Card framing guide (2.5 : 3.5 aspect) */
@@ -37,7 +58,15 @@
 </style>
 </head>
 <body>
-  <header>📷 Scanner — point at a card</header>
+  <header>📷 Scanner — point at a card
+    <button id="scansBtn">Scans</button>
+  </header>
+  <div id="scansPanel">
+    <header>🃏 Scanned cards
+      <button id="scansClose" style="font-size:14px;font-weight:600;padding:6px 12px;border:0;border-radius:8px;background:#23262e;color:#cbd2dc;width:auto">Close</button>
+    </header>
+    <div id="scansList"></div>
+  </div>
   <div id="stage">
     <video id="video" autoplay playsinline muted></video>
     <div id="guide"></div>
@@ -248,6 +277,63 @@ shoot.addEventListener('click', async () => {
     setTimeout(() => { shoot.disabled = false; }, 400);
   }
 });
+
+// ── scanned-cards panel ──────────────────────────────────────────────────────
+const scansPanel = document.getElementById('scansPanel');
+const scansList = document.getElementById('scansList');
+const scansBtn = document.getElementById('scansBtn');
+let scansTimer = null;
+
+const escHtml = s => String(s ?? '').replace(/[&<>"]/g,
+  c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+function f2fBest(scan) {
+  const c = scan.f2f?.conditions || {};
+  const cond = scan.selection?.condition || 'NM';
+  const order = { NM:['NM','PL'], LP:['PL','NM'], MP:['MP','PL','NM'],
+                  HP:['HP','PL','NM'], DMG:['DMG','HP','PL','NM'] }[cond] || ['NM'];
+  for (const k of order) if (c[k] != null) return c[k];
+  const vals = Object.values(c); return vals.length ? Math.min(...vals) : null;
+}
+
+async function refreshScans() {
+  try {
+    const scans = await (await fetch('/api/scans')).json();
+    scansBtn.textContent = `Scans (${scans.length})`;
+    if (!scansPanel.classList.contains('open')) return;
+    scansList.innerHTML = scans.map(s => {
+      const sel = s.status === 'selected';
+      const name = s.selection?.name || s.card_read?.name || '(unread)';
+      const thumb = s.selection?.image_normal || s.candidates?.[0]?.image_small
+                    || `/api/scans/${s.id}/image`;
+      const price = sel ? f2fBest(s) : null;
+      const sub = sel
+        ? `${(s.selection.set||'').toUpperCase()} #${s.selection.collector_number} · ${s.selection.condition} · ${s.selection.finish} · ×${s.selection.quantity}`
+        : `${(s.candidates||[]).length} printings — pick on desktop`;
+      return `<div class="srow">
+        <img src="${escHtml(thumb)}" loading="lazy" onerror="this.style.visibility='hidden'">
+        <div class="meta">
+          <div class="nm">${escHtml(name)}</div>
+          <div class="sub">${escHtml(sub)}</div>
+        </div>
+        ${price != null ? `<div class="sprice">$${price}</div>` : ''}
+        <span class="spill ${sel?'sel':''}">${sel?'selected':'pending'}</span>
+      </div>`;
+    }).join('') || `<div style="padding:40px;text-align:center;color:#6b7280">No scans yet.</div>`;
+  } catch (e) { /* server momentarily unreachable */ }
+}
+
+scansBtn.addEventListener('click', () => {
+  scansPanel.classList.add('open');
+  refreshScans();
+  scansTimer = setInterval(refreshScans, 3000);
+});
+document.getElementById('scansClose').addEventListener('click', () => {
+  scansPanel.classList.remove('open');
+  clearInterval(scansTimer); scansTimer = null;
+});
+setInterval(() => { if (!scansPanel.classList.contains('open')) refreshScans(); }, 5000);
+refreshScans();
 
 startCamera();
 </script>
