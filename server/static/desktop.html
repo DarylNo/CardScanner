@@ -176,7 +176,7 @@ function candCard(scan, c, chosenId){
   const dist = c.multi_distance!=null
     ? `<span class="pill" title="combined match: art×4 + title + textbox (lower = better)">Δ${c.multi_distance}</span>`
     : (c.phash_distance!=null ? `<span class="pill">art Δ${c.phash_distance}</span>` : "");
-  return `<div class="card ${c.id===chosenId?'chosen':''}" data-pick='${esc(JSON.stringify(c))}'>
+  return `<div class="card ${c.id===chosenId?'chosen':''}" data-pick="${esc(c.id)}">
     <img src="${esc(c.image_normal||c.image_small)}" loading="lazy" onerror="this.style.visibility='hidden'">
     <div class="t"><b>${esc(c.set_name)}</b>#${esc(c.collector_number)} · ${esc(c.rarity||"")}</div>
     <div class="badges">${dist}${badges}</div>
@@ -279,13 +279,18 @@ function currentControls(){
 }
 
 function wireDetail(scan){
+  // data-pick holds only the candidate id — the printing object is looked up
+  // from memory (embedding JSON in an HTML attribute broke on names/sets
+  // containing quotes, e.g. "Battle for Baldur's Gate").
+  const pickFrom = (pool) => async (el) => {
+    const printing = (pool || []).find(c => c.id === el.dataset.pick);
+    if (!printing) return;
+    await jsend(`/api/scans/${scan.id}/select`, "POST", { printing, ...currentControls() });
+    await poll(); detailSig=""; renderDetail();
+  };
+  const candPick = pickFrom(scan.candidates);
   $("#right").querySelectorAll(".card[data-pick]").forEach(el =>
-    el.addEventListener("click", async () => {
-      const printing = JSON.parse(el.dataset.pick);
-      const ctl = currentControls();
-      await jsend(`/api/scans/${scan.id}/select`, "POST", { printing, ...ctl });
-      await poll(); detailSig=""; renderDetail();
-    }));
+    el.addEventListener("click", () => candPick(el)));
 
   // Live edit of an already-selected scan when controls change.
   if (scan.status === "selected"){
@@ -304,11 +309,9 @@ function wireDetail(scan){
     const { candidates } = await jget(`/api/search?q=${encodeURIComponent(q)}`);
     $("#msearchResults").innerHTML = candidates.map(c=>candCard(scan,c,scan.selection?.scryfall_id)).join("")
       || `<p class="muted">No results.</p>`;
+    const searchPick = pickFrom(candidates);
     $("#msearchResults").querySelectorAll(".card[data-pick]").forEach(el =>
-      el.addEventListener("click", async () => {
-        await jsend(`/api/scans/${scan.id}/select`, "POST", { printing: JSON.parse(el.dataset.pick), ...currentControls() });
-        await poll(); detailSig=""; renderDetail();
-      }));
+      el.addEventListener("click", () => searchPick(el)));
   };
   $("#msearchBtn")?.addEventListener("click", doSearch);
   $("#msearch")?.addEventListener("keydown", e => { if (e.key==="Enter") doSearch(); });
