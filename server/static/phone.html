@@ -277,17 +277,22 @@ function detectBox(cur, ref) {
 }
 
 function looksLikeCard(b) {
-  // Portrait card on the tray: solid box, plausible aspect (with tilt slack),
-  // occupying a sane share of the frame.
-  return !!b && b.areaFrac > 0.03 && b.areaFrac < 0.85
-      && b.density > 0.55
-      && b.aspect > 0.45 && b.aspect < 1.1;
+  // Portrait-ish box occupying a sane share of the frame. Density is kept
+  // LOOSE (0.30): a card's white textbox/title bar blends into the white tray
+  // and punches holes in the changed-pixel box — a real card can register as
+  // only ~a third "changed". The floor exists solely to reject sparse smears
+  // (drifting shadows), which land well under 0.2.
+  return !!b && b.areaFrac > 0.02 && b.areaFrac < 0.9
+      && b.density > 0.30
+      && b.aspect > 0.40 && b.aspect < 1.25;
 }
 
 function boxStable(a, b) {
+  // Borderline pixels at the box edge flicker frame-to-frame (especially
+  // where pale card regions meet the pale tray) — allow a little wobble.
   if (!a || !b) return false;
   return Math.abs(a.x - b.x) + Math.abs(a.y - b.y)
-       + Math.abs(a.w - b.w) + Math.abs(a.h - b.h) <= 4;
+       + Math.abs(a.w - b.w) + Math.abs(a.h - b.h) <= 7;
 }
 
 // Draw the detected boundary on the preview (video is object-fit: contain,
