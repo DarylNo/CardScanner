@@ -492,13 +492,17 @@ function priceRange(s) {
 }
 
 function renderRecent(scans) {
+  // Newest-first working strip: tap a chip to open that scan (verify the
+  // match, pick the printing, fix a misread) without leaving the camera.
   const el = document.getElementById('recent');
-  el.innerHTML = scans.slice(-3).reverse().map(s => {
+  el.innerHTML = scans.slice(-8).reverse().map(s => {
     const sel = s.status === 'selected';
     const name = s.selection?.name || s.card_read?.name || '?';
     const pr = priceRange(s);
-    return `<span class="chip ${sel?'selchip':''}">${escHtml(name)}${pr ? ' · ' + pr : ''}</span>`;
+    return `<span class="chip ${sel?'selchip':''}" data-sid="${s.id}">${escHtml(name)}${pr ? ' · ' + pr : ''}</span>`;
   }).join('');
+  el.querySelectorAll('.chip[data-sid]').forEach(chip =>
+    chip.addEventListener('click', () => openDetail(Number(chip.dataset.sid))));
 }
 
 async function refreshScans() {
