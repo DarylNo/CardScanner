@@ -121,6 +121,10 @@
       <button id="p-excl">Exclude filtered</button>
     </div>
     <div id="scansStat"></div>
+    <div id="priceBar" style="border-top:1px solid #23262e">
+      <button id="clr-junk" style="background:#23262e;color:#cbd2dc">Clear unpicked</button>
+      <button id="clr-all" style="background:#3a1c1c;color:#fca5a5">Clear all</button>
+    </div>
     <div id="scansList"></div>
   </div>
   <div id="detailPanel">
@@ -693,6 +697,20 @@ document.getElementById('p-min').addEventListener('input', e => {
 document.getElementById('p-max').addEventListener('input', e => {
   priceMax = e.target.value === '' ? null : Number(e.target.value); refreshScans();
 });
+async function clearScans(only) {
+  const scans = await (await fetch('/api/scans')).json();
+  const n = only === 'unselected'
+    ? scans.filter(s => s.status !== 'selected').length : scans.length;
+  if (!n) { setStatus('Nothing to delete.'); return; }
+  const what = only === 'unselected' ? `${n} unpicked scan${n>1?'s':''}` : `ALL ${n} scans`;
+  if (!confirm(`Delete ${what}? This cannot be undone.`)) return;
+  const r = await jsend('/api/scans/delete-all', 'POST', only ? { only } : {});
+  refreshScans();
+  setStatus(`Deleted ${r.deleted} scan${r.deleted === 1 ? '' : 's'}.`, 'ok');
+}
+document.getElementById('clr-junk').addEventListener('click', () => clearScans('unselected'));
+document.getElementById('clr-all').addEventListener('click', () => clearScans(null));
+
 document.getElementById('p-excl').addEventListener('click', async () => {
   // Bulk-exclude every priced, still-included scan the filter hides.
   // Reversible per card from the desktop's include checkbox.

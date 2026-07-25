@@ -117,6 +117,8 @@
   <span class="sp"></span>
   <span class="stat" id="stats">—</span>
   <button class="btn ghost" id="refreshBtn" title="Reload now">↻</button>
+  <button class="btn ghost" id="clearJunkBtn" title="Delete every scan that has no chosen printing">Clear unpicked</button>
+  <button class="btn danger" id="clearAllBtn" title="Delete every scan">Clear all</button>
   <button class="btn" id="exportBtn">Export to Mana Exchange</button>
 </header>
 <main>
@@ -467,6 +469,21 @@ $("#exclBtn").addEventListener("click", async () => {
 });
 
 $("#refreshBtn").addEventListener("click", () => { listSig=""; detailSig=""; poll(); });
+
+async function clearScans(only){
+  const n = only === "unselected"
+    ? scans.filter(s => s.status !== "selected").length
+    : scans.length;
+  if (!n) { toast("Nothing to delete"); return; }
+  const what = only === "unselected" ? `${n} unpicked scan${n>1?'s':''}` : `ALL ${n} scans`;
+  if (!confirm(`Delete ${what}? This cannot be undone.`)) return;
+  const r = await jsend("/api/scans/delete-all", "POST", only ? { only } : {});
+  focusedId = null; listSig = ""; detailSig = "";
+  await poll(); renderDetail();
+  toast(`Deleted ${r.deleted} scan${r.deleted===1?'':'s'}`);
+}
+$("#clearJunkBtn").addEventListener("click", () => clearScans("unselected"));
+$("#clearAllBtn").addEventListener("click", () => clearScans(null));
 $("#exportBtn").addEventListener("click", () => { window.location = "/api/export"; });
 $("#phoneLink").textContent = "Phone: " + location.origin + "/phone";
 

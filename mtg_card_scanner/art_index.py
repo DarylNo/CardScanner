@@ -52,8 +52,14 @@ _DEFAULT_INDEX_DIR = Path.home() / ".cache" / "mtg-card-scanner" / "art_index"
 # Thresholds are applied by the PIPELINE, not by identify() itself —
 # identify() always returns scores so the CLI `query` helper can be used to
 # tune these constants against real rig photos.
-_MAX_CONFIDENT_DISTANCE = 140   # combined score: above this → manual search
-_HIGH_CONFIDENCE_DISTANCE = 125  # combined score: at/below this → "high"
+# Calibrated on real rig photos AFTER the dense two-stage search, which pulled
+# correct matches down to 68-78 while leaving near-misses at 124+. The gap is
+# wide, so the bar sits in the middle: a genuinely ambiguous card (e.g. an
+# ORI-frame Shivan Dragon whose indexed artwork is the 7ED printing, red on
+# red, under glare) now falls through to manual search instead of being
+# returned as a confidently WRONG card.
+_MAX_CONFIDENT_DISTANCE = 110   # combined score: above this → manual search
+_HIGH_CONFIDENCE_DISTANCE = 90  # combined score: at/below this → "high"
 # Above this, the frame almost certainly contains NO card at all (empty tray /
 # lens cap): measured empty scenes score ≥236 while even badly-glared real
 # cards stay ≤~170. Scans in this band are rejected outright rather than
@@ -79,11 +85,21 @@ def _variant_params(shifts, insets) -> list[tuple[float, float, float]]:
     return [(dy, dx, ins) for dy in shifts for dx in shifts for ins in insets]
 
 
-_CORE_PARAMS = _variant_params(_CORE_SHIFTS, _CORE_INSETS)
-_EXT_PARAMS = [
-    p for p in _variant_params(_JITTER_SHIFTS, _JITTER_INSETS)
-    if p not in set(_CORE_PARAMS)
-]
+_CORE_PARAMS = _variant_params(_JITTER_SHIFTS, _JITTER_INSETS)
+
+# Stage 2 refinement grid. Scores proved sensitive to crop shifts as small as
+# 1% — a cross-frame reprint (e.g. a 7ED artwork rescanned from an ORI-frame
+# card) can sit right at the noise floor on the coarse grid yet separate
+# cleanly a few hundredths away — so the shortlist is rescored on a much
+# denser grid. Cheap because it only touches _SHORTLIST rows.
+_DENSE_SHIFTS = (-0.06, -0.04, -0.02, 0.0, 0.02, 0.04, 0.06)
+_DENSE_INSETS = (-0.10, -0.07, -0.04, -0.01, 0.02, 0.05, 0.08, 0.12)
+_DENSE_PARAMS = _variant_params(_DENSE_SHIFTS, _DENSE_INSETS)
+_SHORTLIST = 400
+
+# Crops are taken from a half-size warp: pHash reduces to 32×32 internally, so
+# hashes match the full-size ones to <1 bit on average while costing ~9× less.
+_HASH_SCALE = 0.5
 
 
 _REQUEST_DELAY = 0.12          # seconds — stays under Scryfall CDN ~10 req/s limit
@@ -226,26 +242,33 @@ class ArtIndex:
             pass
         return frame
 
+    def _card_pil(self, frame: np.ndarray):
+        """Warp the card out of *frame* and return it as a half-size PIL image."""
+        import cv2
+        from PIL import Image as PILImage
+        card = self._warp(frame)
+        if _HASH_SCALE != 1.0:
+            card = cv2.resize(
+                card, (int(card.shape[1] * _HASH_SCALE), int(card.shape[0] * _HASH_SCALE)),
+                interpolation=cv2.INTER_AREA)
+        return PILImage.fromarray(cv2.cvtColor(card, cv2.COLOR_BGR2RGB))
+
     def _hash_variants(
         self,
         frame: np.ndarray,
         params: Optional[list[tuple[float, float, float]]] = None,
+        card_pil=None,
     ) -> list[tuple[int, list[int]]]:
         """Return (h64, h256-words) for each jittered art crop of the card."""
-        import cv2
         import imagehash
-        from PIL import Image as PILImage
         from mtg_card_scanner.visual_match import (
             _crop_region, _ART_Y0, _ART_Y1, _ART_X0, _ART_X1,
         )
-        card = self._warp(frame)
-        # One BGR→PIL conversion, then cheap crops from it.  (No downscale:
-        # resizing before hashing measurably shifts the fine hash and eats
-        # 20-30 points of the correct card's margin — not worth ~0.1s.)
-        card_pil = PILImage.fromarray(cv2.cvtColor(card, cv2.COLOR_BGR2RGB))
+        if card_pil is None:
+            card_pil = self._card_pil(frame)
         art_h, art_w = _ART_Y1 - _ART_Y0, _ART_X1 - _ART_X0
         variants: list[tuple[int, list[int]]] = []
-        for dy, dx, inset in (params if params is not None else _CORE_PARAMS + _EXT_PARAMS):
+        for dy, dx, inset in (params if params is not None else _CORE_PARAMS):
             y0 = _ART_Y0 + dy + inset * art_h / 2
             y1 = _ART_Y1 + dy - inset * art_h / 2
             x0 = _ART_X0 + dx + inset * art_w / 2
@@ -258,14 +281,17 @@ class ArtIndex:
             variants.append((h64, h256))
         return variants
 
-    def _accumulate(self, best: np.ndarray, variants) -> None:
-        assert self._h64 is not None and self._h256 is not None
+    @staticmethod
+    def _score(h64_arr: np.ndarray, h256_arr: np.ndarray, variants) -> np.ndarray:
+        """Best (minimum) combined distance per row over all crop variants."""
+        best = np.full(len(h64_arr), 4096, dtype=np.uint16)
         for h64, h256 in variants:
-            d = 4 * np.bitwise_count(self._h64 ^ np.uint64(h64)).astype(np.uint16)
+            d = 4 * np.bitwise_count(h64_arr ^ np.uint64(h64)).astype(np.uint16)
             d += np.bitwise_count(
-                self._h256 ^ np.array(h256, dtype=np.uint64)
+                h256_arr ^ np.array(h256, dtype=np.uint64)
             ).sum(axis=1).astype(np.uint16)
             np.minimum(best, d, out=best)
+        return best
 
     def identify(self, frame: np.ndarray, top_n: int = 5) -> list[dict[str, Any]]:
         """
@@ -277,22 +303,28 @@ class ArtIndex:
             [{"name", "scryfall_id", "set", "collector_number", "artist",
               "distance"}, ...]
 
-        Tiered: the core jitter grid runs first; the extended grid is skipped
-        only when the core best is CLEARLY confident (≤ the high-confidence
-        line).  Exiting at the mere confident threshold is NOT safe — a wrong
-        card can squeak under it on the core grid while the true card needs an
-        extended (outset) crop to reveal its lower score.
+        Two stages: the whole index is scored on a coarse crop grid, then the
+        best _SHORTLIST rows are RE-scored on a much denser grid.  Scoring
+        everything densely would be needlessly slow, and scoring everything
+        coarsely is not accurate enough — a cross-frame reprint can sit at the
+        noise floor on the coarse grid and separate cleanly a few hundredths
+        of a crop away.  (An earlier version instead skipped work when the
+        coarse pass "looked confident", which silently returned wrong cards.)
 
         No thresholding here — callers decide what score is "confident"
         (see _MAX_CONFIDENT_DISTANCE).
         """
         self._load()
-        assert self._h64 is not None
-        best = np.full(len(self._h64), 4096, dtype=np.uint16)
-        self._accumulate(best, self._hash_variants(frame, _CORE_PARAMS))
-        if int(best.min()) > _HIGH_CONFIDENCE_DISTANCE:
-            self._accumulate(best, self._hash_variants(frame, _EXT_PARAMS))
-        order = np.argsort(best, kind="stable")
+        assert self._h64 is not None and self._h256 is not None
+        card_pil = self._card_pil(frame)
+
+        coarse = self._score(self._h64, self._h256,
+                             self._hash_variants(frame, _CORE_PARAMS, card_pil))
+        shortlist = np.argsort(coarse, kind="stable")[:_SHORTLIST]
+        dense = self._score(self._h64[shortlist], self._h256[shortlist],
+                            self._hash_variants(frame, _DENSE_PARAMS, card_pil))
+        order = shortlist[np.argsort(dense, kind="stable")]
+        score_by_row = dict(zip(shortlist.tolist(), dense.tolist()))
 
         results: list[dict[str, Any]] = []
         seen_names: set[str] = set()
@@ -307,7 +339,7 @@ class ArtIndex:
                 "set": set_code,
                 "collector_number": num,
                 "artist": artist,
-                "distance": int(best[idx]),
+                "distance": int(score_by_row[int(idx)]),
             })
             if len(results) >= top_n:
                 break

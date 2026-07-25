@@ -118,9 +118,14 @@ def create_app(
         # failure must never break the scan itself.
         try:
             from mtg_card_scanner.card_detect import extract_card, pick_sharpest
-            card_img, _ = extract_card(pick_sharpest(frames))
+            sharpest = pick_sharpest(frames)
+            card_img, detected = extract_card(sharpest)
+            # Only store the warped card when the edges were actually found —
+            # otherwise keep the untouched frame, so a failed detection shows
+            # the real photo instead of a distorted crop of it.
             scan_images_dir.mkdir(parents=True, exist_ok=True)
-            cv2.imwrite(str(scan_images_dir / f"{scan['id']}.jpg"), card_img,
+            cv2.imwrite(str(scan_images_dir / f"{scan['id']}.jpg"),
+                        card_img if detected else sharpest,
                         [cv2.IMWRITE_JPEG_QUALITY, 90])
         except Exception as exc:
             print(f"  [server] could not save scan image for #{scan['id']}: {exc}")
@@ -235,6 +240,24 @@ def create_app(
     def delete_scan(scan_id: int):
         (scan_images_dir / f"{scan_id}.jpg").unlink(missing_ok=True)
         return {"deleted": store.delete_scan(scan_id)}
+
+    @app.post("/api/scans/delete-all")
+    def delete_all_scans(body: dict = Body(default={})):
+        """
+        Clear the whole scan list (and their photos).
+
+        ``{"only": "unselected"}`` keeps everything that already has a chosen
+        printing — the usual way to sweep junk without losing real work.
+        """
+        only = str(body.get("only") or "").lower()
+        targets = [
+            s for s in store.list_scans()
+            if only != "unselected" or s.get("status") != "selected"
+        ]
+        for s in targets:
+            (scan_images_dir / f"{s['id']}.jpg").unlink(missing_ok=True)
+            store.delete_scan(s["id"])
+        return {"deleted": len(targets)}
 
     # ── manual re-identification ────────────────────────────────────────────────
     @app.get("/api/search")

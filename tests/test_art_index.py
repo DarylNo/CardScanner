@@ -43,7 +43,7 @@ def _seed_index(index_dir, rows):
 def _fake_variants(h64, h256_words=None):
     """Patchable _hash_variants stand-in returning a single crop variant."""
     words = h256_words or [0, 0, 0, 0]
-    return lambda self, frame, params=None: [(h64, words)]
+    return lambda self, frame, params=None, card_pil=None: [(h64, words)]
 
 
 def _jpeg_bytes(color=(120, 40, 200), size=(146, 204)):
@@ -189,7 +189,7 @@ def test_identify_takes_min_over_variants(tmp_path, monkeypatch):
     # Two variants: a bad one (d64=8) and a perfect one — min wins.
     monkeypatch.setattr(
         ArtIndex, "_hash_variants",
-        lambda self, f, params=None: [(0xFF, [0, 0, 0, 0]), (0x0, [0, 0, 0, 0])],
+        lambda self, f, params=None, card_pil=None: [(0xFF, [0, 0, 0, 0]), (0x0, [0, 0, 0, 0])],
     )
     assert idx.identify(FRAME, top_n=1)[0]["distance"] == 0
 
@@ -406,7 +406,7 @@ def test_hash_frame_roundtrip_matches_indexed_image(tmp_path, monkeypatch):
     # Bypass warp/jitter (synthetic image has no card quad): hash the base crop.
     monkeypatch.setattr(
         ArtIndex, "_hash_variants",
-        lambda self, f, params=None: [(
+        lambda self, f, params=None, card_pil=None: [(
             int(str(imagehash.phash(crop_art_region(f))), 16),
             _split_u64(str(imagehash.phash(crop_art_region(f), hash_size=16)), 4),
         )],

@@ -183,3 +183,34 @@ def test_scan_background_prices_top_candidate(client):
     stored = client.get(f"/api/scans/{scan['id']}").json()
     assert stored["status"] == "candidates"               # still unselected
     assert stored["f2f"]["conditions"] == {"NM": 3.49, "PL": 2.79}
+
+
+def test_delete_all_scans(client):
+    for _ in range(3):
+        client.post("/api/scan", files={"files": ("c.jpg", _jpeg_bytes(), "image/jpeg")})
+    assert len(client.get("/api/scans").json()) == 3
+
+    r = client.post("/api/scans/delete-all", json={})
+    assert r.json()["deleted"] == 3
+    assert client.get("/api/scans").json() == []
+
+
+def test_delete_all_can_keep_selected(client):
+    ids = [client.post("/api/scan", files={"files": ("c.jpg", _jpeg_bytes(), "image/jpeg")}).json()["id"]
+           for _ in range(3)]
+    client.post(f"/api/scans/{ids[0]}/select",
+                json={"printing": CANDIDATES[0], "condition": "NM",
+                      "finish": "Non-Foil", "quantity": 1})
+
+    r = client.post("/api/scans/delete-all", json={"only": "unselected"})
+    assert r.json()["deleted"] == 2
+    left = client.get("/api/scans").json()
+    assert [s["id"] for s in left] == [ids[0]]
+    assert left[0]["status"] == "selected"
+
+
+def test_delete_all_removes_scan_images(client, tmp_path):
+    scan = client.post("/api/scan", files={"files": ("c.jpg", _jpeg_bytes(), "image/jpeg")}).json()
+    assert client.get(f"/api/scans/{scan['id']}/image").status_code == 200
+    client.post("/api/scans/delete-all", json={})
+    assert client.get(f"/api/scans/{scan['id']}/image").status_code == 404
