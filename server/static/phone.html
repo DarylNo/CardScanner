@@ -32,6 +32,12 @@
   .vchip.on { background: #1c2740; border-color: #3b82f6; color: #cfe1ff; }
   #scansStat { font-size: 12px; color: #8b93a1; padding: 6px 12px; flex: 0 0 auto; }
   #scansStat b { color: #e8eaed; } #scansStat .money { color: #6ee7a0; }
+  #priceBar { display: flex; gap: 8px; padding: 8px 12px; border-bottom: 1px solid #23262e;
+              flex: 0 0 auto; align-items: center; }
+  #priceBar input { width: 84px; padding: 8px 10px; border-radius: 8px; border: 1px solid #2a2f3a;
+                    background: #0f1115; color: #e8eaed; font: inherit; }
+  #priceBar button { flex: 0 0 auto; width: auto; font-size: 13px; font-weight: 600;
+                     padding: 8px 12px; background: #23262e; color: #cbd2dc; }
   .srow { display: flex; gap: 10px; padding: 10px 14px; border-bottom: 1px solid #1b1e26; align-items: center; }
   .srow img { width: 44px; height: 62px; object-fit: cover; border-radius: 4px; background: #23262e; }
   .srow .meta { flex: 1; min-width: 0; }
@@ -108,6 +114,11 @@
       <span class="vchip" data-view="pending">Needs pick</span>
       <span class="vchip" data-view="selected">Selected</span>
       <span class="vchip" data-view="problem">Problems</span>
+    </div>
+    <div id="priceBar">
+      <input id="p-min" type="number" min="0" step="0.25" placeholder="Min $" inputmode="decimal">
+      <input id="p-max" type="number" min="0" step="0.25" placeholder="Max $" inputmode="decimal">
+      <button id="p-excl">Exclude filtered</button>
     </div>
     <div id="scansStat"></div>
     <div id="scansList"></div>
@@ -583,7 +594,23 @@ function renderRecent(scans) {
 }
 
 let scansView = 'all';
+let priceMin = null, priceMax = null;
 const isProblem = s => !!s.error || !(s.candidates || []).length;
+
+// Selected scans get their exact price; pending ones are judged on the
+// background-priced top match, so bulk lots can be triaged before picking.
+function priceOf(s) {
+  const p = f2fBest(s);
+  return p == null ? null : Number(p);
+}
+function inPriceRange(s) {
+  if (priceMin == null && priceMax == null) return true;
+  const p = priceOf(s);
+  if (p == null) return true;            // unpriced never disappears
+  if (priceMin != null && p < priceMin) return false;
+  if (priceMax != null && p > priceMax) return false;
+  return true;
+}
 
 async function refreshScans() {
   try {
@@ -599,11 +626,11 @@ async function refreshScans() {
       `<b>${scans.length}</b> scans · <b>${scans.length - sel.length}</b> to pick · ` +
       `<span class="money">$${total.toFixed(2)}</span> to export`;
 
-    const rows = scans.filter(s =>
+    const rows = scans.filter(s => inPriceRange(s) && (
       scansView === 'all' ? true :
       scansView === 'pending' ? s.status !== 'selected' :
       scansView === 'selected' ? s.status === 'selected' :
-      isProblem(s));
+      isProblem(s)));
 
     scansList.innerHTML = rows.slice().reverse().map(s => {
       const isSel = s.status === 'selected';
@@ -639,6 +666,24 @@ document.querySelectorAll('.vchip').forEach(chip =>
     scansView = chip.dataset.view;
     refreshScans();
   }));
+
+document.getElementById('p-min').addEventListener('input', e => {
+  priceMin = e.target.value === '' ? null : Number(e.target.value); refreshScans();
+});
+document.getElementById('p-max').addEventListener('input', e => {
+  priceMax = e.target.value === '' ? null : Number(e.target.value); refreshScans();
+});
+document.getElementById('p-excl').addEventListener('click', async () => {
+  // Bulk-exclude every priced, still-included scan the filter hides.
+  // Reversible per card from the desktop's include checkbox.
+  const scans = await (await fetch('/api/scans')).json();
+  const targets = scans.filter(s =>
+    s.status === 'selected' && s.included && priceOf(s) != null && !inPriceRange(s));
+  if (!targets.length) { setStatus('Nothing to exclude.'); return; }
+  for (const s of targets) await jsend(`/api/scans/${s.id}`, 'PATCH', { included: false });
+  refreshScans();
+  setStatus(`Excluded ${targets.length} card${targets.length > 1 ? 's' : ''} from export.`, 'ok');
+});
 
 scansBtn.addEventListener('click', () => {
   scansPanel.classList.add('open');
