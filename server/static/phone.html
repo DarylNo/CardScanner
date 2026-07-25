@@ -176,13 +176,16 @@ const MAX_UPLOAD_DIM = 1280, JPEG_QUALITY = 0.85;
 // the whole thing immune to lighting drift.
 //
 // Debug: open /phone?debug to see the live numbers and tune constants.
-const MW = 96, SAMPLE_MS = 200;
-// MH tracks the video's aspect so sample pixels stay square. A fixed 96×72
-// grid squashed portrait phone video sideways — a portrait card measured
-// aspect 1.72 (landscape!) and its pixels smeared across tray columns.
-let MH = 72;
+// 176 px wide, not 96: at 96 a card filling ~30% of the frame is only ~29
+// samples across, so its thin black border and its rules text both average
+// away — leaving ONLY the art textured, and the box locked onto the art
+// alone. At 176 the border survives as ~1-2 samples and coarse text strokes
+// register, which is what ties the whole card together.
+const MW = 176, SAMPLE_MS = 200;
+// MH tracks the video's aspect so sample pixels stay square.
+let MH = 132;
 const PIX_DELTA = 25;        // gray levels — per-pixel "really changed" bar
-const GRAD_THR = 18;         // gradient magnitude counted as "textured"
+const GRAD_THR = 14;         // gradient magnitude counted as "textured"
 const STABLE_FRAC = 0.010;   // vs previous sample: <1% changed → motion stopped
 const EMPTY_FRAC = 0.015;    // card mask below this → tray is empty
 const SWAP_FRAC = 0.06;      // vs frame at last scan: enough change = new card
@@ -350,14 +353,24 @@ function cardMask(cur, curGrad) {
     if ((curGrad[i] > GRAD_THR && emptyGrad[i] <= GRAD_THR) ||
         Math.abs(cur[i] - emptyRef[i]) > PIX_DELTA * 2) mask[i] = 1;
   }
-  // Close 1-px gaps along each row so text lines read as continuous card.
+  // Morphological close (dilate → erode) with a 3×3 kernel: bridges the gaps
+  // between a card's separate signal islands — art block, title text, rules
+  // text, outer border — so they read as ONE object instead of the box
+  // snapping to the art alone.
+  const dil = new Uint8Array(MW * MH);
   for (let y = 0; y < MH; y++) {
-    const o = y * MW;
-    for (let x = 1; x < MW - 1; x++) {
-      if (!mask[o + x] && mask[o + x - 1] && mask[o + x + 1]) mask[o + x] = 1;
+    for (let x = 0; x < MW; x++) {
+      let on = 0;
+      for (let dy = -1; dy <= 1 && !on; dy++) {
+        for (let dx = -1; dx <= 1 && !on; dx++) {
+          const yy = y + dy, xx = x + dx;
+          if (yy >= 0 && yy < MH && xx >= 0 && xx < MW && mask[yy * MW + xx]) on = 1;
+        }
+      }
+      dil[y * MW + x] = on;
     }
   }
-  return mask;
+  return dil;
 }
 
 function detectBox(cur) {
@@ -378,8 +391,12 @@ function detectBox(cur) {
   let rband = mainBand(rows, Math.max(2, rMax * 0.30));
   let cband = mainBand(cols, Math.max(2, cMax * 0.30));
   if (!rband || !cband) return null;
-  rband = expandBand(rows, rband, Math.max(2, rMax * 0.10));
-  cband = expandBand(cols, cband, Math.max(2, cMax * 0.10));
+  // Grow on a near-absolute floor: a row crossing the card's pale textbox
+  // may only carry its two border pixels, which any percentage-of-max floor
+  // would reject (the art block makes rMax large). Growth still stops dead
+  // at genuinely clean tray rows.
+  rband = expandBand(rows, rband, Math.max(2, rMax * 0.04));
+  cband = expandBand(cols, cband, Math.max(2, cMax * 0.04));
   let m = 0;
   for (let y = rband.a; y <= rband.b; y++)
     for (let x = cband.a; x <= cband.b; x++)
@@ -390,17 +407,20 @@ function detectBox(cur) {
     areaFrac: (w * h) / (MW * MH),    // how much of the frame the box covers
     density: m / (w * h),             // how solid the box is (card ≈ solid)
     aspect: w / h,
+    ratio: Math.max(w, h) / Math.min(w, h),   // orientation-agnostic shape
   };
 }
 
 function looksLikeCard(b) {
-  // Portrait-ish box covering a sane share of the frame. A real card is
-  // 63:88 ≈ 0.72 wide/tall; the window allows for tilt and imperfect edges.
-  // Density stays generous because a card's smooth art passages legitimately
-  // carry little texture — the floor only rejects sparse smears.
+  // Shape is checked ORIENTATION-AGNOSTICALLY (long side / short side): the
+  // phone may be mounted in either rotation and cards get laid down sideways,
+  // so a portrait-only window silently rejected perfectly good scans.
+  // A real card is 88:63 ≈ 1.40; the window allows tilt and edge slop.
+  // Density stays generous — smooth art passages legitimately carry little
+  // texture; the floor only rejects sparse smears.
   return !!b && b.areaFrac > 0.03 && b.areaFrac < 0.92
       && b.density > 0.35
-      && b.aspect > 0.42 && b.aspect < 1.15;
+      && b.ratio > 1.15 && b.ratio < 1.95;
 }
 
 function boxStable(a, b) {
@@ -480,7 +500,7 @@ function tick() {
     drawOverlay(box, cardish ? '#6ee7a0' : '#fbbf24');
     if (cardish && boxStable(box, prevBox) && changedFrac(cur, prevFrame) < STABLE_FRAC) {
       stableCount++;
-      dbg(`card ${(box.areaFrac*100).toFixed(0)}% asp ${box.aspect.toFixed(2)} dens ${(box.density*100).toFixed(0)}% steady ${stableCount}/${STABLE_FRAMES}`);
+      dbg(`card ${(box.areaFrac*100).toFixed(0)}% ratio ${box.ratio.toFixed(2)} dens ${(box.density*100).toFixed(0)}% steady ${stableCount}/${STABLE_FRAMES}`);
       if (!DEBUG) setStatus('Card detected — hold still…');
       if (stableCount >= STABLE_FRAMES) {
         stableCount = 0;
@@ -492,7 +512,7 @@ function tick() {
     } else {
       stableCount = 0;
       if (box && !cardish) {
-        dbg(`not card-like: area ${(box.areaFrac*100).toFixed(0)}% asp ${box.aspect.toFixed(2)} dens ${(box.density*100).toFixed(0)}%`);
+        dbg(`not card-like: area ${(box.areaFrac*100).toFixed(0)}% ratio ${box.ratio.toFixed(2)} dens ${(box.density*100).toFixed(0)}%`);
       } else if (!box) {
         dbg('watching — tray empty');
       }
