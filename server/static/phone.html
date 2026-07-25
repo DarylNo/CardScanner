@@ -137,23 +137,29 @@ const MAX_UPLOAD_DIM = 1280, JPEG_QUALITY = 0.85;
 
 // ── card detection & auto-scan ───────────────────────────────────────────────
 // The rig is a fixed mount over a tray. Every tick (5 fps) we downsample the
-// frame to 96×72 gray and find the BOUNDING BOX of pixels that differ from the
-// learned empty-tray reference — i.e. the card's actual boundary, which is
-// drawn live on the preview. When that box looks card-shaped and holds still,
-// the scan fires; then we wait for the card to be removed or swapped before
-// arming again. Detection is diff-vs-empty (not darkness), so white-bordered
-// cards work as well as black.
+// frame and find the card by TEXTURE, not by brightness difference:
+//
+//   card pixel  =  locally textured NOW  and  smooth in the empty tray
+//                  (or) massively different from the empty tray
+//
+// A Magic card is edges everywhere — border, art detail, rules text — while
+// the tray is smooth plastic. Crucially the pale textbox, which defeated every
+// brightness-difference approach (white card on white tray), is packed with
+// black text and so lights up strongly under a gradient measure. Subtracting
+// the empty tray's own texture keeps the static mount/lamp at the top of the
+// frame out of the box, and using gradients rather than absolute levels makes
+// the whole thing immune to lighting drift.
 //
 // Debug: open /phone?debug to see the live numbers and tune constants.
 const MW = 96, SAMPLE_MS = 200;
 // MH tracks the video's aspect so sample pixels stay square. A fixed 96×72
 // grid squashed portrait phone video sideways — a portrait card measured
-// aspect 1.72 (landscape!) and its pixels smeared across tray columns,
-// wrecking the density check too.
+// aspect 1.72 (landscape!) and its pixels smeared across tray columns.
 let MH = 72;
 const PIX_DELTA = 25;        // gray levels — per-pixel "really changed" bar
+const GRAD_THR = 18;         // gradient magnitude counted as "textured"
 const STABLE_FRAC = 0.010;   // vs previous sample: <1% changed → motion stopped
-const EMPTY_FRAC = 0.015;    // box area below this → tray is empty
+const EMPTY_FRAC = 0.015;    // card mask below this → tray is empty
 const SWAP_FRAC = 0.06;      // vs frame at last scan: enough change = new card
 const STABLE_FRAMES = 3;     // ~0.6 s of steady card before scanning
 const DEBUG = new URLSearchParams(location.search).has('debug');
@@ -161,6 +167,7 @@ const DEBUG = new URLSearchParams(location.search).has('debug');
 let autoEnabled = true;
 let mode = 'watching';       // watching | scanning | awaitNext
 let emptyRef = null;         // the empty tray (adaptive — refreshed when idle)
+let emptyGrad = null;        // its texture map
 let prevFrame = null, prevBox = null, scannedFrame = null;
 let stableCount = 0, bootCount = 0, emptyRefreshTick = 0;
 
@@ -226,7 +233,8 @@ async function scanOnce() {
       // Server saw nothing card-like — whatever we thought was a card isn't.
       // Adopt the current scene as the new "empty" so we stop firing on it.
       setStatus('No card detected.', 'err');
-      emptyRef = sampleSmallGray() || emptyRef;
+      const s = sampleSmallGray();
+      if (s) { emptyRef = s; emptyGrad = gradMap(s); }
     } else if (data.identified) {
       const n = (data.candidates || []).length;
       setStatus(`✓ ${data.card_read.name} — ${n} printings. Swap card for the next.`, 'ok');
@@ -246,7 +254,7 @@ function sampleSmallGray() {
   if (wantMH !== MH) {
     // Video aspect (re)learned — old references are in the wrong geometry.
     MH = wantMH;
-    emptyRef = null; prevFrame = null; prevBox = null; bootCount = 0;
+    emptyRef = null; emptyGrad = null; prevFrame = null; prevBox = null; bootCount = 0;
   }
   motion.width = MW; motion.height = MH;
   const ctx = motion.getContext('2d', { willReadFrequently: true });
@@ -296,47 +304,78 @@ function expandBand(counts, band, lowThr) {
   return { a, b };
 }
 
-function detectBox(cur, ref) {
-  // Changed-pixel mass per row/column vs the empty tray.
+function gradMap(gray) {
+  // |dx| + |dy| — cheap gradient magnitude ("how textured is this pixel").
+  const g = new Uint8ClampedArray(MW * MH);
+  for (let y = 1; y < MH - 1; y++) {
+    for (let x = 1; x < MW - 1; x++) {
+      const i = y * MW + x;
+      g[i] = Math.min(255,
+        Math.abs(gray[i + 1] - gray[i - 1]) + Math.abs(gray[i + MW] - gray[i - MW]));
+    }
+  }
+  return g;
+}
+
+function cardMask(cur, curGrad) {
+  // Textured now + smooth when empty  →  card detail (art, text, borders).
+  // Or hugely different from empty     →  solid regions (dark border on tray).
+  const mask = new Uint8Array(MW * MH);
+  for (let i = 0; i < mask.length; i++) {
+    if ((curGrad[i] > GRAD_THR && emptyGrad[i] <= GRAD_THR) ||
+        Math.abs(cur[i] - emptyRef[i]) > PIX_DELTA * 2) mask[i] = 1;
+  }
+  // Close 1-px gaps along each row so text lines read as continuous card.
+  for (let y = 0; y < MH; y++) {
+    const o = y * MW;
+    for (let x = 1; x < MW - 1; x++) {
+      if (!mask[o + x] && mask[o + x - 1] && mask[o + x + 1]) mask[o + x] = 1;
+    }
+  }
+  return mask;
+}
+
+function detectBox(cur) {
+  const curGrad = gradMap(cur);
+  const mask = cardMask(cur, curGrad);
   const rows = new Uint16Array(MH), cols = new Uint16Array(MW);
   let n = 0;
   for (let y = 0; y < MH; y++) {
     for (let x = 0; x < MW; x++) {
-      if (Math.abs(cur[y * MW + x] - ref[y * MW + x]) > PIX_DELTA) {
-        rows[y]++; cols[x]++; n++;
-      }
+      if (mask[y * MW + x]) { rows[y]++; cols[x]++; n++; }
     }
   }
   if (!n) return null;
   const rMax = Math.max(...rows), cMax = Math.max(...cols);
-  let rband = mainBand(rows, Math.max(2, rMax * 0.25));
-  let cband = mainBand(cols, Math.max(2, cMax * 0.25));
+  // Dense core (the card body), then grow outward through anything still
+  // carrying mass — stops at clean tray rows, so a detached shadow band or
+  // the static mount can never join the box.
+  let rband = mainBand(rows, Math.max(2, rMax * 0.30));
+  let cband = mainBand(cols, Math.max(2, cMax * 0.30));
   if (!rband || !cband) return null;
-  rband = expandBand(rows, rband, Math.max(2, rMax * 0.05));
-  cband = expandBand(cols, cband, Math.max(2, cMax * 0.05));
-  // Density measured inside the trimmed box only.
+  rband = expandBand(rows, rband, Math.max(2, rMax * 0.10));
+  cband = expandBand(cols, cband, Math.max(2, cMax * 0.10));
   let m = 0;
   for (let y = rband.a; y <= rband.b; y++)
     for (let x = cband.a; x <= cband.b; x++)
-      if (Math.abs(cur[y * MW + x] - ref[y * MW + x]) > PIX_DELTA) m++;
+      if (mask[y * MW + x]) m++;
   const w = cband.b - cband.a + 1, h = rband.b - rband.a + 1;
   return {
     x: cband.a, y: rband.a, w, h,
-    areaFrac: m / (MW * MH),          // fraction of frame the box's mass covers
+    areaFrac: (w * h) / (MW * MH),    // how much of the frame the box covers
     density: m / (w * h),             // how solid the box is (card ≈ solid)
     aspect: w / h,
   };
 }
 
 function looksLikeCard(b) {
-  // Portrait-ish box occupying a sane share of the frame. Density is kept
-  // LOOSE (0.30): a card's white textbox/title bar blends into the white tray
-  // and punches holes in the changed-pixel box — a real card can register as
-  // only ~a third "changed". The floor exists solely to reject sparse smears
-  // (drifting shadows), which land well under 0.2.
-  return !!b && b.areaFrac > 0.02 && b.areaFrac < 0.9
-      && b.density > 0.30
-      && b.aspect > 0.40 && b.aspect < 1.25;
+  // Portrait-ish box covering a sane share of the frame. A real card is
+  // 63:88 ≈ 0.72 wide/tall; the window allows for tilt and imperfect edges.
+  // Density stays generous because a card's smooth art passages legitimately
+  // carry little texture — the floor only rejects sparse smears.
+  return !!b && b.areaFrac > 0.03 && b.areaFrac < 0.92
+      && b.density > 0.35
+      && b.aspect > 0.42 && b.aspect < 1.15;
 }
 
 function boxStable(a, b) {
@@ -349,7 +388,9 @@ function boxStable(a, b) {
 
 // Draw the detected boundary on the preview (video is object-fit: contain,
 // so map sample coords → video coords → letterboxed display coords).
-function drawOverlay(box, color) {
+// captured=true paints the card solid blue with a large white check — the
+// visual confirmation that this exact region was sent off for analysis.
+function drawOverlay(box, color, captured = false) {
   const cw = overlay.clientWidth, ch = overlay.clientHeight;
   if (overlay.width !== cw) overlay.width = cw;
   if (overlay.height !== ch) overlay.height = ch;
@@ -359,11 +400,33 @@ function drawOverlay(box, color) {
   const s = Math.min(cw / video.videoWidth, ch / video.videoHeight);
   const ox = (cw - video.videoWidth * s) / 2, oy = (ch - video.videoHeight * s) / 2;
   const fx = video.videoWidth / MW * s, fy = video.videoHeight / MH * s;
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 3;
+  const bx = ox + box.x * fx, by = oy + box.y * fy;
+  const bw = box.w * fx, bh = box.h * fy;
+
   ctx.beginPath();
-  ctx.roundRect(ox + box.x * fx, oy + box.y * fy, box.w * fx, box.h * fy, 10);
-  ctx.stroke();
+  ctx.roundRect(bx, by, bw, bh, 12);
+  if (captured) {
+    ctx.fillStyle = 'rgba(59,130,246,.62)';
+    ctx.fill();
+    ctx.strokeStyle = '#93c5fd';
+    ctx.lineWidth = 4;
+    ctx.stroke();
+    // Checkmark, sized to the card
+    const cx = bx + bw / 2, cy = by + bh / 2, r = Math.min(bw, bh) * 0.3;
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = Math.max(6, r * 0.22);
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    ctx.moveTo(cx - r * 0.75, cy);
+    ctx.lineTo(cx - r * 0.15, cy + r * 0.6);
+    ctx.lineTo(cx + r * 0.8, cy - r * 0.6);
+    ctx.stroke();
+  } else {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 3;
+    ctx.stroke();
+  }
 }
 
 function dbg(msg) { if (DEBUG) setStatus(msg); }
@@ -379,13 +442,13 @@ function tick() {
     if (prevFrame && changedFrac(cur, prevFrame) < STABLE_FRAC) bootCount++;
     else bootCount = 0;
     if (bootCount >= STABLE_FRAMES + 1) {
-      emptyRef = cur; bootCount = 0;
+      emptyRef = cur; emptyGrad = gradMap(cur); bootCount = 0;
       setStatus('Auto: watching for a card…');
     }
     prevFrame = cur; return;
   }
 
-  const box = detectBox(cur, emptyRef);
+  const box = detectBox(cur);
   const cardish = looksLikeCard(box);
 
   if (mode === 'watching') {
@@ -398,7 +461,7 @@ function tick() {
         stableCount = 0;
         scannedFrame = cur;
         mode = 'scanning';
-        drawOverlay(box, '#3b82f6');
+        drawOverlay(box, null, true);   // solid blue + check: sent for analysis
         scanOnce().finally(() => { mode = 'awaitNext'; });
       }
     } else {
@@ -411,7 +474,7 @@ function tick() {
       // Adaptive empty reference: truly empty and calm → slowly re-learn the
       // tray so lighting drift never accumulates into phantom boxes.
       if ((!box || box.areaFrac < EMPTY_FRAC) && prevFrame && changedFrac(cur, prevFrame) < STABLE_FRAC) {
-        if (++emptyRefreshTick >= 25) { emptyRef = cur; emptyRefreshTick = 0; }
+        if (++emptyRefreshTick >= 25) { emptyRef = cur; emptyGrad = gradMap(cur); emptyRefreshTick = 0; }
       } else emptyRefreshTick = 0;
     }
   } else if (mode === 'awaitNext') {
@@ -458,7 +521,7 @@ shoot.addEventListener('click', async () => {
 // the page with a card already in place, which bakes the card into the
 // reference and makes further detection blind).
 document.getElementById('stage').addEventListener('dblclick', () => {
-  emptyRef = null; prevFrame = null; prevBox = null;
+  emptyRef = null; emptyGrad = null; prevFrame = null; prevBox = null;
   bootCount = 0; stableCount = 0; mode = 'watching';
   setStatus('Re-learning empty tray — clear it and hold steady…');
 });
