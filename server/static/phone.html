@@ -25,6 +25,13 @@
   #scansPanel.open { display: flex; }
   #scansPanel header { flex: 0 0 auto; }
   #scansList { flex: 1; overflow-y: auto; }
+  #scansBar { display: flex; gap: 6px; padding: 8px 12px; border-bottom: 1px solid #23262e;
+              overflow-x: auto; flex: 0 0 auto; align-items: center; }
+  .vchip { font-size: 13px; padding: 6px 12px; border-radius: 999px; background: #23262e;
+           color: #cbd2dc; white-space: nowrap; flex: 0 0 auto; border: 1px solid transparent; }
+  .vchip.on { background: #1c2740; border-color: #3b82f6; color: #cfe1ff; }
+  #scansStat { font-size: 12px; color: #8b93a1; padding: 6px 12px; flex: 0 0 auto; }
+  #scansStat b { color: #e8eaed; } #scansStat .money { color: #6ee7a0; }
   .srow { display: flex; gap: 10px; padding: 10px 14px; border-bottom: 1px solid #1b1e26; align-items: center; }
   .srow img { width: 44px; height: 62px; object-fit: cover; border-radius: 4px; background: #23262e; }
   .srow .meta { flex: 1; min-width: 0; }
@@ -96,6 +103,13 @@
     <header>🃏 Scanned cards
       <button id="scansClose" style="font-size:14px;font-weight:600;padding:6px 12px;border:0;border-radius:8px;background:#23262e;color:#cbd2dc;width:auto">Close</button>
     </header>
+    <div id="scansBar">
+      <span class="vchip on" data-view="all">All</span>
+      <span class="vchip" data-view="pending">Needs pick</span>
+      <span class="vchip" data-view="selected">Selected</span>
+      <span class="vchip" data-view="problem">Problems</span>
+    </div>
+    <div id="scansStat"></div>
     <div id="scansList"></div>
   </div>
   <div id="detailPanel">
@@ -568,21 +582,41 @@ function renderRecent(scans) {
     chip.addEventListener('click', () => openDetail(Number(chip.dataset.sid))));
 }
 
+let scansView = 'all';
+const isProblem = s => !!s.error || !(s.candidates || []).length;
+
 async function refreshScans() {
   try {
     const scans = await (await fetch('/api/scans')).json();
     scansBtn.textContent = `Scans (${scans.length})`;
     renderRecent(scans);
     if (!scansPanel.classList.contains('open')) return;
-    scansList.innerHTML = scans.map(s => {
-      const sel = s.status === 'selected';
-      const name = s.selection?.name || s.card_read?.name || '(unread)';
+
+    const sel = scans.filter(s => s.status === 'selected');
+    const total = sel.filter(s => s.included)
+      .reduce((t, s) => t + (f2fBest(s) ?? 0), 0);
+    document.getElementById('scansStat').innerHTML =
+      `<b>${scans.length}</b> scans · <b>${scans.length - sel.length}</b> to pick · ` +
+      `<span class="money">$${total.toFixed(2)}</span> to export`;
+
+    const rows = scans.filter(s =>
+      scansView === 'all' ? true :
+      scansView === 'pending' ? s.status !== 'selected' :
+      scansView === 'selected' ? s.status === 'selected' :
+      isProblem(s));
+
+    scansList.innerHTML = rows.slice().reverse().map(s => {
+      const isSel = s.status === 'selected';
+      const name = s.selection?.name || s.card_read?.name || '(unidentified)';
       const thumb = s.selection?.image_normal || s.candidates?.[0]?.image_small
                     || `/api/scans/${s.id}/image`;
       const pr = priceRange(s);
-      const sub = sel
+      const sub = isSel
         ? `${(s.selection.set||'').toUpperCase()} #${s.selection.collector_number} · ${s.selection.condition} · ${s.selection.finish} · ×${s.selection.quantity}`
         : `${(s.candidates||[]).length} printings — tap to pick`;
+      const pill = isSel ? `<span class="spill sel">selected</span>`
+                 : isProblem(s) ? `<span class="spill" style="background:#3a1c1c;color:#fca5a5">check</span>`
+                 : `<span class="spill">pending</span>`;
       return `<div class="srow" data-sid="${s.id}">
         <img src="${escHtml(thumb)}" loading="lazy" onerror="this.style.visibility='hidden'">
         <div class="meta">
@@ -590,13 +624,21 @@ async function refreshScans() {
           <div class="sub">${escHtml(sub)}</div>
         </div>
         ${pr ? `<div class="sprice">${pr}</div>` : ''}
-        <span class="spill ${sel?'sel':''}">${sel?'selected':'pending'}</span>
+        ${pill}
       </div>`;
-    }).join('') || `<div style="padding:40px;text-align:center;color:#6b7280">No scans yet.</div>`;
+    }).join('') || `<div style="padding:40px;text-align:center;color:#6b7280">Nothing here.</div>`;
     scansList.querySelectorAll('.srow[data-sid]').forEach(row =>
       row.addEventListener('click', () => openDetail(Number(row.dataset.sid))));
   } catch (e) { /* server momentarily unreachable */ }
 }
+
+document.querySelectorAll('.vchip').forEach(chip =>
+  chip.addEventListener('click', () => {
+    document.querySelectorAll('.vchip').forEach(c => c.classList.remove('on'));
+    chip.classList.add('on');
+    scansView = chip.dataset.view;
+    refreshScans();
+  }));
 
 scansBtn.addEventListener('click', () => {
   scansPanel.classList.add('open');

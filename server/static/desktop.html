@@ -5,56 +5,109 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Card Scanner — Control</title>
 <style>
-  :root { color-scheme: dark; }
+  :root {
+    color-scheme: dark;
+    --bg: #0f1115; --panel: #12141a; --card: #171a21; --line: #23262e;
+    --text: #e8eaed; --muted: #8b93a1; --dim: #6b7280;
+    --accent: #3b82f6; --good: #6ee7a0; --warn: #fbbf24; --bad: #ff8a8a;
+  }
   * { box-sizing: border-box; }
-  body { margin: 0; font-family: system-ui, sans-serif; background: #0f1115; color: #e8eaed; }
+  body { margin: 0; font-family: system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); }
+
+  /* ── header ─────────────────────────────────────────────────────────── */
   header {
     display: flex; align-items: center; gap: 14px; padding: 10px 16px;
-    border-bottom: 1px solid #23262e; position: sticky; top: 0; background: #12141a; z-index: 5;
+    border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--panel); z-index: 5;
   }
-  header h1 { font-size: 16px; margin: 0; font-weight: 700; }
+  header h1 { font-size: 16px; margin: 0; font-weight: 700; white-space: nowrap; }
   header .sp { flex: 1; }
-  .btn { font: inherit; padding: 8px 14px; border: 0; border-radius: 8px; background: #3b82f6; color: #fff; cursor: pointer; }
-  .btn.ghost { background: #23262e; color: #cbd2dc; }
-  .btn:disabled { opacity: .5; cursor: default; }
-  main { display: grid; grid-template-columns: 380px 1fr; gap: 0; height: calc(100dvh - 53px); }
-  #left { border-right: 1px solid #23262e; overflow-y: auto; }
-  #right { overflow-y: auto; padding: 16px; }
-  .toolbar { padding: 10px 12px; position: sticky; top: 0; background: #12141a; border-bottom: 1px solid #23262e; }
-  .toolbar input { width: 100%; padding: 8px 10px; border-radius: 8px; border: 1px solid #2a2f3a; background: #0f1115; color: #e8eaed; }
-  .row {
-    display: flex; gap: 10px; padding: 10px 12px; border-bottom: 1px solid #1b1e26; cursor: pointer; align-items: center;
+  .stat { font-size: 13px; color: var(--muted); white-space: nowrap; }
+  .stat b { color: var(--text); }
+  .stat .money { color: var(--good); }
+  .btn { font: inherit; padding: 8px 14px; border: 0; border-radius: 8px; background: var(--accent); color: #fff; cursor: pointer; white-space: nowrap; }
+  .btn.ghost { background: var(--line); color: #cbd2dc; }
+  .btn.danger { background: #3a1c1c; color: var(--bad); }
+  .btn:disabled { opacity: .45; cursor: default; }
+  .btn.sm { padding: 5px 10px; font-size: 13px; }
+
+  main { display: grid; grid-template-columns: 400px 1fr; height: calc(100dvh - 53px); }
+  #left { border-right: 1px solid var(--line); overflow-y: auto; }
+  #right { overflow-y: auto; padding: 18px 20px 60px; }
+
+  /* ── filters ────────────────────────────────────────────────────────── */
+  .toolbar { padding: 10px 12px; position: sticky; top: 0; background: var(--panel); border-bottom: 1px solid var(--line); z-index: 2; }
+  .toolbar input, .toolbar select {
+    padding: 8px 10px; border-radius: 8px; border: 1px solid #2a2f3a;
+    background: var(--bg); color: var(--text); font: inherit;
   }
+  .toolbar .full { width: 100%; }
+  .frow { display: flex; gap: 8px; margin-top: 8px; align-items: center; }
+  .frow .price { width: 82px; }
+  .chipbar { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+  .fchip { font-size: 12px; padding: 4px 10px; border-radius: 999px; background: var(--line);
+           color: #cbd2dc; cursor: pointer; border: 1px solid transparent; }
+  .fchip.on { background: #1c2740; border-color: var(--accent); color: #cfe1ff; }
+
+  /* ── scan list ──────────────────────────────────────────────────────── */
+  .row { display: flex; gap: 10px; padding: 10px 12px; border-bottom: 1px solid #1b1e26; cursor: pointer; align-items: center; }
   .row:hover { background: #171a21; }
   .row.active { background: #1c2740; }
-  .row img { width: 40px; height: 56px; object-fit: cover; border-radius: 4px; background: #23262e; }
+  .row img { width: 42px; height: 59px; object-fit: cover; border-radius: 4px; background: var(--line); flex: 0 0 auto; }
   .row .meta { flex: 1; min-width: 0; }
   .row .nm { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .row .sub { font-size: 12px; color: #8b93a1; }
-  .pill { font-size: 11px; padding: 1px 7px; border-radius: 999px; background: #23262e; color: #aeb4bf; }
+  .row .sub { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row .right { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex: 0 0 auto; }
+  .price { color: var(--good); font-weight: 700; font-size: 13px; }
+  .pill { font-size: 11px; padding: 1px 7px; border-radius: 999px; background: var(--line); color: #aeb4bf; }
   .pill.sel { background: #14532d; color: #86efac; }
-  .pill.cand { background: #3f2d10; color: #fbbf24; }
-  .row input[type=checkbox] { width: 18px; height: 18px; }
-  h2 { font-size: 15px; margin: 4px 0 12px; }
-  .muted { color: #8b93a1; }
-  .controls { display: flex; gap: 12px; align-items: end; flex-wrap: wrap; margin: 8px 0 16px; }
-  .field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: #8b93a1; }
-  select, .qty { padding: 7px 9px; border-radius: 8px; border: 1px solid #2a2f3a; background: #0f1115; color: #e8eaed; font: inherit; }
-  .qty { width: 70px; }
+  .pill.cand { background: #3f2d10; color: var(--warn); }
+  .pill.err { background: #3a1c1c; color: var(--bad); }
+  .row input[type=checkbox] { width: 18px; height: 18px; flex: 0 0 auto; }
+  .empty { color: var(--dim); text-align: center; padding: 40px 20px; }
+
+  /* ── detail ─────────────────────────────────────────────────────────── */
+  h2 { font-size: 15px; margin: 0 0 10px; }
+  .muted { color: var(--muted); }
+  .dhead { display: flex; gap: 18px; align-items: flex-start; margin-bottom: 16px; }
+  .scanshot { width: 168px; flex: 0 0 auto; }
+  .scanshot img { width: 100%; border-radius: 10px; background: var(--line); cursor: zoom-in; display: block; }
+  .scanshot .cap { font-size: 11px; color: var(--dim); text-align: center; margin-top: 4px; }
+  .dinfo { flex: 1; min-width: 0; }
+  .dname { font-size: 22px; font-weight: 700; line-height: 1.2; }
+  .dsub { color: var(--muted); font-size: 13px; margin-top: 4px; }
+  .bigprice { font-size: 26px; font-weight: 800; color: var(--good); margin: 10px 0 2px; }
+  .controls { display: flex; gap: 12px; align-items: end; flex-wrap: wrap; margin: 14px 0; }
+  .field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+  select, .qty { padding: 7px 9px; border-radius: 8px; border: 1px solid #2a2f3a; background: var(--bg); color: var(--text); font: inherit; }
+  .qty { width: 72px; }
+  table.prices { border-collapse: collapse; margin: 6px 0; font-size: 13px; }
+  table.prices td { padding: 2px 14px 2px 0; color: var(--muted); }
+  table.prices td.v { color: var(--text); font-weight: 600; }
+
+  .sec { margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--line); }
+  .sechead { display: flex; align-items: baseline; gap: 10px; margin-bottom: 12px; }
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
-  .card { border: 2px solid transparent; border-radius: 10px; background: #171a21; padding: 8px; cursor: pointer; transition: border-color .1s; }
-  .card:hover { border-color: #3b82f6; }
+  .card { border: 2px solid transparent; border-radius: 10px; background: var(--card); padding: 8px; cursor: pointer; transition: border-color .1s, transform .1s; }
+  .card:hover { border-color: var(--accent); transform: translateY(-2px); }
   .card.chosen { border-color: #22c55e; }
-  .card img { width: 100%; border-radius: 6px; display: block; background: #23262e; aspect-ratio: 5/7; object-fit: cover; }
-  .card .t { font-size: 12px; margin-top: 6px; line-height: 1.3; }
+  .card.best::after { content: 'closest'; position: absolute; }
+  .card img { width: 100%; border-radius: 6px; display: block; background: var(--line); aspect-ratio: 5/7; object-fit: cover; }
+  .card .t { font-size: 12px; margin-top: 6px; line-height: 1.35; }
   .card .t b { display: block; }
-  .badges { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px; }
-  table.prices { border-collapse: collapse; margin: 10px 0; }
-  table.prices td { padding: 3px 12px 3px 0; }
-  .big-price { font-size: 22px; font-weight: 700; color: #6ee7a0; }
-  .sec { margin-top: 22px; padding-top: 14px; border-top: 1px solid #23262e; }
+  .badges { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 5px; }
   a { color: #7cc4ff; }
-  .empty { color: #6b7280; text-align: center; padding: 40px 20px; }
+  .searchrow { display: flex; gap: 8px; max-width: 460px; }
+  .searchrow input { flex: 1; padding: 8px 10px; border-radius: 8px; border: 1px solid #2a2f3a; background: var(--bg); color: var(--text); font: inherit; }
+
+  /* ── lightbox ───────────────────────────────────────────────────────── */
+  #lightbox { position: fixed; inset: 0; background: rgba(0,0,0,.93); z-index: 40; display: none;
+              align-items: center; justify-content: center; cursor: zoom-out; }
+  #lightbox.open { display: flex; }
+  #lightbox img { max-width: 92vw; max-height: 92vh; border-radius: 12px; }
+  .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+           background: var(--card); border: 1px solid var(--line); padding: 10px 18px;
+           border-radius: 10px; z-index: 50; display: none; }
+  .toast.show { display: block; }
 </style>
 </head>
 <body>
@@ -62,47 +115,65 @@
   <h1>🃏 MTG Card Scanner</h1>
   <span class="pill" id="phoneLink"></span>
   <span class="sp"></span>
-  <span class="muted" id="count">0 to export</span>
+  <span class="stat" id="stats">—</span>
+  <button class="btn ghost" id="refreshBtn" title="Reload now">↻</button>
   <button class="btn" id="exportBtn">Export to Mana Exchange</button>
 </header>
 <main>
   <div id="left">
     <div class="toolbar">
-      <input id="filter" placeholder="Filter scans by name / set…">
-      <div style="display:flex;gap:8px;margin-top:8px;align-items:center">
-        <input id="pmin" type="number" min="0" step="0.25" placeholder="Min $" style="width:80px">
-        <input id="pmax" type="number" min="0" step="0.25" placeholder="Max $" style="width:80px">
-        <button class="btn ghost" id="exclBtn" title="Mark every priced card outside the range as not-included in the export (reversible per card)">Exclude filtered</button>
+      <input id="filter" class="full" placeholder="Filter by name or set…">
+      <div class="frow">
+        <input id="pmin" class="price" type="number" min="0" step="0.25" placeholder="Min $">
+        <input id="pmax" class="price" type="number" min="0" step="0.25" placeholder="Max $">
+        <button class="btn ghost sm" id="exclBtn" title="Exclude every priced card outside the range from the export (reversible per card)">Exclude filtered</button>
+      </div>
+      <div class="chipbar">
+        <span class="fchip on" data-view="all">All</span>
+        <span class="fchip" data-view="pending">Needs pick</span>
+        <span class="fchip" data-view="selected">Selected</span>
+        <span class="fchip" data-view="problem">Problems</span>
       </div>
     </div>
     <div id="list"></div>
   </div>
   <div id="right"><div class="empty">Scan a card on your phone to begin.</div></div>
 </main>
+<div id="lightbox"><img id="lightboxImg" alt=""></div>
+<div class="toast" id="toast"></div>
 
 <script>
 const CONDITIONS = ["NM","LP","MP","HP","DMG"];
 const FINISHES = ["Non-Foil","Foil","Etched"];
-let scans = [], focusedId = null, lastMaxId = 0, detailSig = "", filterText = "";
+let scans = [], focusedId = null, lastMaxId = 0, detailSig = "", listSig = "";
+let filterText = "", priceMin = null, priceMax = null, view = "all";
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 async function jget(u){ return (await fetch(u)).json(); }
 async function jsend(u,m,b){ return (await fetch(u,{method:m,headers:{'Content-Type':'application/json'},body:JSON.stringify(b)})).json(); }
 
-function thumbFor(scan){
-  if (scan.selection?.image_normal) return scan.selection.image_normal;
-  return scan.candidates?.[0]?.image_small || scan.candidates?.[0]?.image_normal || "";
-}
-function titleFor(scan){
-  return scan.selection?.name || scan.card_read?.name || "(unread)";
+function toast(msg){
+  const t = $("#toast"); t.textContent = msg; t.classList.add("show");
+  clearTimeout(toast._t); toast._t = setTimeout(()=>t.classList.remove("show"), 1800);
 }
 
-// ── price filter ──────────────────────────────────────────────────────────────
-// Applies to scans with a fetched F2F price; unpriced scans (still awaiting a
-// printing pick) always stay visible so they don't silently disappear.
-let priceMin = null, priceMax = null;
-
+/* ── pricing helpers ───────────────────────────────────────────────────── */
+function f2fBest(scan){
+  const c = scan.f2f?.conditions || {};
+  const cond = scan.selection?.condition || "NM";
+  const order = { NM:["NM","PL"], LP:["PL","NM"], MP:["MP","PL","NM"], HP:["HP","PL","NM"], DMG:["DMG","HP","PL","NM"] }[cond] || ["NM"];
+  for (const k of order) if (c[k]!=null) return c[k];
+  const vals = Object.values(c); return vals.length ? Math.min(...vals) : null;
+}
+// Low–high across every listed condition — shown for pending scans too, since
+// the server prices the top-ranked printing in the background at scan time.
+function priceRange(scan){
+  const vals = Object.values(scan.f2f?.conditions || {});
+  if (!vals.length) return null;
+  const lo = Math.min(...vals), hi = Math.max(...vals);
+  return lo === hi ? `$${lo.toFixed(2)}` : `$${lo.toFixed(2)}–$${hi.toFixed(2)}`;
+}
 function priceOf(scan){
   if (scan.status !== "selected" || !scan.f2f) return null;
   const p = f2fBest(scan);
@@ -111,37 +182,63 @@ function priceOf(scan){
 function inPriceRange(scan){
   if (priceMin == null && priceMax == null) return true;
   const p = priceOf(scan);
-  if (p == null) return true;
+  if (p == null) return true;              // unpriced never disappears
   if (priceMin != null && p < priceMin) return false;
   if (priceMax != null && p > priceMax) return false;
   return true;
 }
 
-function renderList(){
+function thumbFor(scan){
+  return scan.selection?.image_normal
+      || scan.candidates?.[0]?.image_small
+      || scan.candidates?.[0]?.image_normal
+      || `/api/scans/${scan.id}/image`;
+}
+function titleFor(scan){ return scan.selection?.name || scan.card_read?.name || "(unidentified)"; }
+function isProblem(scan){ return !!scan.error || !(scan.candidates||[]).length; }
+
+/* ── list ──────────────────────────────────────────────────────────────── */
+function visibleScans(){
   const q = filterText.toLowerCase();
-  const rows = scans.filter(s => {
+  return scans.filter(s => {
     if (!inPriceRange(s)) return false;
+    if (view === "pending"  && s.status === "selected") return false;
+    if (view === "selected" && s.status !== "selected") return false;
+    if (view === "problem"  && !isProblem(s)) return false;
     if (!q) return true;
     const hay = (titleFor(s)+" "+(s.selection?.set||s.card_read?.set_code||"")).toLowerCase();
     return hay.includes(q);
   });
+}
+
+function renderList(){
+  const rows = visibleScans();
+  const sig = rows.map(s => [s.id,s.status,s.included,JSON.stringify(s.f2f?.conditions||{}),s.id===focusedId].join("~")).join("|");
+  if (sig === listSig) { updateStats(); return; }
+  listSig = sig;
+
   $("#list").innerHTML = rows.map(s => {
     const sel = s.status === "selected";
-    const price = sel && s.f2f ? f2fBest(s) : null;
+    const pr = priceRange(s);
     const sub = sel
       ? `${(s.selection.set||"").toUpperCase()} #${s.selection.collector_number} · ${s.selection.condition} · ${s.selection.finish}`
       : `${(s.candidates||[]).length} printings`;
+    const pill = sel ? `<span class="pill sel">selected</span>`
+               : isProblem(s) ? `<span class="pill err">check</span>`
+               : `<span class="pill cand">pick</span>`;
     return `<div class="row ${s.id===focusedId?'active':''}" data-id="${s.id}">
-      <img src="${esc(thumbFor(s))}" onerror="this.style.visibility='hidden'">
+      <img src="${esc(thumbFor(s))}" loading="lazy" onerror="this.style.visibility='hidden'">
       <div class="meta">
         <div class="nm">${esc(titleFor(s))}</div>
-        <div class="sub">${esc(sub)}${price!=null?` · <b style="color:#6ee7a0">$${price}</b>`:''}</div>
-        <div style="margin-top:4px"><span class="pill ${sel?'sel':'cand'}">${sel?'selected':'pick printing'}</span>
-          ${sel?`<span class="pill">×${s.selection.quantity}</span>`:''}</div>
+        <div class="sub">${esc(sub)}</div>
+        <div style="margin-top:4px">${pill}${sel?`<span class="pill">×${s.selection.quantity}</span>`:''}</div>
       </div>
-      ${sel?`<input type="checkbox" title="include in export" ${s.included?'checked':''} data-inc="${s.id}">`:''}
+      <div class="right">
+        ${pr?`<span class="price">${pr}</span>`:''}
+        ${sel?`<input type="checkbox" title="include in export" ${s.included?'checked':''} data-inc="${s.id}">`:''}
+      </div>
     </div>`;
-  }).join("") || `<div class="empty">No scans yet.</div>`;
+  }).join("") || `<div class="empty">No scans match.</div>`;
 
   $("#list").querySelectorAll(".row").forEach(r =>
     r.addEventListener("click", e => {
@@ -149,124 +246,111 @@ function renderList(){
       focusScan(Number(r.dataset.id));
     }));
   $("#list").querySelectorAll("[data-inc]").forEach(cb =>
-    cb.addEventListener("change", async e => {
+    cb.addEventListener("change", async () => {
       await jsend(`/api/scans/${cb.dataset.inc}`, "PATCH", { included: cb.checked });
       poll();
     }));
-  updateCount();
+  updateStats();
 }
 
-function f2fBest(scan){
-  const c = scan.f2f?.conditions || {};
-  const cond = scan.selection?.condition || "NM";
-  const order = { NM:["NM","PL"], LP:["PL","NM"], MP:["MP","PL","NM"], HP:["HP","PL","NM"], DMG:["DMG","HP","PL","NM"] }[cond] || ["NM"];
-  for (const k of order) if (c[k]!=null) return c[k];
-  const vals = Object.values(c); return vals.length ? Math.min(...vals) : null;
-}
-function updateCount(){
-  const n = scans.filter(s => s.status==="selected" && s.included).length;
-  $("#count").textContent = `${n} to export`;
+function updateStats(){
+  const sel = scans.filter(s => s.status==="selected");
+  const inc = sel.filter(s => s.included);
+  const total = inc.reduce((t,s) => t + (priceOf(s) ?? 0), 0);
+  $("#stats").innerHTML =
+    `<b>${scans.length}</b> scans · <b>${scans.length-sel.length}</b> to pick · ` +
+    `<b>${inc.length}</b> to export · <span class="money">$${total.toFixed(2)}</span>`;
+  $("#exportBtn").disabled = inc.length === 0;
 }
 
-function focusScan(id){ focusedId = id; detailSig = ""; renderDetail(); renderList(); }
+function focusScan(id){ focusedId = id; detailSig = ""; renderDetail(); listSig=""; renderList(); }
 
-function candCard(scan, c, chosenId){
+/* ── candidate cards ───────────────────────────────────────────────────── */
+function candCard(c, chosenId, idx){
   const badges = (c.finishes||[]).map(f=>`<span class="pill">${esc(f)}</span>`).join("");
-  // multi = art×4 + title×1 + textbox×1 — the order candidates are shown in.
-  const dist = c.multi_distance!=null
-    ? `<span class="pill" title="combined match: art×4 + title + textbox (lower = better)">Δ${c.multi_distance}</span>`
+  // multi = art×4 + title + textbox — the order candidates are shown in.
+  const d = c.multi_distance!=null
+    ? `<span class="pill" title="combined match: art×4 + title + textbox (lower = closer)">Δ${c.multi_distance}</span>`
     : (c.phash_distance!=null ? `<span class="pill">art Δ${c.phash_distance}</span>` : "");
+  const best = idx===0 ? `<span class="pill" style="background:#1c2740;color:#cfe1ff">closest</span>` : "";
   return `<div class="card ${c.id===chosenId?'chosen':''}" data-pick="${esc(c.id)}">
     <img src="${esc(c.image_normal||c.image_small)}" loading="lazy" onerror="this.style.visibility='hidden'">
     <div class="t"><b>${esc(c.set_name)}</b>#${esc(c.collector_number)} · ${esc(c.rarity||"")}</div>
-    <div class="badges">${dist}${badges}</div>
+    <div class="badges">${best}${d}${badges}</div>
   </div>`;
 }
 
 function controlsHtml(scan){
-  const condDefault = (scan.selection?.condition
-    || (scan.card_read?.condition_estimate||"").toUpperCase()) ;
+  const condDefault = scan.selection?.condition || (scan.card_read?.condition_estimate||"").toUpperCase();
   const cond = CONDITIONS.includes(condDefault) ? condDefault : "NM";
-  const finDefault = scan.selection?.finish || (scan.card_read?.foil ? "Foil" : "Non-Foil");
+  const fin = scan.selection?.finish || (scan.card_read?.foil ? "Foil" : "Non-Foil");
   const qty = scan.selection?.quantity || 1;
   return `<div class="controls">
     <div class="field">Condition
       <select id="c-cond">${CONDITIONS.map(c=>`<option ${c===cond?'selected':''}>${c}</option>`).join("")}</select></div>
     <div class="field">Finish
-      <select id="c-fin">${FINISHES.map(f=>`<option ${f===finDefault?'selected':''}>${f}</option>`).join("")}</select></div>
+      <select id="c-fin">${FINISHES.map(f=>`<option ${f===fin?'selected':''}>${f}</option>`).join("")}</select></div>
     <div class="field">Qty <input class="qty" id="c-qty" type="number" min="1" value="${qty}"></div>
   </div>`;
 }
 
+/* ── detail ────────────────────────────────────────────────────────────── */
 function renderDetail(){
   const scan = scans.find(s => s.id === focusedId);
   const right = $("#right");
   if (!scan){ right.innerHTML = `<div class="empty">Scan a card on your phone to begin.</div>`; return; }
-  const cr = scan.card_read || {};
-  const chosenId = scan.selection?.scryfall_id;
+  const cr = scan.card_read || {}, sel = scan.selection || null;
+  const chosenId = sel?.scryfall_id;
+  const pr = priceRange(scan);
 
-  let html = `<h2>${esc(titleFor(scan))}
-    <span class="muted" style="font-weight:400">— matched as ${esc(cr.name||"?")}
-    ${cr.foil?'· foil':''} · est. ${esc(cr.condition_estimate||"?")}
-    ${cr.condition_reason?`(${esc(cr.condition_reason)})`:''}</span></h2>`;
+  let html = `<div class="dhead">
+    <div class="scanshot">
+      <img src="/api/scans/${scan.id}/image" id="scanShot" onerror="this.parentNode.style.display='none'">
+      <div class="cap">your card · click to enlarge</div>
+    </div>
+    <div class="dinfo">
+      <div class="dname">${esc(titleFor(scan))}</div>
+      <div class="dsub">${sel
+        ? `${esc(sel.set_name)} · ${esc((sel.set||'').toUpperCase())} #${esc(sel.collector_number)}`
+        : `matched by art as <b>${esc(cr.name||'?')}</b> — pick the exact printing below`}</div>
+      ${(cr.alternates||[]).length ? `<div class="dsub">also possible: ${
+        cr.alternates.map(a=>`<a href="#" class="alt-name" data-name="${esc(a.name)}">${esc(a.name)}</a> <span class="muted">(Δ${a.distance})</span>`).join(" · ")
+      }</div>` : ''}
+      ${scan.error ? `<div class="dsub" style="color:var(--bad)">⚠ ${esc(scan.error)}</div>` : ''}
+      ${sel
+        ? `<div class="bigprice">Face to Face: $${f2fBest(scan) ?? '—'}</div>
+           ${(() => { const rows = Object.entries(scan.f2f?.conditions||{});
+             return rows.length
+               ? `<table class="prices"><tr>${rows.map(([k])=>`<td>${esc(k)}</td>`).join("")}</tr>
+                  <tr>${rows.map(([,v])=>`<td class="v">$${v}</td>`).join("")}</tr></table>`
+               : `<div class="muted" style="font-size:13px">No Face to Face listing found.</div>`; })()}
+           ${scan.f2f?.url?`<a href="${esc(scan.f2f.url)}" target="_blank">View on Face to Face ↗</a>`:''}`
+        : (pr ? `<div class="bigprice">~${pr} <span class="muted" style="font-size:13px;font-weight:400">(top match)</span></div>` : '')}
+      ${controlsHtml(scan)}
+    </div>
+  </div>`;
 
-  if ((cr.alternates||[]).length){
-    const alts = cr.alternates.map(a =>
-      `<a href="#" class="alt-name" data-name="${esc(a.name)}">${esc(a.name)}</a> <span class="muted">(Δ${a.distance})</span>`
-    ).join(" · ");
-    html += `<p class="muted">Also possible: ${alts}</p>`;
-  }
+  html += `<div class="sec">
+    <div class="sechead"><h2>${sel?"Re-pick printing":"Pick the printing"}</h2>
+      <span class="muted" style="font-size:12px">ranked closest first — art ×4 + title + textbox</span></div>`;
+  html += (scan.candidates||[]).length
+    ? `<div class="grid" id="cands">${scan.candidates.map((c,i)=>candCard(c,chosenId,i)).join("")}</div>`
+    : `<p class="muted">No art candidates — use the search below.</p>`;
+  html += `</div>`;
 
-  if (scan.error) html += `<p class="muted">⚠ ${esc(scan.error)}</p>`;
-
-  html += controlsHtml(scan);
-
-  if (scan.status === "selected"){
-    const s = scan.selection, prices = scan.f2f?.conditions || {};
-    const rows = Object.entries(prices).map(([k,v])=>`<tr><td>${esc(k)}</td><td>$${v}</td></tr>`).join("")
-      || `<tr><td class="muted" colspan=2>No Face to Face listing found.</td></tr>`;
-    html += `<div class="sec"><h2>Selected printing</h2>
-      <div style="display:flex;gap:16px">
-        <img src="${esc(s.image_normal)}" style="width:150px;border-radius:8px" onerror="this.style.visibility='hidden'">
-        <div>
-          <div><b>${esc(s.name)}</b></div>
-          <div class="muted">${esc(s.set_name)} · ${(s.set||'').toUpperCase()} #${esc(s.collector_number)}</div>
-          <div style="margin:8px 0">${esc(s.condition)} · ${esc(s.finish)} · ×${s.quantity}</div>
-          <div class="big-price">Face to Face: $${f2fBest(scan) ?? '—'}</div>
-          <table class="prices">${rows}</table>
-          ${scan.f2f?.url?`<a href="${esc(scan.f2f.url)}" target="_blank">View on Face to Face ↗</a>`:''}
-        </div>
-      </div>
-      <p class="muted">Change condition/finish/qty above and it updates. Re-pick below to change the printing.</p>
-    </div>`;
-  }
-
-  html += `<div class="sec"><h2>${scan.status==="selected"?"Re-pick printing":"Pick the correct printing"}</h2>
-    <div style="display:flex;gap:16px;align-items:flex-start">
-      <div style="flex:0 0 190px;position:sticky;top:8px">
-        <img src="/api/scans/${scan.id}/image" style="width:190px;border-radius:10px;background:#23262e"
-             onerror="this.parentNode.style.display='none'">
-        <div class="muted" style="font-size:12px;text-align:center;margin-top:4px">your card</div>
-      </div>
-      <div style="flex:1">`;
-  if ((scan.candidates||[]).length){
-    html += `<div class="grid">${scan.candidates.map(c=>candCard(scan,c,chosenId)).join("")}</div>`;
-  } else {
-    html += `<p class="muted">No art candidates. Use manual search below.</p>`;
-  }
-  html += `</div></div></div>`;
-
-  html += `<div class="sec"><h2>Manual search (wrong card?)</h2>
-    <div style="display:flex;gap:8px;max-width:420px">
-      <input id="msearch" placeholder="Card name…" style="flex:1;padding:8px;border-radius:8px;border:1px solid #2a2f3a;background:#0f1115;color:#e8eaed">
+  html += `<div class="sec">
+    <div class="sechead"><h2>Wrong card?</h2><span class="muted" style="font-size:12px">search by name</span></div>
+    <div class="searchrow">
+      <input id="msearch" placeholder="Card name…">
       <button class="btn ghost" id="msearchBtn">Search</button>
     </div>
     <div class="grid" id="msearchResults" style="margin-top:12px"></div>
   </div>`;
 
-  html += `<div class="sec"><button class="btn ghost" id="delBtn">Delete this scan</button></div>`;
+  html += `<div class="sec"><button class="btn danger" id="delBtn">Delete this scan</button></div>`;
 
   right.innerHTML = html;
+  right.scrollTop = 0;
   wireDetail(scan);
 }
 
@@ -285,20 +369,23 @@ function wireDetail(scan){
   const pickFrom = (pool) => async (el) => {
     const printing = (pool || []).find(c => c.id === el.dataset.pick);
     if (!printing) return;
+    el.style.opacity = ".5";
     await jsend(`/api/scans/${scan.id}/select`, "POST", { printing, ...currentControls() });
     await poll(); detailSig=""; renderDetail();
+    toast(`Selected ${printing.set_name} #${printing.collector_number}`);
   };
   const candPick = pickFrom(scan.candidates);
-  $("#right").querySelectorAll(".card[data-pick]").forEach(el =>
+  $("#cands")?.querySelectorAll(".card[data-pick]").forEach(el =>
     el.addEventListener("click", () => candPick(el)));
+
+  $("#scanShot")?.addEventListener("click", () => openLightbox(`/api/scans/${scan.id}/image`));
 
   // Live edit of an already-selected scan when controls change.
   if (scan.status === "selected"){
     ["c-cond","c-fin","c-qty"].forEach(id => {
-      const el = document.getElementById(id);
-      el?.addEventListener("change", async () => {
+      document.getElementById(id)?.addEventListener("change", async () => {
         await jsend(`/api/scans/${scan.id}`, "PATCH", currentControls());
-        await poll(); detailSig=""; renderList();
+        await poll(); detailSig=""; renderDetail(); listSig=""; renderList();
       });
     });
   }
@@ -307,7 +394,7 @@ function wireDetail(scan){
     const q = $("#msearch").value.trim(); if (!q) return;
     $("#msearchResults").innerHTML = `<p class="muted">Searching…</p>`;
     const { candidates } = await jget(`/api/search?q=${encodeURIComponent(q)}`);
-    $("#msearchResults").innerHTML = candidates.map(c=>candCard(scan,c,scan.selection?.scryfall_id)).join("")
+    $("#msearchResults").innerHTML = candidates.map((c,i)=>candCard(c,scan.selection?.scryfall_id,-1)).join("")
       || `<p class="muted">No results.</p>`;
     const searchPick = pickFrom(candidates);
     $("#msearchResults").querySelectorAll(".card[data-pick]").forEach(el =>
@@ -322,14 +409,24 @@ function wireDetail(scan){
       e.preventDefault();
       $("#msearch").value = a.dataset.name;
       doSearch();
+      $("#msearch").scrollIntoView({ behavior: "smooth", block: "center" });
     }));
 
   $("#delBtn")?.addEventListener("click", async () => {
     await fetch(`/api/scans/${scan.id}`, { method: "DELETE" });
     focusedId = null; await poll(); renderDetail();
+    toast("Scan deleted");
   });
 }
 
+/* ── lightbox ──────────────────────────────────────────────────────────── */
+function openLightbox(src){ $("#lightboxImg").src = src; $("#lightbox").classList.add("open"); }
+$("#lightbox").addEventListener("click", () => $("#lightbox").classList.remove("open"));
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape") $("#lightbox").classList.remove("open");
+});
+
+/* ── polling ───────────────────────────────────────────────────────────── */
 function sigOf(scan){
   if (!scan) return "none";
   return [scan.id, scan.status, (scan.candidates||[]).length,
@@ -341,7 +438,6 @@ async function poll(){
   try {
     scans = await jget("/api/scans");
     const maxId = scans.reduce((m,s)=>Math.max(m,s.id), 0);
-    // Auto-advance focus to a freshly scanned card.
     if (maxId > lastMaxId){ focusedId = maxId; lastMaxId = maxId; detailSig = ""; }
     renderList();
     const focused = scans.find(s => s.id === focusedId);
@@ -350,18 +446,27 @@ async function poll(){
   } catch (e) { /* server momentarily unreachable */ }
 }
 
-$("#filter").addEventListener("input", e => { filterText = e.target.value; renderList(); });
-$("#pmin").addEventListener("input", e => { priceMin = e.target.value === "" ? null : Number(e.target.value); renderList(); });
-$("#pmax").addEventListener("input", e => { priceMax = e.target.value === "" ? null : Number(e.target.value); renderList(); });
+/* ── filters + actions ─────────────────────────────────────────────────── */
+$("#filter").addEventListener("input", e => { filterText = e.target.value; listSig=""; renderList(); });
+$("#pmin").addEventListener("input", e => { priceMin = e.target.value === "" ? null : Number(e.target.value); listSig=""; renderList(); });
+$("#pmax").addEventListener("input", e => { priceMax = e.target.value === "" ? null : Number(e.target.value); listSig=""; renderList(); });
+document.querySelectorAll(".fchip").forEach(chip =>
+  chip.addEventListener("click", () => {
+    document.querySelectorAll(".fchip").forEach(c => c.classList.remove("on"));
+    chip.classList.add("on"); view = chip.dataset.view; listSig=""; renderList();
+  }));
+
 $("#exclBtn").addEventListener("click", async () => {
-  // Bulk-exclude everything the price filter currently hides (priced, out of
-  // range, still included). Reversible per card via its include checkbox.
+  // Bulk-exclude everything the price filter hides (priced, out of range,
+  // still included). Reversible per card via its include checkbox.
   const targets = scans.filter(s =>
     s.status === "selected" && s.included && priceOf(s) != null && !inPriceRange(s));
-  if (!targets.length) return;
+  if (!targets.length) { toast("Nothing to exclude"); return; }
   for (const s of targets) await jsend(`/api/scans/${s.id}`, "PATCH", { included: false });
-  poll();
+  poll(); toast(`Excluded ${targets.length} card${targets.length>1?'s':''}`);
 });
+
+$("#refreshBtn").addEventListener("click", () => { listSig=""; detailSig=""; poll(); });
 $("#exportBtn").addEventListener("click", () => { window.location = "/api/export"; });
 $("#phoneLink").textContent = "Phone: " + location.origin + "/phone";
 
