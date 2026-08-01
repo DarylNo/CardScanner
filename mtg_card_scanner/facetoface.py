@@ -175,10 +175,23 @@ def _default_get_json(cache_dir: Path) -> Callable[[str], Any]:
     """
     import os
     import threading
+    from collections import deque
 
     session = requests.Session()
     session.headers["User-Agent"] = _USER_AGENT
     state = {"last": 0.0, "delay": _START_DELAY}
+    # Ring buffer of recent request outcomes — the debug surface that answers
+    # "why is pricing slow RIGHT NOW" (429 storm? cache hits? errors?).
+    events: deque = deque(maxlen=80)
+
+    def _record(url: str, status: str, waited: float = 0.0) -> None:
+        events.append({
+            "t": time.time(),
+            "url": url.split("facetofacegames.com")[-1][:90],
+            "status": status,
+            "wait_s": round(waited, 1),
+            "delay_s": round(state["delay"], 2),
+        })
     throttle_lock = threading.Lock()
     cache_dir.mkdir(parents=True, exist_ok=True)
 
@@ -206,7 +219,9 @@ def _default_get_json(cache_dir: Path) -> Callable[[str], Any]:
         cached = cache_dir / f"{key}.json"
         try:
             if cached.exists() and time.time() - cached.stat().st_mtime < _CACHE_TTL:
-                return json.loads(cached.read_text(encoding="utf-8"))
+                data = json.loads(cached.read_text(encoding="utf-8"))
+                _record(url, "cache")
+                return data
         except (OSError, ValueError):
             pass                       # torn/corrupt entry → refetch below
         # Failure handling, tuned to the two real failure modes observed:
@@ -226,13 +241,17 @@ def _default_get_json(cache_dir: Path) -> Callable[[str], Any]:
                         wait = float(resp.headers.get("Retry-After") or 0)
                     except ValueError:
                         wait = 0.0
-                    time.sleep(min(max(wait, 2.0 * attempt), 15.0))
+                    waited = min(max(wait, 2.0 * attempt), 15.0)
+                    _record(url, "429", waited)
+                    time.sleep(waited)
                     continue
                 resp.raise_for_status()
                 data = resp.json()
                 _feedback(True)                    # pace up gently
+                _record(url, "200")
             except (requests.RequestException, ValueError) as exc:
                 last_error = f"{type(exc).__name__}: {exc}"
+                _record(url, type(exc).__name__)
                 if attempt >= 2:
                     break
                 time.sleep(0.8)
@@ -255,6 +274,7 @@ def _default_get_json(cache_dir: Path) -> Callable[[str], Any]:
         return None
 
     get_json.current_delay = lambda: state["delay"]   # UI: show the live pace
+    get_json.recent_events = lambda: list(events)     # UI: request-level debug
     return get_json
 
 
@@ -286,6 +306,11 @@ class FaceToFaceClient:
         """Current adaptive request spacing in seconds (None for injected fakes)."""
         fn = getattr(self._get_json, "current_delay", None)
         return round(fn(), 2) if fn else None
+
+    def recent_requests(self) -> list[dict[str, Any]]:
+        """Recent request outcomes for the debug UI ([] for injected fakes)."""
+        fn = getattr(self._get_json, "recent_events", None)
+        return fn() if fn else []
 
     def _suggest(self, name: str) -> list[dict[str, Any]]:
         url = (

@@ -446,3 +446,9 @@ def test_selected_scan_queues_only_its_selection(tmp_path):
     scan = c.get(f"/api/scans/{sid}").json()
     assert scan["f2f"]["conditions"] == {"NM": 1.99}
     assert all(cc.get("f2f_conditions") is None for cc in scan["candidates"])
+
+
+def test_price_debug_endpoint(client):
+    d = client.get("/api/price-debug").json()
+    assert "events" in d and isinstance(d["events"], list)
+    assert "pace_s" in d

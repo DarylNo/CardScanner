@@ -121,6 +121,7 @@
   <span class="pill" id="phoneLink" style="cursor:pointer" title="Click for a QR code to open the scanner on your phone"></span>
   <span class="sp"></span>
   <span class="stat" id="sweepStat" style="color:var(--warn)"></span>
+  <button class="btn ghost sm" id="f2fLogBtn" title="F2F request log — every request's outcome and the adaptive pace">🐞</button>
   <button class="btn ghost sm" id="sweepStartBtn" style="display:none" title="Start a pricing sweep now (also overrides a throttling cooldown)">▶ Sweep</button>
   <button class="btn ghost sm" id="sweepStopBtn" style="display:none" title="Stop the price sweep (auto-sweep pauses 10 min; it restarts within a minute of pressing the phone's Price missing)">■ Stop</button>
   <span class="stat" id="stats">—</span>
@@ -130,6 +131,9 @@
   <button class="btn danger" id="clearAllBtn" title="Delete every scan">Clear all</button>
   <button class="btn" id="exportBtn">Export to Mana Exchange</button>
 </header>
+<div id="f2fLog" style="display:none;position:fixed;right:14px;bottom:14px;width:560px;
+     max-height:55vh;overflow:auto;background:var(--panel);border:1px solid var(--line);
+     border-radius:10px;padding:10px 12px;z-index:60;font:12px/1.6 ui-monospace,Consolas,monospace"></div>
 <div id="dlBar" style="display:none;flex-direction:column;gap:8px;padding:12px 16px;
      background:var(--panel);border-bottom:1px solid var(--line);font-size:13px">
   <div><b>Card database</b> <span class="muted">(identifies cards — required)</span>
@@ -554,7 +558,7 @@ function sigOf(scan){
 
 // Version banner — page version · server git hash. Same rationale as the
 // phone: without it, "is this the old page?" is undebuggable.
-const UI_VERSION = "d8";
+const UI_VERSION = "d9";
 $("#sweepStopBtn").addEventListener("click", async () => {
   await jsend("/api/price-sweep/stop", "POST", {});
   toast("Sweep stopping — auto-sweep paused 10 min");
@@ -670,6 +674,37 @@ $("#dlImgBtn").addEventListener("click", async () => {
   await jsend("/api/setup/prefetch-images", "POST", {}); checkSetup();
 });
 checkSetup();
+
+/* ── F2F request log (debug) ─────────────────────────────────────────────── */
+let f2fLogTimer = null;
+async function renderF2fLog(){
+  try {
+    const d = await jget("/api/price-debug");
+    const el = $("#f2fLog");
+    const rows = (d.events || []).slice(-45).reverse().map(e => {
+      const age = Math.max(0, Math.round(Date.now()/1000 - e.t));
+      const col = e.status === "200" ? "var(--good)"
+                : e.status === "429" ? "var(--warn)"
+                : e.status === "cache" ? "var(--dim)" : "var(--bad)";
+      return `<div><span style="color:var(--dim)">${String(age).padStart(3)}s</span> ` +
+        `<b style="color:${col}">${esc(e.status)}</b> ` +
+        `<span style="color:var(--muted)">pace ${e.delay_s}s${e.wait_s ? ` · waited ${e.wait_s}s` : ""}</span> ` +
+        `<span style="color:var(--muted)">${esc(e.url)}</span></div>`;
+    }).join("");
+    el.innerHTML = `<div style="margin-bottom:6px"><b>F2F requests</b> (newest first) · pace 1/${d.pace_s ?? "—"}s` +
+      `<span style="float:right;cursor:pointer" id="f2fLogClose">✕</span></div>` +
+      (rows || `<span style="color:var(--muted)">no requests yet this session</span>`);
+    $("#f2fLogClose").addEventListener("click", toggleF2fLog);
+  } catch(e){}
+}
+function toggleF2fLog(){
+  const el = $("#f2fLog");
+  const open = el.style.display === "none";
+  el.style.display = open ? "block" : "none";
+  clearInterval(f2fLogTimer); f2fLogTimer = null;
+  if (open){ renderF2fLog(); f2fLogTimer = setInterval(renderF2fLog, 3000); }
+}
+$("#f2fLogBtn").addEventListener("click", toggleF2fLog);
 
 /* ── manual sweep start ──────────────────────────────────────────────────── */
 $("#sweepStartBtn").addEventListener("click", async () => {

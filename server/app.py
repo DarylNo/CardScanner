@@ -419,6 +419,15 @@ def create_app(
             "eta_s": round(remaining / rate) if rate else None,
         }
 
+    @app.get("/api/price-debug")
+    def price_debug():
+        """Request-level F2F log: recent outcomes (200/429/cache/errors),
+        each stamped with the adaptive pace at that moment."""
+        return {
+            "pace_s": getattr(f2f, "pacing_delay", lambda: None)(),
+            "events": getattr(f2f, "recent_requests", lambda: [])(),
+        }
+
     @app.post("/api/price-sweep/stop")
     def price_sweep_stop():
         """Cancel the running sweep (it stops within one card) and pause the
@@ -440,16 +449,25 @@ def create_app(
         A search that found no listing is recorded (empty conditions) so it is
         not re-searched every sweep; the manual per-scan button still forces.
         """
-        targets: list[tuple[str, int, dict, bool]] = []
+        targets: list[tuple[str, int, dict, bool, str]] = []
         for s in store.list_scans():
             if s.get("selection"):
                 if s.get("f2f") is None and s["selection"].get("name"):
-                    targets.append(("scan", s["id"], s["selection"],
-                                    bool(s["selection"].get("foil", False))))
+                    sel = s["selection"]
+                    targets.append(("scan", s["id"], sel,
+                                    bool(sel.get("foil", False)),
+                                    sel.get("name", "")))
             else:
-                for c in (s.get("candidates") or []):
-                    if c.get("f2f_conditions") is None and c.get("name"):
-                        targets.append(("print", s["id"], c, False))
+                pending = [c for c in (s.get("candidates") or [])
+                           if c.get("f2f_conditions") is None and c.get("name")]
+                for i, c in enumerate(pending, 1):
+                    # Header readout: "Corpulent Corpse [TSR #104] · print 2/5"
+                    label = c.get("name", "")
+                    if c.get("set"):
+                        label += f" [{c['set'].upper()} #{c.get('collector_number', '')}]"
+                    if len(pending) > 1:
+                        label += f" · print {i}/{len(pending)}"
+                    targets.append(("print", s["id"], c, False, label))
         return targets
 
     def _claim_sweep(targets: list) -> bool:
@@ -463,7 +481,7 @@ def create_app(
                          cancel=False, started=time.monotonic())
             return True
 
-    def _run_sweep(items: list[tuple[str, int, dict, bool]]) -> None:
+    def _run_sweep(items: list[tuple[str, int, dict, bool, str]]) -> None:
         """Requires a successful _claim_sweep by the caller."""
         # Circuit breaker: when the storefront is rate-limiting, every fetch
         # burns its full backoff budget and still fails — and the 60s auto-
@@ -473,11 +491,11 @@ def create_app(
         # the bucket actually recovers; a manual start overrides the cooldown.
         unavailable_streak = 0
         try:
-            for kind, sid, c, foil in items:
+            for kind, sid, c, foil, label in items:
                 if sweep.get("cancel"):
                     print(f"  [server] price sweep cancelled at {sweep['done']}/{sweep['total']}")
                     break
-                sweep["current"] = c.get("name", "")
+                sweep["current"] = label or c.get("name", "")
                 try:
                     # Skip WITHOUT fetching when the target became moot since
                     # collect time — the target list is frozen at sweep start,
