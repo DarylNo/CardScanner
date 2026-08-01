@@ -5,7 +5,8 @@ import numpy as np
 import cv2
 
 from mtg_card_scanner.card_detect import (
-    CARD_H, CARD_W, extract_card, find_card_quad, frame_sharpness, pick_sharpest,
+    CARD_H, CARD_W, extract_card, find_card_quad, frame_sharpness,
+    is_blank_surface, pick_sharpest,
 )
 
 
@@ -78,6 +79,43 @@ class TestFindCardQuad:
 
     def test_returns_none_on_blank_frame(self):
         assert find_card_quad(np.full((600, 800, 3), 235, np.uint8)) is None
+
+    def test_rejects_uniform_card_shaped_object(self):
+        """A black card holder is card-shaped but has no printed interior —
+        the texture gate must reject it (it used to out-area the real card)."""
+        frame = np.full((600, 800, 3), 235, np.uint8)
+        frame[146:453, 290:510] = 22               # 220×307 uniform dark slab
+        assert find_card_quad(frame) is None
+
+    def test_prefers_real_card_over_bigger_holder(self):
+        """With both in frame, the CARD wins even though the holder is larger."""
+        frame = _scene(220, 307)                   # real textured card at x 290-510
+        frame[120:500, 20:260] = 18                # bigger dark holder beside it
+        quad = find_card_quad(frame)
+        assert quad is not None
+        assert quad[:, 0].min() > 260              # quad sits on the card, not the holder
+
+
+class TestIsBlankSurface:
+    def test_uniform_dark_slab_is_blank(self):
+        assert is_blank_surface(np.full((CARD_H, CARD_W, 3), 22, np.uint8)) is True
+
+    def test_empty_tray_crop_is_blank(self):
+        assert is_blank_surface(np.full((CARD_H, CARD_W, 3), 235, np.uint8)) is True
+
+    def test_card_like_content_is_not_blank(self):
+        card, detected = extract_card(_scene(220, 307))
+        assert detected is True
+        assert is_blank_surface(card, detected=detected) is False
+
+    def test_fallback_crop_of_holder_is_blank(self):
+        """Centre-crop fallback: holder outline edges alone must not count as
+        card content — the stricter fallback bar applies."""
+        frame = np.full((600, 800, 3), 235, np.uint8)
+        frame[146:453, 290:510] = 22
+        img, detected = extract_card(frame)
+        assert detected is False
+        assert is_blank_surface(img, detected=detected) is True
 
 
 class TestExtractCard:

@@ -18,7 +18,7 @@ from mtg_card_scanner.art_index import (
     _NO_CARD_DISTANCE,
 )
 from mtg_card_scanner.card_read import CardRead
-from mtg_card_scanner.card_detect import frame_sharpness
+from mtg_card_scanner.card_detect import extract_card, frame_sharpness, is_blank_surface
 from mtg_card_scanner.scryfall import ScryfallClient, ScryfallError
 from mtg_card_scanner.output import ScanResult, OutputWriter, build_result, format_listing
 
@@ -144,6 +144,24 @@ class Pipeline:
             return {
                 "identified": False, "card_read": {}, "confidence": low_conf,
                 "candidates": [], "error": "No art index configured.",
+            }
+
+        # Blank-surface guard: a card holder / empty tray / lens cap warps to a
+        # near-uniform image whose pHash can still land within confident
+        # distance of a dark low-contrast artwork — the distance threshold
+        # alone did NOT catch this (a black holder scanned as a real card).
+        # Content is checked directly instead: no printed detail in ANY frame
+        # → there is no card, skip hashing the index entirely.
+        def _blank(frame: np.ndarray) -> bool:
+            card_img, detected = extract_card(frame)
+            return is_blank_surface(card_img, detected=detected)
+
+        if all(_blank(f) for f in frames):
+            print("  [pipeline] no card detected (blank surface in frame)")
+            return {
+                "identified": False, "no_card": True, "card_read": {},
+                "confidence": low_conf, "candidates": [],
+                "error": "No card detected (blank surface in frame).",
             }
 
         try:

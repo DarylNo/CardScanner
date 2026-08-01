@@ -401,15 +401,22 @@ function detectBox(cur) {
   // at genuinely clean tray rows.
   rband = expandBand(rows, rband, Math.max(2, rMax * 0.04));
   cband = expandBand(cols, cband, Math.max(2, cMax * 0.04));
-  let m = 0;
-  for (let y = rband.a; y <= rband.b; y++)
-    for (let x = cband.a; x <= cband.b; x++)
-      if (mask[y * MW + x]) m++;
+  let m = 0, tex = 0;
+  for (let y = rband.a; y <= rband.b; y++) {
+    for (let x = cband.a; x <= cband.b; x++) {
+      const i = y * MW + x;
+      if (mask[i]) m++;
+      // Textured NOW and smooth when empty — printed card detail only, so
+      // the tray's own static texture never counts toward the box.
+      if (curGrad[i] > GRAD_THR && emptyGrad[i] <= GRAD_THR) tex++;
+    }
+  }
   const w = cband.b - cband.a + 1, h = rband.b - rband.a + 1;
   return {
     x: cband.a, y: rband.a, w, h,
     areaFrac: (w * h) / (MW * MH),    // how much of the frame the box covers
     density: m / (w * h),             // how solid the box is (card ≈ solid)
+    texFrac: tex / (w * h),           // printed-detail fraction (card ≫ holder)
     aspect: w / h,
     ratio: Math.max(w, h) / Math.min(w, h),   // orientation-agnostic shape
   };
@@ -422,8 +429,12 @@ function looksLikeCard(b) {
   // A real card is 88:63 ≈ 1.40; the window allows tilt and edge slop.
   // Density stays generous — smooth art passages legitimately carry little
   // texture; the floor only rejects sparse smears.
+  // texFrac separates a card from a card-SHAPED uniform object (a black card
+  // holder fills the mask via brightness difference alone): a card's text and
+  // art make a large share of its box textured, a holder only its outline.
   return !!b && b.areaFrac > 0.03 && b.areaFrac < 0.92
       && b.density > 0.35
+      && b.texFrac > 0.06
       && b.ratio > 1.15 && b.ratio < 1.95;
 }
 
@@ -504,7 +515,7 @@ function tick() {
     drawOverlay(box, cardish ? '#6ee7a0' : '#fbbf24');
     if (cardish && boxStable(box, prevBox) && changedFrac(cur, prevFrame) < STABLE_FRAC) {
       stableCount++;
-      dbg(`card ${(box.areaFrac*100).toFixed(0)}% ratio ${box.ratio.toFixed(2)} dens ${(box.density*100).toFixed(0)}% steady ${stableCount}/${STABLE_FRAMES}`);
+      dbg(`card ${(box.areaFrac*100).toFixed(0)}% ratio ${box.ratio.toFixed(2)} dens ${(box.density*100).toFixed(0)}% tex ${(box.texFrac*100).toFixed(0)}% steady ${stableCount}/${STABLE_FRAMES}`);
       if (!DEBUG) setStatus('Card detected — hold still…');
       if (stableCount >= STABLE_FRAMES) {
         stableCount = 0;
@@ -516,7 +527,7 @@ function tick() {
     } else {
       stableCount = 0;
       if (box && !cardish) {
-        dbg(`not card-like: area ${(box.areaFrac*100).toFixed(0)}% ratio ${box.ratio.toFixed(2)} dens ${(box.density*100).toFixed(0)}%`);
+        dbg(`not card-like: area ${(box.areaFrac*100).toFixed(0)}% ratio ${box.ratio.toFixed(2)} dens ${(box.density*100).toFixed(0)}% tex ${(box.texFrac*100).toFixed(0)}%`);
       } else if (!box) {
         dbg('watching — tray empty');
       }

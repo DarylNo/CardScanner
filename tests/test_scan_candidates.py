@@ -82,7 +82,10 @@ def _pipeline(index, scryfall):
     return p
 
 
-FRAME = np.zeros((10, 10, 3), dtype=np.uint8)
+# Textured noise, not zeros: scan_candidates now rejects blank-surface frames
+# (black card holder / empty tray) before ever consulting the index, so a
+# frame that should REACH the index must contain card-like detail.
+FRAME = np.random.default_rng(42).integers(0, 256, (192, 138, 3), dtype=np.uint8)
 
 
 def test_scan_candidates_returns_ranked_candidates():
@@ -239,3 +242,27 @@ def test_scan_candidates_unconfident_is_not_no_card():
     assert out["identified"] is False
     assert out.get("no_card") is None
     assert "manual search" in out["error"].lower()
+
+
+def test_scan_candidates_blank_surface_is_no_card():
+    """
+    A card-shaped uniform object (black card holder on the tray) must be
+    rejected BEFORE identification — its near-featureless hash can land close
+    enough to a dark artwork to store junk (a holder scanned as a real card).
+    """
+    frame = np.full((480, 640, 3), 235, np.uint8)   # white tray...
+    frame[100:380, 220:420] = 22                    # ...with a black holder on it
+    idx = FakeIndex([_match(distance=80)])          # a would-be "confident" match
+    p = _pipeline(idx, FakeScryfall([]))
+    out = p.scan_candidates(frame)
+    assert out.get("no_card") is True
+    assert idx.calls == 0                           # index never consulted
+
+
+def test_scan_candidates_empty_tray_is_no_card_without_index():
+    """A bare tray frame is rejected by the blank guard, not by index distance."""
+    idx = FakeIndex([_match(distance=80)])
+    p = _pipeline(idx, FakeScryfall([]))
+    out = p.scan_candidates(np.full((480, 640, 3), 235, np.uint8))
+    assert out.get("no_card") is True
+    assert idx.calls == 0

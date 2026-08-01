@@ -21,6 +21,25 @@ _MIN_CARD_RATIO, _MAX_CARD_RATIO = 1.15, 1.75
 # Contour must actually fill its own bounding rectangle to be a card.
 _MIN_RECTANGULARITY = 0.75
 
+# A card's interior is full of printed detail — title text, rules text, art
+# edges — while a card-SHAPED uniform surface (a black card holder, a deck-box
+# lid, the bare tray) has almost none. Geometry alone cannot tell them apart,
+# and picking the largest quad meant a black holder in frame beat the actual
+# card, whose dark uniform crop then pHash-matched dark artworks as confident
+# nonsense. Both bars must clear: std catches flat surfaces, edge fraction
+# catches smooth glare gradients (which inflate std but produce no edges).
+# Measured at 64×88 thumbnail scale: holders/tray score std ≈ 3-9 with edge
+# fraction ≈ 0.000-0.005; real cards — even dark-art black-border ones — sit
+# well above both bars.
+_MIN_INTERIOR_STD = 12.0
+_MIN_INTERIOR_EDGE_FRAC = 0.015
+# Stricter edge bar for the CENTRE-CROP FALLBACK (quad detection failed): that
+# crop contains the object plus tray, so a black holder's outline alone yields
+# some edges (measured ≤ 0.055 across holder sizes/darkness) while a real
+# card's text and art dominate its crop (measured ≥ 0.142, median 0.184).
+# 0.09 splits the two with ~2× margin on both sides.
+_MIN_FALLBACK_EDGE_FRAC = 0.09
+
 
 def _order_corners(pts: np.ndarray) -> np.ndarray:
     """Return [top-left, top-right, bottom-right, bottom-left]."""
@@ -76,6 +95,39 @@ def _candidate_from_contour(cnt: np.ndarray, min_area: float, max_area: float):
     return _orient_corners(cv2.boxPoints(rect)), area
 
 
+def _texture_metrics(gray_card: np.ndarray) -> tuple[float, float]:
+    """(std, edge_frac) of a grayscale card image's interior at 64×88 scale."""
+    small = cv2.resize(gray_card, (64, 88), interpolation=cv2.INTER_AREA)
+    inner = small[6:82, 5:59]          # drop the border / edge transition
+    edges = cv2.Canny(inner, 30, 90)
+    return float(inner.std()), float(np.count_nonzero(edges)) / edges.size
+
+
+def _has_card_texture(gray: np.ndarray, corners: np.ndarray) -> bool:
+    """True when the quad's warped interior contains printed-card detail."""
+    patch = warp_card(gray, corners, 64, 88)
+    std, edge_frac = _texture_metrics(patch)
+    return std >= _MIN_INTERIOR_STD and edge_frac >= _MIN_INTERIOR_EDGE_FRAC
+
+
+def is_blank_surface(card_img: np.ndarray, detected: bool = True) -> bool:
+    """
+    True when *card_img* holds no printed card content — a black card holder,
+    an empty tray, a lens cap. Used by the pipeline to reject such scans
+    outright: their near-featureless pHashes can land within confident (or at
+    least junk-row) distance of dark low-contrast artworks, which is exactly
+    how a holder got scanned as a real card.
+
+    Pass detected=False for a centre-crop fallback — the object's own outline
+    against the tray produces edges a warped card interior wouldn't have, so
+    that path needs the stricter bar (see _MIN_FALLBACK_EDGE_FRAC).
+    """
+    gray = cv2.cvtColor(card_img, cv2.COLOR_BGR2GRAY) if card_img.ndim == 3 else card_img
+    std, edge_frac = _texture_metrics(gray)
+    bar = _MIN_INTERIOR_EDGE_FRAC if detected else _MIN_FALLBACK_EDGE_FRAC
+    return std < _MIN_INTERIOR_STD or edge_frac < bar
+
+
 def find_card_quad(frame: np.ndarray, min_area_frac: float = 0.04) -> Optional[np.ndarray]:
     """
     Find the largest card-shaped quadrilateral in *frame*.
@@ -116,7 +168,10 @@ def find_card_quad(frame: np.ndarray, min_area_frac: float = 0.04) -> Optional[n
         contours, _ = cv2.findContours(closed, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         for cnt in contours:
             found = _candidate_from_contour(cnt, min_area, max_area)
-            if found and found[1] > best_area:
+            # The texture gate runs last (it warps a patch, the geometry checks
+            # are cheaper) and rejects card-shaped uniform surfaces — without
+            # it, a black card holder in frame out-areas the actual card.
+            if found and found[1] > best_area and _has_card_texture(gray, found[0]):
                 best_corners, best_area = found
 
     return best_corners
