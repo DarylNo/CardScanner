@@ -5,146 +5,143 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>Card Scanner — Camera</title>
 <style>
-  :root { color-scheme: dark; }
+  :root { color-scheme: dark;
+    --bg:#0f1115; --panel:#12141a; --card:#171a21; --line:#23262e;
+    --text:#e8eaed; --muted:#8b93a1; --accent:#3b82f6; --good:#6ee7a0;
+    --warn:#fbbf24; --bad:#ff8a8a; }
   * { box-sizing: border-box; }
-  body {
-    margin: 0; font-family: system-ui, sans-serif; background: #0f1115; color: #e8eaed;
-    display: flex; flex-direction: column; height: 100dvh; overflow: hidden;
-  }
-  header { padding: 10px 14px; font-weight: 600; border-bottom: 1px solid #23262e;
-           display: flex; align-items: center; justify-content: space-between; }
-  #scansBtn, #areaBtn {
-    font-size: 14px; font-weight: 600; padding: 6px 12px; border: 0; border-radius: 8px;
-    background: #23262e; color: #cbd2dc; flex: 0 0 auto; width: auto;
-  }
-  #areaBtn.on { background: #1c2740; color: #cfe1ff; }
-  #ver { font-size: 11px; color: #7b8290; font-weight: 400; margin-left: 6px; }
-  /* slide-over scans list */
-  #scansPanel {
-    position: fixed; inset: 0; background: #0f1115; z-index: 20; display: none;
-    flex-direction: column;
-  }
-  #scansPanel.open { display: flex; }
-  #scansPanel header { flex: 0 0 auto; }
-  #scansList { flex: 1; overflow-y: auto; }
-  #scansBar { display: flex; gap: 6px; padding: 8px 12px; border-bottom: 1px solid #23262e;
-              overflow-x: auto; flex: 0 0 auto; align-items: center; }
-  .vchip { font-size: 13px; padding: 6px 12px; border-radius: 999px; background: #23262e;
-           color: #cbd2dc; white-space: nowrap; flex: 0 0 auto; border: 1px solid transparent; }
-  .vchip.on { background: #1c2740; border-color: #3b82f6; color: #cfe1ff; }
-  #scansStat { font-size: 12px; color: #8b93a1; padding: 6px 12px; flex: 0 0 auto; }
-  #scansStat b { color: #e8eaed; } #scansStat .money { color: #6ee7a0; }
-  #priceBar { display: flex; gap: 8px; padding: 8px 12px; border-bottom: 1px solid #23262e;
-              flex: 0 0 auto; align-items: center; }
-  #priceBar input { width: 84px; padding: 8px 10px; border-radius: 8px; border: 1px solid #2a2f3a;
-                    background: #0f1115; color: #e8eaed; font: inherit; }
-  #priceBar button { flex: 0 0 auto; width: auto; font-size: 13px; font-weight: 600;
-                     padding: 8px 12px; background: #23262e; color: #cbd2dc; }
-  .srow { display: flex; gap: 10px; padding: 10px 14px; border-bottom: 1px solid #1b1e26; align-items: center; }
-  .srow img { width: 44px; height: 62px; object-fit: cover; border-radius: 4px; background: #23262e; }
-  .srow .meta { flex: 1; min-width: 0; }
-  .srow .nm { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .srow .sub { font-size: 12px; color: #8b93a1; }
-  .spill { font-size: 11px; padding: 1px 7px; border-radius: 999px; background: #3f2d10; color: #fbbf24; }
-  .spill.sel { background: #14532d; color: #86efac; }
-  .sprice { color: #6ee7a0; font-weight: 700; }
-  /* scan detail: pick a printing on the phone */
-  #detailPanel {
-    position: fixed; inset: 0; background: #0f1115; z-index: 30; display: none;
-    flex-direction: column;
-  }
-  #detailPanel.open { display: flex; }
-  #detailBody { flex: 1; overflow-y: auto; padding: 12px 14px 24px; }
-  .prow { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 12px; }
-  .prow img { width: 110px; border-radius: 8px; background: #23262e; }
-  .pctl { display: flex; gap: 8px; margin: 10px 0 14px; flex-wrap: wrap; }
-  .pctl select, .pctl input {
-    padding: 8px 10px; border-radius: 8px; border: 1px solid #2a2f3a;
-    background: #0f1115; color: #e8eaed; font: inherit;
-  }
-  .pctl input { width: 64px; }
-  .pgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-  .pcard { border: 2px solid transparent; border-radius: 8px; background: #171a21; padding: 5px; }
-  .pcard.chosen { border-color: #22c55e; }
-  .pcard img { width: 100%; border-radius: 5px; aspect-ratio: 5/7; object-fit: cover; background: #23262e; display: block; }
-  .pcard .pt { font-size: 11px; margin-top: 4px; line-height: 1.25; color: #cbd2dc; }
-  .pprice { font-size: 18px; font-weight: 700; color: #6ee7a0; margin: 6px 0; }
-  .msrow { display: flex; gap: 8px; margin-top: 8px; }
-  .msrow input { flex: 1; padding: 8px 10px; border-radius: 8px; border: 1px solid #2a2f3a; background: #0f1115; color: #e8eaed; font: inherit; }
-  .msrow button { flex: 0 0 auto; width: auto; font-size: 14px; padding: 8px 14px; background: #23262e; color: #cbd2dc; }
-  .subhead { font-size: 13px; color: #8b93a1; margin: 14px 0 8px; font-weight: 600; }
-  .dangerbtn { background: #3a1c1c; color: #fca5a5; font-size: 14px; padding: 10px; margin-top: 18px; }
-  /* touch-action none: pointer-drag must reach the scan-area setter, not scroll */
-  #stage { position: relative; flex: 1; background: #000; overflow: hidden; touch-action: none; }
-  /* contain, not cover: the preview must show EXACTLY the frame that gets
-     captured — cover was hiding parts of the card that the scan then saw */
-  video { width: 100%; height: 100%; object-fit: contain; }
-  #overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
-  /* recent-scan chips over the bottom of the camera view */
-  #recent { display: flex; gap: 6px; padding: 4px 10px; overflow-x: auto; }
-  .chip { font-size: 12px; padding: 3px 10px; border-radius: 999px; background: #23262e;
-          color: #cbd2dc; white-space: nowrap; flex: 0 0 auto; }
-  .chip.selchip { background: #14532d; color: #86efac; }
-  /* full-screen image viewer */
-  #lightbox { position: fixed; inset: 0; background: rgba(0,0,0,.92); z-index: 40;
-              display: none; align-items: center; justify-content: center; }
-  #lightbox.open { display: flex; }
-  #lightbox img { max-width: 96vw; max-height: 92vh; border-radius: 10px; }
-  footer { padding: 14px; display: flex; flex-direction: column; gap: 10px; }
-  #status { min-height: 1.3em; text-align: center; font-size: 14px; color: #aeb4bf; }
-  #status.ok { color: #6ee7a0; } #status.err { color: #ff8a8a; }
-  .btnrow { display: flex; gap: 10px; }
-  button {
-    font-size: 19px; font-weight: 600; padding: 16px; border: 0; border-radius: 12px;
-    background: #3b82f6; color: #fff; flex: 1;
-  }
-  button:disabled { background: #2a2f3a; color: #7b8290; }
-  #autoBtn { flex: 0 0 34%; background: #14532d; color: #86efac; }
-  #autoBtn.off { background: #23262e; color: #7b8290; }
-  .hint { font-size: 12px; color: #7b8290; text-align: center; }
+  body { margin:0; font-family:system-ui,sans-serif; background:var(--bg); color:var(--text);
+         display:flex; flex-direction:column; height:100dvh; overflow:hidden; }
+  header { padding:8px 12px; font-weight:600; border-bottom:1px solid var(--line);
+           display:flex; align-items:center; justify-content:space-between; flex:0 0 auto; }
+  #ver { font-size:11px; color:#7b8290; font-weight:400; margin-left:6px; }
+  .hbtn { font-size:14px; font-weight:600; padding:6px 12px; border:0; border-radius:8px;
+          background:var(--line); color:#cbd2dc; }
+  .hbtn.on { background:#1c2740; color:#cfe1ff; }
+
+  /* camera stage — pointer-drag must reach the scan-area setter, not scroll */
+  #stage { position:relative; flex:1; background:#000; overflow:hidden; touch-action:none; min-height:0; }
+  /* contain, not cover: preview must show EXACTLY the captured frame */
+  video { width:100%; height:100%; object-fit:contain; }
+  #overlay { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
+
+  /* quick-pick strip: one-tap printing selection without leaving the camera */
+  #qp { flex:0 0 auto; border-top:1px solid var(--line); background:var(--panel);
+        padding:6px 10px 4px; display:none; }
+  #qp.open { display:block; }
+  #qpHead { display:flex; align-items:center; gap:8px; margin-bottom:6px; }
+  #qpName { font-weight:700; font-size:14px; flex:1; min-width:0; white-space:nowrap;
+            overflow:hidden; text-overflow:ellipsis; }
+  #qpHead select { padding:4px 6px; border-radius:6px; border:1px solid #2a2f3a;
+                   background:var(--bg); color:var(--text); font-size:12px; }
+  #qpMore { font-size:12px; font-weight:600; padding:5px 10px; border:0; border-radius:6px;
+            background:var(--line); color:#cbd2dc; }
+  #qpGrid { display:flex; gap:8px; overflow-x:auto; padding-bottom:4px; }
+  .qpc { flex:0 0 76px; border:2px solid transparent; border-radius:8px; background:var(--card);
+         padding:3px; text-align:center; }
+  .qpc img { width:100%; aspect-ratio:5/7; object-fit:cover; border-radius:5px;
+             background:var(--line); display:block; }
+  .qpc .t { font-size:10px; color:#cbd2dc; margin-top:2px; line-height:1.2; }
+  .qpc.chosen { border-color:#22c55e; }
+  .qpc.busy { opacity:.5; }
+
+  footer { padding:8px 12px 12px; display:flex; flex-direction:column; gap:8px; flex:0 0 auto; }
+  #recent { display:flex; gap:6px; overflow-x:auto; min-height:26px; }
+  .chip { font-size:12px; padding:3px 10px; border-radius:999px; background:var(--line);
+          color:#cbd2dc; white-space:nowrap; flex:0 0 auto; }
+  .chip.selchip { background:#14532d; color:#86efac; }
+  #status { min-height:1.3em; text-align:center; font-size:14px; color:#aeb4bf; }
+  #status.ok { color:var(--good); } #status.err { color:var(--bad); }
+  .btnrow { display:flex; gap:10px; }
+  .btnrow button { font-size:18px; font-weight:600; padding:14px; border:0; border-radius:12px;
+                   background:var(--accent); color:#fff; flex:1; }
+  .btnrow button:disabled { background:#2a2f3a; color:#7b8290; }
+  #autoBtn { flex:0 0 34%; background:#14532d; color:#86efac; }
+  #autoBtn.off { background:var(--line); color:#7b8290; }
+  .hint { font-size:11px; color:#7b8290; text-align:center; }
+
+  /* slide-over panels */
+  .panel { position:fixed; inset:0; background:var(--bg); z-index:20; display:none; flex-direction:column; }
+  .panel.open { display:flex; }
+  .panel header { flex:0 0 auto; }
+  .pbody { flex:1; overflow-y:auto; min-height:0; }
+  #scansBar { display:flex; gap:6px; padding:8px 12px; border-bottom:1px solid var(--line);
+              overflow-x:auto; flex:0 0 auto; align-items:center; }
+  .vchip { font-size:13px; padding:6px 12px; border-radius:999px; background:var(--line);
+           color:#cbd2dc; white-space:nowrap; flex:0 0 auto; border:1px solid transparent; }
+  .vchip.on { background:#1c2740; border-color:var(--accent); color:#cfe1ff; }
+  .bar { display:flex; gap:8px; padding:8px 12px; border-bottom:1px solid var(--line);
+         flex:0 0 auto; align-items:center; }
+  .bar input { width:84px; padding:8px 10px; border-radius:8px; border:1px solid #2a2f3a;
+               background:var(--bg); color:var(--text); font:inherit; }
+  .bar button { flex:0 0 auto; font-size:13px; font-weight:600; padding:8px 12px;
+                border:0; border-radius:8px; background:var(--line); color:#cbd2dc; }
+  .bar button.danger { background:#3a1c1c; color:#fca5a5; }
+  #scansStat { font-size:12px; color:var(--muted); padding:6px 12px; flex:0 0 auto; }
+  #scansStat b { color:var(--text); } #scansStat .money { color:var(--good); }
+  .srow { display:flex; gap:10px; padding:10px 14px; border-bottom:1px solid #1b1e26; align-items:center; }
+  .srow img { width:44px; height:62px; object-fit:cover; border-radius:4px; background:var(--line); }
+  .srow .meta { flex:1; min-width:0; }
+  .srow .nm { font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .srow .sub { font-size:12px; color:var(--muted); }
+  .spill { font-size:11px; padding:1px 7px; border-radius:999px; background:#3f2d10; color:var(--warn); }
+  .spill.sel { background:#14532d; color:#86efac; }
+  .spill.chk { background:#3a1c1c; color:#fca5a5; }
+  .sprice { color:var(--good); font-weight:700; }
+
+  /* detail */
+  #detailBody { padding:12px 14px 24px; }
+  .prow { display:flex; gap:12px; align-items:flex-start; margin-bottom:12px; }
+  .prow img { width:110px; border-radius:8px; background:var(--line); }
+  .pctl { display:flex; gap:8px; margin:10px 0 14px; flex-wrap:wrap; }
+  .pctl select, .pctl input { padding:8px 10px; border-radius:8px; border:1px solid #2a2f3a;
+                              background:var(--bg); color:var(--text); font:inherit; }
+  .pctl input { width:64px; }
+  .pgrid { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
+  .pcard { border:2px solid transparent; border-radius:8px; background:var(--card); padding:5px; }
+  .pcard.chosen { border-color:#22c55e; }
+  .pcard img { width:100%; border-radius:5px; aspect-ratio:5/7; object-fit:cover;
+               background:var(--line); display:block; }
+  .pcard .pt { font-size:11px; margin-top:4px; line-height:1.25; color:#cbd2dc; }
+  .pprice { font-size:18px; font-weight:700; color:var(--good); margin:6px 0; }
+  .msrow { display:flex; gap:8px; margin-top:8px; }
+  .msrow input { flex:1; padding:8px 10px; border-radius:8px; border:1px solid #2a2f3a;
+                 background:var(--bg); color:var(--text); font:inherit; }
+  .msrow button { flex:0 0 auto; font-size:14px; padding:8px 14px; border:0; border-radius:8px;
+                  background:var(--line); color:#cbd2dc; }
+  .subhead { font-size:13px; color:var(--muted); margin:14px 0 8px; font-weight:600; }
+  .dangerbtn { width:100%; background:#3a1c1c; color:#fca5a5; font-size:14px; padding:10px;
+               margin-top:18px; border:0; border-radius:8px; }
+  #lightbox { position:fixed; inset:0; background:rgba(0,0,0,.92); z-index:40;
+              display:none; align-items:center; justify-content:center; }
+  #lightbox.open { display:flex; }
+  #lightbox img { max-width:96vw; max-height:92vh; border-radius:10px; }
 </style>
 </head>
 <body>
   <header><span>📷 Scanner<span id="ver"></span></span>
     <span style="display:flex;gap:6px">
-      <button id="areaBtn">Area</button>
-      <button id="scansBtn">Scans</button>
+      <button class="hbtn" id="areaBtn">Area</button>
+      <button class="hbtn" id="scansBtn">Scans</button>
     </span>
   </header>
-  <div id="scansPanel">
-    <header>🃏 Scanned cards
-      <button id="scansClose" style="font-size:14px;font-weight:600;padding:6px 12px;border:0;border-radius:8px;background:#23262e;color:#cbd2dc;width:auto">Close</button>
-    </header>
-    <div id="scansBar">
-      <span class="vchip on" data-view="all">All</span>
-      <span class="vchip" data-view="pending">Needs pick</span>
-      <span class="vchip" data-view="selected">Selected</span>
-      <span class="vchip" data-view="problem">Problems</span>
-    </div>
-    <div id="priceBar">
-      <input id="p-min" type="number" min="0" step="0.25" placeholder="Min $" inputmode="decimal">
-      <input id="p-max" type="number" min="0" step="0.25" placeholder="Max $" inputmode="decimal">
-      <button id="p-excl">Exclude filtered</button>
-    </div>
-    <div id="scansStat"></div>
-    <div id="priceBar" style="border-top:1px solid #23262e">
-      <button id="p-fill" style="background:#23262e;color:#cbd2dc">Price missing</button>
-      <button id="clr-junk" style="background:#23262e;color:#cbd2dc">Clear unpicked</button>
-      <button id="clr-all" style="background:#3a1c1c;color:#fca5a5">Clear all</button>
-    </div>
-    <div id="scansList"></div>
-  </div>
-  <div id="detailPanel">
-    <header><span id="detailTitle">Card</span>
-      <button id="detailBack" style="font-size:14px;font-weight:600;padding:6px 12px;border:0;border-radius:8px;background:#23262e;color:#cbd2dc;width:auto">Back</button>
-    </header>
-    <div id="detailBody"></div>
-  </div>
-  <div id="lightbox"><img id="lightboxImg" alt=""></div>
+
   <div id="stage">
     <video id="video" autoplay playsinline muted></video>
     <canvas id="overlay"></canvas>
   </div>
+
+  <!-- quick-pick: the last scan's top printings, one tap to select -->
+  <div id="qp">
+    <div id="qpHead">
+      <span id="qpName"></span>
+      <select id="qp-cond"></select>
+      <select id="qp-fin"></select>
+      <button id="qpMore">Details</button>
+    </div>
+    <div id="qpGrid"></div>
+  </div>
+
   <footer>
     <div id="recent"></div>
     <div id="status">Starting camera…</div>
@@ -152,148 +149,146 @@
       <button id="autoBtn">Auto: ON</button>
       <button id="shoot" disabled>Scan Card</button>
     </div>
-    <div class="hint">Place a card in the frame — it scans by itself. Swap cards to scan the next.</div>
+    <div class="hint">Place a card in the frame — it scans by itself. Tap a printing below to file it.</div>
   </footer>
+
+  <div class="panel" id="scansPanel">
+    <header>🃏 Scanned cards
+      <button class="hbtn" id="scansClose">Close</button>
+    </header>
+    <div id="scansBar">
+      <span class="vchip on" data-view="all">All</span>
+      <span class="vchip" data-view="pending">Needs pick</span>
+      <span class="vchip" data-view="selected">Selected</span>
+      <span class="vchip" data-view="problem">Problems</span>
+    </div>
+    <div class="bar">
+      <input id="p-min" type="number" min="0" step="0.25" placeholder="Min $" inputmode="decimal">
+      <input id="p-max" type="number" min="0" step="0.25" placeholder="Max $" inputmode="decimal">
+      <button id="p-excl">Exclude filtered</button>
+    </div>
+    <div id="scansStat"></div>
+    <div class="bar" style="border-top:1px solid var(--line)">
+      <button id="p-fill">Price missing</button>
+      <button id="clr-junk">Clear unpicked</button>
+      <button id="clr-all" class="danger">Clear all</button>
+    </div>
+    <div class="pbody" id="scansList"></div>
+  </div>
+
+  <div class="panel" id="detailPanel">
+    <header><span id="detailTitle">Card</span>
+      <button class="hbtn" id="detailBack">Back</button>
+    </header>
+    <div class="pbody" id="detailBody"></div>
+  </div>
+
+  <div id="lightbox"><img id="lightboxImg" alt=""></div>
   <canvas id="canvas" hidden></canvas>
   <canvas id="motion" hidden></canvas>
 
 <script>
-const video = document.getElementById('video');
-const canvas = document.getElementById('canvas');
-const motion = document.getElementById('motion');
-const statusEl = document.getElementById('status');
-const overlay = document.getElementById('overlay');
-const shoot = document.getElementById('shoot');
-const autoBtn = document.getElementById('autoBtn');
-const BURST = 3, BURST_GAP_MS = 120;
-// Upload size cap: identification pHashes downsample to 32×32, and the
-// printing ranker works from Scryfall `normal` images — 1280px q0.85 uploads
-// are hash-equivalent to full-res but ~3× smaller (faster over Wi-Fi).
-const MAX_UPLOAD_DIM = 1280, JPEG_QUALITY = 0.85;
+/* ═══ REBUILT FOR SPEED (v9) ═══
+   - Quick-pick strip on the camera screen: the top match is the right printing
+     60% of the time (measured), so one tap files a card without ever opening
+     the Scans panel. Auto-merge folds duplicate copies into quantity.
+   - Signature-diffed rendering: the old page rebuilt the whole list DOM on
+     every 3s poll (flicker, scroll loss, battery). Every render target now
+     computes a cheap signature first and touches the DOM only on change.
+   - Overlay redraws only when the box/ROI actually moved.
+   - Detection logic (occupancy trigger, AE-drift-cancelled stability, scan
+     area) is carried over UNCHANGED from the tuned v6-v8 code. */
+const $ = s => document.querySelector(s);
+const video = $('#video'), canvas = $('#canvas'), motion = $('#motion');
+const overlay = $('#overlay'), statusEl = $('#status');
+const shoot = $('#shoot'), autoBtn = $('#autoBtn'), areaBtn = $('#areaBtn');
 
-// ── card detection & auto-scan ───────────────────────────────────────────────
-// The rig is a fixed mount over a tray. Every tick (5 fps) we downsample the
-// frame and find the card by TEXTURE, not by brightness difference:
-//
-//   card pixel  =  locally textured NOW  and  smooth in the empty tray
-//                  (or) massively different from the empty tray
-//
-// A Magic card is edges everywhere — border, art detail, rules text — while
-// the tray is smooth plastic. Crucially the pale textbox, which defeated every
-// brightness-difference approach (white card on white tray), is packed with
-// black text and so lights up strongly under a gradient measure. Subtracting
-// the empty tray's own texture keeps the static mount/lamp at the top of the
-// frame out of the box, and using gradients rather than absolute levels makes
-// the whole thing immune to lighting drift.
-//
-// Debug: open /phone?debug to see the live numbers and tune constants.
-// 176 px wide, not 96: at 96 a card filling ~30% of the frame is only ~29
-// samples across, so its thin black border and its rules text both average
-// away — leaving ONLY the art textured, and the box locked onto the art
-// alone. At 176 the border survives as ~1-2 samples and coarse text strokes
-// register, which is what ties the whole card together.
+const BURST = 3, BURST_GAP_MS = 100;
+// 1280px q0.85 uploads are hash-equivalent to full-res but ~3x smaller.
+const MAX_UPLOAD_DIM = 1280, JPEG_QUALITY = 0.85;
+const CONDITIONS = ['NM','LP','MP','HP','DMG'];
+const FINISHES = ['Non-Foil','Foil','Etched'];
+
+/* ── detection constants (tuned on the rig — see git history) ──────────────── */
 const MW = 176, SAMPLE_MS = 200;
-// MH tracks the video's aspect so sample pixels stay square.
-let MH = 132;
-const PIX_DELTA = 25;        // gray levels — per-pixel "really changed" bar
-const GRAD_THR = 14;         // gradient magnitude counted as "textured"
-// Stability: 3% (not 1%) — the ROI zooms the sample into the tray, so sensor
-// noise and micro-shimmer are a larger fraction of pixels; real motion (hand,
-// sliding card) changes far more than 3%. Two steady samples (~0.4 s) is
-// enough once exposure hunting is cancelled in changedFrac.
-const STABLE_FRAC = 0.03;    // vs previous sample: below this → motion stopped
-const EMPTY_FRAC = 0.015;    // card mask below this → tray is empty
-const SWAP_FRAC = 0.06;      // vs frame at last scan: enough change = new card
-const STABLE_FRAMES = 2;     // steady samples required before scanning
+let MH = 132;                 // tracks the scan-area aspect so pixels stay square
+const PIX_DELTA = 25;         // gray levels — per-pixel "really changed" bar
+const GRAD_THR = 14;          // gradient magnitude counted as "textured"
+// 3% + mean-delta cancellation: camera AE shifts every pixel together, and a
+// 1% bar starved the steady counter (see changedFrac).
+const STABLE_FRAC = 0.03;
+const EMPTY_FRAC = 0.015;     // mask below this → tray is empty
+const SWAP_FRAC = 0.06;       // change vs last-scanned frame = new card
+const STABLE_FRAMES = 2;      // steady samples (~0.4s) before scanning
+// The phone's ONLY trigger question is "is something in the tray and settled?"
+// — geometry gates (ratio/density/texture windows) rejected real sleeved
+// cards three separate times; the SERVER judges card content.
+const OCCUPIED_FRAC = 0.02;
 const DEBUG = new URLSearchParams(location.search).has('debug');
 
 let autoEnabled = true;
-let mode = 'watching';       // watching | scanning | awaitNext
-let emptyRef = null;         // the empty tray (adaptive — refreshed when idle)
-let emptyGrad = null;        // its texture map
-let prevFrame = null, prevBox = null, scannedFrame = null;
+let mode = 'watching';        // watching | scanning | awaitNext
+let emptyRef = null, emptyGrad = null;
+let prevFrame = null, scannedFrame = null;
 let stableCount = 0, bootCount = 0, emptyRefreshTick = 0;
 
-function setStatus(msg, cls='') { statusEl.textContent = msg; statusEl.className = cls; }
+function setStatus(msg, cls = '') { statusEl.textContent = msg; statusEl.className = cls; }
+const escHtml = s => String(s ?? '').replace(/[&<>"]/g,
+  c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+async function jsend(url, method, body) {
+  return (await fetch(url, { method, headers: {'Content-Type':'application/json'},
+                             body: JSON.stringify(body) })).json();
+}
 
-// ── version banner ───────────────────────────────────────────────────────────
-// UI_VERSION identifies THIS page; the fetched hash identifies the server.
-// Both are shown so a stale cached page (which cost a debugging round once)
-// is visible at a glance. Bump UI_VERSION on every phone.html change.
-const UI_VERSION = 'v8';
+/* ── version banner — proves which page+server combo is running ────────────── */
+const UI_VERSION = 'v9';
 fetch('/api/version').then(r => r.json())
-  .then(d => { document.getElementById('ver').textContent = `${UI_VERSION} · ${d.version}`; })
-  .catch(() => { document.getElementById('ver').textContent = UI_VERSION; });
+  .then(d => { $('#ver').textContent = `${UI_VERSION} · ${d.version}`; })
+  .catch(() => { $('#ver').textContent = UI_VERSION; });
 
-// ── scan area (ROI) ──────────────────────────────────────────────────────────
-// The rig camera sees far more than the tray — couch, floor, storage boxes —
-// and anything dark or textured out there can grab the detection box while
-// the actual card sits ignored in the tray (observed: box locked onto the
-// couch, card scanned as garbage). The mount is fixed, so the user drags a
-// box around the tray ONCE; it persists in localStorage and EVERYTHING —
-// motion sampling, box detection, and the uploaded capture itself — is
-// cropped to it. Tap Area to set it; tap again to clear.
-let roi = null;              // {x0,y0,x1,y1} as video-frame fractions, or null
+/* ── scan area (ROI) — crops sampling AND capture to the tray ──────────────── */
+let roi = null;               // {x0,y0,x1,y1} video-frame fractions, or null
 try { roi = JSON.parse(localStorage.getItem('scanROI') || 'null'); } catch (e) { roi = null; }
 let settingArea = false, dragA = null, dragB = null;
-const areaBtn = document.getElementById('areaBtn');
 
-function roiRect() {         // ROI in video pixels (whole frame when unset)
+function roiRect() {
   const vw = video.videoWidth, vh = video.videoHeight;
   if (!roi) return { x: 0, y: 0, w: vw, h: vh };
   return { x: roi.x0 * vw, y: roi.y0 * vh,
            w: (roi.x1 - roi.x0) * vw, h: (roi.y1 - roi.y0) * vh };
 }
-
-// Display mapping for the object-fit:contain letterboxed video.
-function contain() {
+function contain() {          // object-fit:contain letterbox mapping
   const cw = overlay.clientWidth, ch = overlay.clientHeight;
   const s = Math.min(cw / video.videoWidth, ch / video.videoHeight);
   return { s, ox: (cw - video.videoWidth * s) / 2, oy: (ch - video.videoHeight * s) / 2 };
 }
-
 function resetDetection(msg) {
-  emptyRef = null; emptyGrad = null; prevFrame = null; prevBox = null;
+  emptyRef = null; emptyGrad = null; prevFrame = null;
   bootCount = 0; stableCount = 0; emptyRefreshTick = 0; mode = 'watching';
+  lastDrawSig = '';
   if (msg) setStatus(msg);
 }
-
 function updateAreaBtn() {
   areaBtn.textContent = settingArea ? 'Cancel' : roi ? 'Area ✓' : 'Area';
   areaBtn.classList.toggle('on', !!roi && !settingArea);
 }
-
 areaBtn.addEventListener('click', () => {
-  if (settingArea) {
-    settingArea = false; dragA = dragB = null;
-    updateAreaBtn(); setStatus('Scan area unchanged.');
-    return;
-  }
-  if (roi) {
-    roi = null; localStorage.removeItem('scanROI');
-    updateAreaBtn();
-    resetDetection('Scan area cleared — full frame. Empty the tray to re-learn…');
-    return;
-  }
-  settingArea = true; updateAreaBtn();
-  setStatus('Drag a box around the tray…');
+  if (settingArea) { settingArea = false; dragA = dragB = null; updateAreaBtn();
+                     setStatus('Scan area unchanged.'); return; }
+  if (roi) { roi = null; localStorage.removeItem('scanROI'); updateAreaBtn();
+             resetDetection('Scan area cleared — full frame. Empty the tray to re-learn…'); return; }
+  settingArea = true; updateAreaBtn(); setStatus('Drag a box around the tray…');
 });
-
-const stageEl = document.getElementById('stage');
-const stagePt = e => {
-  const b = stageEl.getBoundingClientRect();
-  return { x: e.clientX - b.left, y: e.clientY - b.top };
-};
+const stageEl = $('#stage');
+const stagePt = e => { const b = stageEl.getBoundingClientRect();
+                       return { x: e.clientX - b.left, y: e.clientY - b.top }; };
 stageEl.addEventListener('pointerdown', e => {
   if (!settingArea) return;
-  dragA = dragB = stagePt(e);
-  stageEl.setPointerCapture(e.pointerId);
-  e.preventDefault();
+  dragA = dragB = stagePt(e); stageEl.setPointerCapture(e.pointerId); e.preventDefault();
 });
 stageEl.addEventListener('pointermove', e => {
   if (!settingArea || !dragA) return;
-  dragB = stagePt(e);
-  drawOverlay(null);           // repaints the drag rectangle
+  dragB = stagePt(e); lastDrawSig = ''; drawOverlay(null);
 });
 stageEl.addEventListener('pointerup', e => {
   if (!settingArea || !dragA) return;
@@ -304,25 +299,21 @@ stageEl.addEventListener('pointerup', e => {
     y: Math.min(1, Math.max(0, (p.y - oy) / s / video.videoHeight)),
   });
   const a = frac(dragA), b = frac(dragB);
-  const cand = { x0: Math.min(a.x, b.x), y0: Math.min(a.y, b.y),
-                 x1: Math.max(a.x, b.x), y1: Math.max(a.y, b.y) };
+  const cand = { x0: Math.min(a.x,b.x), y0: Math.min(a.y,b.y),
+                 x1: Math.max(a.x,b.x), y1: Math.max(a.y,b.y) };
   settingArea = false; dragA = dragB = null;
-  // A sliver is a mis-drag, not a tray.
   if (cand.x1 - cand.x0 < 0.08 || cand.y1 - cand.y0 < 0.08) {
-    updateAreaBtn(); setStatus('Area too small — tap Area and drag again.', 'err');
-    return;
+    updateAreaBtn(); setStatus('Area too small — tap Area and drag again.', 'err'); return;
   }
-  roi = cand;
-  localStorage.setItem('scanROI', JSON.stringify(roi));
-  updateAreaBtn();
-  resetDetection('Scan area set ✓ Empty the tray to re-learn it…');
+  roi = cand; localStorage.setItem('scanROI', JSON.stringify(roi));
+  updateAreaBtn(); resetDetection('Scan area set ✓ Empty the tray to re-learn it…');
 });
 updateAreaBtn();
 
+/* ── camera + wake lock ────────────────────────────────────────────────────── */
 async function startCamera() {
   if (!navigator.mediaDevices?.getUserMedia) {
-    setStatus('Camera needs HTTPS. Open this page over https:// (see README).', 'err');
-    return;
+    setStatus('Camera needs HTTPS. Open this page over https://.', 'err'); return;
   }
   try {
     const stream = await navigator.mediaDevices.getUserMedia({
@@ -337,8 +328,6 @@ async function startCamera() {
     setStatus('Camera blocked: ' + e.message + ' (HTTPS required on phones).', 'err');
   }
 }
-
-// ── screen wake lock — a hands-free mount dies if the screen sleeps ──────────
 let wakeLock = null;
 async function acquireWakeLock() {
   try { wakeLock = await navigator.wakeLock?.request('screen'); } catch (e) { /* unsupported */ }
@@ -348,10 +337,7 @@ document.addEventListener('visibilitychange', () => {
 });
 acquireWakeLock();
 
-// ── frame capture (full-res burst for the server) ────────────────────────────
-// Cropped to the scan area: the server should never even see the couch — a
-// card that is ~2.5% of the full frame becomes 15-25% of the tray crop, which
-// is what quad detection and the art hashes actually want.
+/* ── capture + submit (state machine releases after the burst) ─────────────── */
 function grabFrame() {
   const r = roiRect();
   const scale = Math.min(1, MAX_UPLOAD_DIM / Math.max(r.w, r.h));
@@ -360,7 +346,6 @@ function grabFrame() {
   canvas.getContext('2d').drawImage(video, r.x, r.y, r.w, r.h, 0, 0, w, h);
   return new Promise(res => canvas.toBlob(b => res(b), 'image/jpeg', JPEG_QUALITY));
 }
-
 async function captureBurst() {
   const frames = [];
   for (let i = 0; i < BURST; i++) {
@@ -369,26 +354,16 @@ async function captureBurst() {
   }
   return frames;
 }
-
-// Capture, then hand off. scanOnce resolves as soon as the BURST is captured —
-// that is the only part that needs the tray untouched. The upload and server
-// identification (seconds: index hashing + printing ranking) continue in the
-// background via submitScan, so the state machine — and the blue check mark —
-// release after ~0.4 s and the next card can go straight in.
+// scanOnce resolves at end-of-capture; identification continues in background.
 async function scanOnce() {
   setStatus('Capturing…');
   let frames;
-  try {
-    frames = await captureBurst();
-  } catch (e) {
-    setStatus('Capture failed: ' + e.message, 'err');
-    return;
-  }
+  try { frames = await captureBurst(); }
+  catch (e) { setStatus('Capture failed: ' + e.message, 'err'); return; }
   submitScan(frames);            // deliberately NOT awaited
 }
-
 async function submitScan(frames) {
-  const capturedScene = scannedFrame;   // what the tray held at capture time
+  const capturedScene = scannedFrame;
   setStatus('Scanning…');
   try {
     const fd = new FormData();
@@ -396,10 +371,8 @@ async function submitScan(frames) {
     const r = await fetch('/api/scan', { method: 'POST', body: fd });
     const data = await r.json();
     if (data.no_card) {
-      // Server saw nothing card-like — whatever we thought was a card isn't.
-      // Adopt the scene as the new "empty" so we stop firing on it — but ONLY
-      // if the tray still shows what we scanned; the response arrives seconds
-      // later and the user may already have swapped in a real card.
+      // Adopt the scene as "empty" ONLY if the tray still shows what we
+      // scanned — the user may already have swapped in the next card.
       setStatus('No card detected.', 'err');
       const s = sampleSmallGray();
       if (s && capturedScene && s.length === capturedScene.length
@@ -408,9 +381,11 @@ async function submitScan(frames) {
       }
     } else if (data.identified) {
       const n = (data.candidates || []).length;
-      setStatus(`✓ ${data.card_read.name} — ${n} printings. Swap card for the next.`, 'ok');
+      setStatus(`✓ ${data.card_read.name} — tap a printing below, or just scan the next.`, 'ok');
+      qpShow(data);
     } else {
       setStatus('✗ ' + (data.error || 'Could not read card. Try again.'), 'err');
+      qpHide();
     }
     refreshScans();
   } catch (e) {
@@ -418,15 +393,61 @@ async function submitScan(frames) {
   }
 }
 
-// ── frame sampling + card boundary detection ─────────────────────────────────
+/* ── quick-pick strip ──────────────────────────────────────────────────────── */
+const qp = $('#qp'), qpGrid = $('#qpGrid'), qpName = $('#qpName');
+$('#qp-cond').innerHTML = CONDITIONS.map(c => `<option>${c}</option>`).join('');
+$('#qp-fin').innerHTML = FINISHES.map(f => `<option>${f}</option>`).join('');
+let qpScan = null;
+
+function qpShow(scan) {
+  qpScan = scan;
+  qpName.textContent = scan.card_read?.name || '?';
+  const cands = (scan.candidates || []).slice(0, 6);
+  qpGrid.innerHTML = cands.map(c => `
+    <div class="qpc" data-pick="${escHtml(c.id)}">
+      <img src="${escHtml(c.image_small || c.image_normal)}" loading="lazy"
+           onerror="this.style.visibility='hidden'">
+      <div class="t"><b>${escHtml((c.set||'').toUpperCase())}</b> #${escHtml(c.collector_number)}</div>
+    </div>`).join('');
+  qp.classList.add('open');
+  qpGrid.scrollLeft = 0;
+  qpGrid.querySelectorAll('.qpc[data-pick]').forEach(el =>
+    el.addEventListener('click', () => qpPick(el)));
+}
+function qpHide() { qp.classList.remove('open'); qpScan = null; }
+
+async function qpPick(el) {
+  if (!qpScan) return;
+  const printing = (qpScan.candidates || []).find(c => c.id === el.dataset.pick);
+  if (!printing) return;
+  el.classList.add('busy');
+  try {
+    const res = await jsend(`/api/scans/${qpScan.id}/select`, 'POST', {
+      printing,
+      condition: $('#qp-cond').value, finish: $('#qp-fin').value, quantity: 1,
+    });
+    el.classList.remove('busy');
+    qpGrid.querySelectorAll('.qpc').forEach(x => x.classList.remove('chosen'));
+    el.classList.add('chosen');
+    setStatus(res.merged_into
+      ? `✓ ${printing.name} — duplicate, merged (now ×${res.selection?.quantity})`
+      : `✓ ${printing.name} [${(printing.set||'').toUpperCase()}] filed. Next card…`, 'ok');
+    refreshScans();
+  } catch (e) {
+    el.classList.remove('busy');
+    setStatus('Select failed: ' + e.message, 'err');
+  }
+}
+$('#qpMore').addEventListener('click', () => { if (qpScan) openDetail(qpScan.id); });
+
+/* ── frame sampling + occupancy detection (tuned — do not "improve") ───────── */
 function sampleSmallGray() {
   if (!video.videoWidth) return null;
-  const r = roiRect();                 // sample the scan area only
+  const r = roiRect();
   const wantMH = Math.max(48, Math.round(MW * r.h / r.w));
-  if (wantMH !== MH) {
-    // Sample aspect (re)learned — old references are in the wrong geometry.
+  if (wantMH !== MH) {   // aspect (re)learned — old references are wrong geometry
     MH = wantMH;
-    emptyRef = null; emptyGrad = null; prevFrame = null; prevBox = null; bootCount = 0;
+    emptyRef = null; emptyGrad = null; prevFrame = null; bootCount = 0;
   }
   motion.width = MW; motion.height = MH;
   const ctx = motion.getContext('2d', { willReadFrequently: true });
@@ -438,13 +459,9 @@ function sampleSmallGray() {
   }
   return gray;
 }
-
 function changedFrac(a, b) {
-  // Camera auto-exposure shifts EVERY pixel together, which read as constant
-  // scene motion and starved the stability counter (observed: never reaching
-  // the steady count). Subtracting the mean frame delta first cancels global
-  // exposure hunting while real motion — a hand, a sliding card — still
-  // changes pixels in different directions and survives.
+  // Mean-delta subtraction cancels camera auto-exposure hunting (shifts every
+  // pixel together); real motion changes pixels in different directions.
   let sum = 0;
   for (let i = 0; i < a.length; i++) sum += a[i] - b[i];
   const mean = sum / a.length;
@@ -454,40 +471,7 @@ function changedFrac(a, b) {
   }
   return n / a.length;
 }
-
-function mainBand(counts, thr) {
-  // Longest contiguous run where the per-row/column changed-pixel count is
-  // meaningful. This is what keeps the box on the CARD: a faint shadow band
-  // or exposure drift near the mount contributes a few pixels per row, which
-  // a raw min/max bounding box happily stretches to — observed dragging the
-  // box far above the card and tanking its density.
-  let best = null, a = -1;
-  for (let i = 0; i <= counts.length; i++) {
-    const on = i < counts.length && counts[i] >= thr;
-    if (on && a < 0) a = i;
-    if (!on && a >= 0) {
-      if (!best || (i - a) > (best.b - best.a + 1)) best = { a, b: i - 1 };
-      a = -1;
-    }
-  }
-  return best;
-}
-
-function expandBand(counts, band, lowThr) {
-  // Grow the dense core outward through rows/columns that still carry SOME
-  // mass. A card's pale textbox rows register only the thin dark borders
-  // (~a few pixels) — far below the core threshold but well above a clean
-  // tray row — so the core (the art block) must extend through them to the
-  // card's true edge, while an isolated shadow band beyond clean tray rows
-  // still can't join.
-  let { a, b } = band;
-  while (a > 0 && counts[a - 1] >= lowThr) a--;
-  while (b < counts.length - 1 && counts[b + 1] >= lowThr) b++;
-  return { a, b };
-}
-
 function gradMap(gray) {
-  // |dx| + |dy| — cheap gradient magnitude ("how textured is this pixel").
   const g = new Uint8ClampedArray(MW * MH);
   for (let y = 1; y < MH - 1; y++) {
     for (let x = 1; x < MW - 1; x++) {
@@ -498,19 +482,14 @@ function gradMap(gray) {
   }
   return g;
 }
-
 function cardMask(cur, curGrad) {
-  // Textured now + smooth when empty  →  card detail (art, text, borders).
-  // Or hugely different from empty     →  solid regions (dark border on tray).
+  // textured now + smooth when empty → printed detail; OR hugely different
+  // from empty → solid regions. 3x3 close bridges the card's signal islands.
   const mask = new Uint8Array(MW * MH);
   for (let i = 0; i < mask.length; i++) {
     if ((curGrad[i] > GRAD_THR && emptyGrad[i] <= GRAD_THR) ||
         Math.abs(cur[i] - emptyRef[i]) > PIX_DELTA * 2) mask[i] = 1;
   }
-  // Morphological close (dilate → erode) with a 3×3 kernel: bridges the gaps
-  // between a card's separate signal islands — art block, title text, rules
-  // text, outer border — so they read as ONE object instead of the box
-  // snapping to the art alone.
   const dil = new Uint8Array(MW * MH);
   for (let y = 0; y < MH; y++) {
     for (let x = 0; x < MW; x++) {
@@ -526,7 +505,24 @@ function cardMask(cur, curGrad) {
   }
   return dil;
 }
-
+function mainBand(counts, thr) {
+  let best = null, a = -1;
+  for (let i = 0; i <= counts.length; i++) {
+    const on = i < counts.length && counts[i] >= thr;
+    if (on && a < 0) a = i;
+    if (!on && a >= 0) {
+      if (!best || (i - a) > (best.b - best.a + 1)) best = { a, b: i - 1 };
+      a = -1;
+    }
+  }
+  return best;
+}
+function expandBand(counts, band, lowThr) {
+  let { a, b } = band;
+  while (a > 0 && counts[a - 1] >= lowThr) a--;
+  while (b < counts.length - 1 && counts[b + 1] >= lowThr) b++;
+  return { a, b };
+}
 function detectBox(cur) {
   const curGrad = gradMap(cur);
   const mask = cardMask(cur, curGrad);
@@ -538,56 +534,26 @@ function detectBox(cur) {
     }
   }
   if (!n) return null;
-  const maskFrac = n / (MW * MH);   // how much of the scan area holds ANYTHING
+  const maskFrac = n / (MW * MH);
   const rMax = Math.max(...rows), cMax = Math.max(...cols);
-  // Dense core (the card body), then grow outward through anything still
-  // carrying mass — stops at clean tray rows, so a detached shadow band or
-  // the static mount can never join the box.
   let rband = mainBand(rows, Math.max(2, rMax * 0.30));
   let cband = mainBand(cols, Math.max(2, cMax * 0.30));
   if (!rband || !cband) return null;
-  // Grow on a near-absolute floor: a row crossing the card's pale textbox
-  // may only carry its two border pixels, which any percentage-of-max floor
-  // would reject (the art block makes rMax large). Growth still stops dead
-  // at genuinely clean tray rows.
   rband = expandBand(rows, rband, Math.max(2, rMax * 0.04));
   cband = expandBand(cols, cband, Math.max(2, cMax * 0.04));
-  let m = 0, tex = 0;
-  for (let y = rband.a; y <= rband.b; y++) {
-    for (let x = cband.a; x <= cband.b; x++) {
-      const i = y * MW + x;
-      if (mask[i]) m++;
-      // Textured NOW and smooth when empty — printed card detail only, so
-      // the tray's own static texture never counts toward the box.
-      if (curGrad[i] > GRAD_THR && emptyGrad[i] <= GRAD_THR) tex++;
-    }
-  }
   const w = cband.b - cband.a + 1, h = rband.b - rband.a + 1;
-  return {
-    x: cband.a, y: rband.a, w, h,
-    maskFrac,                         // total mask coverage of the scan area
-    areaFrac: (w * h) / (MW * MH),    // how much of the frame the box covers
-    density: m / (w * h),             // how solid the box is
-    texFrac: tex / (w * h),           // printed-detail fraction inside the box
-  };
+  return { x: cband.a, y: rband.a, w, h, maskFrac };
 }
 
-// The phone's ONLY question is "is something sitting in the tray, and has it
-// settled?" — the server locates and judges the card (quad detection with a
-// texture gate, blank-surface guard, art-distance thresholds). Three rounds
-// of tuning box-geometry bars (ratio/density/texture windows) each rejected
-// real cards under real conditions — sleeve glare hollowed the mask, sleeve
-// edges squared the box, tray-wall shadows dragged the box off the card
-// entirely. Geometry gating on a 176-px shadow-riddled mask was the wrong
-// altitude for this decision; occupancy + stillness is all the phone can
-// actually know, so that is all it checks now.
-const OCCUPIED_FRAC = 0.02;   // mask coverage that means "something is in the tray"
-
-// Draw the detected boundary on the preview (video is object-fit: contain,
-// so map sample coords → video coords → letterboxed display coords).
-// captured=true paints the card solid blue with a large white check — the
-// visual confirmation that this exact region was sent off for analysis.
+/* ── overlay (draws only when something changed) ───────────────────────────── */
+let lastDrawSig = '';
 function drawOverlay(box, color, captured = false) {
+  const sig = [box && `${box.x},${box.y},${box.w},${box.h}`, color, captured,
+               settingArea && dragB && `${dragB.x},${dragB.y}`,
+               roi && `${roi.x0},${roi.y0}`].join('|');
+  if (sig === lastDrawSig) return;
+  lastDrawSig = sig;
+
   const cw = overlay.clientWidth, ch = overlay.clientHeight;
   if (overlay.width !== cw) overlay.width = cw;
   if (overlay.height !== ch) overlay.height = ch;
@@ -596,8 +562,6 @@ function drawOverlay(box, color, captured = false) {
   if (!video.videoWidth) return;
   const { s, ox, oy } = contain();
 
-  // Scan area: the drag-in-progress while setting, else the active outline —
-  // always visible so it's obvious what part of the view is being watched.
   if (settingArea && dragA && dragB) {
     ctx.strokeStyle = '#fbbf24'; ctx.lineWidth = 2; ctx.setLineDash([8, 6]);
     ctx.strokeRect(Math.min(dragA.x, dragB.x), Math.min(dragA.y, dragB.y),
@@ -615,43 +579,32 @@ function drawOverlay(box, color, captured = false) {
   const fx = r.w / MW * s, fy = r.h / MH * s;
   const bx = ox + r.x * s + box.x * fx, by = oy + r.y * s + box.y * fy;
   const bw = box.w * fx, bh = box.h * fy;
-
   ctx.beginPath();
   ctx.roundRect(bx, by, bw, bh, 12);
   if (captured) {
-    ctx.fillStyle = 'rgba(59,130,246,.62)';
-    ctx.fill();
-    ctx.strokeStyle = '#93c5fd';
-    ctx.lineWidth = 4;
-    ctx.stroke();
-    // Checkmark, sized to the card
-    const cx = bx + bw / 2, cy = by + bh / 2, r = Math.min(bw, bh) * 0.3;
-    ctx.strokeStyle = '#fff';
-    ctx.lineWidth = Math.max(6, r * 0.22);
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
+    ctx.fillStyle = 'rgba(59,130,246,.62)'; ctx.fill();
+    ctx.strokeStyle = '#93c5fd'; ctx.lineWidth = 4; ctx.stroke();
+    const cx = bx + bw / 2, cy = by + bh / 2, rr = Math.min(bw, bh) * 0.3;
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = Math.max(6, rr * 0.22);
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
     ctx.beginPath();
-    ctx.moveTo(cx - r * 0.75, cy);
-    ctx.lineTo(cx - r * 0.15, cy + r * 0.6);
-    ctx.lineTo(cx + r * 0.8, cy - r * 0.6);
+    ctx.moveTo(cx - rr * 0.75, cy);
+    ctx.lineTo(cx - rr * 0.15, cy + rr * 0.6);
+    ctx.lineTo(cx + rr * 0.8, cy - rr * 0.6);
     ctx.stroke();
   } else {
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 3;
-    ctx.stroke();
+    ctx.strokeStyle = color; ctx.lineWidth = 3; ctx.stroke();
   }
 }
-
 function dbg(msg) { if (DEBUG) setStatus(msg); }
 
-// ── state machine: detect → show boundary → capture → analyze → await next ──
+/* ── auto-scan state machine ───────────────────────────────────────────────── */
 function tick() {
   if (!autoEnabled || mode === 'scanning' || settingArea) return;
   const cur = sampleSmallGray();
   if (!cur) return;
 
   if (!emptyRef) {
-    // Bootstrap: the first steady second teaches us the empty tray.
     if (prevFrame && changedFrac(cur, prevFrame) < STABLE_FRAC) bootCount++;
     else bootCount = 0;
     if (bootCount >= STABLE_FRAMES + 1) {
@@ -674,19 +627,17 @@ function tick() {
         stableCount = 0;
         scannedFrame = cur;
         mode = 'scanning';
-        drawOverlay(box, null, true);   // solid blue + check: sent for analysis
+        qpHide();                            // last card's strip is now stale
+        lastDrawSig = '';
+        drawOverlay(box, null, true);        // solid blue + check = captured
         scanOnce().finally(() => { mode = 'awaitNext'; });
       }
     } else {
       stableCount = 0;
-      if (occupied) {
-        dbg(`occupied ${(box.maskFrac*100).toFixed(1)}% — settling`);
-      } else {
-        dbg(box ? `watching — mask ${(box.maskFrac*100).toFixed(1)}%` : 'watching — tray empty');
-      }
-      // Adaptive empty reference: truly empty and calm → slowly re-learn the
-      // tray so lighting drift never accumulates into phantom occupancy.
-      if ((!box || box.maskFrac < EMPTY_FRAC) && prevFrame && changedFrac(cur, prevFrame) < STABLE_FRAC) {
+      if (occupied) dbg(`occupied ${(box.maskFrac*100).toFixed(1)}% — settling`);
+      else dbg(box ? `watching — mask ${(box.maskFrac*100).toFixed(1)}%` : 'watching — tray empty');
+      if ((!box || box.maskFrac < EMPTY_FRAC) && prevFrame
+          && changedFrac(cur, prevFrame) < STABLE_FRAC) {
         if (++emptyRefreshTick >= 25) { emptyRef = cur; emptyGrad = gradMap(cur); emptyRefreshTick = 0; }
       } else emptyRefreshTick = 0;
     }
@@ -703,50 +654,38 @@ function tick() {
       dbg('awaiting next card (remove or swap)');
     }
   }
-
-  prevBox = box; prevFrame = cur;
+  prevFrame = cur;
 }
 setInterval(tick, SAMPLE_MS);
 
-// ── controls ─────────────────────────────────────────────────────────────────
+/* ── controls ──────────────────────────────────────────────────────────────── */
 autoBtn.addEventListener('click', () => {
   autoEnabled = !autoEnabled;
   autoBtn.textContent = autoEnabled ? 'Auto: ON' : 'Auto: OFF';
   autoBtn.classList.toggle('off', !autoEnabled);
-  if (autoEnabled) { mode = 'watching'; stableCount = 0;
-                     setStatus('Auto: watching for a card…'); }
-  else { drawOverlay(null); setStatus('Auto off — tap Scan Card.'); }
+  if (autoEnabled) { mode = 'watching'; stableCount = 0; setStatus('Auto: watching for a card…'); }
+  else { lastDrawSig = ''; drawOverlay(null); setStatus('Auto off — tap Scan Card.'); }
 });
-
 shoot.addEventListener('click', async () => {
   shoot.disabled = true;
-  mode = 'scanning';
-  try {
-    await scanOnce();
-  } finally {
-    scannedFrame = sampleSmallGray() || scannedFrame;  // don't auto-refire on this scene
+  mode = 'scanning'; qpHide();
+  try { await scanOnce(); }
+  finally {
+    scannedFrame = sampleSmallGray() || scannedFrame;
     mode = 'awaitNext';
     setTimeout(() => { shoot.disabled = false; }, 400);
   }
 });
-
-// Double-tap the camera view to re-learn the empty tray (e.g. after loading
-// the page with a card already in place, which bakes the card into the
-// reference and makes further detection blind).
-document.getElementById('stage').addEventListener('dblclick', () => {
-  emptyRef = null; emptyGrad = null; prevFrame = null; prevBox = null;
-  bootCount = 0; stableCount = 0; mode = 'watching';
-  setStatus('Re-learning empty tray — clear it and hold steady…');
+// Double-tap: re-learn the empty tray.
+stageEl.addEventListener('dblclick', () => {
+  resetDetection('Re-learning empty tray — clear it and hold steady…');
 });
 
-// ── scanned-cards panel ──────────────────────────────────────────────────────
-const scansPanel = document.getElementById('scansPanel');
-const scansList = document.getElementById('scansList');
-const scansBtn = document.getElementById('scansBtn');
+/* ── scans data + signature-diffed rendering ───────────────────────────────── */
+const scansPanel = $('#scansPanel'), scansList = $('#scansList'), scansBtn = $('#scansBtn');
+let scans = [], scansView = 'all', priceMin = null, priceMax = null;
+let lastRecentSig = '', lastListSig = '', lastStatSig = '';
 let scansTimer = null;
-
-const escHtml = s => String(s ?? '').replace(/[&<>"]/g,
-  c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
 function f2fBest(scan) {
   const c = scan.f2f?.conditions || {};
@@ -756,9 +695,6 @@ function f2fBest(scan) {
   for (const k of order) if (c[k] != null) return c[k];
   const vals = Object.values(c); return vals.length ? Math.min(...vals) : null;
 }
-
-// F2F low–high across all listed conditions (works for pending scans too —
-// the server prices the top-ranked printing in the background at scan time).
 function priceRange(s) {
   const c = s.f2f?.conditions || {};
   const vals = Object.values(c);
@@ -766,84 +702,89 @@ function priceRange(s) {
   const lo = Math.min(...vals), hi = Math.max(...vals);
   return lo === hi ? `$${lo}` : `$${lo}–$${hi}`;
 }
-
-function renderRecent(scans) {
-  // Newest-first working strip: tap a chip to open that scan (verify the
-  // match, pick the printing, fix a misread) without leaving the camera.
-  const el = document.getElementById('recent');
-  el.innerHTML = scans.slice(-8).reverse().map(s => {
-    const sel = s.status === 'selected';
-    const name = s.selection?.name || s.card_read?.name || '?';
-    const pr = priceRange(s);
-    return `<span class="chip ${sel?'selchip':''}" data-sid="${s.id}">${escHtml(name)}${pr ? ' · ' + pr : ''}</span>`;
-  }).join('');
-  el.querySelectorAll('.chip[data-sid]').forEach(chip =>
-    chip.addEventListener('click', () => openDetail(Number(chip.dataset.sid))));
-}
-
-let scansView = 'all';
-let priceMin = null, priceMax = null;
 const isProblem = s => !!s.error || !(s.candidates || []).length;
-
-// Selected scans get their exact price; pending ones are judged on the
-// background-priced top match, so bulk lots can be triaged before picking.
-function priceOf(s) {
-  const p = f2fBest(s);
-  return p == null ? null : Number(p);
-}
+function priceOf(s) { const p = f2fBest(s); return p == null ? null : Number(p); }
 function inPriceRange(s) {
   if (priceMin == null && priceMax == null) return true;
   const p = priceOf(s);
-  if (p == null) return true;            // unpriced never disappears
+  if (p == null) return true;
   if (priceMin != null && p < priceMin) return false;
   if (priceMax != null && p > priceMax) return false;
   return true;
 }
 
-async function refreshScans() {
-  try {
-    const scans = await (await fetch('/api/scans')).json();
-    scansBtn.textContent = `Scans (${scans.length})`;
-    renderRecent(scans);
-    if (!scansPanel.classList.contains('open')) return;
+function renderRecent() {
+  const slice = scans.slice(-8).reverse();
+  const sig = slice.map(s => `${s.id}~${s.status}~${JSON.stringify(s.f2f?.conditions||0)}`).join('|');
+  if (sig === lastRecentSig) return;
+  lastRecentSig = sig;
+  const el = $('#recent');
+  el.innerHTML = slice.map(s => {
+    const selc = s.status === 'selected';
+    const name = s.selection?.name || s.card_read?.name || '?';
+    const pr = priceRange(s);
+    const qty = s.selection?.quantity > 1 ? ` ×${s.selection.quantity}` : '';
+    return `<span class="chip ${selc?'selchip':''}" data-sid="${s.id}">${escHtml(name)}${qty}${pr ? ' · ' + pr : ''}</span>`;
+  }).join('');
+  el.querySelectorAll('.chip[data-sid]').forEach(chip =>
+    chip.addEventListener('click', () => openDetail(Number(chip.dataset.sid))));
+}
 
-    const sel = scans.filter(s => s.status === 'selected');
-    const total = sel.filter(s => s.included)
-      .reduce((t, s) => t + (f2fBest(s) ?? 0), 0);
-    document.getElementById('scansStat').innerHTML =
+function renderScansPanel() {
+  if (!scansPanel.classList.contains('open')) return;
+  const sel = scans.filter(s => s.status === 'selected');
+  const total = sel.filter(s => s.included).reduce((t, s) => t + (f2fBest(s) ?? 0), 0);
+  const statSig = `${scans.length}~${sel.length}~${total}`;
+  if (statSig !== lastStatSig) {
+    lastStatSig = statSig;
+    $('#scansStat').innerHTML =
       `<b>${scans.length}</b> scans · <b>${scans.length - sel.length}</b> to pick · ` +
       `<span class="money">$${total.toFixed(2)}</span> to export`;
+  }
 
-    const rows = scans.filter(s => inPriceRange(s) && (
-      scansView === 'all' ? true :
-      scansView === 'pending' ? s.status !== 'selected' :
-      scansView === 'selected' ? s.status === 'selected' :
-      isProblem(s)));
+  const rows = scans.filter(s => inPriceRange(s) && (
+    scansView === 'all' ? true :
+    scansView === 'pending' ? s.status !== 'selected' :
+    scansView === 'selected' ? s.status === 'selected' :
+    isProblem(s)));
+  const listSig = scansView + '~' + priceMin + '~' + priceMax + '~' +
+    rows.map(s => [s.id, s.status, s.included, s.selection?.quantity,
+                   JSON.stringify(s.f2f?.conditions||0)].join(',')).join('|');
+  if (listSig === lastListSig) return;
+  lastListSig = listSig;
 
-    scansList.innerHTML = rows.slice().reverse().map(s => {
-      const isSel = s.status === 'selected';
-      const name = s.selection?.name || s.card_read?.name || '(unidentified)';
-      const thumb = s.selection?.image_normal || s.candidates?.[0]?.image_small
-                    || `/api/scans/${s.id}/image`;
-      const pr = priceRange(s);
-      const sub = isSel
-        ? `${(s.selection.set||'').toUpperCase()} #${s.selection.collector_number} · ${s.selection.condition} · ${s.selection.finish} · ×${s.selection.quantity}`
-        : `${(s.candidates||[]).length} printings — tap to pick`;
-      const pill = isSel ? `<span class="spill sel">selected</span>`
-                 : isProblem(s) ? `<span class="spill" style="background:#3a1c1c;color:#fca5a5">check</span>`
-                 : `<span class="spill">pending</span>`;
-      return `<div class="srow" data-sid="${s.id}">
-        <img src="${escHtml(thumb)}" loading="lazy" onerror="this.style.visibility='hidden'">
-        <div class="meta">
-          <div class="nm">${escHtml(name)}</div>
-          <div class="sub">${escHtml(sub)}</div>
-        </div>
-        ${pr ? `<div class="sprice">${pr}</div>` : ''}
-        ${pill}
-      </div>`;
-    }).join('') || `<div style="padding:40px;text-align:center;color:#6b7280">Nothing here.</div>`;
-    scansList.querySelectorAll('.srow[data-sid]').forEach(row =>
-      row.addEventListener('click', () => openDetail(Number(row.dataset.sid))));
+  scansList.innerHTML = rows.slice().reverse().map(s => {
+    const isSel = s.status === 'selected';
+    const name = s.selection?.name || s.card_read?.name || '(unidentified)';
+    const thumb = s.selection?.image_normal || s.candidates?.[0]?.image_small
+                  || `/api/scans/${s.id}/image`;
+    const pr = priceRange(s);
+    const sub = isSel
+      ? `${(s.selection.set||'').toUpperCase()} #${s.selection.collector_number} · ${s.selection.condition} · ${s.selection.finish} · ×${s.selection.quantity}`
+      : `${(s.candidates||[]).length} printings — tap to pick`;
+    const pill = isSel ? `<span class="spill sel">selected</span>`
+               : isProblem(s) ? `<span class="spill chk">check</span>`
+               : `<span class="spill">pending</span>`;
+    return `<div class="srow" data-sid="${s.id}">
+      <img src="${escHtml(thumb)}" loading="lazy" onerror="this.style.visibility='hidden'">
+      <div class="meta">
+        <div class="nm">${escHtml(name)}</div>
+        <div class="sub">${escHtml(sub)}</div>
+      </div>
+      ${pr ? `<div class="sprice">${pr}</div>` : ''}
+      ${pill}
+    </div>`;
+  }).join('') || `<div style="padding:40px;text-align:center;color:#6b7280">Nothing here.</div>`;
+  scansList.querySelectorAll('.srow[data-sid]').forEach(row =>
+    row.addEventListener('click', () => openDetail(Number(row.dataset.sid))));
+}
+
+async function refreshScans() {
+  try {
+    scans = await (await fetch('/api/scans')).json();
+    scansBtn.textContent = `Scans (${scans.length})`;
+    renderRecent();
+    renderScansPanel();
   } catch (e) { /* server momentarily unreachable */ }
 }
 
@@ -852,17 +793,18 @@ document.querySelectorAll('.vchip').forEach(chip =>
     document.querySelectorAll('.vchip').forEach(c => c.classList.remove('on'));
     chip.classList.add('on');
     scansView = chip.dataset.view;
-    refreshScans();
+    lastListSig = ''; renderScansPanel();
   }));
+$('#p-min').addEventListener('input', e => {
+  priceMin = e.target.value === '' ? null : Number(e.target.value);
+  lastListSig = ''; renderScansPanel();
+});
+$('#p-max').addEventListener('input', e => {
+  priceMax = e.target.value === '' ? null : Number(e.target.value);
+  lastListSig = ''; renderScansPanel();
+});
 
-document.getElementById('p-min').addEventListener('input', e => {
-  priceMin = e.target.value === '' ? null : Number(e.target.value); refreshScans();
-});
-document.getElementById('p-max').addEventListener('input', e => {
-  priceMax = e.target.value === '' ? null : Number(e.target.value); refreshScans();
-});
 async function clearScans(only) {
-  const scans = await (await fetch('/api/scans')).json();
   const n = only === 'unselected'
     ? scans.filter(s => s.status !== 'selected').length : scans.length;
   if (!n) { setStatus('Nothing to delete.'); return; }
@@ -872,30 +814,21 @@ async function clearScans(only) {
   refreshScans();
   setStatus(`Deleted ${r.deleted} scan${r.deleted === 1 ? '' : 's'}.`, 'ok');
 }
-document.getElementById('clr-junk').addEventListener('click', () => clearScans('unselected'));
-document.getElementById('clr-all').addEventListener('click', () => clearScans(null));
+$('#clr-junk').addEventListener('click', () => clearScans('unselected'));
+$('#clr-all').addEventListener('click', () => clearScans(null));
 
-// Backfill F2F prices for every scan that doesn't have one (already-priced
-// scans are skipped server-side). Prices land progressively via the normal
-// refresh poll while the panel is open.
-document.getElementById('p-fill').addEventListener('click', async () => {
-  const btn = document.getElementById('p-fill');
+$('#p-fill').addEventListener('click', async () => {
+  const btn = $('#p-fill');
   btn.disabled = true;
   try {
     const r = await jsend('/api/scans/price-missing', 'POST', {});
     setStatus(r.queued
       ? `Pricing ${r.queued} card${r.queued > 1 ? 's' : ''} in the background…`
       : 'All scans already priced.', 'ok');
-  } finally {
-    setTimeout(() => { btn.disabled = false; }, 2000);
-  }
+  } finally { setTimeout(() => { btn.disabled = false; }, 2000); }
   refreshScans();
 });
-
-document.getElementById('p-excl').addEventListener('click', async () => {
-  // Bulk-exclude every priced, still-included scan the filter hides.
-  // Reversible per card from the desktop's include checkbox.
-  const scans = await (await fetch('/api/scans')).json();
+$('#p-excl').addEventListener('click', async () => {
   const targets = scans.filter(s =>
     s.status === 'selected' && s.included && priceOf(s) != null && !inPriceRange(s));
   if (!targets.length) { setStatus('Nothing to exclude.'); return; }
@@ -906,28 +839,21 @@ document.getElementById('p-excl').addEventListener('click', async () => {
 
 scansBtn.addEventListener('click', () => {
   scansPanel.classList.add('open');
-  refreshScans();
+  lastListSig = lastStatSig = '';
+  renderScansPanel(); refreshScans();
   scansTimer = setInterval(refreshScans, 3000);
 });
-document.getElementById('scansClose').addEventListener('click', () => {
+$('#scansClose').addEventListener('click', () => {
   scansPanel.classList.remove('open');
   clearInterval(scansTimer); scansTimer = null;
 });
+// Light background poll keeps chips/count fresh while only the camera is open.
 setInterval(() => { if (!scansPanel.classList.contains('open')) refreshScans(); }, 5000);
 refreshScans();
 
-// ── scan detail: pick a printing from the phone ──────────────────────────────
-const detailPanel = document.getElementById('detailPanel');
-const detailBody = document.getElementById('detailBody');
-const detailTitle = document.getElementById('detailTitle');
-const CONDITIONS = ['NM','LP','MP','HP','DMG'];
-const FINISHES = ['Non-Foil','Foil','Etched'];
+/* ── detail panel ──────────────────────────────────────────────────────────── */
+const detailPanel = $('#detailPanel'), detailBody = $('#detailBody'), detailTitle = $('#detailTitle');
 let detailScanId = null;
-
-async function jsend(url, method, body) {
-  return (await fetch(url, { method, headers: {'Content-Type':'application/json'},
-                             body: JSON.stringify(body) })).json();
-}
 
 function pcandCard(c, chosenId) {
   return `<div class="pcard ${c.id===chosenId?'chosen':''}" data-pick="${escHtml(c.id)}">
@@ -936,7 +862,6 @@ function pcandCard(c, chosenId) {
       ${c.multi_distance!=null?`· Δ${c.multi_distance}`:''}</div>
   </div>`;
 }
-
 function detailControls(scan) {
   const cr = scan.card_read || {};
   const condDefault = scan.selection?.condition || (cr.condition_estimate||'NM').toUpperCase();
@@ -949,21 +874,18 @@ function detailControls(scan) {
     <input id="p-qty" type="number" min="1" value="${qty}">
   </div>`;
 }
-
 function detailCtl() {
   return {
-    condition: document.getElementById('p-cond')?.value || 'NM',
-    finish: document.getElementById('p-fin')?.value || 'Non-Foil',
-    quantity: Number(document.getElementById('p-qty')?.value || 1),
+    condition: $('#p-cond')?.value || 'NM',
+    finish: $('#p-fin')?.value || 'Non-Foil',
+    quantity: Number($('#p-qty')?.value || 1),
   };
 }
-
 async function openDetail(id) {
   detailScanId = id;
   detailPanel.classList.add('open');
   await renderScanDetail();
 }
-
 async function renderScanDetail() {
   const scan = await (await fetch(`/api/scans/${detailScanId}`)).json();
   if (scan.error && !scan.id) { detailBody.innerHTML = `<p>${escHtml(scan.error)}</p>`; return; }
@@ -975,33 +897,28 @@ async function renderScanDetail() {
     <img src="/api/scans/${scan.id}/image" onerror="this.style.display='none'">
     <div>
       ${sel ? `<div><b>${escHtml(sel.name)}</b></div>
-        <div style="font-size:13px;color:#8b93a1">${escHtml(sel.set_name)} · ${escHtml((sel.set||'').toUpperCase())} #${escHtml(sel.collector_number)}</div>
+        <div style="font-size:13px;color:var(--muted)">${escHtml(sel.set_name)} · ${escHtml((sel.set||'').toUpperCase())} #${escHtml(sel.collector_number)} · ×${sel.quantity}</div>
         <div class="pprice">F2F: $${f2fBest(scan) ?? '—'}</div>`
       : `<div><b>${escHtml(cr.name||'(unread)')}</b></div>
-        <div style="font-size:13px;color:#8b93a1">tap a printing below to select it</div>
-        ${priceRange(scan) ? `<div class="pprice">~${priceRange(scan)} <span style="font-size:12px;color:#8b93a1;font-weight:400">(top match)</span></div>` : ''}`}
-      ${scan.error ? `<div style="font-size:12px;color:#ff8a8a;margin-top:6px">${escHtml(scan.error)}</div>` : ''}
+        <div style="font-size:13px;color:var(--muted)">tap a printing below to select it</div>
+        ${priceRange(scan) ? `<div class="pprice">~${priceRange(scan)} <span style="font-size:12px;color:var(--muted);font-weight:400">(top match)</span></div>` : ''}`}
+      ${scan.error ? `<div style="font-size:12px;color:var(--bad);margin-top:6px">${escHtml(scan.error)}</div>` : ''}
     </div>
   </div>`;
-
   html += detailControls(scan);
   html += `<div class="subhead">${sel ? 'Re-pick printing' : 'Pick the printing'} — closest first</div>`;
   html += (scan.candidates||[]).length
     ? `<div class="pgrid" id="pcands">${scan.candidates.map(c=>pcandCard(c, sel?.scryfall_id)).join('')}</div>`
-    : `<p style="color:#8b93a1;font-size:13px">No candidates — search below.</p>`;
-
+    : `<p style="color:var(--muted);font-size:13px">No candidates — search below.</p>`;
   html += `<div class="subhead">Wrong card? Search</div>
     <div class="msrow"><input id="p-search" placeholder="Card name…"><button id="p-searchBtn">Search</button></div>
     <div class="pgrid" id="psearchResults" style="margin-top:8px"></div>`;
-  html += `<button class="dangerbtn" id="p-delete" style="width:100%">Delete this scan</button>`;
+  html += `<button class="dangerbtn" id="p-delete">Delete this scan</button>`;
   detailBody.innerHTML = html;
 
-  // Tap the scan photo to inspect it full-screen.
   const scanImg = detailBody.querySelector('.prow img');
   scanImg?.addEventListener('click', () => openLightbox(scanImg.src));
 
-  // data-pick carries only the candidate id; objects come from memory
-  // (embedding JSON in attributes broke on apostrophes — same fix as desktop).
   const pickFrom = (pool) => async (el) => {
     const printing = (pool || []).find(c => c.id === el.dataset.pick);
     if (!printing) return;
@@ -1018,7 +935,6 @@ async function renderScanDetail() {
   detailBody.querySelectorAll('#pcands .pcard[data-pick]').forEach(el =>
     el.addEventListener('click', () => candPick(el)));
 
-  // live condition/finish/qty edits on an already-selected scan
   if (scan.status === 'selected') {
     ['p-cond','p-fin','p-qty'].forEach(cid => {
       document.getElementById(cid)?.addEventListener('change', async () => {
@@ -1029,39 +945,34 @@ async function renderScanDetail() {
   }
 
   const doSearch = async () => {
-    const q = document.getElementById('p-search').value.trim(); if (!q) return;
-    const res = document.getElementById('psearchResults');
-    res.innerHTML = `<p style="color:#8b93a1">Searching…</p>`;
+    const q = $('#p-search').value.trim(); if (!q) return;
+    const res = $('#psearchResults');
+    res.innerHTML = `<p style="color:var(--muted)">Searching…</p>`;
     const { candidates } = await (await fetch(`/api/search?q=${encodeURIComponent(q)}`)).json();
     res.innerHTML = candidates.map(c=>pcandCard(c, sel?.scryfall_id)).join('')
-      || `<p style="color:#8b93a1">No results.</p>`;
+      || `<p style="color:var(--muted)">No results.</p>`;
     const searchPick = pickFrom(candidates);
     res.querySelectorAll('.pcard[data-pick]').forEach(el =>
       el.addEventListener('click', () => searchPick(el)));
   };
-  document.getElementById('p-searchBtn').addEventListener('click', doSearch);
-  document.getElementById('p-search').addEventListener('keydown', e => { if (e.key==='Enter') doSearch(); });
+  $('#p-searchBtn').addEventListener('click', doSearch);
+  $('#p-search').addEventListener('keydown', e => { if (e.key==='Enter') doSearch(); });
 
-  document.getElementById('p-delete').addEventListener('click', async () => {
+  $('#p-delete').addEventListener('click', async () => {
     await fetch(`/api/scans/${scan.id}`, { method: 'DELETE' });
     detailPanel.classList.remove('open');
     refreshScans();
   });
 }
-
-document.getElementById('detailBack').addEventListener('click', () => {
+$('#detailBack').addEventListener('click', () => {
   detailPanel.classList.remove('open');
   detailScanId = null;
   refreshScans();
 });
 
-// ── full-screen image viewer ─────────────────────────────────────────────────
-const lightbox = document.getElementById('lightbox');
-const lightboxImg = document.getElementById('lightboxImg');
-function openLightbox(src) {
-  lightboxImg.src = src;
-  lightbox.classList.add('open');
-}
+/* ── lightbox ──────────────────────────────────────────────────────────────── */
+const lightbox = $('#lightbox'), lightboxImg = $('#lightboxImg');
+function openLightbox(src) { lightboxImg.src = src; lightbox.classList.add('open'); }
 lightbox.addEventListener('click', () => lightbox.classList.remove('open'));
 
 startCamera();
