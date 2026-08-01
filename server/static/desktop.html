@@ -83,6 +83,11 @@
   table.prices { border-collapse: collapse; margin: 6px 0; font-size: 13px; }
   table.prices td { padding: 2px 14px 2px 0; color: var(--muted); }
   table.prices td.v { color: var(--text); font-weight: 600; }
+  .f2fbox { margin: 10px 0 4px; padding: 10px 14px; border: 1px solid var(--line);
+            border-radius: 10px; background: var(--card); max-width: 560px; }
+  .f2fbox .boxlabel { font-size: 11px; letter-spacing: .08em; color: var(--muted);
+                      margin-bottom: 4px; }
+  .f2fbox .bigprice { margin: 4px 0 2px; }
 
   .sec { margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--line); }
   .sechead { display: flex; align-items: baseline; gap: 10px; margin-bottom: 12px; }
@@ -296,6 +301,36 @@ function controlsHtml(scan){
   </div>`;
 }
 
+/* ── F2F price panel ───────────────────────────────────────────────────── */
+// One visible home for Face to Face pricing: what the price is (or that
+// there isn't one yet), which printing it was searched for, and a button to
+// run the search on demand — pricing used to happen invisibly in the
+// background with no way to see or retry it per card.
+function f2fBoxHtml(scan){
+  const sel = scan.selection || null;
+  const rows = Object.entries(scan.f2f?.conditions||{});
+  let inner;
+  if (rows.length){
+    const forLabel = !sel && scan.f2f?.name
+      ? ` <span class="muted" style="font-size:12px;font-weight:400">top match: ${esc(scan.f2f.name)} [${esc((scan.f2f.set_code||'').toUpperCase())}]</span>`
+      : '';
+    inner = `<div class="bigprice">${sel ? `$${f2fBest(scan) ?? '—'}` : `~${priceRange(scan)}`}${forLabel}</div>
+      <table class="prices"><tr>${rows.map(([k])=>`<td>${esc(k)}</td>`).join("")}</tr>
+      <tr>${rows.map(([,v])=>`<td class="v">$${v}</td>`).join("")}</tr></table>
+      ${scan.f2f?.url?`<a href="${esc(scan.f2f.url)}" target="_blank">View on Face to Face ↗</a>`:''}`;
+  } else {
+    inner = `<div class="muted" style="font-size:13px;margin:4px 0">Not priced yet.</div>`;
+  }
+  return `<div class="f2fbox">
+    <div class="boxlabel">FACE TO FACE PRICE</div>
+    ${inner}
+    <div style="margin-top:8px">
+      <button class="btn ghost sm" id="f2fSearchBtn">↻ Search F2F price</button>
+      <span class="muted" style="font-size:12px;margin-left:8px" id="f2fStatus"></span>
+    </div>
+  </div>`;
+}
+
 /* ── detail ────────────────────────────────────────────────────────────── */
 function renderDetail(){
   const scan = scans.find(s => s.id === focusedId);
@@ -303,7 +338,6 @@ function renderDetail(){
   if (!scan){ right.innerHTML = `<div class="empty">Scan a card on your phone to begin.</div>`; return; }
   const cr = scan.card_read || {}, sel = scan.selection || null;
   const chosenId = sel?.scryfall_id;
-  const pr = priceRange(scan);
 
   let html = `<div class="dhead">
     <div class="scanshot">
@@ -319,15 +353,7 @@ function renderDetail(){
         cr.alternates.map(a=>`<a href="#" class="alt-name" data-name="${esc(a.name)}">${esc(a.name)}</a> <span class="muted">(Δ${a.distance})</span>`).join(" · ")
       }</div>` : ''}
       ${scan.error ? `<div class="dsub" style="color:var(--bad)">⚠ ${esc(scan.error)}</div>` : ''}
-      ${sel
-        ? `<div class="bigprice">Face to Face: $${f2fBest(scan) ?? '—'}</div>
-           ${(() => { const rows = Object.entries(scan.f2f?.conditions||{});
-             return rows.length
-               ? `<table class="prices"><tr>${rows.map(([k])=>`<td>${esc(k)}</td>`).join("")}</tr>
-                  <tr>${rows.map(([,v])=>`<td class="v">$${v}</td>`).join("")}</tr></table>`
-               : `<div class="muted" style="font-size:13px">No Face to Face listing found.</div>`; })()}
-           ${scan.f2f?.url?`<a href="${esc(scan.f2f.url)}" target="_blank">View on Face to Face ↗</a>`:''}`
-        : (pr ? `<div class="bigprice">~${pr} <span class="muted" style="font-size:13px;font-weight:400">(top match)</span></div>` : '')}
+      ${f2fBoxHtml(scan)}
       ${controlsHtml(scan)}
     </div>
   </div>`;
@@ -381,6 +407,25 @@ function wireDetail(scan){
     el.addEventListener("click", () => candPick(el)));
 
   $("#scanShot")?.addEventListener("click", () => openLightbox(`/api/scans/${scan.id}/image`));
+
+  // On-demand F2F price search with a visible in-flight state.
+  $("#f2fSearchBtn")?.addEventListener("click", async () => {
+    const btn = $("#f2fSearchBtn"), st = $("#f2fStatus");
+    btn.disabled = true; st.textContent = "Searching Face to Face…";
+    try {
+      const updated = await jsend(`/api/scans/${scan.id}/price`, "POST", {});
+      if (updated.error){
+        st.textContent = updated.error; btn.disabled = false;
+      } else if (updated.f2f_search === "not_found"){
+        st.textContent = "No listing found on Face to Face."; btn.disabled = false;
+      } else {
+        await poll(); detailSig=""; renderDetail(); listSig=""; renderList();
+        toast("Price updated");
+      }
+    } catch(e){
+      st.textContent = "Search failed: " + e.message; btn.disabled = false;
+    }
+  });
 
   // Live edit of an already-selected scan when controls change.
   if (scan.status === "selected"){

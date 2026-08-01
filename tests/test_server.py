@@ -237,6 +237,36 @@ class FlakyF2F:
                         conditions={"NM": 1.99})
 
 
+def test_price_now_endpoint(tmp_path):
+    """On-demand pricing: prices the scan, and a failed search returns a
+    transient not_found flag WITHOUT clearing an existing price."""
+    f2f = FlakyF2F()
+    app = create_app(pipeline_factory=lambda: FakePipeline(),
+                     store=ScanStore(tmp_path / "s.db"), f2f=f2f,
+                     scan_images_dir=tmp_path / "imgs")
+    c = TestClient(app)
+    sid = c.post("/api/scan",
+                 files={"files": ("c.jpg", _jpeg_bytes(), "image/jpeg")}).json()["id"]
+
+    # Search finds nothing → flag, no stored price.
+    r = c.post(f"/api/scans/{sid}/price").json()
+    assert r["f2f_search"] == "not_found"
+    assert not c.get(f"/api/scans/{sid}").json().get("f2f")
+
+    # Search succeeds → price stored on the scan.
+    f2f.enabled = True
+    r = c.post(f"/api/scans/{sid}/price").json()
+    assert r["f2f"]["conditions"] == {"NM": 1.99}
+
+    # A later failed search must NOT clear the stored price.
+    f2f.enabled = False
+    r = c.post(f"/api/scans/{sid}/price").json()
+    assert r["f2f_search"] == "not_found"
+    assert c.get(f"/api/scans/{sid}").json()["f2f"]["conditions"] == {"NM": 1.99}
+
+    assert c.post("/api/scans/9999/price").status_code == 404
+
+
 def test_price_missing_fills_unpriced_and_skips_priced(tmp_path):
     f2f = FlakyF2F()
     app = create_app(pipeline_factory=lambda: FakePipeline(),

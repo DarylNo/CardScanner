@@ -177,6 +177,36 @@ def create_app(
             background_tasks.add_task(_price_top, scan["id"], top)
         return scan
 
+    # ── pricing ────────────────────────────────────────────────────────────────
+    @app.post("/api/scans/{scan_id}/price")
+    async def price_now(scan_id: int):
+        """
+        Price ONE scan on demand (the desktop's "Search F2F price" button).
+        Synchronous — the UI shows a searching state until this returns.
+        Prices the selected printing, else the top-ranked candidate.  A failed
+        search never clears an existing price; it returns the scan with a
+        transient ``f2f_search: "not_found"`` flag for the UI instead.
+        """
+        scan = store.get_scan(scan_id)
+        if not scan:
+            return JSONResponse({"error": "not found"}, status_code=404)
+        printing = scan.get("selection") or (scan.get("candidates") or [None])[0]
+        if not printing or not printing.get("name"):
+            return JSONResponse(
+                {"error": "nothing to price — no selection or candidates"},
+                status_code=400,
+            )
+        price = await run_in_threadpool(
+            f2f.get_price, printing.get("name", ""), printing.get("set", ""),
+            printing.get("collector_number", ""), bool(printing.get("foil", False)),
+            printing.get("set_name", ""),
+        )
+        if price:
+            return store.update_scan(scan_id, f2f=price.to_dict())
+        scan = store.get_scan(scan_id)
+        scan["f2f_search"] = "not_found"
+        return scan
+
     # ── batch pricing ──────────────────────────────────────────────────────────
     @app.post("/api/scans/price-missing")
     async def price_missing(background_tasks: BackgroundTasks):
