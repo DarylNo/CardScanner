@@ -31,7 +31,11 @@ from urllib.parse import quote
 import requests
 
 _BASE = "https://facetofacegames.com"
-_USER_AGENT = "MTGCardScanner/1.0 facetoface (contact: your-email@example.com)"
+# Browser UA, mirroring the ManaExchange store's proven scraper: Shopify
+# rate-limits identified bots far more aggressively — the honest bot UA is
+# what made the leaky bucket so tight for us.
+_USER_AGENT = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+               "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
 # ADAPTIVE pacing (slow start + AIMD): fixed rates kept failing — 6.7/s
 # tripped the storefront's leaky bucket instantly, 2/s sustained kept it
 # tripped, and even 1/s saw scattered 429s once the IP was warm. So: each
@@ -46,7 +50,7 @@ _SPEEDUP = 0.9             # multiply delay on success
 _SLOWDOWN = 2.0            # multiply delay on 429
 _IDLE_RESET_S = 120.0      # quiet this long → next burst slow-starts again
 _TIMEOUT = 8               # fail fast rather than hang a scan
-_SUGGEST_LIMIT = 10
+_SUGGEST_LIMIT = 20
 _DEFAULT_CACHE_DIR = Path.home() / ".cache" / "mtg-card-scanner" / "facetoface"
 # Storefront prices move; the cache previously never expired, so a listing
 # priced once was quoted at that price forever. A day keeps repeat scans of
@@ -179,6 +183,8 @@ def _default_get_json(cache_dir: Path) -> Callable[[str], Any]:
 
     session = requests.Session()
     session.headers["User-Agent"] = _USER_AGENT
+    session.headers["Accept"] = "application/json"
+    session.headers["Accept-Language"] = "en-CA,en;q=0.9"
     state = {"last": 0.0, "delay": _START_DELAY}
     # Ring buffer of recent request outcomes — the debug surface that answers
     # "why is pricing slow RIGHT NOW" (429 storm? cache hits? errors?).
@@ -361,14 +367,21 @@ class FaceToFaceClient:
         want_set = _norm(set_code)
         want_set_name = _norm(set_name)
 
-        # Predictive search caps at ~10 results, so a heavily-reprinted card's
-        # target printing may not appear under a bare-name query. Try the name
-        # first, then progressively more specific queries until we confirm a match.
-        queries = [name]
+        # Query ladder ported from the ManaExchange store's scraper: MOST
+        # specific first — "name collector setname [foil]" usually lands the
+        # exact product in ONE suggest call + ONE product fetch, where the old
+        # bare-name-first order fanned out into several product fetches per
+        # card (each one spending rate-limit budget). Fallbacks loosen
+        # progressively for promos/odd titles.
+        suffix = " foil" if foil else ""
+        queries = []
+        if set_name and collector_number:
+            queries.append(f"{name} {collector_number} {set_name}{suffix}")
         if set_name:
-            queries.append(f"{name} {set_name}")
-        if collector_number:
-            queries.append(f"{name} {collector_number}")
+            queries.append(f"{name} {set_name}{suffix}")
+        if suffix:
+            queries.append(f"{name}{suffix}")
+        queries.append(name)
 
         tried: set[str] = set()
         for q in queries:
