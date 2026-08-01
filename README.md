@@ -95,7 +95,7 @@ Then open, on the same LAN:
 - Phone:   `https://<this-machine-ip>:8443/phone`
 
 > **HTTPS is required for the phone camera.** Browsers only allow camera access
-> (`getUserMedia`) in a secure context — `https://` or `localhost`. `run_server.sh` generates a
+> (`getUserMedia`) in a secure context — `https://` or `localhost`. The launcher generates a
 > self-signed certificate; accept the one-time security warning on the phone. (On the desktop
 > alone you could use plain `http://localhost`, but the phone needs HTTPS.)
 
@@ -103,21 +103,31 @@ Config via env: `PORT`, `SCAN_DB`, `HOST`.
 
 ### Auto-scan (hands-free)
 
-The phone page watches the camera at 5 fps. When the scene changes (a card is placed or
-swapped) and then holds still for ~1 second, it captures a burst and scans — no tap needed.
-The empty tray is learned at startup, so *removing* a card never triggers a scan, and a card
-is never rescanned until the scene changes again. The **Auto** toggle turns this off; the
-**Scan Card** button always works manually. The page holds a screen wake-lock so a mounted
-phone doesn't sleep.
+The phone page watches the camera at 5 fps. It fires when **something occupies the scan
+area and settles** (~half a second) — geometry doesn't matter; the server judges whether
+it's a card. The empty tray is learned at startup and re-learned automatically, so
+*removing* a card never triggers a scan, and a card is never rescanned until the scene
+changes. Tap **Area** once and drag a box around your tray — detection and captures crop
+to it, so clutter around the rig can't interfere. The page holds a screen wake-lock so a
+mounted phone doesn't sleep.
+
+Two modes: **Auto ON** is fully hands-free — cards identify, single-printing cards
+auto-file (marked ⚠), duplicates merge into quantity, and printing picks happen on the
+desktop. **Auto OFF + Scan Card** opens the printing picker right on the phone.
 
 Start the page with the tray **empty** — the first steady second seeds the "empty" reference.
 
 ### Face to Face pricing + price filter
 
 `mtg_card_scanner/facetoface.py` looks up live prices from Face to Face Games' public Shopify
-JSON endpoints (no API key) for the exact printing you select, by condition and foil. It's shown
-as **decision support** while you review — a transient F2F outage just shows "no listing", never
-breaks a scan.
+JSON endpoints (no API key), by condition and foil. A background **sweep** prices everything
+automatically (every 60s while work remains): selected scans get their exact printing priced;
+unpicked scans get **every** candidate printing priced so the price filter can hide them only
+on full knowledge. Fetching self-paces (slow start, speeds up on success, backs off on 429s,
+circuit-breaks and cools down if the storefront objects) and distinguishes "confirmed not
+listed" from "couldn't reach the store" — outages stay retryable and never break a scan.
+The header shows live sweep progress, pace, and a countdown to the next check; the 🐞 button
+opens a request-level log.
 
 The scan list has **Min $ / Max $** filters on the fetched F2F price. Cards outside the range
 are hidden from the list; **Exclude filtered** marks them all as not-included in the export in
@@ -167,7 +177,7 @@ Phone camera → POST /api/scan → card_detect.py (find + warp card)
 
 ## Prerequisites
 
-- Python 3.10+
+- Python 3.11+
 - ~2 GB free disk for the art index build (bulk JSON + cached images + index)
 - No GPU, no Ollama, no API keys
 
@@ -213,7 +223,7 @@ of a new card name is as fast as a repeat scan (otherwise that first scan waits 
 while the name's printing images download):
 
 ```bash
-python -m mtg_card_scanner.art_index prefetch-printings   # ~116k images, ~10 GB, ~4 h, resumable
+python -m mtg_card_scanner.art_index prefetch-printings   # ~100k paper images, ~2 GB, resumable
 ```
 
 The server runs fine before the index is built — scans just return "Art index not built" until

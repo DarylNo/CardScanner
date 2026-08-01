@@ -36,3 +36,9 @@ scans.db
 !tests/fixtures/**
 server.log
 scan_images/
+
+# Session logs / local build noise
+*.log
+tsc.out
+pkgtest.log
+.certs/

@@ -551,8 +551,8 @@ class ArtIndexBuilder:
         cache so rank_printings never waits on Scryfall at scan time.
 
         Uses the `default_cards` bulk (one entry per printing) and the same
-        `normal`-size URL preference as rank_printings.  ~115k images ≈ 10 GB,
-        ~4 h at the rate limit; resumable (existing files are skipped) and
+        `small`-size URL preference as rank_printings.  ~100k paper images
+        ≈ 2 GB; resumable (existing files are skipped) and
         incremental — re-run after new set releases to top up.
         """
         from mtg_card_scanner.visual_match import _DEFAULT_CACHE_DIR
@@ -653,7 +653,7 @@ def _cli() -> None:
 
     p_pref = sub.add_parser(
         "prefetch-printings",
-        help="predownload every printing's ranking image (~10 GB, ~4 h, resumable)",
+        help="predownload every paper printing's ranking image (~2 GB, resumable)",
     )
     p_pref.add_argument("--limit", type=int, default=None,
                         help="stop after N newly fetched images")
