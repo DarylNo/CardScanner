@@ -160,3 +160,32 @@ def test_unreachable_storefront_raises_not_none():
     down = FaceToFaceClient(get_json=lambda url: None)
     with _pytest.raises(F2FUnavailableError):
         down.get_price("Mold Folk", "clb", "133", foil=False)
+
+
+def test_429_backs_off_and_recovers(tmp_path, monkeypatch):
+    """Shopify's rate limit must be waited out, not treated as a failure —
+    persistent 429s made whole cards 'unavailable' every sweep."""
+    from mtg_card_scanner import facetoface as f2f_mod
+
+    sleeps = []
+    monkeypatch.setattr(f2f_mod.time, "sleep", lambda s: sleeps.append(s))
+    calls = []
+
+    class Resp:
+        def __init__(self, code):
+            self.status_code = code
+            self.headers = {}
+        def raise_for_status(self): pass
+        def json(self): return {"ok": True}
+
+    class Sess:
+        def __init__(self): self.headers = {}
+        def get(self, url, timeout=None):
+            calls.append(url)
+            return Resp(429 if len(calls) < 3 else 200)
+
+    monkeypatch.setattr(f2f_mod.requests, "Session", Sess)
+    get_json = f2f_mod._default_get_json(tmp_path)
+    assert get_json("http://x") == {"ok": True}
+    assert len(calls) == 3                      # two 429s, then success
+    assert any(s >= 2.0 for s in sleeps)        # real backoff, not the 0.8s blip retry

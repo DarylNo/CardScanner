@@ -32,7 +32,11 @@ import requests
 
 _BASE = "https://facetofacegames.com"
 _USER_AGENT = "MTGCardScanner/1.0 facetoface (contact: your-email@example.com)"
-_MIN_DELAY = 0.15          # ~6 req/s — polite to the storefront
+# Shopify's storefront /products/*.json runs a ~2 req/s leaky bucket: at the
+# old 0.15s spacing a sweep tripped it and every quick retry 429'd too, so
+# whole cards went "unavailable" each pass (observed live: persistent 429s on
+# duskhunter-bat/hunt-for-specimens while a lone curl returned 200).
+_MIN_DELAY = 0.5           # ~2 req/s — matches the storefront's real bucket
 _TIMEOUT = 8               # fail fast rather than hang a scan
 _SUGGEST_LIMIT = 10
 _DEFAULT_CACHE_DIR = Path.home() / ".cache" / "mtg-card-scanner" / "facetoface"
@@ -185,22 +189,31 @@ def _default_get_json(cache_dir: Path) -> Callable[[str], Any]:
                 return json.loads(cached.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             pass                       # torn/corrupt entry → refetch below
-        # The storefront intermittently rejects a request (bot protection,
-        # blips) — observed live returning fine on the very next attempt. One
-        # retry turns most of those into a hit; failures are LOGGED, because a
-        # silent None here reads as "card not listed" in the UI, which is
-        # misleading when the card is in fact in stock.
+        # Failure handling, tuned to the two real failure modes observed:
+        #   429 (rate limit) — retryable, but only REAL waiting helps: honor
+        #   Retry-After, else back off 2s/4s/6s across up to 4 attempts.
+        #   Anything else (network blip, 5xx) — one quick retry, then give up;
+        #   failures are LOGGED because a silent None reads as "not listed".
         last_error = ""
-        for attempt in (1, 2):
+        for attempt in (1, 2, 3, 4):
             _throttle()
             try:
                 resp = session.get(url, timeout=_TIMEOUT)
+                if resp.status_code == 429:
+                    last_error = "429 Too Many Requests"
+                    try:
+                        wait = float(resp.headers.get("Retry-After") or 0)
+                    except ValueError:
+                        wait = 0.0
+                    time.sleep(min(max(wait, 2.0 * attempt), 15.0))
+                    continue
                 resp.raise_for_status()
                 data = resp.json()
             except (requests.RequestException, ValueError) as exc:
                 last_error = f"{type(exc).__name__}: {exc}"
-                if attempt == 1:
-                    time.sleep(0.8)
+                if attempt >= 2:
+                    break
+                time.sleep(0.8)
                 continue
             tmp = cached.with_suffix(f".{os.getpid()}.{threading.get_ident()}.tmp")
             try:
