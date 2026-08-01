@@ -216,7 +216,7 @@ function setStatus(msg, cls='') { statusEl.textContent = msg; statusEl.className
 // UI_VERSION identifies THIS page; the fetched hash identifies the server.
 // Both are shown so a stale cached page (which cost a debugging round once)
 // is visible at a glance. Bump UI_VERSION on every phone.html change.
-const UI_VERSION = 'v4';
+const UI_VERSION = 'v5';
 fetch('/api/version').then(r => r.json())
   .then(d => { document.getElementById('ver').textContent = `${UI_VERSION} · ${d.version}`; })
   .catch(() => { document.getElementById('ver').textContent = UI_VERSION; });
@@ -503,6 +503,7 @@ function detectBox(cur) {
     }
   }
   if (!n) return null;
+  const maskFrac = n / (MW * MH);   // how much of the scan area holds ANYTHING
   const rMax = Math.max(...rows), cMax = Math.max(...cols);
   // Dense core (the card body), then grow outward through anything still
   // carrying mass — stops at clean tray rows, so a detached shadow band or
@@ -529,40 +530,23 @@ function detectBox(cur) {
   const w = cband.b - cband.a + 1, h = rband.b - rband.a + 1;
   return {
     x: cband.a, y: rband.a, w, h,
+    maskFrac,                         // total mask coverage of the scan area
     areaFrac: (w * h) / (MW * MH),    // how much of the frame the box covers
-    density: m / (w * h),             // how solid the box is (card ≈ solid)
-    texFrac: tex / (w * h),           // printed-detail fraction (card ≫ holder)
-    aspect: w / h,
-    ratio: Math.max(w, h) / Math.min(w, h),   // orientation-agnostic shape
+    density: m / (w * h),             // how solid the box is
+    texFrac: tex / (w * h),           // printed-detail fraction inside the box
   };
 }
 
-function looksLikeCard(b) {
-  // These bars are deliberately LOOSE. The server now rejects non-cards by
-  // content (interior-texture gate + blank-surface guard + art-distance
-  // threshold), and a false fire costs one cleanly-rejected roundtrip — but a
-  // missed fire silently costs the user a card. Measured on the rig, a real
-  // sleeved card came in at ratio 1.03 / dens 25% / tex 4%: sleeve glare
-  // matches the white tray (hole in the mask → low density), wipes out local
-  // texture (low texFrac), and sleeve edges square the box off (ratio ~1).
-  // The old card-shaped windows (ratio>1.15, dens>0.35, tex>0.06) rejected
-  // exactly the thing we were built to scan.
-  //   ratio     — only reject long smears (a card box can be ~square in a sleeve)
-  //   density   — only reject sparse noise (glare holes are legitimate)
-  //   texFrac   — only reject fully-uniform objects (black holder: outline only)
-  return !!b && b.areaFrac > 0.03 && b.areaFrac < 0.95
-      && b.density > 0.15
-      && b.texFrac > 0.02
-      && b.ratio < 2.0;
-}
-
-function boxStable(a, b) {
-  // Borderline pixels at the box edge flicker frame-to-frame (especially
-  // where pale card regions meet the pale tray) — allow a little wobble.
-  if (!a || !b) return false;
-  return Math.abs(a.x - b.x) + Math.abs(a.y - b.y)
-       + Math.abs(a.w - b.w) + Math.abs(a.h - b.h) <= 7;
-}
+// The phone's ONLY question is "is something sitting in the tray, and has it
+// settled?" — the server locates and judges the card (quad detection with a
+// texture gate, blank-surface guard, art-distance thresholds). Three rounds
+// of tuning box-geometry bars (ratio/density/texture windows) each rejected
+// real cards under real conditions — sleeve glare hollowed the mask, sleeve
+// edges squared the box, tray-wall shadows dragged the box off the card
+// entirely. Geometry gating on a 176-px shadow-riddled mask was the wrong
+// altitude for this decision; occupancy + stillness is all the phone can
+// actually know, so that is all it checks now.
+const OCCUPIED_FRAC = 0.02;   // mask coverage that means "something is in the tray"
 
 // Draw the detected boundary on the preview (video is object-fit: contain,
 // so map sample coords → video coords → letterboxed display coords).
@@ -643,13 +627,13 @@ function tick() {
   }
 
   const box = detectBox(cur);
-  const cardish = looksLikeCard(box);
+  const occupied = !!box && box.maskFrac > OCCUPIED_FRAC;
 
   if (mode === 'watching') {
-    drawOverlay(box, cardish ? '#6ee7a0' : '#fbbf24');
-    if (cardish && boxStable(box, prevBox) && changedFrac(cur, prevFrame) < STABLE_FRAC) {
+    drawOverlay(box, occupied ? '#6ee7a0' : '#fbbf24');
+    if (occupied && changedFrac(cur, prevFrame) < STABLE_FRAC) {
       stableCount++;
-      dbg(`card ${(box.areaFrac*100).toFixed(0)}% ratio ${box.ratio.toFixed(2)} dens ${(box.density*100).toFixed(0)}% tex ${(box.texFrac*100).toFixed(0)}% steady ${stableCount}/${STABLE_FRAMES}`);
+      dbg(`occupied ${(box.maskFrac*100).toFixed(1)}% steady ${stableCount}/${STABLE_FRAMES}`);
       if (!DEBUG) setStatus('Card detected — hold still…');
       if (stableCount >= STABLE_FRAMES) {
         stableCount = 0;
@@ -660,21 +644,21 @@ function tick() {
       }
     } else {
       stableCount = 0;
-      if (box && !cardish) {
-        dbg(`not card-like: area ${(box.areaFrac*100).toFixed(0)}% ratio ${box.ratio.toFixed(2)} dens ${(box.density*100).toFixed(0)}% tex ${(box.texFrac*100).toFixed(0)}%`);
-      } else if (!box) {
-        dbg('watching — tray empty');
+      if (occupied) {
+        dbg(`occupied ${(box.maskFrac*100).toFixed(1)}% — settling`);
+      } else {
+        dbg(box ? `watching — mask ${(box.maskFrac*100).toFixed(1)}%` : 'watching — tray empty');
       }
       // Adaptive empty reference: truly empty and calm → slowly re-learn the
-      // tray so lighting drift never accumulates into phantom boxes.
-      if ((!box || box.areaFrac < EMPTY_FRAC) && prevFrame && changedFrac(cur, prevFrame) < STABLE_FRAC) {
+      // tray so lighting drift never accumulates into phantom occupancy.
+      if ((!box || box.maskFrac < EMPTY_FRAC) && prevFrame && changedFrac(cur, prevFrame) < STABLE_FRAC) {
         if (++emptyRefreshTick >= 25) { emptyRef = cur; emptyGrad = gradMap(cur); emptyRefreshTick = 0; }
       } else emptyRefreshTick = 0;
     }
   } else if (mode === 'awaitNext') {
     drawOverlay(box, '#8b93a1');
-    const removed = !box || box.areaFrac < EMPTY_FRAC;
-    const swapped = scannedFrame && cardish
+    const removed = !box || box.maskFrac < EMPTY_FRAC;
+    const swapped = scannedFrame && occupied
                  && changedFrac(cur, scannedFrame) > SWAP_FRAC
                  && changedFrac(cur, prevFrame) < STABLE_FRAC;
     if (removed || swapped) {
