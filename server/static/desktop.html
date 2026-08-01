@@ -118,6 +118,7 @@
 <body>
 <header>
   <h1>🃏 MTG Card Scanner</h1>
+  <span class="stat" id="dver" style="font-size:11px"></span>
   <span class="pill" id="phoneLink"></span>
   <span class="sp"></span>
   <span class="stat" id="sweepStat" style="color:var(--warn)"></span>
@@ -487,6 +488,12 @@ function sigOf(scan){
           scan.selection?.scryfall_id, scan.selection?.condition, scan.selection?.finish,
           scan.selection?.quantity, JSON.stringify(scan.f2f?.conditions||{}), scan.included].join("|");
 }
+
+// Version banner — page version · server git hash. Same rationale as the
+// phone: without it, "is this the old page?" is undebuggable.
+const UI_VERSION = "d2";
+jget("/api/version").then(d => { $("#dver").textContent = `${UI_VERSION} · ${d.version}`; })
+  .catch(() => { $("#dver").textContent = UI_VERSION; });
 
 async function poll(){
   try {
