@@ -14,6 +14,7 @@ a built art index (inject a fake pipeline).
 from __future__ import annotations
 
 import os
+import subprocess
 from pathlib import Path
 from typing import Any, Callable, Optional
 
@@ -28,6 +29,28 @@ from server.export import build_mx_export
 from server.store import ScanStore
 
 _STATIC = Path(__file__).parent / "static"
+
+
+def _git_version() -> str:
+    """Short commit hash of the running code, or 'unknown' outside a checkout."""
+    try:
+        return subprocess.check_output(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=Path(__file__).parent, text=True, timeout=5,
+            stderr=subprocess.DEVNULL,
+        ).strip()
+    except Exception:
+        return "unknown"
+
+
+# Resolved once at import — identifies the code THIS process is running, which
+# is exactly what the phone UI displays to prove it isn't a stale cached page
+# talking to an old server (a real debugging dead-end that burned us).
+APP_VERSION = _git_version()
+
+# The HTML pages must never be cached: the phone kept running a weeks-old
+# phone.html after a fix, which was invisible until a version number existed.
+_NO_STORE = {"Cache-Control": "no-store"}
 
 
 def _decode_image(data: bytes) -> Optional[np.ndarray]:
@@ -82,15 +105,19 @@ def create_app(
 
     @app.get("/")
     def desktop():
-        return FileResponse(_STATIC / "desktop.html")
+        return FileResponse(_STATIC / "desktop.html", headers=_NO_STORE)
 
     @app.get("/phone")
     def phone():
-        return FileResponse(_STATIC / "phone.html")
+        return FileResponse(_STATIC / "phone.html", headers=_NO_STORE)
 
     @app.get("/api/health")
     def health():
-        return {"ok": True}
+        return {"ok": True, "version": APP_VERSION}
+
+    @app.get("/api/version")
+    def version():
+        return {"version": APP_VERSION}
 
     # ── scan (phone → server) ──────────────────────────────────────────────────
     @app.post("/api/scan")
@@ -149,6 +176,40 @@ def create_app(
 
             background_tasks.add_task(_price_top, scan["id"], top)
         return scan
+
+    # ── batch pricing ──────────────────────────────────────────────────────────
+    @app.post("/api/scans/price-missing")
+    async def price_missing(background_tasks: BackgroundTasks):
+        """
+        Fetch an F2F price for every scan that doesn't have one yet — scans
+        that already carry prices are skipped.  Prices the SELECTED printing
+        when one is chosen, else the top-ranked candidate (same rule as the
+        per-scan background pricing at scan time).  Runs in the background;
+        the UIs pick prices up on their normal refresh polls.
+        """
+        targets: list[tuple[int, dict, bool]] = []
+        for s in store.list_scans():
+            if (s.get("f2f") or {}).get("conditions"):
+                continue                               # already priced — skip
+            printing = s.get("selection") or (s.get("candidates") or [None])[0]
+            if not printing or not printing.get("name"):
+                continue                               # nothing to price against
+            targets.append((s["id"], printing, bool(printing.get("foil", False))))
+
+        def _price_all(items: list[tuple[int, dict, bool]]) -> None:
+            for sid, c, foil in items:
+                try:
+                    p = f2f.get_price(c.get("name", ""), c.get("set", ""),
+                                      c.get("collector_number", ""), foil,
+                                      c.get("set_name", ""))
+                    if p:
+                        store.update_scan(sid, f2f=p.to_dict())
+                except Exception as exc:
+                    print(f"  [server] price-missing failed for #{sid}: {exc}")
+
+        if targets:
+            background_tasks.add_task(_price_all, targets)
+        return {"queued": len(targets)}
 
     @app.get("/api/scans/{scan_id}/image")
     def scan_image(scan_id: int):

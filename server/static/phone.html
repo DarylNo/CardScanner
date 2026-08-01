@@ -13,10 +13,12 @@
   }
   header { padding: 10px 14px; font-weight: 600; border-bottom: 1px solid #23262e;
            display: flex; align-items: center; justify-content: space-between; }
-  #scansBtn {
+  #scansBtn, #areaBtn {
     font-size: 14px; font-weight: 600; padding: 6px 12px; border: 0; border-radius: 8px;
     background: #23262e; color: #cbd2dc; flex: 0 0 auto; width: auto;
   }
+  #areaBtn.on { background: #1c2740; color: #cfe1ff; }
+  #ver { font-size: 11px; color: #7b8290; font-weight: 400; margin-left: 6px; }
   /* slide-over scans list */
   #scansPanel {
     position: fixed; inset: 0; background: #0f1115; z-index: 20; display: none;
@@ -72,7 +74,8 @@
   .msrow button { flex: 0 0 auto; width: auto; font-size: 14px; padding: 8px 14px; background: #23262e; color: #cbd2dc; }
   .subhead { font-size: 13px; color: #8b93a1; margin: 14px 0 8px; font-weight: 600; }
   .dangerbtn { background: #3a1c1c; color: #fca5a5; font-size: 14px; padding: 10px; margin-top: 18px; }
-  #stage { position: relative; flex: 1; background: #000; overflow: hidden; }
+  /* touch-action none: pointer-drag must reach the scan-area setter, not scroll */
+  #stage { position: relative; flex: 1; background: #000; overflow: hidden; touch-action: none; }
   /* contain, not cover: the preview must show EXACTLY the frame that gets
      captured — cover was hiding parts of the card that the scan then saw */
   video { width: 100%; height: 100%; object-fit: contain; }
@@ -102,8 +105,11 @@
 </style>
 </head>
 <body>
-  <header>📷 Scanner — point at a card
-    <button id="scansBtn">Scans</button>
+  <header><span>📷 Scanner<span id="ver"></span></span>
+    <span style="display:flex;gap:6px">
+      <button id="areaBtn">Area</button>
+      <button id="scansBtn">Scans</button>
+    </span>
   </header>
   <div id="scansPanel">
     <header>🃏 Scanned cards
@@ -122,6 +128,7 @@
     </div>
     <div id="scansStat"></div>
     <div id="priceBar" style="border-top:1px solid #23262e">
+      <button id="p-fill" style="background:#23262e;color:#cbd2dc">Price missing</button>
       <button id="clr-junk" style="background:#23262e;color:#cbd2dc">Clear unpicked</button>
       <button id="clr-all" style="background:#3a1c1c;color:#fca5a5">Clear all</button>
     </div>
@@ -205,6 +212,109 @@ let stableCount = 0, bootCount = 0, emptyRefreshTick = 0;
 
 function setStatus(msg, cls='') { statusEl.textContent = msg; statusEl.className = cls; }
 
+// ── version banner ───────────────────────────────────────────────────────────
+// UI_VERSION identifies THIS page; the fetched hash identifies the server.
+// Both are shown so a stale cached page (which cost a debugging round once)
+// is visible at a glance. Bump UI_VERSION on every phone.html change.
+const UI_VERSION = 'v3';
+fetch('/api/version').then(r => r.json())
+  .then(d => { document.getElementById('ver').textContent = `${UI_VERSION} · ${d.version}`; })
+  .catch(() => { document.getElementById('ver').textContent = UI_VERSION; });
+
+// ── scan area (ROI) ──────────────────────────────────────────────────────────
+// The rig camera sees far more than the tray — couch, floor, storage boxes —
+// and anything dark or textured out there can grab the detection box while
+// the actual card sits ignored in the tray (observed: box locked onto the
+// couch, card scanned as garbage). The mount is fixed, so the user drags a
+// box around the tray ONCE; it persists in localStorage and EVERYTHING —
+// motion sampling, box detection, and the uploaded capture itself — is
+// cropped to it. Tap Area to set it; tap again to clear.
+let roi = null;              // {x0,y0,x1,y1} as video-frame fractions, or null
+try { roi = JSON.parse(localStorage.getItem('scanROI') || 'null'); } catch (e) { roi = null; }
+let settingArea = false, dragA = null, dragB = null;
+const areaBtn = document.getElementById('areaBtn');
+
+function roiRect() {         // ROI in video pixels (whole frame when unset)
+  const vw = video.videoWidth, vh = video.videoHeight;
+  if (!roi) return { x: 0, y: 0, w: vw, h: vh };
+  return { x: roi.x0 * vw, y: roi.y0 * vh,
+           w: (roi.x1 - roi.x0) * vw, h: (roi.y1 - roi.y0) * vh };
+}
+
+// Display mapping for the object-fit:contain letterboxed video.
+function contain() {
+  const cw = overlay.clientWidth, ch = overlay.clientHeight;
+  const s = Math.min(cw / video.videoWidth, ch / video.videoHeight);
+  return { s, ox: (cw - video.videoWidth * s) / 2, oy: (ch - video.videoHeight * s) / 2 };
+}
+
+function resetDetection(msg) {
+  emptyRef = null; emptyGrad = null; prevFrame = null; prevBox = null;
+  bootCount = 0; stableCount = 0; emptyRefreshTick = 0; mode = 'watching';
+  if (msg) setStatus(msg);
+}
+
+function updateAreaBtn() {
+  areaBtn.textContent = settingArea ? 'Cancel' : roi ? 'Area ✓' : 'Area';
+  areaBtn.classList.toggle('on', !!roi && !settingArea);
+}
+
+areaBtn.addEventListener('click', () => {
+  if (settingArea) {
+    settingArea = false; dragA = dragB = null;
+    updateAreaBtn(); setStatus('Scan area unchanged.');
+    return;
+  }
+  if (roi) {
+    roi = null; localStorage.removeItem('scanROI');
+    updateAreaBtn();
+    resetDetection('Scan area cleared — full frame. Empty the tray to re-learn…');
+    return;
+  }
+  settingArea = true; updateAreaBtn();
+  setStatus('Drag a box around the tray…');
+});
+
+const stageEl = document.getElementById('stage');
+const stagePt = e => {
+  const b = stageEl.getBoundingClientRect();
+  return { x: e.clientX - b.left, y: e.clientY - b.top };
+};
+stageEl.addEventListener('pointerdown', e => {
+  if (!settingArea) return;
+  dragA = dragB = stagePt(e);
+  stageEl.setPointerCapture(e.pointerId);
+  e.preventDefault();
+});
+stageEl.addEventListener('pointermove', e => {
+  if (!settingArea || !dragA) return;
+  dragB = stagePt(e);
+  drawOverlay(null);           // repaints the drag rectangle
+});
+stageEl.addEventListener('pointerup', e => {
+  if (!settingArea || !dragA) return;
+  dragB = stagePt(e);
+  const { s, ox, oy } = contain();
+  const frac = p => ({
+    x: Math.min(1, Math.max(0, (p.x - ox) / s / video.videoWidth)),
+    y: Math.min(1, Math.max(0, (p.y - oy) / s / video.videoHeight)),
+  });
+  const a = frac(dragA), b = frac(dragB);
+  const cand = { x0: Math.min(a.x, b.x), y0: Math.min(a.y, b.y),
+                 x1: Math.max(a.x, b.x), y1: Math.max(a.y, b.y) };
+  settingArea = false; dragA = dragB = null;
+  // A sliver is a mis-drag, not a tray.
+  if (cand.x1 - cand.x0 < 0.08 || cand.y1 - cand.y0 < 0.08) {
+    updateAreaBtn(); setStatus('Area too small — tap Area and drag again.', 'err');
+    return;
+  }
+  roi = cand;
+  localStorage.setItem('scanROI', JSON.stringify(roi));
+  updateAreaBtn();
+  resetDetection('Scan area set ✓ Empty the tray to re-learn it…');
+});
+updateAreaBtn();
+
 async function startCamera() {
   if (!navigator.mediaDevices?.getUserMedia) {
     setStatus('Camera needs HTTPS. Open this page over https:// (see README).', 'err');
@@ -235,11 +345,15 @@ document.addEventListener('visibilitychange', () => {
 acquireWakeLock();
 
 // ── frame capture (full-res burst for the server) ────────────────────────────
+// Cropped to the scan area: the server should never even see the couch — a
+// card that is ~2.5% of the full frame becomes 15-25% of the tray crop, which
+// is what quad detection and the art hashes actually want.
 function grabFrame() {
-  const scale = Math.min(1, MAX_UPLOAD_DIM / Math.max(video.videoWidth, video.videoHeight));
-  const w = Math.round(video.videoWidth * scale), h = Math.round(video.videoHeight * scale);
+  const r = roiRect();
+  const scale = Math.min(1, MAX_UPLOAD_DIM / Math.max(r.w, r.h));
+  const w = Math.round(r.w * scale), h = Math.round(r.h * scale);
   canvas.width = w; canvas.height = h;
-  canvas.getContext('2d').drawImage(video, 0, 0, w, h);
+  canvas.getContext('2d').drawImage(video, r.x, r.y, r.w, r.h, 0, 0, w, h);
   return new Promise(res => canvas.toBlob(b => res(b), 'image/jpeg', JPEG_QUALITY));
 }
 
@@ -282,15 +396,16 @@ async function scanOnce() {
 // ── frame sampling + card boundary detection ─────────────────────────────────
 function sampleSmallGray() {
   if (!video.videoWidth) return null;
-  const wantMH = Math.max(48, Math.round(MW * video.videoHeight / video.videoWidth));
+  const r = roiRect();                 // sample the scan area only
+  const wantMH = Math.max(48, Math.round(MW * r.h / r.w));
   if (wantMH !== MH) {
-    // Video aspect (re)learned — old references are in the wrong geometry.
+    // Sample aspect (re)learned — old references are in the wrong geometry.
     MH = wantMH;
     emptyRef = null; emptyGrad = null; prevFrame = null; prevBox = null; bootCount = 0;
   }
   motion.width = MW; motion.height = MH;
   const ctx = motion.getContext('2d', { willReadFrequently: true });
-  ctx.drawImage(video, 0, 0, MW, MH);
+  ctx.drawImage(video, r.x, r.y, r.w, r.h, 0, 0, MW, MH);
   const { data } = ctx.getImageData(0, 0, MW, MH);
   const gray = new Uint8ClampedArray(MW * MH);
   for (let i = 0, j = 0; j < gray.length; i += 4, j++) {
@@ -456,11 +571,27 @@ function drawOverlay(box, color, captured = false) {
   if (overlay.height !== ch) overlay.height = ch;
   const ctx = overlay.getContext('2d');
   ctx.clearRect(0, 0, cw, ch);
-  if (!box || !video.videoWidth) return;
-  const s = Math.min(cw / video.videoWidth, ch / video.videoHeight);
-  const ox = (cw - video.videoWidth * s) / 2, oy = (ch - video.videoHeight * s) / 2;
-  const fx = video.videoWidth / MW * s, fy = video.videoHeight / MH * s;
-  const bx = ox + box.x * fx, by = oy + box.y * fy;
+  if (!video.videoWidth) return;
+  const { s, ox, oy } = contain();
+
+  // Scan area: the drag-in-progress while setting, else the active outline —
+  // always visible so it's obvious what part of the view is being watched.
+  if (settingArea && dragA && dragB) {
+    ctx.strokeStyle = '#fbbf24'; ctx.lineWidth = 2; ctx.setLineDash([8, 6]);
+    ctx.strokeRect(Math.min(dragA.x, dragB.x), Math.min(dragA.y, dragB.y),
+                   Math.abs(dragB.x - dragA.x), Math.abs(dragB.y - dragA.y));
+    ctx.setLineDash([]);
+  } else if (roi) {
+    const r = roiRect();
+    ctx.strokeStyle = 'rgba(139,147,161,.85)'; ctx.lineWidth = 1.5; ctx.setLineDash([6, 6]);
+    ctx.strokeRect(ox + r.x * s, oy + r.y * s, r.w * s, r.h * s);
+    ctx.setLineDash([]);
+  }
+
+  if (!box) return;
+  const r = roiRect();
+  const fx = r.w / MW * s, fy = r.h / MH * s;
+  const bx = ox + r.x * s + box.x * fx, by = oy + r.y * s + box.y * fy;
   const bw = box.w * fx, bh = box.h * fy;
 
   ctx.beginPath();
@@ -493,7 +624,7 @@ function dbg(msg) { if (DEBUG) setStatus(msg); }
 
 // ── state machine: detect → show boundary → capture → analyze → await next ──
 function tick() {
-  if (!autoEnabled || mode === 'scanning') return;
+  if (!autoEnabled || mode === 'scanning' || settingArea) return;
   const cur = sampleSmallGray();
   if (!cur) return;
 
@@ -721,6 +852,23 @@ async function clearScans(only) {
 }
 document.getElementById('clr-junk').addEventListener('click', () => clearScans('unselected'));
 document.getElementById('clr-all').addEventListener('click', () => clearScans(null));
+
+// Backfill F2F prices for every scan that doesn't have one (already-priced
+// scans are skipped server-side). Prices land progressively via the normal
+// refresh poll while the panel is open.
+document.getElementById('p-fill').addEventListener('click', async () => {
+  const btn = document.getElementById('p-fill');
+  btn.disabled = true;
+  try {
+    const r = await jsend('/api/scans/price-missing', 'POST', {});
+    setStatus(r.queued
+      ? `Pricing ${r.queued} card${r.queued > 1 ? 's' : ''} in the background…`
+      : 'All scans already priced.', 'ok');
+  } finally {
+    setTimeout(() => { btn.disabled = false; }, 2000);
+  }
+  refreshScans();
+});
 
 document.getElementById('p-excl').addEventListener('click', async () => {
   // Bulk-exclude every priced, still-included scan the filter hides.

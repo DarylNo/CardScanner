@@ -128,7 +128,15 @@ def is_blank_surface(card_img: np.ndarray, detected: bool = True) -> bool:
     return std < _MIN_INTERIOR_STD or edge_frac < bar
 
 
-def find_card_quad(frame: np.ndarray, min_area_frac: float = 0.04) -> Optional[np.ndarray]:
+# A card sitting in the tray with the FULL camera frame around it can occupy
+# as little as ~2.5% of the frame (measured on the rig) — the old 4% floor
+# silently skipped it and fell back to a garbage centre crop. The floor only
+# exists to skip contour noise; the texture gate now rejects small false
+# quads, so it can sit well below any real card.
+_MIN_AREA_FRAC = 0.015
+
+
+def find_card_quad(frame: np.ndarray, min_area_frac: float = _MIN_AREA_FRAC) -> Optional[np.ndarray]:
     """
     Find the largest card-shaped quadrilateral in *frame*.
 
@@ -206,7 +214,7 @@ def _centre_crop_fallback(frame: np.ndarray) -> np.ndarray:
     return cv2.resize(crop, (CARD_W, CARD_H), interpolation=cv2.INTER_CUBIC)
 
 
-def extract_card(frame: np.ndarray, min_area_frac: float = 0.04) -> tuple[np.ndarray, bool]:
+def extract_card(frame: np.ndarray, min_area_frac: float = _MIN_AREA_FRAC) -> tuple[np.ndarray, bool]:
     """
     Detect, warp, and return the card region.
 

@@ -60,7 +60,19 @@ def _jpeg_bytes():
 
 
 def test_health(client):
-    assert client.get("/api/health").json() == {"ok": True}
+    body = client.get("/api/health").json()
+    assert body["ok"] is True
+    assert body["version"]          # non-empty — git hash or "unknown"
+
+
+def test_version_endpoint(client):
+    assert client.get("/api/version").json()["version"]
+
+
+def test_html_pages_are_never_cached(client):
+    """A stale cached phone.html hid a fix once — both pages must say no-store."""
+    for path in ("/", "/phone"):
+        assert client.get(path).headers["cache-control"] == "no-store"
 
 
 def test_scan_creates_candidates(client):
@@ -207,6 +219,46 @@ def test_delete_all_can_keep_selected(client):
     left = client.get("/api/scans").json()
     assert [s["id"] for s in left] == [ids[0]]
     assert left[0]["status"] == "selected"
+
+
+class FlakyF2F:
+    """No prices until enabled — creates unpriced scans, then priceable ones."""
+
+    def __init__(self):
+        self.enabled = False
+        self.calls = 0
+
+    def get_price(self, name, set_code, collector_number, foil=False, set_name=""):
+        self.calls += 1
+        if not self.enabled:
+            return None
+        return F2FPrice(name=name, set_code=set_code, collector_number=collector_number,
+                        foil=foil, handle="h", url="http://f2f/h",
+                        conditions={"NM": 1.99})
+
+
+def test_price_missing_fills_unpriced_and_skips_priced(tmp_path):
+    f2f = FlakyF2F()
+    app = create_app(pipeline_factory=lambda: FakePipeline(),
+                     store=ScanStore(tmp_path / "s.db"), f2f=f2f,
+                     scan_images_dir=tmp_path / "imgs")
+    c = TestClient(app)
+
+    # Scan-time pricing returns nothing → three unpriced scans.
+    for _ in range(3):
+        c.post("/api/scan", files={"files": ("c.jpg", _jpeg_bytes(), "image/jpeg")})
+    assert all(not s.get("f2f") for s in c.get("/api/scans").json())
+
+    f2f.enabled = True
+    r = c.post("/api/scans/price-missing")
+    assert r.json()["queued"] == 3
+    scans = c.get("/api/scans").json()   # TestClient runs background tasks inline
+    assert all(s["f2f"]["conditions"] == {"NM": 1.99} for s in scans)
+
+    # Second pass: everything is priced now, so nothing is queued or fetched.
+    calls_before = f2f.calls
+    assert c.post("/api/scans/price-missing").json()["queued"] == 0
+    assert f2f.calls == calls_before
 
 
 def test_delete_all_removes_scan_images(client, tmp_path):
