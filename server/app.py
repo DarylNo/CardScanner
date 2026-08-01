@@ -22,7 +22,7 @@ from typing import Any, Callable, Optional
 
 import cv2
 import numpy as np
-from fastapi import BackgroundTasks, Body, FastAPI, File, UploadFile
+from fastapi import BackgroundTasks, Body, FastAPI, File, Request, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -42,7 +42,12 @@ def _git_version() -> str:
             stderr=subprocess.DEVNULL,
         ).strip()
     except Exception:
-        return "unknown"
+        # Packaged installs have no git checkout — use the package version.
+        try:
+            from importlib.metadata import version as _pkg_version
+            return "v" + _pkg_version("mtg-card-scanner")
+        except Exception:
+            return "unknown"
 
 
 # Resolved once at import — identifies the code THIS process is running, which
@@ -121,6 +126,66 @@ def create_app(
     @app.get("/api/version")
     def version():
         return {"version": APP_VERSION}
+
+    # ── first-run setup ────────────────────────────────────────────────────────
+    # A fresh install has no art index; the desktop shows a Build button with
+    # live progress instead of pointing users at a CLI command.
+    setup = {"building": False, "error": None}
+    _EXPECTED_INDEX = 49500          # display denominator (approx artwork count)
+
+    def _index_count() -> int:
+        try:
+            from mtg_card_scanner.art_index import ArtIndex
+            return ArtIndex().count()
+        except Exception:
+            return 0
+
+    @app.get("/api/setup/status")
+    def setup_status():
+        count = _index_count()
+        return {
+            "index_built": count > 1000 and not setup["building"],
+            "indexed": count,
+            "total": _EXPECTED_INDEX,
+            "building": setup["building"],
+            "error": setup["error"],
+        }
+
+    @app.post("/api/setup/build-index")
+    def setup_build_index():
+        if setup["building"]:
+            return {"started": False, "already_running": True}
+
+        def _build() -> None:
+            try:
+                from mtg_card_scanner.art_index import ArtIndexBuilder
+                ArtIndexBuilder().build()
+                setup["error"] = None
+                # The lazily-built pipeline may hold an empty index — force a
+                # reload so the first scan after building actually works.
+                _pipeline["instance"] = None
+            except Exception as exc:
+                setup["error"] = str(exc)
+                print(f"  [server] index build failed: {exc}")
+            finally:
+                setup["building"] = False
+
+        setup["building"] = True
+        setup["error"] = None
+        threading.Thread(target=_build, daemon=True, name="index-build").start()
+        return {"started": True}
+
+    @app.get("/api/phone-qr")
+    def phone_qr(request: Request):
+        """QR of the phone URL — point the phone camera at the desktop screen."""
+        import io
+        import segno
+        from mtg_card_scanner.launch import lan_ip
+        port = request.url.port or 8443
+        buf = io.BytesIO()
+        segno.make(f"https://{lan_ip()}:{port}/phone").save(
+            buf, kind="svg", scale=6, dark="#e8eaed", light="#171a21")
+        return Response(buf.getvalue(), media_type="image/svg+xml", headers=_NO_STORE)
 
     # ── live debug peek ────────────────────────────────────────────────────────
     # The camera stream is local to the phone browser; these two endpoints

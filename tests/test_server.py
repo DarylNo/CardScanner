@@ -381,3 +381,12 @@ def test_delete_all_removes_scan_images(client, tmp_path):
     assert client.get(f"/api/scans/{scan['id']}/image").status_code == 200
     client.post("/api/scans/delete-all", json={})
     assert client.get(f"/api/scans/{scan['id']}/image").status_code == 404
+
+
+def test_setup_status_and_qr(client):
+    st = client.get("/api/setup/status").json()
+    assert set(st) >= {"index_built", "indexed", "total", "building", "error"}
+    assert st["building"] is False
+    qr = client.get("/api/phone-qr")
+    assert qr.status_code == 200
+    assert qr.headers["content-type"].startswith("image/svg")

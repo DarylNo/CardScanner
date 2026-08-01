@@ -21,13 +21,47 @@ Because a card's art is shared across many printings, art-matching intentionally
 *ranked set of candidates* rather than one guess — you choose the correct printing (set +
 collector number), which is what downstream pricing and export depend on.
 
-### Run it
+### Install & run (one command)
+
+```bash
+pipx install git+https://github.com/DarylNo/CardScanner   # or: pip install .
+mtg-card-scanner
+```
+
+The launcher does everything `run_server.sh` used to require by hand:
+
+- generates the HTTPS certificate automatically (phones only allow camera
+  access over HTTPS) — pure Python, no openssl needed;
+- opens the desktop UI in your browser;
+- prints the **phone URL with a QR code** — scan it with the phone camera
+  (or click the "Phone:" link on the desktop for an on-screen QR), accept the
+  one-time certificate warning, and mount the phone over a tray.
+
+**First run:** the desktop shows a **Build card database** banner (~1 hour,
+one-time, resumable — it downloads ~50k card artworks from Scryfall). Once it
+finishes, scanning works end to end: place a card in the tray → it identifies,
+auto-files single-printing cards, merges duplicates, and prices everything in
+the background → pick printings on the desktop → export.
+
+Data (scans, photos, certificates) lives in `~/.mtg-card-scanner/`; the art
+index cache in `~/.cache/mtg-card-scanner/`.
+
+Tips:
+- On the phone page tap **Area** and drag a box around your tray once —
+  detection and captures crop to it (couches and clutter stop mattering).
+- Windows asks to allow Python through the firewall on first launch — allow
+  it on private networks so the phone can reach the server.
+- `mtg-card-scanner --help` for port/data-dir options.
+
+<details>
+<summary>Manual / development run (the old way)</summary>
 
 ```bash
 pip install -r requirements.txt                # includes fastapi/uvicorn
 python -m mtg_card_scanner.art_index build     # one-time art index build (see below)
 ./run_server.sh                                # serves HTTPS on :8443 (generates a self-signed cert)
 ```
+</details>
 
 Then open, on the same LAN:
 

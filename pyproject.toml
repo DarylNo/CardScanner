@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mtg-card-scanner"
+version = "1.0.0"
+description = "Hands-free MTG card scanner: phone camera + local art-hash identification + pricing + export"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+dependencies = [
+    "fastapi>=0.110",
+    "uvicorn>=0.29",
+    "python-multipart>=0.0.9",
+    "opencv-python>=4.9",
+    "numpy>=2.0",          # np.bitwise_count
+    "pillow>=10.0",
+    "ImageHash>=4.3",
+    "requests>=2.31",
+    "cryptography>=42.0",  # self-signed TLS cert generation (no openssl binary)
+    "segno>=1.6",          # QR codes for connecting the phone
+]
+
+[project.scripts]
+mtg-card-scanner = "mtg_card_scanner.launch:main"
+
+[tool.setuptools]
+packages = ["mtg_card_scanner", "server"]
+
+[tool.setuptools.package-data]
+server = ["static/*.html"]

@@ -118,7 +118,7 @@
 <header>
   <h1>🃏 MTG Card Scanner</h1>
   <span class="stat" id="dver" style="font-size:11px"></span>
-  <span class="pill" id="phoneLink"></span>
+  <span class="pill" id="phoneLink" style="cursor:pointer" title="Click for a QR code to open the scanner on your phone"></span>
   <span class="sp"></span>
   <span class="stat" id="sweepStat" style="color:var(--warn)"></span>
   <button class="btn ghost sm" id="sweepStopBtn" style="display:none" title="Stop the price sweep (auto-sweep pauses 10 min; it restarts within a minute of pressing the phone's Price missing)">■ Stop</button>
@@ -128,6 +128,11 @@
   <button class="btn danger" id="clearAllBtn" title="Delete every scan">Clear all</button>
   <button class="btn" id="exportBtn">Export to Mana Exchange</button>
 </header>
+<div id="setupBanner" style="display:none;padding:14px 16px;background:#3f2d10;color:#fde68a;
+     border-bottom:1px solid var(--line);font-size:14px;align-items:center;gap:14px">
+  <b>First-run setup:</b>&nbsp;<span id="setupMsg">the card database isn't built yet.</span>
+  <button class="btn sm" id="setupBuildBtn" style="margin-left:10px">Build card database (~1 hour, one-time)</button>
+</div>
 <main>
   <div id="left">
     <div class="toolbar">
@@ -608,6 +613,36 @@ $("#clearJunkBtn").addEventListener("click", () => clearScans("unselected"));
 $("#clearAllBtn").addEventListener("click", () => clearScans(null));
 $("#exportBtn").addEventListener("click", () => { window.location = "/api/export"; });
 $("#phoneLink").textContent = "Phone: " + location.origin + "/phone";
+// Click the phone link -> QR code in the lightbox; point the phone camera at it.
+$("#phoneLink").addEventListener("click", () => openLightbox("/api/phone-qr"));
+
+/* ── first-run setup banner ─────────────────────────────────────────────── */
+async function checkSetup(){
+  try {
+    const st = await jget("/api/setup/status");
+    const banner = $("#setupBanner"), msg = $("#setupMsg"), btn = $("#setupBuildBtn");
+    if (st.index_built){ banner.style.display = "none"; return; }
+    banner.style.display = "flex";
+    if (st.building){
+      btn.disabled = true;
+      msg.textContent = `building card database — ${st.indexed.toLocaleString()} / ~${st.total.toLocaleString()} artworks indexed… (keep this window open)`;
+      setTimeout(checkSetup, 5000);
+    } else if (st.error){
+      btn.disabled = false;
+      msg.textContent = `build failed: ${st.error} — it resumes where it left off, try again.`;
+    } else {
+      btn.disabled = false;
+      msg.textContent = st.indexed > 0
+        ? `card database partially built (${st.indexed.toLocaleString()} artworks) — resume the build.`
+        : "the card database isn't built yet — scanning won't work until it is.";
+    }
+  } catch(e){ /* server starting up */ }
+}
+$("#setupBuildBtn").addEventListener("click", async () => {
+  await jsend("/api/setup/build-index", "POST", {});
+  checkSetup();
+});
+checkSetup();
 
 poll();
 setInterval(poll, 1500);

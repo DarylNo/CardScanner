@@ -10,3 +10,5 @@ Pillow>=9.0.0
 fastapi>=0.110.0
 uvicorn[standard]>=0.29.0
 python-multipart>=0.0.9     # multipart image upload from the phone
+cryptography>=42.0
+segno>=1.6

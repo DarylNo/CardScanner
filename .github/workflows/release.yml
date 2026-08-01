@@ -1,0 +1,28 @@
+# Build a double-clickable Windows exe on every version tag (v*).
+# NOTE: authored but not yet exercised in CI — verify the artifact boots
+# before announcing a release.
+name: release
+on:
+  push:
+    tags: ["v*"]
+jobs:
+  windows-exe:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install . pyinstaller
+      - run: >
+          pyinstaller --onefile --name mtg-card-scanner
+          --collect-data server
+          --collect-submodules uvicorn
+          scripts/pyinstaller_entry.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mtg-card-scanner-windows
+          path: dist/mtg-card-scanner.exe
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/mtg-card-scanner.exe
