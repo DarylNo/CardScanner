@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 # Columns whose values are dict/list and are stored as JSON text.
-_JSON_FIELDS = ("card_read", "confidence", "candidates", "selection", "f2f", "mx")
+_JSON_FIELDS = ("card_read", "confidence", "candidates", "selection", "f2f")
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS scans (
@@ -51,11 +51,6 @@ class ScanStore:
         self._lock = threading.Lock()
         with self._lock:
             self._conn.executescript(_SCHEMA)
-            # Migrate older DBs in place: mx holds Mana Exchange inventory
-            # prices per scryfall_id (JSON), fetched from the user's own store.
-            cols = {r[1] for r in self._conn.execute("PRAGMA table_info(scans)")}
-            if "mx" not in cols:
-                self._conn.execute("ALTER TABLE scans ADD COLUMN mx TEXT")
             self._conn.commit()
 
     # ── serialization helpers ──────────────────────────────────────────────────
@@ -125,7 +120,7 @@ class ScanStore:
         """Update whitelisted columns; dict/list fields are JSON-encoded."""
         allowed = {
             "status", "identified", "error", "card_read", "confidence",
-            "candidates", "selection", "f2f", "mx", "included",
+            "candidates", "selection", "f2f", "included",
         }
         sets, values = [], []
         for key, val in fields.items():

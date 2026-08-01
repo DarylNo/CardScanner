@@ -88,7 +88,6 @@ def create_app(
     pipeline_factory: Optional[Callable[[], Any]] = None,
     store: Optional[ScanStore] = None,
     f2f: Optional[Any] = None,
-    mx: Optional[Any] = None,
     scan_images_dir: Optional[Path] = None,
     auto_sweep_interval: Optional[float] = 60.0,
 ) -> FastAPI:
@@ -101,9 +100,6 @@ def create_app(
     if f2f is None:
         from mtg_card_scanner.facetoface import FaceToFaceClient
         f2f = FaceToFaceClient()
-    if mx is None:
-        from mtg_card_scanner.manaexchange import ManaExchangeClient
-        mx = ManaExchangeClient()
     pipeline_factory = pipeline_factory or _default_pipeline_factory()
 
     _pipeline: dict[str, Any] = {"instance": None}
@@ -312,23 +308,6 @@ def create_app(
             scan = await _apply_selection(scan["id"], cands[0], "NM", "Non-Foil", 1, auto=True)
             if scan.get("merged_into"):
                 return scan
-
-        # Mana Exchange inventory check: ONE batched call to our own store
-        # covers every candidate printing — "do I already stock this?" lands
-        # next to the F2F price in the review UI.
-        def _fetch_mx(scan_id: int, ids: list[str]) -> None:
-            try:
-                results = mx.get_prices(ids)
-                store.update_scan(scan_id, mx=results if results else {})
-            except Exception as exc:
-                print(f"  [server] MX lookup failed for #{scan_id}: {exc}")
-
-        mx_ids = [c.get("id", "") for c in cands]
-        sel_now = (scan.get("selection") or {}).get("scryfall_id")
-        if sel_now:
-            mx_ids.append(sel_now)
-        if mx_ids:
-            background_tasks.add_task(_fetch_mx, scan["id"], mx_ids)
 
         # Price the TOP-RANKED printing in the background so the review lists
         # can show an F2F low-high range before a printing is even picked.
@@ -633,22 +612,6 @@ def create_app(
             if s.get("identified") and len(kept) == 1:
                 _apply_selection_core(s["id"], kept[0], "NM", "Non-Foil", 1, auto=True)
 
-    def _retro_fetch_mx() -> None:
-        """Backfill Mana Exchange inventory data for scans that predate it
-        (mx is NULL). One batched call per scan against our own store."""
-        for s in store.list_scans():
-            if s.get("mx") is not None:
-                continue
-            ids = [c.get("id", "") for c in (s.get("candidates") or [])]
-            sel = (s.get("selection") or {}).get("scryfall_id")
-            if sel:
-                ids.append(sel)
-            if not ids:
-                store.update_scan(s["id"], mx={})
-                continue
-            results = mx.get_prices(ids)
-            store.update_scan(s["id"], mx=results if results else {})
-
     # Auto-sweep: any unpriced work is picked up every minute without the user
     # pressing anything. A manual stop pauses it for 10 minutes; a manual
     # start clears the pause.
@@ -660,7 +623,6 @@ def create_app(
                 if sweep["active"]:
                     continue
                 _retro_fix_scans()
-                _retro_fetch_mx()
                 stopped_at = sweep.get("manual_stop_at")
                 if stopped_at is not None and time.monotonic() - stopped_at < 600:
                     continue
