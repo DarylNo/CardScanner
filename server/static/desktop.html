@@ -95,7 +95,6 @@
   .card { border: 2px solid transparent; border-radius: 10px; background: var(--card); padding: 8px; cursor: pointer; transition: border-color .1s, transform .1s; }
   .card:hover { border-color: var(--accent); transform: translateY(-2px); }
   .card.chosen { border-color: #22c55e; }
-  .card.best::after { content: 'closest'; position: absolute; }
   .card img { width: 100%; border-radius: 6px; display: block; background: var(--line); aspect-ratio: 5/7; object-fit: cover; }
   .card .t { font-size: 12px; margin-top: 6px; line-height: 1.35; }
   .card .t b { display: block; }
@@ -122,6 +121,7 @@
   <span class="pill" id="phoneLink"></span>
   <span class="sp"></span>
   <span class="stat" id="sweepStat" style="color:var(--warn)"></span>
+  <button class="btn ghost sm" id="sweepStopBtn" style="display:none" title="Stop the price sweep (auto-sweep pauses 10 min; it restarts within a minute of pressing the phone's Price missing)">■ Stop</button>
   <span class="stat" id="stats">—</span>
   <button class="btn ghost" id="refreshBtn" title="Reload now">↻</button>
   <button class="btn ghost" id="clearJunkBtn" title="Delete every scan that has no chosen printing">Clear unpicked</button>
@@ -176,8 +176,29 @@ function f2fBest(scan){
   const vals = Object.values(c); return vals.length ? Math.min(...vals) : null;
 }
 // Low–high across every listed condition — shown for pending scans too, since
+// Per-print F2F data on an unpicked scan (filled by the auto-sweeper).
+// searched is true once EVERY candidate print has a completed search — only
+// then may the price filter hide the card.
+function printInfo(s){
+  const cands = s.candidates || [];
+  const searched = cands.length > 0 && cands.every(c => c.f2f_conditions != null);
+  const vals = [];
+  for (const c of cands){
+    const v = Object.values(c.f2f_conditions || {});
+    if (v.length) vals.push(Math.min(...v));
+  }
+  return { searched, vals };
+}
+
 // the server prices the top-ranked printing in the background at scan time.
 function priceRange(scan){
+  if (scan.status !== "selected"){
+    const { vals } = printInfo(scan);
+    if (vals.length){
+      const lo = Math.min(...vals), hi = Math.max(...vals);
+      return lo === hi ? `$${lo.toFixed(2)}` : `$${lo.toFixed(2)}–$${hi.toFixed(2)}`;
+    }
+  }
   const vals = Object.values(scan.f2f?.conditions || {});
   if (!vals.length) return null;
   const lo = Math.min(...vals), hi = Math.max(...vals);
@@ -188,13 +209,18 @@ function priceOf(scan){
   const p = f2fBest(scan);
   return p == null ? null : Number(p);
 }
+const inBand = p => (priceMin == null || p >= priceMin) && (priceMax == null || p <= priceMax);
 function inPriceRange(scan){
   if (priceMin == null && priceMax == null) return true;
-  const p = priceOf(scan);
-  if (p == null) return true;              // unpriced never disappears
-  if (priceMin != null && p < priceMin) return false;
-  if (priceMax != null && p > priceMax) return false;
-  return true;
+  if (scan.status === "selected"){
+    const p = priceOf(scan);
+    return p == null ? true : inBand(p);   // unpriced never disappears
+  }
+  // Unpicked: hidden only when EVERY print it could be has been searched and
+  // none falls in the band — partial knowledge never hides a card.
+  const { searched, vals } = printInfo(scan);
+  if (!searched || !vals.length) return true;
+  return vals.some(inBand);
 }
 
 function thumbFor(scan){
@@ -222,7 +248,13 @@ function visibleScans(){
 
 function renderList(){
   const rows = visibleScans();
-  const sig = rows.map(s => [s.id,s.status,s.included,JSON.stringify(s.f2f?.conditions||{}),s.id===focusedId].join("~")).join("|");
+  // Sig must cover every rendered field: selection identity (re-picks swap
+  // name/set/number), condition/finish edits (the phone can PATCH these), etc.
+  const sig = rows.map(s => [s.id,s.status,s.included,s.selection?.quantity,
+    s.selection?.scryfall_id,s.selection?.condition,s.selection?.finish,
+    s.card_read?.name,s.error?'e':'',
+    s.selection?.auto_picked?'a':'',JSON.stringify(s.f2f?.conditions||{}),
+    printInfo(s).vals.join(";"),s.id===focusedId].join("~")).join("|");
   if (sig === listSig) { updateStats(); return; }
   listSig = sig;
 
@@ -232,9 +264,10 @@ function renderList(){
     const sub = sel
       ? `${(s.selection.set||"").toUpperCase()} #${s.selection.collector_number} · ${s.selection.condition} · ${s.selection.finish}`
       : `${(s.candidates||[]).length} printings`;
-    const pill = sel ? `<span class="pill sel">selected</span>`
-               : isProblem(s) ? `<span class="pill err">check</span>`
-               : `<span class="pill cand">pick</span>`;
+    const pill = sel
+      ? `<span class="pill sel" ${s.selection?.auto_picked ? 'title="auto-picked — only printing"' : ''}>${s.selection?.auto_picked ? '⚠ auto' : 'selected'}</span>`
+      : isProblem(s) ? `<span class="pill err">check</span>`
+      : `<span class="pill cand">pick</span>`;
     return `<div class="row ${s.id===focusedId?'active':''}" data-id="${s.id}">
       <img src="${esc(thumbFor(s))}" loading="lazy" onerror="this.style.visibility='hidden'">
       <div class="meta">
@@ -265,7 +298,8 @@ function renderList(){
 function updateStats(){
   const sel = scans.filter(s => s.status==="selected");
   const inc = sel.filter(s => s.included);
-  const total = inc.reduce((t,s) => t + (priceOf(s) ?? 0), 0);
+  // quantity matters: an auto-merged x3 row exports 3 copies
+  const total = inc.reduce((t,s) => t + (priceOf(s) ?? 0) * (s.selection?.quantity || 1), 0);
   $("#stats").innerHTML =
     `<b>${scans.length}</b> scans · <b>${scans.length-sel.length}</b> to pick · ` +
     `<b>${inc.length}</b> to export · <span class="money">$${total.toFixed(2)}</span>`;
@@ -318,10 +352,14 @@ function f2fBoxHtml(scan){
       : '';
     inner = `<div class="bigprice">${sel ? `$${f2fBest(scan) ?? '—'}` : `~${priceRange(scan)}`}${forLabel}</div>
       <table class="prices"><tr>${rows.map(([k])=>`<td>${esc(k)}</td>`).join("")}</tr>
-      <tr>${rows.map(([,v])=>`<td class="v">$${v}</td>`).join("")}</tr></table>
+      <tr>${rows.map(([,v])=>`<td class="v">$${Number(v).toFixed(2)}</td>`).join("")}</tr></table>
       ${scan.f2f?.url?`<a href="${esc(scan.f2f.url)}" target="_blank">View on Face to Face ↗</a>`:''}`;
+  } else if (!sel && printInfo(scan).vals.length){
+    // Pending scan with sweeper-filled per-print prices but no top-match f2f.
+    inner = `<div class="bigprice">~${priceRange(scan)} <span class="muted" style="font-size:13px;font-weight:400">(across its printings)</span></div>`;
   } else {
-    inner = `<div class="muted" style="font-size:13px;margin:4px 0">Not priced yet.</div>`;
+    inner = `<div class="muted" style="font-size:13px;margin:4px 0">${
+      scan.f2f ? 'No Face to Face listing found.' : 'Not priced yet.'}</div>`;
   }
   return `<div class="f2fbox">
     <div class="boxlabel">FACE TO FACE PRICE</div>
@@ -347,7 +385,7 @@ function renderDetail(){
       <div class="cap">your card · click to enlarge</div>
     </div>
     <div class="dinfo">
-      <div class="dname">${esc(titleFor(scan))}</div>
+      <div class="dname">${esc(titleFor(scan))}${sel?.auto_picked ? ` <span title="auto-picked — this card has only one printing; glance to confirm" style="color:var(--warn);font-size:16px;cursor:help">⚠</span>` : ''}</div>
       <div class="dsub">${sel
         ? `${esc(sel.set_name)} · ${esc((sel.set||'').toUpperCase())} #${esc(sel.collector_number)}`
         : `matched by art as <b>${esc(cr.name||'?')}</b> — pick the exact printing below`}</div>
@@ -402,9 +440,12 @@ function wireDetail(scan){
     el.style.opacity = ".5";
     const res = await jsend(`/api/scans/${scan.id}/select`, "POST", { printing, ...currentControls() });
     if (res.merged_into){
-      // Duplicate copy — folded into the existing row; follow it there.
+      // Duplicate copy — folded into the existing row; follow it there. Say
+      // so when that row is export-excluded, or the copy silently vanishes
+      // from the export with a toast implying it was filed.
       focusedId = res.merged_into;
-      toast(`Duplicate — merged into existing entry (now ×${res.selection?.quantity})`);
+      toast(`Duplicate — merged into existing entry (now ×${res.selection?.quantity})`
+            + (res.included === false ? ' — NOTE: that row is excluded from export' : ''));
     } else {
       toast(`Selected ${printing.set_name} #${printing.collector_number}`);
     }
@@ -422,10 +463,13 @@ function wireDetail(scan){
     btn.disabled = true; st.textContent = "Searching Face to Face…";
     try {
       const updated = await jsend(`/api/scans/${scan.id}/price`, "POST", {});
-      if (updated.error){
-        st.textContent = updated.error; btn.disabled = false;
-      } else if (updated.f2f_search === "not_found"){
+      // NOTE: on success this returns the full scan row, whose stored `error`
+      // column may carry an old art-match warning — success is "row came
+      // back", not "error field empty".
+      if (updated.f2f_search === "not_found"){
         st.textContent = "No listing found on Face to Face."; btn.disabled = false;
+      } else if (!updated.id){
+        st.textContent = updated.error || "Search failed."; btn.disabled = false;
       } else {
         await poll(); detailSig=""; renderDetail(); listSig=""; renderList();
         toast("Price updated");
@@ -486,12 +530,19 @@ function sigOf(scan){
   if (!scan) return "none";
   return [scan.id, scan.status, (scan.candidates||[]).length,
           scan.selection?.scryfall_id, scan.selection?.condition, scan.selection?.finish,
-          scan.selection?.quantity, JSON.stringify(scan.f2f?.conditions||{}), scan.included].join("|");
+          scan.selection?.quantity, scan.selection?.auto_picked, scan.error,
+          scan.f2f ? JSON.stringify(scan.f2f.conditions||{}) : "null",
+          printInfo(scan).vals.join(";"), scan.included].join("|");
 }
 
 // Version banner — page version · server git hash. Same rationale as the
 // phone: without it, "is this the old page?" is undebuggable.
-const UI_VERSION = "d2";
+const UI_VERSION = "d5";
+$("#sweepStopBtn").addEventListener("click", async () => {
+  await jsend("/api/price-sweep/stop", "POST", {});
+  toast("Sweep stopping — auto-sweep paused 10 min");
+  poll();
+});
 jget("/api/version").then(d => { $("#dver").textContent = `${UI_VERSION} · ${d.version}`; })
   .catch(() => { $("#dver").textContent = UI_VERSION; });
 
@@ -503,9 +554,11 @@ async function poll(){
     // Live sweep readout: which card the background pricer is searching on
     // F2F right now, progress, and measured ETA — it was invisible before.
     $("#sweepStat").textContent = sweep.active
-      ? `⟳ pricing ${sweep.done}/${sweep.total} — ${sweep.current || "…"}`
-        + (sweep.eta_s != null ? ` (~${sweep.eta_s}s left)` : "")
+      ? (sweep.cancelling ? `⟳ stopping…`
+         : `⟳ pricing ${sweep.done}/${sweep.total} — ${sweep.current || "…"}`
+           + (sweep.eta_s != null ? ` (~${sweep.eta_s}s left)` : ""))
       : "";
+    $("#sweepStopBtn").style.display = sweep.active && !sweep.cancelling ? "" : "none";
     const maxId = scans.reduce((m,s)=>Math.max(m,s.id), 0);
     if (maxId > lastMaxId){ focusedId = maxId; lastMaxId = maxId; detailSig = ""; }
     renderList();

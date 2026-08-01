@@ -49,6 +49,19 @@ class TestGetAllPrintings:
             out = client.get_all_printings("Lightning Bolt")
         assert [c["id"] for c in out] == ["paper", "legacy-no-games"]
 
+    def test_drops_art_series_and_tokens(self):
+        """Art cards share the card's exact name via include_extras — they are
+        not sellable printings and must not appear in the pick grid."""
+        cards = [
+            {"id": "real", "games": ["paper"], "layout": "normal", "image_uris": {"small": "u"}},
+            {"id": "art", "games": ["paper"], "layout": "art_series", "image_uris": {"small": "u"}},
+            {"id": "tok", "games": ["paper"], "layout": "token", "image_uris": {"small": "u"}},
+        ]
+        client = ScryfallClient()
+        with patch.object(client._session, "get", return_value=_ok({"data": cards})):
+            out = client.get_all_printings("Lightning Bolt")
+        assert [c["id"] for c in out] == ["real"]
+
     def test_grafts_dfc_face_images(self):
         cards = [{"id": "dfc", "games": ["paper"],
                   "card_faces": [{"image_uris": {"small": "front"}}]}]

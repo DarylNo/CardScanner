@@ -257,15 +257,19 @@ class Pipeline:
             }
 
         # ── fetch printings + rank by art ─────────────────────────────────────
+        # except Exception, not just ScryfallError: _get only wraps 404s — a
+        # timeout / 429 / 5xx surfaces as a requests exception, which used to
+        # escape here and turn a perfectly good identification into an HTTP
+        # 500 with the scan dropped entirely.
         try:
             candidates = self._ranked_candidates(frames[0], best["name"], top_n)
-        except ScryfallError as exc:
+        except Exception as exc:
             return {
                 "identified": True,
                 "card_read": read_dict,
                 "confidence": confidence,
                 "candidates": [],
-                "error": f"No printings found for '{_safe(best['name'])}': {_safe(str(exc))}",
+                "error": f"Printings lookup failed for '{_safe(best['name'])}': {_safe(str(exc))}",
             }
 
         return {

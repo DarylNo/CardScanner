@@ -48,7 +48,8 @@ class FakeF2F:
 def client(tmp_path):
     app = create_app(pipeline_factory=lambda: FakePipeline(),
                      store=ScanStore(tmp_path / "s.db"), f2f=FakeF2F(),
-                     scan_images_dir=tmp_path / "scan_images")
+                     scan_images_dir=tmp_path / "scan_images",
+                     auto_sweep_interval=None)
     return TestClient(app)
 
 
@@ -305,28 +306,74 @@ def test_price_status_endpoint(client):
     assert st["current"] == ""
 
 
-def test_price_missing_fills_unpriced_and_skips_priced(tmp_path):
+def test_price_missing_prices_every_print_of_unpicked(tmp_path):
+    """Unpicked scans get EVERY candidate print priced (so the price filter
+    can hide them only on full knowledge); completed searches — even empty
+    ones — are never re-queued."""
     f2f = FlakyF2F()
     app = create_app(pipeline_factory=lambda: FakePipeline(),
                      store=ScanStore(tmp_path / "s.db"), f2f=f2f,
-                     scan_images_dir=tmp_path / "imgs")
+                     scan_images_dir=tmp_path / "imgs",
+                     auto_sweep_interval=None)
     c = TestClient(app)
-
-    # Scan-time pricing returns nothing → three unpriced scans.
     for _ in range(3):
         c.post("/api/scan", files={"files": ("c.jpg", _jpeg_bytes(), "image/jpeg")})
-    assert all(not s.get("f2f") for s in c.get("/api/scans").json())
 
     f2f.enabled = True
     r = c.post("/api/scans/price-missing")
-    assert r.json()["queued"] == 3
-    scans = c.get("/api/scans").json()   # TestClient runs background tasks inline
-    assert all(s["f2f"]["conditions"] == {"NM": 1.99} for s in scans)
+    assert r.json()["queued"] == 6              # 3 pending scans × 2 prints
+    for s in c.get("/api/scans").json():        # background runs inline
+        assert all(cc["f2f_conditions"] == {"NM": 1.99} for cc in s["candidates"])
 
-    # Second pass: everything is priced now, so nothing is queued or fetched.
     calls_before = f2f.calls
     assert c.post("/api/scans/price-missing").json()["queued"] == 0
     assert f2f.calls == calls_before
+
+
+def test_failed_print_search_is_not_requeued(tmp_path):
+    """A search that finds no listing records an empty result — the sweeper
+    must not hammer F2F for the same unlisted prints every minute."""
+    f2f = FlakyF2F()                            # disabled → all searches miss
+    app = create_app(pipeline_factory=lambda: FakePipeline(),
+                     store=ScanStore(tmp_path / "s.db"), f2f=f2f,
+                     scan_images_dir=tmp_path / "imgs",
+                     auto_sweep_interval=None)
+    c = TestClient(app)
+    c.post("/api/scan", files={"files": ("c.jpg", _jpeg_bytes(), "image/jpeg")})
+    assert c.post("/api/scans/price-missing").json()["queued"] == 2
+    (scan,) = c.get("/api/scans").json()
+    assert all(cc["f2f_conditions"] == {} for cc in scan["candidates"])
+    assert c.post("/api/scans/price-missing").json()["queued"] == 0
+
+
+class SingleCandPipeline(FakePipeline):
+    def scan_candidates(self, frames, top_n=12):
+        out = dict(super().scan_candidates(frames, top_n))
+        out["candidates"] = [CANDIDATES[0]]
+        return out
+
+
+def test_single_printing_auto_picks_with_flag(tmp_path):
+    """One printing → nothing to choose: auto-selected NM/Non-Foil ×1 with
+    auto_picked set; a second copy folds in as quantity via auto-merge."""
+    app = create_app(pipeline_factory=lambda: SingleCandPipeline(),
+                     store=ScanStore(tmp_path / "s.db"), f2f=FakeF2F(),
+                     scan_images_dir=tmp_path / "imgs",
+                     auto_sweep_interval=None)
+    c = TestClient(app)
+    first = c.post("/api/scan", files={"files": ("c.jpg", _jpeg_bytes(), "image/jpeg")}).json()
+    assert first["status"] == "selected"
+    assert first["selection"]["auto_picked"] is True
+    assert first["selection"]["scryfall_id"] == "id-m10"
+
+    second = c.post("/api/scan", files={"files": ("c.jpg", _jpeg_bytes(), "image/jpeg")}).json()
+    assert second["merged_into"] == first["id"]
+    assert second["selection"]["quantity"] == 2
+    assert [s["id"] for s in c.get("/api/scans").json()] == [first["id"]]
+
+
+def test_sweep_stop_endpoint_when_idle(client):
+    assert client.post("/api/price-sweep/stop").json() == {"stopping": False}
 
 
 def test_delete_all_removes_scan_images(client, tmp_path):

@@ -25,26 +25,6 @@
   video { width:100%; height:100%; object-fit:contain; }
   #overlay { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
 
-  /* quick-pick strip: one-tap printing selection without leaving the camera */
-  #qp { flex:0 0 auto; border-top:1px solid var(--line); background:var(--panel);
-        padding:6px 10px 4px; display:none; }
-  #qp.open { display:block; }
-  #qpHead { display:flex; align-items:center; gap:8px; margin-bottom:6px; }
-  #qpName { font-weight:700; font-size:14px; flex:1; min-width:0; white-space:nowrap;
-            overflow:hidden; text-overflow:ellipsis; }
-  #qpHead select { padding:4px 6px; border-radius:6px; border:1px solid #2a2f3a;
-                   background:var(--bg); color:var(--text); font-size:12px; }
-  #qpMore { font-size:12px; font-weight:600; padding:5px 10px; border:0; border-radius:6px;
-            background:var(--line); color:#cbd2dc; }
-  #qpGrid { display:flex; gap:8px; overflow-x:auto; padding-bottom:4px; }
-  .qpc { flex:0 0 76px; border:2px solid transparent; border-radius:8px; background:var(--card);
-         padding:3px; text-align:center; }
-  .qpc img { width:100%; aspect-ratio:5/7; object-fit:cover; border-radius:5px;
-             background:var(--line); display:block; }
-  .qpc .t { font-size:10px; color:#cbd2dc; margin-top:2px; line-height:1.2; }
-  .qpc.chosen { border-color:#22c55e; }
-  .qpc.busy { opacity:.5; }
-
   footer { padding:8px 12px 12px; display:flex; flex-direction:column; gap:8px; flex:0 0 auto; }
   #recent { display:flex; gap:6px; overflow-x:auto; min-height:26px; }
   .chip { font-size:12px; padding:3px 10px; border-radius:999px; background:var(--line);
@@ -131,17 +111,6 @@
     <canvas id="overlay"></canvas>
   </div>
 
-  <!-- quick-pick: the last scan's top printings, one tap to select -->
-  <div id="qp">
-    <div id="qpHead">
-      <span id="qpName"></span>
-      <select id="qp-cond"></select>
-      <select id="qp-fin"></select>
-      <button id="qpMore">Details</button>
-    </div>
-    <div id="qpGrid"></div>
-  </div>
-
   <footer>
     <div id="recent"></div>
     <div id="status">Starting camera…</div>
@@ -149,7 +118,7 @@
       <button id="autoBtn">Auto: ON</button>
       <button id="shoot" disabled>Scan Card</button>
     </div>
-    <div class="hint">Place a card in the frame — it scans by itself. Tap a printing below to file it.</div>
+    <div class="hint">Place a card in the frame — it scans by itself. Pick printings on the desktop.</div>
   </footer>
 
   <div class="panel" id="scansPanel">
@@ -190,13 +159,14 @@
   <canvas id="motion" hidden></canvas>
 
 <script>
-/* ═══ REBUILT FOR SPEED (v9) ═══
-   - Quick-pick strip on the camera screen: the top match is the right printing
-     60% of the time (measured), so one tap files a card without ever opening
-     the Scans panel. Auto-merge folds duplicate copies into quantity.
+/* ═══ REBUILT FOR SPEED (v9+) ═══
+   - Scan-only camera flow: the phone scans and reports; printings are picked
+     on the DESKTOP (the on-phone picker was removed by request in v13).
+     Single-printing cards auto-file server-side; duplicates auto-merge.
    - Signature-diffed rendering: the old page rebuilt the whole list DOM on
      every 3s poll (flicker, scroll loss, battery). Every render target now
-     computes a cheap signature first and touches the DOM only on change.
+     computes a cheap signature first and touches the DOM only on change —
+     every field a row RENDERS must appear in its signature.
    - Overlay redraws only when the box/ROI actually moved.
    - Detection logic (occupancy trigger, AE-drift-cancelled stability, scan
      area) is carried over UNCHANGED from the tuned v6-v8 code. */
@@ -243,7 +213,7 @@ async function jsend(url, method, body) {
 }
 
 /* ── version banner — proves which page+server combo is running ────────────── */
-const UI_VERSION = 'v11';
+const UI_VERSION = 'v15';
 fetch('/api/version').then(r => r.json())
   .then(d => { $('#ver').textContent = `${UI_VERSION} · ${d.version}`; })
   .catch(() => { $('#ver').textContent = UI_VERSION; });
@@ -381,71 +351,24 @@ async function submitScan(frames) {
           && changedFrac(s, capturedScene) < SWAP_FRAC) {
         emptyRef = s; emptyGrad = gradMap(s);
       }
+    } else if (data.merged_into) {
+      // Single-printing card, repeat copy — auto-filed as +1 on the row.
+      setStatus(`✓ ${data.selection?.name} — duplicate, merged (now ×${data.selection?.quantity})`
+        + (data.included === false ? ' ⚠ row excluded from export' : ''), 'ok');
     } else if (data.identified) {
-      setStatus(`✓ ${data.card_read.name} — tap a printing below, or just scan the next.`, 'ok');
-      qpShow(data);
+      setStatus(data.selection?.auto_picked
+        ? `✓ ${data.card_read.name} — only one printing, auto-filed ⚠`
+        : `✓ ${data.card_read.name} — filed for desktop pick. Next card…`, 'ok');
     } else if ((data.candidates || []).length) {
-      // Unconfident, but the top guess's printings are attached — verify by
-      // eye and tap; the alternates and search live in Details.
-      setStatus(`? Best guess ${data.card_read?.name || '?'} — CHECK the card, tap if right.`, 'err');
-      qpShow(data, true);
+      setStatus(`? Best guess ${data.card_read?.name || '?'} — verify on desktop.`, 'err');
     } else {
       setStatus('✗ ' + (data.error || 'Could not read card. Try again.'), 'err');
-      qpHide();
     }
     refreshScans();
   } catch (e) {
     setStatus('Upload failed: ' + e.message, 'err');
   }
 }
-
-/* ── quick-pick strip ──────────────────────────────────────────────────────── */
-const qp = $('#qp'), qpGrid = $('#qpGrid'), qpName = $('#qpName');
-$('#qp-cond').innerHTML = CONDITIONS.map(c => `<option>${c}</option>`).join('');
-$('#qp-fin').innerHTML = FINISHES.map(f => `<option>${f}</option>`).join('');
-let qpScan = null;
-
-function qpShow(scan, uncertain = false) {
-  qpScan = scan;
-  qpName.textContent = (uncertain ? '? ' : '') + (scan.card_read?.name || '?');
-  qpName.style.color = uncertain ? 'var(--warn)' : '';
-  const cands = (scan.candidates || []).slice(0, 6);
-  qpGrid.innerHTML = cands.map(c => `
-    <div class="qpc" data-pick="${escHtml(c.id)}">
-      <img src="${escHtml(c.image_small || c.image_normal)}" loading="lazy"
-           onerror="this.style.visibility='hidden'">
-      <div class="t"><b>${escHtml((c.set||'').toUpperCase())}</b> #${escHtml(c.collector_number)}</div>
-    </div>`).join('');
-  qp.classList.add('open');
-  qpGrid.scrollLeft = 0;
-  qpGrid.querySelectorAll('.qpc[data-pick]').forEach(el =>
-    el.addEventListener('click', () => qpPick(el)));
-}
-function qpHide() { qp.classList.remove('open'); qpScan = null; }
-
-async function qpPick(el) {
-  if (!qpScan) return;
-  const printing = (qpScan.candidates || []).find(c => c.id === el.dataset.pick);
-  if (!printing) return;
-  el.classList.add('busy');
-  try {
-    const res = await jsend(`/api/scans/${qpScan.id}/select`, 'POST', {
-      printing,
-      condition: $('#qp-cond').value, finish: $('#qp-fin').value, quantity: 1,
-    });
-    el.classList.remove('busy');
-    qpGrid.querySelectorAll('.qpc').forEach(x => x.classList.remove('chosen'));
-    el.classList.add('chosen');
-    setStatus(res.merged_into
-      ? `✓ ${printing.name} — duplicate, merged (now ×${res.selection?.quantity})`
-      : `✓ ${printing.name} [${(printing.set||'').toUpperCase()}] filed. Next card…`, 'ok');
-    refreshScans();
-  } catch (e) {
-    el.classList.remove('busy');
-    setStatus('Select failed: ' + e.message, 'err');
-  }
-}
-$('#qpMore').addEventListener('click', () => { if (qpScan) openDetail(qpScan.id); });
 
 /* ── frame sampling + occupancy detection (tuned — do not "improve") ───────── */
 function sampleSmallGray() {
@@ -626,7 +549,9 @@ function tick() {
 
   if (mode === 'watching') {
     drawOverlay(box, occupied ? '#6ee7a0' : '#fbbf24');
-    if (occupied && changedFrac(cur, prevFrame) < STABLE_FRAC) {
+    // prevFrame can be null for one tick after a reset that raced an
+    // in-flight no_card response re-seeding emptyRef — guard like the twins.
+    if (occupied && prevFrame && changedFrac(cur, prevFrame) < STABLE_FRAC) {
       stableCount++;
       dbg(`occupied ${(box.maskFrac*100).toFixed(1)}% steady ${stableCount}/${STABLE_FRAMES}`);
       if (!DEBUG) setStatus('Card detected — hold still…');
@@ -634,7 +559,6 @@ function tick() {
         stableCount = 0;
         scannedFrame = cur;
         mode = 'scanning';
-        qpHide();                            // last card's strip is now stale
         lastDrawSig = '';
         drawOverlay(box, null, true);        // solid blue + check = captured
         scanOnce().finally(() => { mode = 'awaitNext'; });
@@ -675,10 +599,13 @@ autoBtn.addEventListener('click', () => {
 });
 shoot.addEventListener('click', async () => {
   shoot.disabled = true;
-  mode = 'scanning'; qpHide();
+  mode = 'scanning';
+  // Snapshot the scene BEFORE capturing: submitScan's no_card guard compares
+  // against scannedFrame, and setting it only afterwards handed the guard the
+  // PREVIOUS scan's scene (or null on a fresh page).
+  scannedFrame = sampleSmallGray() || scannedFrame;
   try { await scanOnce(); }
   finally {
-    scannedFrame = sampleSmallGray() || scannedFrame;
     mode = 'awaitNext';
     setTimeout(() => { shoot.disabled = false; }, 400);
   }
@@ -702,7 +629,28 @@ function f2fBest(scan) {
   for (const k of order) if (c[k] != null) return c[k];
   const vals = Object.values(c); return vals.length ? Math.min(...vals) : null;
 }
+// Per-print F2F data on an unpicked scan (filled by the sweeper): searched is
+// true once EVERY candidate print has a completed search — only then may the
+// price filter hide the card, because only then is "no print it could be is
+// in range" actually known.
+function printInfo(s) {
+  const cands = s.candidates || [];
+  const searched = cands.length > 0 && cands.every(c => c.f2f_conditions != null);
+  const vals = [];
+  for (const c of cands) {
+    const v = Object.values(c.f2f_conditions || {});
+    if (v.length) vals.push(Math.min(...v));
+  }
+  return { searched, vals };
+}
 function priceRange(s) {
+  if (s.status !== 'selected') {
+    const { vals } = printInfo(s);
+    if (vals.length) {
+      const lo = Math.min(...vals), hi = Math.max(...vals);
+      return lo === hi ? `$${lo}` : `$${lo}–$${hi}`;
+    }
+  }
   const c = s.f2f?.conditions || {};
   const vals = Object.values(c);
   if (!vals.length) return null;
@@ -711,18 +659,26 @@ function priceRange(s) {
 }
 const isProblem = s => !!s.error || !(s.candidates || []).length;
 function priceOf(s) { const p = f2fBest(s); return p == null ? null : Number(p); }
+const inBand = p => (priceMin == null || p >= priceMin) && (priceMax == null || p <= priceMax);
 function inPriceRange(s) {
   if (priceMin == null && priceMax == null) return true;
-  const p = priceOf(s);
-  if (p == null) return true;
-  if (priceMin != null && p < priceMin) return false;
-  if (priceMax != null && p > priceMax) return false;
-  return true;
+  if (s.status === 'selected') {
+    const p = priceOf(s);
+    return p == null ? true : inBand(p);
+  }
+  // Unpicked: hidden only when every print is searched AND none is in range.
+  const { searched, vals } = printInfo(s);
+  if (!searched || !vals.length) return true;
+  return vals.some(inBand);
 }
 
 function renderRecent() {
-  const slice = scans.slice(-8).reverse();
-  const sig = slice.map(s => `${s.id}~${s.status}~${JSON.stringify(s.f2f?.conditions||0)}`).join('|');
+  // /api/scans is newest-first — take the head as-is (slice(-8).reverse()
+  // on a descending list showed the 8 OLDEST scans).
+  const slice = scans.slice(0, 8);
+  // Every rendered field must be in the sig: name (re-picks change it), qty,
+  // auto flag, prices — else the chip silently keeps stale content.
+  const sig = slice.map(s => `${s.id}~${s.status}~${s.selection?.name||s.card_read?.name||''}~${s.selection?.quantity||0}~${s.selection?.auto_picked?'a':''}~${JSON.stringify(s.f2f?.conditions||0)}~${printInfo(s).vals.join(';')}`).join('|');
   if (sig === lastRecentSig) return;
   lastRecentSig = sig;
   const el = $('#recent');
@@ -731,7 +687,8 @@ function renderRecent() {
     const name = s.selection?.name || s.card_read?.name || '?';
     const pr = priceRange(s);
     const qty = s.selection?.quantity > 1 ? ` ×${s.selection.quantity}` : '';
-    return `<span class="chip ${selc?'selchip':''}" data-sid="${s.id}">${escHtml(name)}${qty}${pr ? ' · ' + pr : ''}</span>`;
+    const auto = s.selection?.auto_picked ? '⚠' : '';
+    return `<span class="chip ${selc?'selchip':''}" data-sid="${s.id}">${auto}${escHtml(name)}${qty}${pr ? ' · ' + pr : ''}</span>`;
   }).join('');
   el.querySelectorAll('.chip[data-sid]').forEach(chip =>
     chip.addEventListener('click', () => openDetail(Number(chip.dataset.sid))));
@@ -740,7 +697,8 @@ function renderRecent() {
 function renderScansPanel() {
   if (!scansPanel.classList.contains('open')) return;
   const sel = scans.filter(s => s.status === 'selected');
-  const total = sel.filter(s => s.included).reduce((t, s) => t + (f2fBest(s) ?? 0), 0);
+  const total = sel.filter(s => s.included)
+    .reduce((t, s) => t + (f2fBest(s) ?? 0) * (s.selection?.quantity || 1), 0);
   const statSig = `${scans.length}~${sel.length}~${total}`;
   if (statSig !== lastStatSig) {
     lastStatSig = statSig;
@@ -754,13 +712,21 @@ function renderScansPanel() {
     scansView === 'pending' ? s.status !== 'selected' :
     scansView === 'selected' ? s.status === 'selected' :
     isProblem(s)));
+  // Sig must cover every rendered field: selection identity (re-picks swap
+  // name/set/number/thumb), condition/finish edits, qty, flags, prices.
   const listSig = scansView + '~' + priceMin + '~' + priceMax + '~' +
-    rows.map(s => [s.id, s.status, s.included, s.selection?.quantity,
-                   JSON.stringify(s.f2f?.conditions||0)].join(',')).join('|');
+    rows.map(s => [s.id, s.status, s.included,
+                   s.selection?.scryfall_id, s.selection?.condition,
+                   s.selection?.finish, s.selection?.quantity,
+                   s.selection?.auto_picked ? 'a' : '',
+                   s.card_read?.name, s.error ? 'e' : '',
+                   (s.candidates||[]).length,
+                   JSON.stringify(s.f2f?.conditions||0),
+                   printInfo(s).vals.join(';')].join(',')).join('|');
   if (listSig === lastListSig) return;
   lastListSig = listSig;
 
-  scansList.innerHTML = rows.slice().reverse().map(s => {
+  scansList.innerHTML = rows.map(s => {   // already newest-first from the server
     const isSel = s.status === 'selected';
     const name = s.selection?.name || s.card_read?.name || '(unidentified)';
     const thumb = s.selection?.image_normal || s.candidates?.[0]?.image_small
@@ -769,9 +735,10 @@ function renderScansPanel() {
     const sub = isSel
       ? `${(s.selection.set||'').toUpperCase()} #${s.selection.collector_number} · ${s.selection.condition} · ${s.selection.finish} · ×${s.selection.quantity}`
       : `${(s.candidates||[]).length} printings — tap to pick`;
-    const pill = isSel ? `<span class="spill sel">selected</span>`
-               : isProblem(s) ? `<span class="spill chk">check</span>`
-               : `<span class="spill">pending</span>`;
+    const pill = isSel
+      ? `<span class="spill sel">${s.selection?.auto_picked ? '⚠ auto' : 'selected'}</span>`
+      : isProblem(s) ? `<span class="spill chk">check</span>`
+      : `<span class="spill">pending</span>`;
     return `<div class="srow" data-sid="${s.id}">
       <img src="${escHtml(thumb)}" loading="lazy" onerror="this.style.visibility='hidden'">
       <div class="meta">
@@ -786,13 +753,16 @@ function renderScansPanel() {
     row.addEventListener('click', () => openDetail(Number(row.dataset.sid))));
 }
 
-let sweepWasActive = false;
+let sweepWasActive = false, sweepActive = false, sweepStopRequested = false;
 function renderSweep(sw) {
   const btn = $('#p-fill'), info = $('#sweepInfo');
-  if (sw?.active) {
+  sweepActive = !!sw?.active;
+  if (sweepActive) {
     sweepWasActive = true;
-    btn.disabled = true;
-    btn.textContent = `Pricing ${sw.done}/${sw.total}…`;
+    // The button flips into a stop control while the sweep runs; tapping
+    // Price missing again afterwards restarts from whatever is unpriced.
+    btn.disabled = !!sw.cancelling;
+    btn.textContent = sw.cancelling ? 'Stopping…' : `■ Stop (${sw.done}/${sw.total})`;
     info.style.display = 'block';
     info.textContent = `Searching F2F: ${sw.current || '…'}`
       + (sw.eta_s != null ? ` · ~${sw.eta_s}s left` : '');
@@ -800,7 +770,11 @@ function renderSweep(sw) {
     btn.disabled = false;
     btn.textContent = 'Price missing';
     info.style.display = 'none';
-    if (sweepWasActive) { sweepWasActive = false; setStatus('Pricing sweep finished.', 'ok'); }
+    if (sweepWasActive) {
+      sweepWasActive = false;
+      setStatus(sweepStopRequested ? 'Pricing sweep stopped.' : 'Pricing sweep finished.', 'ok');
+      sweepStopRequested = false;
+    }
   }
 }
 
@@ -846,10 +820,16 @@ $('#clr-junk').addEventListener('click', () => clearScans('unselected'));
 $('#clr-all').addEventListener('click', () => clearScans(null));
 
 $('#p-fill').addEventListener('click', async () => {
-  const r = await jsend('/api/scans/price-missing', 'POST', {});
-  setStatus(r.already_running ? 'A pricing sweep is already running.'
-    : r.queued ? `Pricing ${r.queued} card${r.queued > 1 ? 's' : ''} in the background…`
-    : 'All scans already priced.', 'ok');
+  if (sweepActive) {
+    sweepStopRequested = true;
+    await jsend('/api/price-sweep/stop', 'POST', {});
+    setStatus('Stopping sweep… tap Price missing to restart.', 'ok');
+  } else {
+    const r = await jsend('/api/scans/price-missing', 'POST', {});
+    setStatus(r.already_running ? 'A pricing sweep is already running.'
+      : r.queued ? `Pricing ${r.queued} card${r.queued > 1 ? 's' : ''} in the background…`
+      : 'All scans already priced.', 'ok');
+  }
   refreshScans();          // renderSweep takes over the button from here
 });
 $('#p-excl').addEventListener('click', async () => {
@@ -951,7 +931,8 @@ async function renderScanDetail() {
     if (res.merged_into) {
       // Duplicate copy — folded into the existing row; show that row instead.
       detailScanId = res.merged_into;
-      setStatus(`Duplicate — merged (now ×${res.selection?.quantity})`, 'ok');
+      setStatus(`Duplicate — merged (now ×${res.selection?.quantity})`
+        + (res.included === false ? ' — row is EXCLUDED from export' : ''), 'ok');
     }
     await renderScanDetail(); refreshScans();
   };

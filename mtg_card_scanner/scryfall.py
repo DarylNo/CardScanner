@@ -35,6 +35,12 @@ class ScryfallError(Exception):
     pass
 
 
+# Non-sellable print objects that pollute the pick-a-printing grid: art-series
+# cards share the exact card name (include_extras surfaces them), and tokens/
+# emblems can too. Mirrors art_index._SKIP_LAYOUTS.
+_SKIP_PRINT_LAYOUTS = frozenset({"token", "double_faced_token", "emblem", "art_series"})
+
+
 class ScryfallClient:
     def __init__(self) -> None:
         self._session = requests.Session()
@@ -116,7 +122,9 @@ class ScryfallClient:
         )
         cards = data.get("data", [])
         # Missing `games` (old/fixture data) is treated as paper, not dropped.
-        paper = [c for c in cards if "paper" in (c.get("games") or ["paper"])]
+        paper = [c for c in cards
+                 if "paper" in (c.get("games") or ["paper"])
+                 and c.get("layout") not in _SKIP_PRINT_LAYOUTS]
         # Double-faced cards keep their images on card_faces, not top-level —
         # graft the front face's image_uris on so pHash ranking and the UI
         # treat them like any other printing.

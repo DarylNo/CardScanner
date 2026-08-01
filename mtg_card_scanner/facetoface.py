@@ -152,17 +152,39 @@ def _variants_to_conditions(variants: list[dict[str, Any]]) -> dict[str, float]:
 
 
 def _default_get_json(cache_dir: Path) -> Callable[[str], Any]:
-    """Build the real HTTP fetcher: throttled, UA'd, disk-cached by URL."""
+    """Build the real HTTP fetcher: throttled, UA'd, disk-cached by URL.
+
+    Called concurrently from the auto-sweep daemon thread AND request
+    threads, so: the throttle state sits under a lock (unsynchronized, two
+    threads each saw a stale `last` and defeated the politeness cap), cache
+    files are written atomically via temp+rename, and a corrupt/torn cache
+    entry falls through to a refetch instead of raising JSONDecodeError out
+    of get_price for 24 h straight.
+    """
+    import os
+    import threading
+
     session = requests.Session()
     session.headers["User-Agent"] = _USER_AGENT
     state = {"last": 0.0}
+    throttle_lock = threading.Lock()
     cache_dir.mkdir(parents=True, exist_ok=True)
+
+    def _throttle() -> None:
+        with throttle_lock:
+            elapsed = time.monotonic() - state["last"]
+            if elapsed < _MIN_DELAY:
+                time.sleep(_MIN_DELAY - elapsed)
+            state["last"] = time.monotonic()
 
     def get_json(url: str) -> Any:
         key = hashlib.sha1(url.encode()).hexdigest()
         cached = cache_dir / f"{key}.json"
-        if cached.exists() and time.time() - cached.stat().st_mtime < _CACHE_TTL:
-            return json.loads(cached.read_text(encoding="utf-8"))
+        try:
+            if cached.exists() and time.time() - cached.stat().st_mtime < _CACHE_TTL:
+                return json.loads(cached.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            pass                       # torn/corrupt entry → refetch below
         # The storefront intermittently rejects a request (bot protection,
         # blips) — observed live returning fine on the very next attempt. One
         # retry turns most of those into a hit; failures are LOGGED, because a
@@ -170,21 +192,27 @@ def _default_get_json(cache_dir: Path) -> Callable[[str], Any]:
         # misleading when the card is in fact in stock.
         last_error = ""
         for attempt in (1, 2):
-            elapsed = time.monotonic() - state["last"]
-            if elapsed < _MIN_DELAY:
-                time.sleep(_MIN_DELAY - elapsed)
+            _throttle()
             try:
                 resp = session.get(url, timeout=_TIMEOUT)
-                state["last"] = time.monotonic()
                 resp.raise_for_status()
                 data = resp.json()
             except (requests.RequestException, ValueError) as exc:
-                state["last"] = time.monotonic()
                 last_error = f"{type(exc).__name__}: {exc}"
                 if attempt == 1:
                     time.sleep(0.8)
                 continue
-            cached.write_text(json.dumps(data), encoding="utf-8")
+            tmp = cached.with_suffix(f".{os.getpid()}.{threading.get_ident()}.tmp")
+            try:
+                tmp.write_text(json.dumps(data), encoding="utf-8")
+                os.replace(tmp, cached)
+            except OSError:
+                # Cache write is best-effort — but don't litter tmp files
+                # (Windows os.replace can fail if a reader holds the dest).
+                try:
+                    tmp.unlink(missing_ok=True)
+                except OSError:
+                    pass
             return data
         # Pricing is a side feature: degrade to "no listing", never crash a
         # scan/select. Not cached, so a later reprice retries for real.

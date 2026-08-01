@@ -211,7 +211,7 @@ def test_scan_candidates_no_printings_found():
     out = p.scan_candidates(FRAME)
     assert out["identified"] is True
     assert out["candidates"] == []
-    assert "No printings" in out["error"]
+    assert "Printings lookup failed" in out["error"]
 
 
 def test_search_candidates_sorts_newest_first():
