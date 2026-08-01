@@ -216,7 +216,7 @@ function setStatus(msg, cls='') { statusEl.textContent = msg; statusEl.className
 // UI_VERSION identifies THIS page; the fetched hash identifies the server.
 // Both are shown so a stale cached page (which cost a debugging round once)
 // is visible at a glance. Bump UI_VERSION on every phone.html change.
-const UI_VERSION = 'v3';
+const UI_VERSION = 'v4';
 fetch('/api/version').then(r => r.json())
   .then(d => { document.getElementById('ver').textContent = `${UI_VERSION} · ${d.version}`; })
   .catch(() => { document.getElementById('ver').textContent = UI_VERSION; });
@@ -538,19 +538,22 @@ function detectBox(cur) {
 }
 
 function looksLikeCard(b) {
-  // Shape is checked ORIENTATION-AGNOSTICALLY (long side / short side): the
-  // phone may be mounted in either rotation and cards get laid down sideways,
-  // so a portrait-only window silently rejected perfectly good scans.
-  // A real card is 88:63 ≈ 1.40; the window allows tilt and edge slop.
-  // Density stays generous — smooth art passages legitimately carry little
-  // texture; the floor only rejects sparse smears.
-  // texFrac separates a card from a card-SHAPED uniform object (a black card
-  // holder fills the mask via brightness difference alone): a card's text and
-  // art make a large share of its box textured, a holder only its outline.
-  return !!b && b.areaFrac > 0.03 && b.areaFrac < 0.92
-      && b.density > 0.35
-      && b.texFrac > 0.06
-      && b.ratio > 1.15 && b.ratio < 1.95;
+  // These bars are deliberately LOOSE. The server now rejects non-cards by
+  // content (interior-texture gate + blank-surface guard + art-distance
+  // threshold), and a false fire costs one cleanly-rejected roundtrip — but a
+  // missed fire silently costs the user a card. Measured on the rig, a real
+  // sleeved card came in at ratio 1.03 / dens 25% / tex 4%: sleeve glare
+  // matches the white tray (hole in the mask → low density), wipes out local
+  // texture (low texFrac), and sleeve edges square the box off (ratio ~1).
+  // The old card-shaped windows (ratio>1.15, dens>0.35, tex>0.06) rejected
+  // exactly the thing we were built to scan.
+  //   ratio     — only reject long smears (a card box can be ~square in a sleeve)
+  //   density   — only reject sparse noise (glare holes are legitimate)
+  //   texFrac   — only reject fully-uniform objects (black holder: outline only)
+  return !!b && b.areaFrac > 0.03 && b.areaFrac < 0.95
+      && b.density > 0.15
+      && b.texFrac > 0.02
+      && b.ratio < 2.0;
 }
 
 function boxStable(a, b) {
