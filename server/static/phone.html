@@ -213,7 +213,7 @@ async function jsend(url, method, body) {
 }
 
 /* ── version banner — proves which page+server combo is running ────────────── */
-const UI_VERSION = 'v18';
+const UI_VERSION = 'v19';
 fetch('/api/version').then(r => r.json())
   .then(d => { $('#ver').textContent = `${UI_VERSION} · ${d.version}`; })
   .catch(() => { $('#ver').textContent = UI_VERSION; });
@@ -794,6 +794,9 @@ function renderSweep(sw) {
     if (sw?.cooldown_s > 0) {
       info.style.display = 'block';
       info.textContent = `⏸ F2F throttled — auto-sweep resumes in ${sw.cooldown_s}s (Price missing overrides)`;
+    } else if (sw?.next_check_s != null) {
+      info.style.display = 'block';
+      info.textContent = `next price check in ~${sw.next_check_s}s`;
     } else {
       info.style.display = 'none';
     }

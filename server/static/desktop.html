@@ -558,7 +558,7 @@ function sigOf(scan){
 
 // Version banner — page version · server git hash. Same rationale as the
 // phone: without it, "is this the old page?" is undebuggable.
-const UI_VERSION = "d9";
+const UI_VERSION = "d10";
 $("#sweepStopBtn").addEventListener("click", async () => {
   await jsend("/api/price-sweep/stop", "POST", {});
   toast("Sweep stopping — auto-sweep paused 10 min");
@@ -574,18 +574,25 @@ async function poll(){
     scans = scansData;
     // Live sweep readout: which card the background pricer is searching on
     // F2F right now, progress, and measured ETA — it was invisible before.
-    $("#sweepStat").textContent = sweep.active
-      ? (sweep.cancelling ? `⟳ stopping…`
-         : `⟳ pricing ${sweep.done}/${sweep.total} — ${sweep.current || "…"}`
-           + (sweep.eta_s != null ? ` (~${sweep.eta_s}s left` : "")
-           + (sweep.pace_s ? ` · pace 1/${sweep.pace_s}s` : "")
-           + (sweep.eta_s != null ? `)` : ""))
-      : "";
+    const ss = $("#sweepStat");
+    if (sweep.active){
+      ss.style.color = "var(--warn)";
+      ss.textContent = sweep.cancelling ? `⟳ stopping…`
+        : `⟳ pricing ${sweep.done}/${sweep.total} — ${sweep.current || "…"}`
+          + (sweep.eta_s != null ? ` (~${sweep.eta_s}s left` : "")
+          + (sweep.pace_s ? ` · pace 1/${sweep.pace_s}s` : "")
+          + (sweep.eta_s != null ? `)` : "");
+    } else if (sweep.cooldown_s > 0){
+      ss.style.color = "var(--warn)";
+      ss.textContent = `⏸ F2F throttled — auto-sweep resumes in ${sweep.cooldown_s}s (▶ overrides)`;
+    } else if (sweep.next_check_s != null){
+      ss.style.color = "var(--dim)";
+      ss.textContent = `next price check in ~${sweep.next_check_s}s`;
+    } else {
+      ss.textContent = "";
+    }
     $("#sweepStopBtn").style.display = sweep.active && !sweep.cancelling ? "" : "none";
     $("#sweepStartBtn").style.display = !sweep.active ? "" : "none";
-    if (!sweep.active && sweep.cooldown_s > 0){
-      $("#sweepStat").textContent = `⏸ F2F throttled — auto-sweep resumes in ${sweep.cooldown_s}s (▶ overrides)`;
-    }
     const maxId = scans.reduce((m,s)=>Math.max(m,s.id), 0);
     if (maxId > lastMaxId){ focusedId = maxId; lastMaxId = maxId; detailSig = ""; }
     renderList();

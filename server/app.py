@@ -415,6 +415,17 @@ def create_app(
             "cooldown_s": (round(max(0.0, sweep["backoff_until"] - time.monotonic()))
                            if sweep.get("backoff_until") else 0),
             "pace_s": getattr(f2f, "pacing_delay", lambda: None)(),
+            # Countdown to the next automatic price check. The tick may skip
+            # (cooldown / manual-stop pause), so report the LATEST of the
+            # constraints — the earliest moment a check can actually run.
+            "next_check_s": (lambda: (
+                round(max(0.0, max(c for c in [
+                    sweep.get("next_check_at"),
+                    sweep.get("backoff_until"),
+                    (sweep["manual_stop_at"] + 600
+                     if sweep.get("manual_stop_at") is not None else None),
+                ] if c is not None) - time.monotonic()))
+                if sweep.get("next_check_at") else None))(),
             "rate_per_s": round(rate, 2) if rate else None,
             "eta_s": round(remaining / rate) if rate else None,
         }
@@ -425,6 +436,17 @@ def create_app(
         each stamped with the adaptive pace at that moment."""
         return {
             "pace_s": getattr(f2f, "pacing_delay", lambda: None)(),
+            # Countdown to the next automatic price check. The tick may skip
+            # (cooldown / manual-stop pause), so report the LATEST of the
+            # constraints — the earliest moment a check can actually run.
+            "next_check_s": (lambda: (
+                round(max(0.0, max(c for c in [
+                    sweep.get("next_check_at"),
+                    sweep.get("backoff_until"),
+                    (sweep["manual_stop_at"] + 600
+                     if sweep.get("manual_stop_at") is not None else None),
+                ] if c is not None) - time.monotonic()))
+                if sweep.get("next_check_at") else None))(),
             "events": getattr(f2f, "recent_requests", lambda: [])(),
         }
 
@@ -595,6 +617,7 @@ def create_app(
     # start clears the pause.
     def _auto_sweep_loop(interval: float) -> None:
         while True:
+            sweep["next_check_at"] = time.monotonic() + interval
             time.sleep(interval)
             try:
                 if sweep["active"]:
