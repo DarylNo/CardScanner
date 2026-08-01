@@ -350,7 +350,14 @@ class ArtMatcher:
         results: list[dict[str, Any]] = []
         for p in printings:
             image_uris = p.get("image_uris") or {}
-            url = image_uris.get("normal") or image_uris.get("large")
+            # `small` (146×204), not `normal`: this image is ONLY hashed
+            # (pHash downsamples to 32×32, so small is already oversized), and
+            # the UI displays candidates straight from Scryfall's CDN — never
+            # from this cache. Small cuts the cache ~6× (~90KB→~15KB) with no
+            # ranking or display impact. Existing cached `normal` files (same
+            # id.jpg name) still hash fine, so the switch is incremental.
+            url = (image_uris.get("small")
+                   or image_uris.get("normal") or image_uris.get("large"))
             sid = p.get("id", "")
             if not url or not sid:
                 continue

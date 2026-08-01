@@ -567,10 +567,12 @@ class ArtIndexBuilder:
             entries = json.load(fh)
 
         def rank_url(e: dict[str, Any]) -> Optional[str]:
-            # Mirror rank_printings: image_uris.normal, else large; DFC front face.
+            # Mirror rank_printings: `small` — the ranking cache is hash-only
+            # (pHash → 32×32) and the UI shows candidates from Scryfall's CDN,
+            # so small suffices and cuts the full prefetch ~6× (~10 GB → ~2 GB).
             for holder in (e, *(e.get("card_faces") or [])[:1]):
                 uris = holder.get("image_uris") or {}
-                url = uris.get("normal") or uris.get("large")
+                url = uris.get("small") or uris.get("normal") or uris.get("large")
                 if url:
                     return url
             return None
