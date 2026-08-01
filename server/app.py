@@ -179,9 +179,9 @@ def create_app(
 
             def _price_top(scan_id: int, c: dict) -> None:
                 try:
-                    p = f2f.get_price(c.get("name", ""), c.get("set", ""),
-                                      c.get("collector_number", ""), False,
-                                      c.get("set_name", ""))
+                    p = _safe_get_price(c.get("name", ""), c.get("set", ""),
+                                        c.get("collector_number", ""), False,
+                                        c.get("set_name", ""))
                     if p:
                         # Guarded: if the user picked a printing while this
                         # fetch ran, their exact price must not be clobbered
@@ -215,11 +215,19 @@ def create_app(
             )
         was_selected = bool(scan.get("selection"))
         pid = printing.get("scryfall_id") or printing.get("id") or ""
-        price = await run_in_threadpool(
-            f2f.get_price, printing.get("name", ""), printing.get("set", ""),
-            printing.get("collector_number", ""), bool(printing.get("foil", False)),
-            printing.get("set_name", ""),
-        )
+        from mtg_card_scanner.facetoface import F2FUnavailableError
+        try:
+            price = await run_in_threadpool(
+                f2f.get_price, printing.get("name", ""), printing.get("set", ""),
+                printing.get("collector_number", ""), bool(printing.get("foil", False)),
+                printing.get("set_name", ""),
+            )
+        except F2FUnavailableError:
+            scan = store.get_scan(scan_id)
+            if not scan:
+                return JSONResponse({"error": "not found"}, status_code=404)
+            scan["f2f_search"] = "unavailable"    # unreachable ≠ not listed
+            return scan
         if price:
             expect = ({"selected": True, "scryfall_id": pid,
                        "foil": bool(printing.get("foil", False))}
@@ -345,6 +353,11 @@ def create_app(
                                         cc["f2f_conditions"] = p.conditions if p else {}
                                 store.update_scan(sid, candidates=cands)
                 except Exception as exc:
+                    # Includes F2FUnavailableError: an unreachable storefront
+                    # skips ALL writes, so the target stays unsearched and the
+                    # next sweep retries it. Only a real fetch that returned
+                    # no match records the searched-empty marker above —
+                    # get_price returning None now MEANS "confirmed unlisted".
                     print(f"  [server] pricing failed for #{sid}: {exc}")
                 finally:
                     sweep["done"] += 1
@@ -491,6 +504,21 @@ def create_app(
             return store.update_scan(
                 scan_id, status="selected", selection=selection, error=None)
 
+    def _safe_get_price(name: str, set_code: str, collector_number: str,
+                        foil: bool, set_name: str):
+        """
+        get_price that treats storefront-unavailable as 'no price yet' (None).
+        ONLY for callers that never persist an empty result — the sweep must
+        NOT use this, because it records None as a permanent no-listing
+        marker and unavailability must stay retryable.
+        """
+        from mtg_card_scanner.facetoface import F2FUnavailableError
+        try:
+            return f2f.get_price(name, set_code, collector_number, foil, set_name)
+        except F2FUnavailableError as exc:
+            print(f"  [server] F2F unavailable: {exc}")
+            return None
+
     def _write_price_if_current(scan_id: int, expect: dict, f2f_value) -> Optional[dict]:
         """
         Store an F2F result ONLY if the scan still matches what was priced.
@@ -524,7 +552,7 @@ def create_app(
             return result
         sel = result["selection"]
         price = await run_in_threadpool(
-            f2f.get_price, sel["name"], sel["set"],
+            _safe_get_price, sel["name"], sel["set"],
             sel["collector_number"], sel["foil"], sel["set_name"],
         )
         updated = _write_price_if_current(
@@ -579,7 +607,7 @@ def create_app(
             # foil status may have flipped — reprice (guarded: a re-pick that
             # lands during this fetch keeps ITS price, not this stale one)
             price = await run_in_threadpool(
-                f2f.get_price, selection.get("name", ""), selection.get("set", ""),
+                _safe_get_price, selection.get("name", ""), selection.get("set", ""),
                 selection.get("collector_number", ""), selection["foil"],
                 selection.get("set_name", ""),
             )

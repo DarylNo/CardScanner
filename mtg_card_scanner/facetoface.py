@@ -222,6 +222,18 @@ def _default_get_json(cache_dir: Path) -> Callable[[str], Any]:
     return get_json
 
 
+class F2FUnavailableError(Exception):
+    """
+    The storefront could not be reached — the answer is UNKNOWN, not "no
+    listing".  get_price previously returned None for BOTH cases, and the
+    sweeper recorded the None as a permanent searched-empty marker: a
+    transient bot-protection rejection froze "not found" onto cards with
+    live listings (observed: Mold Folk, listed, marked no-listing forever).
+    Callers that persist results must catch this and leave the row
+    UNSEARCHED so a later sweep retries.
+    """
+
+
 class FaceToFaceClient:
     """Look up Face to Face Games pricing for a specific printing."""
 
@@ -241,7 +253,9 @@ class FaceToFaceClient:
             f"&resources%5Blimit%5D={_SUGGEST_LIMIT}"
             f"&resources%5Boptions%5D%5Bunavailable_products%5D=show"
         )
-        data = self._get_json(url) or {}
+        data = self._get_json(url)
+        if data is None:                   # fetch failed — unknown, not empty
+            raise F2FUnavailableError(f"suggest fetch failed for {name!r}")
         return (
             data.get("resources", {})
             .get("results", {})
@@ -249,7 +263,9 @@ class FaceToFaceClient:
         )
 
     def _product(self, handle: str) -> dict[str, Any]:
-        data = self._get_json(f"{_BASE}/products/{handle}.json") or {}
+        data = self._get_json(f"{_BASE}/products/{handle}.json")
+        if data is None:                   # fetch failed — unknown, not empty
+            raise F2FUnavailableError(f"product fetch failed for {handle!r}")
         return data.get("product", {})
 
     # ── public ────────────────────────────────────────────────────────────────

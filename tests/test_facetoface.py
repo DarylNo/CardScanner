@@ -149,3 +149,14 @@ def test_price_cache_expires_after_ttl(tmp_path, monkeypatch):
     os.utime(tmp_path / f"{key}.json", (old, old))
     assert get_json("http://x") == {"fetch": 2}
     assert len(calls) == 2
+
+
+def test_unreachable_storefront_raises_not_none():
+    """A failed fetch must raise F2FUnavailableError — returning None meant
+    'confirmed unlisted' and froze transient blips into permanent no-listing
+    markers (a live Mold Folk listing was marked not-found forever)."""
+    import pytest as _pytest
+    from mtg_card_scanner.facetoface import F2FUnavailableError
+    down = FaceToFaceClient(get_json=lambda url: None)
+    with _pytest.raises(F2FUnavailableError):
+        down.get_price("Mold Folk", "clb", "133", foil=False)

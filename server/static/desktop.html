@@ -468,6 +468,8 @@ function wireDetail(scan){
       // back", not "error field empty".
       if (updated.f2f_search === "not_found"){
         st.textContent = "No listing found on Face to Face."; btn.disabled = false;
+      } else if (updated.f2f_search === "unavailable"){
+        st.textContent = "Face to Face unreachable — try again."; btn.disabled = false;
       } else if (!updated.id){
         st.textContent = updated.error || "Search failed."; btn.disabled = false;
       } else {
@@ -537,7 +539,7 @@ function sigOf(scan){
 
 // Version banner — page version · server git hash. Same rationale as the
 // phone: without it, "is this the old page?" is undebuggable.
-const UI_VERSION = "d5";
+const UI_VERSION = "d6";
 $("#sweepStopBtn").addEventListener("click", async () => {
   await jsend("/api/price-sweep/stop", "POST", {});
   toast("Sweep stopping — auto-sweep paused 10 min");
