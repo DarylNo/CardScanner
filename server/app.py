@@ -309,29 +309,40 @@ def create_app(
             if scan.get("merged_into"):
                 return scan
 
-        # Price the TOP-RANKED printing in the background so the review lists
-        # can show an F2F low-high range before a printing is even picked.
-        # Selecting a printing later overwrites this with the exact price.
-        if result["identified"] and cands:
+        # Background pricing at scan time. A single-printing auto-pick is a
+        # definite selection, so price that EXACT printing (not a range) right
+        # away — the user asked to see it priced immediately, not wait for the
+        # sweep. Otherwise (multiple candidates, still unpicked) price the
+        # top-ranked candidate so the review list shows a low-high range.
+        sel_now = scan.get("selection")
+        if result["identified"] and sel_now and sel_now.get("scryfall_id"):
+            expect = {"selected": True, "scryfall_id": sel_now["scryfall_id"],
+                      "foil": bool(sel_now.get("foil", False))}
+            price_args = (sel_now.get("name", ""), sel_now.get("set", ""),
+                          sel_now.get("collector_number", ""),
+                          bool(sel_now.get("foil", False)), sel_now.get("set_name", ""))
+        elif result["identified"] and cands:
             top = cands[0]
+            expect = {"selected": False}
+            price_args = (top.get("name", ""), top.get("set", ""),
+                          top.get("collector_number", ""), False, top.get("set_name", ""))
+        else:
+            expect = None
 
-            def _price_top(scan_id: int, c: dict) -> None:
+        if expect is not None:
+            def _price_bg(scan_id: int, args: tuple, expect: dict) -> None:
                 if sweep["active"]:
-                    return          # the per-print sweep covers pending scans
+                    return          # one F2F consumer — the sweep covers it
                 try:
-                    p = _safe_get_price(c.get("name", ""), c.get("set", ""),
-                                        c.get("collector_number", ""), False,
-                                        c.get("set_name", ""))
+                    p = _safe_get_price(*args)
                     if p:
-                        # Guarded: if the user picked a printing while this
-                        # fetch ran, their exact price must not be clobbered
-                        # by the top CANDIDATE's price.
-                        _write_price_if_current(scan_id, {"selected": False},
-                                                p.to_dict())
+                        # Guarded: a pick/re-pick landing mid-fetch keeps ITS
+                        # price, never clobbered by this one.
+                        _write_price_if_current(scan_id, expect, p.to_dict())
                 except Exception as exc:
-                    print(f"  [server] top-candidate pricing failed for #{scan_id}: {exc}")
+                    print(f"  [server] scan-time pricing failed for #{scan_id}: {exc}")
 
-            background_tasks.add_task(_price_top, scan["id"], top)
+            background_tasks.add_task(_price_bg, scan["id"], price_args, expect)
         return scan
 
     # ── pricing ────────────────────────────────────────────────────────────────

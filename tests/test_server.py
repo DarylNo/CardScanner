@@ -452,3 +452,17 @@ def test_price_debug_endpoint(client):
     d = client.get("/api/price-debug").json()
     assert "events" in d and isinstance(d["events"], list)
     assert "pace_s" in d
+
+
+def test_single_printing_auto_pick_gets_priced_immediately(tmp_path):
+    """One printing -> auto-pick AND an immediate exact-printing price, not a
+    wait for the sweep."""
+    app = create_app(pipeline_factory=lambda: SingleCandPipeline(),
+                     store=ScanStore(tmp_path / "s.db"), f2f=FakeF2F(),
+                     scan_images_dir=tmp_path / "imgs",
+                     auto_sweep_interval=None)
+    c = TestClient(app)
+    sid = c.post("/api/scan", files={"files": ("c.jpg", _jpeg_bytes(), "image/jpeg")}).json()["id"]
+    scan = c.get(f"/api/scans/{sid}").json()          # bg tasks ran inline
+    assert scan["selection"]["auto_picked"] is True
+    assert scan["f2f"]["conditions"] == {"NM": 3.49, "PL": 2.79}
