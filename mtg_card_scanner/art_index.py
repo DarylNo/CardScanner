@@ -575,9 +575,24 @@ class ArtIndexBuilder:
                     return url
             return None
 
+        def _wanted(e: dict[str, Any]) -> bool:
+            # Only prefetch images we could ever rank or show. Candidates are
+            # PAPER printings excluding art-series/tokens (scryfall.get_all_
+            # printings); a digital-only or art-series image would just eat
+            # disk (~of the ~10 GB total) and never be looked at.
+            if e.get("layout", "") in _SKIP_LAYOUTS:
+                return False
+            games = e.get("games") or ["paper"]     # missing → treat as paper
+            return "paper" in games
+
         cache_dir = Path(_DEFAULT_CACHE_DIR)
         cache_dir.mkdir(parents=True, exist_ok=True)
-        wanted = [(e["id"], url) for e in entries if (url := rank_url(e))]
+        total = len(entries)
+        wanted = [(e["id"], url) for e in entries
+                  if _wanted(e) and (url := rank_url(e))]
+        skipped = total - len(wanted)
+        print(f"  [art_index] {skipped} non-paper/non-card printings skipped "
+              f"(digital, tokens, art series — never ranked or shown)")
         del entries
         todo = [(sid, url) for sid, url in wanted
                 if not (cache_dir / f"{sid}.jpg").exists()]

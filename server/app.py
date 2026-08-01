@@ -134,7 +134,7 @@ def create_app(
     setup = {"building": False, "error": None,
              "prefetching": False, "prefetch_error": None}
     _EXPECTED_INDEX = 49500          # display denominator (approx artwork count)
-    _EXPECTED_IMAGES = 115000        # approx printings with images
+    _EXPECTED_IMAGES = 100000        # approx PAPER printings with images (non-paper skipped)
 
     # Counting ~115k cache files takes ~100ms — cache it briefly so status
     # polls stay cheap while still showing live prefetch progress.
