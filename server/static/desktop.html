@@ -120,6 +120,7 @@
   <h1>🃏 MTG Card Scanner</h1>
   <span class="pill" id="phoneLink"></span>
   <span class="sp"></span>
+  <span class="stat" id="sweepStat" style="color:var(--warn)"></span>
   <span class="stat" id="stats">—</span>
   <button class="btn ghost" id="refreshBtn" title="Reload now">↻</button>
   <button class="btn ghost" id="clearJunkBtn" title="Delete every scan that has no chosen printing">Clear unpicked</button>
@@ -489,7 +490,15 @@ function sigOf(scan){
 
 async function poll(){
   try {
-    scans = await jget("/api/scans");
+    const [scansData, sweep] = await Promise.all([
+      jget("/api/scans"), jget("/api/price-status")]);
+    scans = scansData;
+    // Live sweep readout: which card the background pricer is searching on
+    // F2F right now, progress, and measured ETA — it was invisible before.
+    $("#sweepStat").textContent = sweep.active
+      ? `⟳ pricing ${sweep.done}/${sweep.total} — ${sweep.current || "…"}`
+        + (sweep.eta_s != null ? ` (~${sweep.eta_s}s left)` : "")
+      : "";
     const maxId = scans.reduce((m,s)=>Math.max(m,s.id), 0);
     if (maxId > lastMaxId){ focusedId = maxId; lastMaxId = maxId; detailSig = ""; }
     renderList();

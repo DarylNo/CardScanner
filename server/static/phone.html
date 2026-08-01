@@ -173,6 +173,8 @@
       <button id="clr-junk">Clear unpicked</button>
       <button id="clr-all" class="danger">Clear all</button>
     </div>
+    <div id="sweepInfo" style="display:none;font-size:12px;color:var(--muted);padding:6px 12px;
+         border-bottom:1px solid var(--line);white-space:nowrap;overflow:hidden;text-overflow:ellipsis"></div>
     <div class="pbody" id="scansList"></div>
   </div>
 
@@ -241,7 +243,7 @@ async function jsend(url, method, body) {
 }
 
 /* ── version banner — proves which page+server combo is running ────────────── */
-const UI_VERSION = 'v10';
+const UI_VERSION = 'v11';
 fetch('/api/version').then(r => r.json())
   .then(d => { $('#ver').textContent = `${UI_VERSION} · ${d.version}`; })
   .catch(() => { $('#ver').textContent = UI_VERSION; });
@@ -784,9 +786,30 @@ function renderScansPanel() {
     row.addEventListener('click', () => openDetail(Number(row.dataset.sid))));
 }
 
+let sweepWasActive = false;
+function renderSweep(sw) {
+  const btn = $('#p-fill'), info = $('#sweepInfo');
+  if (sw?.active) {
+    sweepWasActive = true;
+    btn.disabled = true;
+    btn.textContent = `Pricing ${sw.done}/${sw.total}…`;
+    info.style.display = 'block';
+    info.textContent = `Searching F2F: ${sw.current || '…'}`
+      + (sw.eta_s != null ? ` · ~${sw.eta_s}s left` : '');
+  } else {
+    btn.disabled = false;
+    btn.textContent = 'Price missing';
+    info.style.display = 'none';
+    if (sweepWasActive) { sweepWasActive = false; setStatus('Pricing sweep finished.', 'ok'); }
+  }
+}
+
 async function refreshScans() {
   try {
-    scans = await (await fetch('/api/scans')).json();
+    const [scansRes, sweepRes] = await Promise.all([
+      fetch('/api/scans'), fetch('/api/price-status')]);
+    scans = await scansRes.json();
+    renderSweep(await sweepRes.json());
     scansBtn.textContent = `Scans (${scans.length})`;
     renderRecent();
     renderScansPanel();
@@ -823,15 +846,11 @@ $('#clr-junk').addEventListener('click', () => clearScans('unselected'));
 $('#clr-all').addEventListener('click', () => clearScans(null));
 
 $('#p-fill').addEventListener('click', async () => {
-  const btn = $('#p-fill');
-  btn.disabled = true;
-  try {
-    const r = await jsend('/api/scans/price-missing', 'POST', {});
-    setStatus(r.queued
-      ? `Pricing ${r.queued} card${r.queued > 1 ? 's' : ''} in the background…`
-      : 'All scans already priced.', 'ok');
-  } finally { setTimeout(() => { btn.disabled = false; }, 2000); }
-  refreshScans();
+  const r = await jsend('/api/scans/price-missing', 'POST', {});
+  setStatus(r.already_running ? 'A pricing sweep is already running.'
+    : r.queued ? `Pricing ${r.queued} card${r.queued > 1 ? 's' : ''} in the background…`
+    : 'All scans already priced.', 'ok');
+  refreshScans();          // renderSweep takes over the button from here
 });
 $('#p-excl').addEventListener('click', async () => {
   const targets = scans.filter(s =>

@@ -298,6 +298,13 @@ def test_price_now_endpoint(tmp_path):
     assert c.post("/api/scans/9999/price").status_code == 404
 
 
+def test_price_status_endpoint(client):
+    st = client.get("/api/price-status").json()
+    assert st["active"] is False
+    assert st["done"] == 0 and st["total"] == 0
+    assert st["current"] == ""
+
+
 def test_price_missing_fills_unpriced_and_skips_priced(tmp_path):
     f2f = FlakyF2F()
     app = create_app(pipeline_factory=lambda: FakePipeline(),

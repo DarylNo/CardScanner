@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import time
 from pathlib import Path
 from typing import Any, Callable, Optional
 
@@ -208,6 +209,25 @@ def create_app(
         return scan
 
     # ── batch pricing ──────────────────────────────────────────────────────────
+    # Live progress of the background price sweep — which card is being
+    # searched right now, how far along, how fast. The sweep was previously
+    # invisible; the UIs poll /api/price-status to display it.
+    sweep = {"active": False, "total": 0, "done": 0, "current": "", "started": 0.0}
+
+    @app.get("/api/price-status")
+    def price_status():
+        elapsed = time.monotonic() - sweep["started"] if sweep["active"] else 0.0
+        rate = sweep["done"] / elapsed if sweep["active"] and elapsed > 0 else None
+        remaining = max(0, sweep["total"] - sweep["done"])
+        return {
+            "active": sweep["active"],
+            "total": sweep["total"],
+            "done": sweep["done"],
+            "current": sweep["current"],
+            "rate_per_s": round(rate, 2) if rate else None,
+            "eta_s": round(remaining / rate) if rate else None,
+        }
+
     @app.post("/api/scans/price-missing")
     async def price_missing(background_tasks: BackgroundTasks):
         """
@@ -215,8 +235,11 @@ def create_app(
         that already carry prices are skipped.  Prices the SELECTED printing
         when one is chosen, else the top-ranked candidate (same rule as the
         per-scan background pricing at scan time).  Runs in the background;
-        the UIs pick prices up on their normal refresh polls.
+        the UIs pick prices up on their normal refresh polls and follow the
+        sweep's progress via /api/price-status.
         """
+        if sweep["active"]:
+            return {"queued": 0, "already_running": True}
         targets: list[tuple[int, dict, bool]] = []
         for s in store.list_scans():
             if (s.get("f2f") or {}).get("conditions"):
@@ -227,15 +250,24 @@ def create_app(
             targets.append((s["id"], printing, bool(printing.get("foil", False))))
 
         def _price_all(items: list[tuple[int, dict, bool]]) -> None:
-            for sid, c, foil in items:
-                try:
-                    p = f2f.get_price(c.get("name", ""), c.get("set", ""),
-                                      c.get("collector_number", ""), foil,
-                                      c.get("set_name", ""))
-                    if p:
-                        store.update_scan(sid, f2f=p.to_dict())
-                except Exception as exc:
-                    print(f"  [server] price-missing failed for #{sid}: {exc}")
+            sweep.update(active=True, total=len(items), done=0, current="",
+                         started=time.monotonic())
+            try:
+                for sid, c, foil in items:
+                    sweep["current"] = c.get("name", "")
+                    try:
+                        p = f2f.get_price(c.get("name", ""), c.get("set", ""),
+                                          c.get("collector_number", ""), foil,
+                                          c.get("set_name", ""))
+                        if p:
+                            store.update_scan(sid, f2f=p.to_dict())
+                    except Exception as exc:
+                        print(f"  [server] price-missing failed for #{sid}: {exc}")
+                    finally:
+                        sweep["done"] += 1
+            finally:
+                sweep["active"] = False
+                sweep["current"] = ""
 
         if targets:
             background_tasks.add_task(_price_all, targets)
