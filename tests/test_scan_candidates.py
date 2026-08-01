@@ -244,6 +244,39 @@ def test_scan_candidates_unconfident_is_not_no_card():
     assert "manual search" in out["error"].lower()
 
 
+def test_scan_candidates_margin_accepts_lone_leader():
+    """
+    Live case: correct card at d=116 (over the 110 bar) with the runner-up 22
+    points back was kicked to manual search. A lone leader below the noise
+    floor with a wide gap must be accepted.
+    """
+    idx = FakeIndex([_match(distance=116),
+                     _match(name="Eternal Isolation", distance=138)])
+    p = _pipeline(idx, FakeScryfall([_printing("id", "m10", "146", "Magic 2010")]))
+    out = p.scan_candidates(FRAME)
+    assert out["identified"] is True
+    assert out["candidates"]
+
+
+def test_scan_candidates_tight_cluster_stays_manual():
+    """Over the bar with a close runner-up is noise — manual search."""
+    idx = FakeIndex([_match(distance=116),
+                     _match(name="Other", distance=124)])
+    p = _pipeline(idx, FakeScryfall([]))
+    out = p.scan_candidates(FRAME)
+    assert out["identified"] is False
+    assert "manual search" in out["error"].lower()
+
+
+def test_scan_candidates_margin_cannot_rescue_noise_floor():
+    """A huge gap does not make a noise-floor score (>140) trustworthy."""
+    idx = FakeIndex([_match(distance=150),
+                     _match(name="Other", distance=200)])
+    p = _pipeline(idx, FakeScryfall([]))
+    out = p.scan_candidates(FRAME)
+    assert out["identified"] is False
+
+
 def test_scan_candidates_blank_surface_is_no_card():
     """
     A card-shaped uniform object (black card holder on the tray) must be

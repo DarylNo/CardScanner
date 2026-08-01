@@ -60,6 +60,13 @@ _DEFAULT_INDEX_DIR = Path.home() / ".cache" / "mtg-card-scanner" / "art_index"
 # returned as a confidently WRONG card.
 _MAX_CONFIDENT_DISTANCE = 110   # combined score: above this → manual search
 _HIGH_CONFIDENCE_DISTANCE = 90  # combined score: at/below this → "high"
+# Margin acceptance: a best match somewhat over the absolute bar is still
+# trustworthy when NOTHING else comes close — noise-floor matches cluster
+# tightly, a lone leader does not. Observed live: the correct card at d=116
+# (bar 110) with the runner-up 22 points back was kicked to manual search.
+# Only applies below the noise floor (~144), so junk can't ride a fluke gap.
+_MARGIN_CONFIDENT_DISTANCE = 140  # margin rule ceiling for the best score
+_MARGIN_MIN_GAP = 20              # required lead over the second-best NAME
 # Above this, the frame almost certainly contains NO card at all (empty tray /
 # lens cap): measured empty scenes score ≥236 while even badly-glared real
 # cards stay ≤~170. Scans in this band are rejected outright rather than

@@ -14,6 +14,8 @@ from mtg_card_scanner.art_index import (
     ArtIndex,
     ArtIndexError,
     _HIGH_CONFIDENCE_DISTANCE,
+    _MARGIN_CONFIDENT_DISTANCE,
+    _MARGIN_MIN_GAP,
     _MAX_CONFIDENT_DISTANCE,
     _NO_CARD_DISTANCE,
 )
@@ -55,6 +57,22 @@ def _confidence_for(distance: int) -> str:
     if distance <= _MAX_CONFIDENT_DISTANCE:
         return "medium"
     return "low"
+
+
+def _is_confident(matches: list[dict[str, Any]]) -> bool:
+    """
+    Accept the top art match either on absolute score or on MARGIN: a best
+    score somewhat over the bar whose runner-up NAME trails far behind is a
+    lone leader, not noise (noise-floor matches cluster tightly — see the
+    margin constants in art_index).  matches is already deduped by name.
+    """
+    if not matches:
+        return False
+    distance = matches[0]["distance"]
+    if distance <= _MAX_CONFIDENT_DISTANCE:
+        return True
+    gap = (matches[1]["distance"] - distance) if len(matches) > 1 else (1 << 30)
+    return distance <= _MARGIN_CONFIDENT_DISTANCE and gap >= _MARGIN_MIN_GAP
 
 
 _DEMO_CARD = CardRead(
@@ -99,7 +117,7 @@ class Pipeline:
         assert self.index is not None
         matches = self.index.identify(frames[0], top_n=5)
         for frame in frames[1:]:
-            if matches and matches[0]["distance"] <= _MAX_CONFIDENT_DISTANCE:
+            if _is_confident(matches):
                 break
             retry = self.index.identify(frame, top_n=5)
             if retry and (not matches or retry[0]["distance"] < matches[0]["distance"]):
@@ -217,7 +235,7 @@ class Pipeline:
             ],
         }
 
-        if distance > _MAX_CONFIDENT_DISTANCE:
+        if not _is_confident(matches):
             return {
                 "identified": False,
                 "card_read": read_dict,
