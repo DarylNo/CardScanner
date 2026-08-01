@@ -458,6 +458,12 @@ def create_app(
         sweep["manual_stop_at"] = time.monotonic()
         if sweep["active"]:
             sweep["cancel"] = True
+            # Abort in-flight waits/retries too — the cancel flag alone was
+            # only checked between targets, and a 429 storm made one target
+            # take minutes ("stopping…" stuck at 0/85 at ceiling pace).
+            evt = getattr(f2f, "interrupt", None)
+            if evt is not None:
+                evt.set()
             return {"stopping": True}
         return {"stopping": False}
 
@@ -501,6 +507,9 @@ def create_app(
                 return False
             sweep.update(active=True, total=len(targets), done=0, current="",
                          cancel=False, started=time.monotonic())
+            evt = getattr(f2f, "interrupt", None)
+            if evt is not None:
+                evt.clear()
             return True
 
     def _run_sweep(items: list[tuple[str, int, dict, bool, str]]) -> None:
@@ -570,6 +579,8 @@ def create_app(
                                 store.update_scan(sid, candidates=cands)
                 except F2FUnavailableError as exc:
                     # No writes — the target stays unsearched and retryable.
+                    if sweep.get("cancel"):
+                        break          # user stop, not storefront weather
                     print(f"  [server] F2F unavailable for #{sid}: {exc}")
                     unavailable_streak += 1
                     if unavailable_streak >= 5:
@@ -587,6 +598,9 @@ def create_app(
                 sweep["active"] = False
                 sweep["current"] = ""
                 sweep["cancel"] = False
+            evt = getattr(f2f, "interrupt", None)
+            if evt is not None:
+                evt.clear()
 
     def _retro_fix_scans() -> None:
         """

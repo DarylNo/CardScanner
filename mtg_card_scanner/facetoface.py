@@ -22,6 +22,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -167,7 +168,8 @@ def _variants_to_conditions(variants: list[dict[str, Any]]) -> dict[str, float]:
     return conditions
 
 
-def _default_get_json(cache_dir: Path) -> Callable[[str], Any]:
+def _default_get_json(cache_dir: Path,
+                      interrupt: Optional["threading.Event"] = None) -> Callable[[str], Any]:
     """Build the real HTTP fetcher: throttled, UA'd, disk-cached by URL.
 
     Called concurrently from the auto-sweep daemon thread AND request
@@ -178,7 +180,6 @@ def _default_get_json(cache_dir: Path) -> Callable[[str], Any]:
     of get_price for 24 h straight.
     """
     import os
-    import threading
     from collections import deque
 
     session = requests.Session()
@@ -201,15 +202,26 @@ def _default_get_json(cache_dir: Path) -> Callable[[str], Any]:
     throttle_lock = threading.Lock()
     cache_dir.mkdir(parents=True, exist_ok=True)
 
-    def _throttle() -> None:
+    def _wait(seconds: float) -> bool:
+        """Sleep, but wake instantly if the interrupt fires. True = aborted.
+        A Stop press used to sit behind minutes of 429 backoff (observed:
+        'stopping…' stuck on the first target at ceiling pace)."""
+        if interrupt is not None:
+            return interrupt.wait(seconds)
+        time.sleep(seconds)
+        return False
+
+    def _throttle() -> bool:
         with throttle_lock:
             now = time.monotonic()
             if now - state["last"] > _IDLE_RESET_S:
                 state["delay"] = _START_DELAY      # fresh burst — slow start
             elapsed = now - state["last"]
+            aborted = False
             if elapsed < state["delay"]:
-                time.sleep(state["delay"] - elapsed)
+                aborted = _wait(state["delay"] - elapsed)
             state["last"] = time.monotonic()
+            return aborted
 
     def _feedback(ok: bool) -> None:
         """AIMD-ish: successes speed the pace up gently, 429s halve it hard.
@@ -237,7 +249,12 @@ def _default_get_json(cache_dir: Path) -> Callable[[str], Any]:
         #   failures are LOGGED because a silent None reads as "not listed".
         last_error = ""
         for attempt in (1, 2, 3, 4):
-            _throttle()
+            if interrupt is not None and interrupt.is_set():
+                last_error = "interrupted"
+                break
+            if _throttle():
+                last_error = "interrupted"
+                break
             try:
                 resp = session.get(url, timeout=_TIMEOUT)
                 if resp.status_code == 429:
@@ -249,7 +266,9 @@ def _default_get_json(cache_dir: Path) -> Callable[[str], Any]:
                         wait = 0.0
                     waited = min(max(wait, 2.0 * attempt), 15.0)
                     _record(url, "429", waited)
-                    time.sleep(waited)
+                    if _wait(waited):
+                        last_error = "interrupted"
+                        break
                     continue
                 resp.raise_for_status()
                 data = resp.json()
@@ -260,7 +279,9 @@ def _default_get_json(cache_dir: Path) -> Callable[[str], Any]:
                 _record(url, type(exc).__name__)
                 if attempt >= 2:
                     break
-                time.sleep(0.8)
+                if _wait(0.8):
+                    last_error = "interrupted"
+                    break
                 continue
             tmp = cached.with_suffix(f".{os.getpid()}.{threading.get_ident()}.tmp")
             try:
@@ -304,7 +325,10 @@ class FaceToFaceClient:
         get_json: Optional[Callable[[str], Any]] = None,
         cache_dir: Path = _DEFAULT_CACHE_DIR,
     ) -> None:
-        self._get_json = get_json or _default_get_json(Path(cache_dir))
+        # Cooperative cancel: set() aborts in-flight waits/retries instantly
+        # (fetches then surface as F2FUnavailableError — never as "unlisted").
+        self.interrupt = threading.Event()
+        self._get_json = get_json or _default_get_json(Path(cache_dir), self.interrupt)
 
     # ── endpoint wrappers ──────────────────────────────────────────────────────
 

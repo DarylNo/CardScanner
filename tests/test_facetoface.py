@@ -222,3 +222,24 @@ def test_adaptive_pacing_slow_start_speedup_and_backoff(tmp_path, monkeypatch):
     assert get_json("http://throttled") is None
     assert get_json.current_delay() > sped_up
     assert get_json.current_delay() <= m._CEIL_DELAY
+
+
+def test_interrupt_aborts_fetch_without_touching_network(tmp_path, monkeypatch):
+    """A fired interrupt makes get_json bail before any request — this is
+    what lets Stop cut through minutes of 429 backoff instantly."""
+    import threading as _threading
+    from mtg_card_scanner import facetoface as m
+    calls = []
+
+    class Sess:
+        def __init__(self): self.headers = {}
+        def get(self, url, timeout=None):
+            calls.append(url)
+            raise AssertionError("must not fetch after interrupt")
+
+    monkeypatch.setattr(m.requests, "Session", Sess)
+    evt = _threading.Event()
+    evt.set()
+    get_json = m._default_get_json(tmp_path, evt)
+    assert get_json("http://x") is None
+    assert calls == []
