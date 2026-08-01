@@ -478,6 +478,27 @@ def create_app(
                     break
                 sweep["current"] = c.get("name", "")
                 try:
+                    # Skip WITHOUT fetching when the target became moot since
+                    # collect time — the target list is frozen at sweep start,
+                    # but picks land mid-sweep, and once a print is selected
+                    # (auto or user) that selection is the ONLY print worth a
+                    # request. Every skipped fetch is rate-limit budget saved.
+                    row = store.get_scan(sid)
+                    if not row:
+                        continue                    # scan deleted mid-sweep
+                    if kind == "print":
+                        if row.get("selection"):
+                            continue                # pick landed — candidates moot
+                        cc = next((x for x in (row.get("candidates") or [])
+                                   if x.get("id") == c.get("id")), None)
+                        if cc is None or cc.get("f2f_conditions") is not None:
+                            continue                # gone or already searched
+                    else:
+                        sel = row.get("selection") or {}
+                        if (row.get("f2f") is not None
+                                or sel.get("scryfall_id") != c.get("scryfall_id")
+                                or bool(sel.get("foil", False)) != foil):
+                            continue                # re-picked/re-priced already
                     p = f2f.get_price(c.get("name", ""), c.get("set", ""),
                                       c.get("collector_number", ""), foil,
                                       c.get("set_name", ""))

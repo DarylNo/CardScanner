@@ -424,3 +424,25 @@ def test_sweep_circuit_breaker_aborts_and_cools_down(tmp_path):
     assert f2f.calls - calls_before_sweep == 5    # aborted after 5, not 8
     for s in c.get("/api/scans").json():          # nothing falsely recorded
         assert all(cc.get("f2f_conditions") is None for cc in s["candidates"])
+
+
+def test_selected_scan_queues_only_its_selection(tmp_path):
+    """Once a print is selected (auto or user), that selection is the ONLY
+    print the sweeper queues — never the other candidates."""
+    f2f = FlakyF2F()                              # select-time pricing finds nothing
+    app = create_app(pipeline_factory=lambda: FakePipeline(),
+                     store=ScanStore(tmp_path / "s.db"), f2f=f2f,
+                     scan_images_dir=tmp_path / "imgs",
+                     auto_sweep_interval=None)
+    c = TestClient(app)
+    sid = c.post("/api/scan", files={"files": ("c.jpg", _jpeg_bytes(), "image/jpeg")}).json()["id"]
+    c.post(f"/api/scans/{sid}/select",
+           json={"printing": CANDIDATES[0], "condition": "NM",
+                 "finish": "Non-Foil", "quantity": 1})
+
+    f2f.enabled = True
+    r = c.post("/api/scans/price-missing").json()
+    assert r["queued"] == 1                       # the selection — not 2 prints
+    scan = c.get(f"/api/scans/{sid}").json()
+    assert scan["f2f"]["conditions"] == {"NM": 1.99}
+    assert all(cc.get("f2f_conditions") is None for cc in scan["candidates"])
