@@ -197,10 +197,14 @@ const MW = 176, SAMPLE_MS = 200;
 let MH = 132;
 const PIX_DELTA = 25;        // gray levels — per-pixel "really changed" bar
 const GRAD_THR = 14;         // gradient magnitude counted as "textured"
-const STABLE_FRAC = 0.010;   // vs previous sample: <1% changed → motion stopped
+// Stability: 3% (not 1%) — the ROI zooms the sample into the tray, so sensor
+// noise and micro-shimmer are a larger fraction of pixels; real motion (hand,
+// sliding card) changes far more than 3%. Two steady samples (~0.4 s) is
+// enough once exposure hunting is cancelled in changedFrac.
+const STABLE_FRAC = 0.03;    // vs previous sample: below this → motion stopped
 const EMPTY_FRAC = 0.015;    // card mask below this → tray is empty
 const SWAP_FRAC = 0.06;      // vs frame at last scan: enough change = new card
-const STABLE_FRAMES = 3;     // ~0.6 s of steady card before scanning
+const STABLE_FRAMES = 2;     // steady samples required before scanning
 const DEBUG = new URLSearchParams(location.search).has('debug');
 
 let autoEnabled = true;
@@ -216,7 +220,7 @@ function setStatus(msg, cls='') { statusEl.textContent = msg; statusEl.className
 // UI_VERSION identifies THIS page; the fetched hash identifies the server.
 // Both are shown so a stale cached page (which cost a debugging round once)
 // is visible at a glance. Bump UI_VERSION on every phone.html change.
-const UI_VERSION = 'v5';
+const UI_VERSION = 'v6';
 fetch('/api/version').then(r => r.json())
   .then(d => { document.getElementById('ver').textContent = `${UI_VERSION} · ${d.version}`; })
   .catch(() => { document.getElementById('ver').textContent = UI_VERSION; });
@@ -415,8 +419,18 @@ function sampleSmallGray() {
 }
 
 function changedFrac(a, b) {
+  // Camera auto-exposure shifts EVERY pixel together, which read as constant
+  // scene motion and starved the stability counter (observed: never reaching
+  // the steady count). Subtracting the mean frame delta first cancels global
+  // exposure hunting while real motion — a hand, a sliding card — still
+  // changes pixels in different directions and survives.
+  let sum = 0;
+  for (let i = 0; i < a.length; i++) sum += a[i] - b[i];
+  const mean = sum / a.length;
   let n = 0;
-  for (let i = 0; i < a.length; i++) if (Math.abs(a[i] - b[i]) > PIX_DELTA) n++;
+  for (let i = 0; i < a.length; i++) {
+    if (Math.abs(a[i] - b[i] - mean) > PIX_DELTA) n++;
+  }
   return n / a.length;
 }
 
