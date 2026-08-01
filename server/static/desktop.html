@@ -554,7 +554,7 @@ function sigOf(scan){
 
 // Version banner — page version · server git hash. Same rationale as the
 // phone: without it, "is this the old page?" is undebuggable.
-const UI_VERSION = "d7";
+const UI_VERSION = "d8";
 $("#sweepStopBtn").addEventListener("click", async () => {
   await jsend("/api/price-sweep/stop", "POST", {});
   toast("Sweep stopping — auto-sweep paused 10 min");
@@ -573,7 +573,9 @@ async function poll(){
     $("#sweepStat").textContent = sweep.active
       ? (sweep.cancelling ? `⟳ stopping…`
          : `⟳ pricing ${sweep.done}/${sweep.total} — ${sweep.current || "…"}`
-           + (sweep.eta_s != null ? ` (~${sweep.eta_s}s left)` : ""))
+           + (sweep.eta_s != null ? ` (~${sweep.eta_s}s left` : "")
+           + (sweep.pace_s ? ` · pace 1/${sweep.pace_s}s` : "")
+           + (sweep.eta_s != null ? `)` : ""))
       : "";
     $("#sweepStopBtn").style.display = sweep.active && !sweep.cancelling ? "" : "none";
     $("#sweepStartBtn").style.display = !sweep.active ? "" : "none";

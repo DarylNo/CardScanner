@@ -414,6 +414,7 @@ def create_app(
             "cancelling": bool(sweep.get("cancel")),
             "cooldown_s": (round(max(0.0, sweep["backoff_until"] - time.monotonic()))
                            if sweep.get("backoff_until") else 0),
+            "pace_s": getattr(f2f, "pacing_delay", lambda: None)(),
             "rate_per_s": round(rate, 2) if rate else None,
             "eta_s": round(remaining / rate) if rate else None,
         }

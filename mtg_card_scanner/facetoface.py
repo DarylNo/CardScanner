@@ -32,11 +32,19 @@ import requests
 
 _BASE = "https://facetofacegames.com"
 _USER_AGENT = "MTGCardScanner/1.0 facetoface (contact: your-email@example.com)"
-# Shopify's storefront /products/*.json runs a ~2 req/s leaky bucket: at the
-# old 0.15s spacing a sweep tripped it and every quick retry 429'd too, so
-# whole cards went "unavailable" each pass (observed live: persistent 429s on
-# duskhunter-bat/hunt-for-specimens while a lone curl returned 200).
-_MIN_DELAY = 1.0           # 1 req/s — even 2/s sustained kept the bucket tripped
+# ADAPTIVE pacing (slow start + AIMD): fixed rates kept failing — 6.7/s
+# tripped the storefront's leaky bucket instantly, 2/s sustained kept it
+# tripped, and even 1/s saw scattered 429s once the IP was warm. So: each
+# burst starts at 1 request per _START_DELAY seconds, every success speeds
+# up ~10% down to a floor, every 429 doubles the delay up to a ceiling, and
+# going idle resets to the slow start (a fresh sweep faces an unknown
+# bucket). Per-request Retry-After waits still apply on top.
+_START_DELAY = 2.0         # slow start: 1 req / 2s
+_FLOOR_DELAY = 0.5         # never faster than 2/s regardless of success
+_CEIL_DELAY = 10.0
+_SPEEDUP = 0.9             # multiply delay on success
+_SLOWDOWN = 2.0            # multiply delay on 429
+_IDLE_RESET_S = 120.0      # quiet this long → next burst slow-starts again
 _TIMEOUT = 8               # fail fast rather than hang a scan
 _SUGGEST_LIMIT = 10
 _DEFAULT_CACHE_DIR = Path.home() / ".cache" / "mtg-card-scanner" / "facetoface"
@@ -170,16 +178,28 @@ def _default_get_json(cache_dir: Path) -> Callable[[str], Any]:
 
     session = requests.Session()
     session.headers["User-Agent"] = _USER_AGENT
-    state = {"last": 0.0}
+    state = {"last": 0.0, "delay": _START_DELAY}
     throttle_lock = threading.Lock()
     cache_dir.mkdir(parents=True, exist_ok=True)
 
     def _throttle() -> None:
         with throttle_lock:
-            elapsed = time.monotonic() - state["last"]
-            if elapsed < _MIN_DELAY:
-                time.sleep(_MIN_DELAY - elapsed)
+            now = time.monotonic()
+            if now - state["last"] > _IDLE_RESET_S:
+                state["delay"] = _START_DELAY      # fresh burst — slow start
+            elapsed = now - state["last"]
+            if elapsed < state["delay"]:
+                time.sleep(state["delay"] - elapsed)
             state["last"] = time.monotonic()
+
+    def _feedback(ok: bool) -> None:
+        """AIMD-ish: successes speed the pace up gently, 429s halve it hard.
+        Non-429 network errors are NOT pacing signals and change nothing."""
+        with throttle_lock:
+            if ok:
+                state["delay"] = max(_FLOOR_DELAY, state["delay"] * _SPEEDUP)
+            else:
+                state["delay"] = min(_CEIL_DELAY, state["delay"] * _SLOWDOWN)
 
     def get_json(url: str) -> Any:
         key = hashlib.sha1(url.encode()).hexdigest()
@@ -200,6 +220,7 @@ def _default_get_json(cache_dir: Path) -> Callable[[str], Any]:
             try:
                 resp = session.get(url, timeout=_TIMEOUT)
                 if resp.status_code == 429:
+                    _feedback(False)               # pace down for everyone
                     last_error = "429 Too Many Requests"
                     try:
                         wait = float(resp.headers.get("Retry-After") or 0)
@@ -209,6 +230,7 @@ def _default_get_json(cache_dir: Path) -> Callable[[str], Any]:
                     continue
                 resp.raise_for_status()
                 data = resp.json()
+                _feedback(True)                    # pace up gently
             except (requests.RequestException, ValueError) as exc:
                 last_error = f"{type(exc).__name__}: {exc}"
                 if attempt >= 2:
@@ -232,6 +254,7 @@ def _default_get_json(cache_dir: Path) -> Callable[[str], Any]:
         print(f"  [facetoface] GET failed after retry: {url} ({last_error})")
         return None
 
+    get_json.current_delay = lambda: state["delay"]   # UI: show the live pace
     return get_json
 
 
@@ -258,6 +281,11 @@ class FaceToFaceClient:
         self._get_json = get_json or _default_get_json(Path(cache_dir))
 
     # ── endpoint wrappers ──────────────────────────────────────────────────────
+
+    def pacing_delay(self) -> Optional[float]:
+        """Current adaptive request spacing in seconds (None for injected fakes)."""
+        fn = getattr(self._get_json, "current_delay", None)
+        return round(fn(), 2) if fn else None
 
     def _suggest(self, name: str) -> list[dict[str, Any]]:
         url = (

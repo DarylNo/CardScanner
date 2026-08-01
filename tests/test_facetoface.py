@@ -189,3 +189,36 @@ def test_429_backs_off_and_recovers(tmp_path, monkeypatch):
     assert get_json("http://x") == {"ok": True}
     assert len(calls) == 3                      # two 429s, then success
     assert any(s >= 2.0 for s in sleeps)        # real backoff, not the 0.8s blip retry
+
+
+def test_adaptive_pacing_slow_start_speedup_and_backoff(tmp_path, monkeypatch):
+    """Slow start at 1/2s; successes speed the pace up toward the floor;
+    a 429 storm slows it multiplicatively toward the ceiling."""
+    from mtg_card_scanner import facetoface as m
+    monkeypatch.setattr(m.time, "sleep", lambda s: None)
+    codes = {"value": 200}
+
+    class Resp:
+        def __init__(self):
+            self.status_code = codes["value"]
+            self.headers = {}
+        def raise_for_status(self): pass
+        def json(self): return {"ok": True}
+
+    class Sess:
+        def __init__(self): self.headers = {}
+        def get(self, url, timeout=None): return Resp()
+
+    monkeypatch.setattr(m.requests, "Session", Sess)
+    get_json = m._default_get_json(tmp_path)
+    assert get_json.current_delay() == m._START_DELAY
+
+    for i in range(5):                       # distinct URLs to dodge the cache
+        get_json(f"http://ok/{i}")
+    sped_up = get_json.current_delay()
+    assert sped_up < m._START_DELAY
+
+    codes["value"] = 429                     # storm: every attempt 429s
+    assert get_json("http://throttled") is None
+    assert get_json.current_delay() > sped_up
+    assert get_json.current_delay() <= m._CEIL_DELAY

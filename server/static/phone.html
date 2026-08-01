@@ -213,7 +213,7 @@ async function jsend(url, method, body) {
 }
 
 /* ── version banner — proves which page+server combo is running ────────────── */
-const UI_VERSION = 'v17';
+const UI_VERSION = 'v18';
 fetch('/api/version').then(r => r.json())
   .then(d => { $('#ver').textContent = `${UI_VERSION} · ${d.version}`; })
   .catch(() => { $('#ver').textContent = UI_VERSION; });
@@ -786,7 +786,8 @@ function renderSweep(sw) {
     btn.textContent = sw.cancelling ? 'Stopping…' : `■ Stop (${sw.done}/${sw.total})`;
     info.style.display = 'block';
     info.textContent = `Searching F2F: ${sw.current || '…'}`
-      + (sw.eta_s != null ? ` · ~${sw.eta_s}s left` : '');
+      + (sw.eta_s != null ? ` · ~${sw.eta_s}s left` : '')
+      + (sw.pace_s ? ` · pace 1/${sw.pace_s}s` : '');
   } else {
     btn.disabled = false;
     btn.textContent = 'Price missing';
