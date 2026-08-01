@@ -136,7 +136,7 @@ def test_price_cache_expires_after_ttl(tmp_path, monkeypatch):
             calls.append(url)
             return FakeResp()
 
-    monkeypatch.setattr(f2f_mod.requests, "Session", FakeSession)
+    monkeypatch.setattr(f2f_mod, "_new_session", lambda: FakeSession())
     get_json = f2f_mod._default_get_json(tmp_path)
 
     assert get_json("http://x") == {"fetch": 1}
@@ -182,12 +182,12 @@ def test_429_backs_off_and_recovers(tmp_path, monkeypatch):
         def __init__(self): self.headers = {}
         def get(self, url, timeout=None):
             calls.append(url)
-            return Resp(429 if len(calls) < 3 else 200)
+            return Resp(429 if len(calls) < 2 else 200)
 
-    monkeypatch.setattr(f2f_mod.requests, "Session", Sess)
+    monkeypatch.setattr(f2f_mod, "_new_session", lambda: Sess())
     get_json = f2f_mod._default_get_json(tmp_path)
     assert get_json("http://x") == {"ok": True}
-    assert len(calls) == 3                      # two 429s, then success
+    assert len(calls) == 2                      # one 429 (waited out), then success
     assert any(s >= 2.0 for s in sleeps)        # real backoff, not the 0.8s blip retry
 
 
@@ -209,7 +209,7 @@ def test_adaptive_pacing_slow_start_speedup_and_backoff(tmp_path, monkeypatch):
         def __init__(self): self.headers = {}
         def get(self, url, timeout=None): return Resp()
 
-    monkeypatch.setattr(m.requests, "Session", Sess)
+    monkeypatch.setattr(m, "_new_session", lambda: Sess())
     get_json = m._default_get_json(tmp_path)
     assert get_json.current_delay() == m._START_DELAY
 
@@ -237,7 +237,7 @@ def test_interrupt_aborts_fetch_without_touching_network(tmp_path, monkeypatch):
             calls.append(url)
             raise AssertionError("must not fetch after interrupt")
 
-    monkeypatch.setattr(m.requests, "Session", Sess)
+    monkeypatch.setattr(m, "_new_session", lambda: Sess())
     evt = _threading.Event()
     evt.set()
     get_json = m._default_get_json(tmp_path, evt)

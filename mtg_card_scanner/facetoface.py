@@ -45,7 +45,7 @@ _USER_AGENT = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
 # going idle resets to the slow start (a fresh sweep faces an unknown
 # bucket). Per-request Retry-After waits still apply on top.
 _START_DELAY = 2.0         # slow start: 1 req / 2s
-_FLOOR_DELAY = 0.5         # never faster than 2/s regardless of success
+_FLOOR_DELAY = 0.5         # with Chrome TLS impersonation the bucket is generous
 _CEIL_DELAY = 10.0
 _SPEEDUP = 0.9             # multiply delay on success
 _SLOWDOWN = 2.0            # multiply delay on 429
@@ -168,6 +168,21 @@ def _variants_to_conditions(variants: list[dict[str, Any]]) -> dict[str, float]:
     return conditions
 
 
+def _new_session():
+    """HTTP session for storefront calls. Prefers curl_cffi's Chrome TLS
+    impersonation: Shopify's rate limiter fingerprints the TLS handshake, not
+    just the User-Agent — python-requests' signature draws a tiny bucket
+    (429 on the 3rd rapid request) while a real Chrome handshake gets the
+    generous one (measured: 6/6 rapid 200s on the exact URL that had been
+    429ing every attempt). Falls back to plain requests if curl_cffi is
+    unavailable — the adaptive pacing still protects that path."""
+    try:
+        from curl_cffi import requests as _cffi
+        return _cffi.Session(impersonate="chrome")
+    except Exception:
+        return requests.Session()
+
+
 def _default_get_json(cache_dir: Path,
                       interrupt: Optional["threading.Event"] = None) -> Callable[[str], Any]:
     """Build the real HTTP fetcher: throttled, UA'd, disk-cached by URL.
@@ -182,7 +197,7 @@ def _default_get_json(cache_dir: Path,
     import os
     from collections import deque
 
-    session = requests.Session()
+    session = _new_session()
     session.headers["User-Agent"] = _USER_AGENT
     session.headers["Accept"] = "application/json"
     session.headers["Accept-Language"] = "en-CA,en;q=0.9"
@@ -247,8 +262,12 @@ def _default_get_json(cache_dir: Path,
         #   Retry-After, else back off 2s/4s/6s across up to 4 attempts.
         #   Anything else (network blip, 5xx) — one quick retry, then give up;
         #   failures are LOGGED because a silent None reads as "not listed".
+        # Two attempts max: honor one Retry-After, then surrender the URL to
+        # the NEXT auto-sweep (60s away). Grinding 4 attempts in place spent
+        # ~75s per dead URL for the same eventual outcome. With Chrome TLS
+        # impersonation genuine 429s are now rare anyway.
         last_error = ""
-        for attempt in (1, 2, 3, 4):
+        for attempt in (1, 2):
             if interrupt is not None and interrupt.is_set():
                 last_error = "interrupted"
                 break
@@ -274,7 +293,7 @@ def _default_get_json(cache_dir: Path,
                 data = resp.json()
                 _feedback(True)                    # pace up gently
                 _record(url, "200")
-            except (requests.RequestException, ValueError) as exc:
+            except Exception as exc:   # requests OR curl_cffi transport errors
                 last_error = f"{type(exc).__name__}: {exc}"
                 _record(url, type(exc).__name__)
                 if attempt >= 2:
