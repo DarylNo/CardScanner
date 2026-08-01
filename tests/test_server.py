@@ -237,6 +237,37 @@ class FlakyF2F:
                         conditions={"NM": 1.99})
 
 
+def test_select_merges_duplicate_printings(client):
+    """Selecting the exact printing+condition+finish an existing selected row
+    holds folds the new scan into it as quantity instead of a duplicate row."""
+    a = client.post("/api/scan", files={"files": ("c.jpg", _jpeg_bytes(), "image/jpeg")}).json()
+    b = client.post("/api/scan", files={"files": ("c.jpg", _jpeg_bytes(), "image/jpeg")}).json()
+    client.post(f"/api/scans/{a['id']}/select",
+                json={"printing": CANDIDATES[0], "condition": "NM",
+                      "finish": "Non-Foil", "quantity": 1})
+    r = client.post(f"/api/scans/{b['id']}/select",
+                    json={"printing": CANDIDATES[0], "condition": "NM",
+                          "finish": "Non-Foil", "quantity": 1}).json()
+    assert r["merged_into"] == a["id"]
+    assert r["selection"]["quantity"] == 2
+    scans = client.get("/api/scans").json()
+    assert [s["id"] for s in scans] == [a["id"]]      # duplicate row is gone
+    assert client.get(f"/api/scans/{b['id']}/image").status_code == 404
+
+
+def test_select_does_not_merge_different_condition(client):
+    a = client.post("/api/scan", files={"files": ("c.jpg", _jpeg_bytes(), "image/jpeg")}).json()
+    b = client.post("/api/scan", files={"files": ("c.jpg", _jpeg_bytes(), "image/jpeg")}).json()
+    client.post(f"/api/scans/{a['id']}/select",
+                json={"printing": CANDIDATES[0], "condition": "NM",
+                      "finish": "Non-Foil", "quantity": 1})
+    r = client.post(f"/api/scans/{b['id']}/select",
+                    json={"printing": CANDIDATES[0], "condition": "LP",
+                          "finish": "Non-Foil", "quantity": 1}).json()
+    assert "merged_into" not in r
+    assert len(client.get("/api/scans").json()) == 2
+
+
 def test_price_now_endpoint(tmp_path):
     """On-demand pricing: prices the scan, and a failed search returns a
     transient not_found flag WITHOUT clearing an existing price."""

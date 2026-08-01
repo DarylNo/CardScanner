@@ -220,7 +220,7 @@ function setStatus(msg, cls='') { statusEl.textContent = msg; statusEl.className
 // UI_VERSION identifies THIS page; the fetched hash identifies the server.
 // Both are shown so a stale cached page (which cost a debugging round once)
 // is visible at a glance. Bump UI_VERSION on every phone.html change.
-const UI_VERSION = 'v7';
+const UI_VERSION = 'v8';
 fetch('/api/version').then(r => r.json())
   .then(d => { document.getElementById('ver').textContent = `${UI_VERSION} · ${d.version}`; })
   .catch(() => { document.getElementById('ver').textContent = UI_VERSION; });
@@ -1006,7 +1006,12 @@ async function renderScanDetail() {
     const printing = (pool || []).find(c => c.id === el.dataset.pick);
     if (!printing) return;
     el.style.opacity = '0.5';
-    await jsend(`/api/scans/${scan.id}/select`, 'POST', { printing, ...detailCtl() });
+    const res = await jsend(`/api/scans/${scan.id}/select`, 'POST', { printing, ...detailCtl() });
+    if (res.merged_into) {
+      // Duplicate copy — folded into the existing row; show that row instead.
+      detailScanId = res.merged_into;
+      setStatus(`Duplicate — merged (now ×${res.selection?.quantity})`, 'ok');
+    }
     await renderScanDetail(); refreshScans();
   };
   const candPick = pickFrom(scan.candidates);

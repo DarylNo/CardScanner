@@ -398,9 +398,15 @@ function wireDetail(scan){
     const printing = (pool || []).find(c => c.id === el.dataset.pick);
     if (!printing) return;
     el.style.opacity = ".5";
-    await jsend(`/api/scans/${scan.id}/select`, "POST", { printing, ...currentControls() });
-    await poll(); detailSig=""; renderDetail();
-    toast(`Selected ${printing.set_name} #${printing.collector_number}`);
+    const res = await jsend(`/api/scans/${scan.id}/select`, "POST", { printing, ...currentControls() });
+    if (res.merged_into){
+      // Duplicate copy — folded into the existing row; follow it there.
+      focusedId = res.merged_into;
+      toast(`Duplicate — merged into existing entry (now ×${res.selection?.quantity})`);
+    } else {
+      toast(`Selected ${printing.set_name} #${printing.collector_number}`);
+    }
+    await poll(); detailSig=""; renderDetail(); listSig=""; renderList();
   };
   const candPick = pickFrom(scan.candidates);
   $("#cands")?.querySelectorAll(".card[data-pick]").forEach(el =>

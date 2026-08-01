@@ -286,6 +286,25 @@ def create_app(
             "foil": foil,
             "image_normal": printing.get("image_normal", ""),
         }
+        # Auto-merge duplicates: bulk lots contain several copies of the same
+        # card (measured: 17% of a real session's scans were repeats), and each
+        # used to become its own row to pick, price, and export.  Selecting the
+        # EXACT printing+condition+finish an existing selected row already
+        # holds folds this scan into it as added quantity instead.
+        if selection["scryfall_id"]:
+            for other in store.list_scans():
+                if other["id"] == scan_id or other.get("status") != "selected":
+                    continue
+                o = dict(other.get("selection") or {})
+                if (o.get("scryfall_id") == selection["scryfall_id"]
+                        and o.get("condition") == condition
+                        and o.get("finish") == finish):
+                    o["quantity"] = int(o.get("quantity") or 1) + quantity
+                    merged = store.update_scan(other["id"], selection=o)
+                    (scan_images_dir / f"{scan_id}.jpg").unlink(missing_ok=True)
+                    store.delete_scan(scan_id)
+                    merged["merged_into"] = other["id"]
+                    return merged
         price = await run_in_threadpool(
             f2f.get_price, selection["name"], selection["set"],
             selection["collector_number"], foil, selection["set_name"],
