@@ -213,7 +213,7 @@ async function jsend(url, method, body) {
 }
 
 /* ── version banner — proves which page+server combo is running ────────────── */
-const UI_VERSION = 'v16';
+const UI_VERSION = 'v17';
 fetch('/api/version').then(r => r.json())
   .then(d => { $('#ver').textContent = `${UI_VERSION} · ${d.version}`; })
   .catch(() => { $('#ver').textContent = UI_VERSION; });
@@ -790,7 +790,12 @@ function renderSweep(sw) {
   } else {
     btn.disabled = false;
     btn.textContent = 'Price missing';
-    info.style.display = 'none';
+    if (sw?.cooldown_s > 0) {
+      info.style.display = 'block';
+      info.textContent = `⏸ F2F throttled — auto-sweep resumes in ${sw.cooldown_s}s (Price missing overrides)`;
+    } else {
+      info.style.display = 'none';
+    }
     if (sweepWasActive) {
       sweepWasActive = false;
       setStatus(sweepStopRequested ? 'Pricing sweep stopped.' : 'Pricing sweep finished.', 'ok');

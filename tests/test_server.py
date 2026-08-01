@@ -390,3 +390,37 @@ def test_setup_status_and_qr(client):
     qr = client.get("/api/phone-qr")
     assert qr.status_code == 200
     assert qr.headers["content-type"].startswith("image/svg")
+
+
+class ThrottledF2F:
+    """Every call fails as storefront-unavailable (simulates a 429 storm)."""
+    def __init__(self):
+        self.calls = 0
+
+    def get_price(self, *a, **k):
+        from mtg_card_scanner.facetoface import F2FUnavailableError
+        self.calls += 1
+        raise F2FUnavailableError("throttled")
+
+
+def test_sweep_circuit_breaker_aborts_and_cools_down(tmp_path):
+    """Five consecutive unavailable targets abort the sweep and start a
+    cooldown — retrying the whole failing list every 60s kept the
+    storefront's limiter permanently tripped. Nothing gets recorded."""
+    f2f = ThrottledF2F()
+    app = create_app(pipeline_factory=lambda: FakePipeline(),
+                     store=ScanStore(tmp_path / "s.db"), f2f=f2f,
+                     scan_images_dir=tmp_path / "imgs",
+                     auto_sweep_interval=None)
+    c = TestClient(app)
+    for _ in range(4):                            # 4 scans × 2 prints = 8 targets
+        c.post("/api/scan", files={"files": ("c.jpg", _jpeg_bytes(), "image/jpeg")})
+    calls_before_sweep = f2f.calls                # scan-time _price_top attempts
+
+    assert c.post("/api/scans/price-missing").json()["queued"] == 8
+    st = c.get("/api/price-status").json()
+    assert st["active"] is False
+    assert st["cooldown_s"] > 0                   # breaker tripped
+    assert f2f.calls - calls_before_sweep == 5    # aborted after 5, not 8
+    for s in c.get("/api/scans").json():          # nothing falsely recorded
+        assert all(cc.get("f2f_conditions") is None for cc in s["candidates"])

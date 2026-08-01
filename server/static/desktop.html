@@ -121,17 +121,25 @@
   <span class="pill" id="phoneLink" style="cursor:pointer" title="Click for a QR code to open the scanner on your phone"></span>
   <span class="sp"></span>
   <span class="stat" id="sweepStat" style="color:var(--warn)"></span>
+  <button class="btn ghost sm" id="sweepStartBtn" style="display:none" title="Start a pricing sweep now (also overrides a throttling cooldown)">▶ Sweep</button>
   <button class="btn ghost sm" id="sweepStopBtn" style="display:none" title="Stop the price sweep (auto-sweep pauses 10 min; it restarts within a minute of pressing the phone's Price missing)">■ Stop</button>
   <span class="stat" id="stats">—</span>
+  <button class="btn ghost" id="dlBtn" title="Card database & image downloads">⬇</button>
   <button class="btn ghost" id="refreshBtn" title="Reload now">↻</button>
   <button class="btn ghost" id="clearJunkBtn" title="Delete every scan that has no chosen printing">Clear unpicked</button>
   <button class="btn danger" id="clearAllBtn" title="Delete every scan">Clear all</button>
   <button class="btn" id="exportBtn">Export to Mana Exchange</button>
 </header>
-<div id="setupBanner" style="display:none;padding:14px 16px;background:#3f2d10;color:#fde68a;
-     border-bottom:1px solid var(--line);font-size:14px;align-items:center;gap:14px">
-  <b>First-run setup:</b>&nbsp;<span id="setupMsg">the card database isn't built yet.</span>
-  <button class="btn sm" id="setupBuildBtn" style="margin-left:10px">Build card database (~1 hour, one-time)</button>
+<div id="dlBar" style="display:none;flex-direction:column;gap:8px;padding:12px 16px;
+     background:var(--panel);border-bottom:1px solid var(--line);font-size:13px">
+  <div><b>Card database</b> <span class="muted">(identifies cards — required)</span>
+    <span id="dlIndexInfo" class="muted"></span>
+    <button class="btn sm" id="dlIndexBtn" style="margin-left:10px">Build</button>
+    </div>
+  <div><b>Card images</b> <span class="muted">(every printing's image, ~10&nbsp;GB — makes ranking &amp; pick grids instant/offline; optional, resumable)</span>
+    <span id="dlImgInfo" class="muted"></span>
+    <button class="btn sm" id="dlImgBtn" style="margin-left:10px">Download all</button>
+    </div>
 </div>
 <main>
   <div id="left">
@@ -471,7 +479,9 @@ function wireDetail(scan){
       // NOTE: on success this returns the full scan row, whose stored `error`
       // column may carry an old art-match warning — success is "row came
       // back", not "error field empty".
-      if (updated.f2f_search === "not_found"){
+      if (updated.f2f_search === "sweeping"){
+        st.textContent = "Sweep in progress — this card will be priced by it."; btn.disabled = false;
+      } else if (updated.f2f_search === "not_found"){
         st.textContent = "No listing found on Face to Face."; btn.disabled = false;
       } else if (updated.f2f_search === "unavailable"){
         st.textContent = "Face to Face unreachable — try again."; btn.disabled = false;
@@ -544,7 +554,7 @@ function sigOf(scan){
 
 // Version banner — page version · server git hash. Same rationale as the
 // phone: without it, "is this the old page?" is undebuggable.
-const UI_VERSION = "d6";
+const UI_VERSION = "d7";
 $("#sweepStopBtn").addEventListener("click", async () => {
   await jsend("/api/price-sweep/stop", "POST", {});
   toast("Sweep stopping — auto-sweep paused 10 min");
@@ -566,6 +576,10 @@ async function poll(){
            + (sweep.eta_s != null ? ` (~${sweep.eta_s}s left)` : ""))
       : "";
     $("#sweepStopBtn").style.display = sweep.active && !sweep.cancelling ? "" : "none";
+    $("#sweepStartBtn").style.display = !sweep.active ? "" : "none";
+    if (!sweep.active && sweep.cooldown_s > 0){
+      $("#sweepStat").textContent = `⏸ F2F throttled — auto-sweep resumes in ${sweep.cooldown_s}s (▶ overrides)`;
+    }
     const maxId = scans.reduce((m,s)=>Math.max(m,s.id), 0);
     if (maxId > lastMaxId){ focusedId = maxId; lastMaxId = maxId; detailSig = ""; }
     renderList();
@@ -616,33 +630,52 @@ $("#phoneLink").textContent = "Phone: " + location.origin + "/phone";
 // Click the phone link -> QR code in the lightbox; point the phone camera at it.
 $("#phoneLink").addEventListener("click", () => openLightbox("/api/phone-qr"));
 
-/* ── first-run setup banner ─────────────────────────────────────────────── */
+/* ── downloads panel: card database + printing images ───────────────────── */
+let dlOpen = false, dlPoll = null;
 async function checkSetup(){
   try {
     const st = await jget("/api/setup/status");
-    const banner = $("#setupBanner"), msg = $("#setupMsg"), btn = $("#setupBuildBtn");
-    if (st.index_built){ banner.style.display = "none"; return; }
-    banner.style.display = "flex";
-    if (st.building){
-      btn.disabled = true;
-      msg.textContent = `building card database — ${st.indexed.toLocaleString()} / ~${st.total.toLocaleString()} artworks indexed… (keep this window open)`;
-      setTimeout(checkSetup, 5000);
-    } else if (st.error){
-      btn.disabled = false;
-      msg.textContent = `build failed: ${st.error} — it resumes where it left off, try again.`;
-    } else {
-      btn.disabled = false;
-      msg.textContent = st.indexed > 0
-        ? `card database partially built (${st.indexed.toLocaleString()} artworks) — resume the build.`
-        : "the card database isn't built yet — scanning won't work until it is.";
-    }
+    const needIndex = !st.index_built;
+    $("#dlBar").style.display =
+      (dlOpen || needIndex || st.building || st.prefetching) ? "flex" : "none";
+
+    $("#dlIndexInfo").textContent = st.building
+      ? ` building — ${st.indexed.toLocaleString()} / ~${st.total.toLocaleString()} artworks… (keep this window open)`
+      : st.index_built ? ` ✓ ${st.indexed.toLocaleString()} artworks`
+      : st.indexed > 0 ? ` ${st.indexed.toLocaleString()} done — resumable`
+      : " not built — scanning won't work until it is.";
+    if (st.error) $("#dlIndexInfo").textContent += ` — failed: ${st.error} (resumes where it left off)`;
+    $("#dlIndexBtn").disabled = st.building;
+    $("#dlIndexBtn").textContent = st.building ? "Building…"
+      : st.index_built ? "Check for new sets" : "Build (~1 hr, one-time)";
+
+    $("#dlImgInfo").textContent = st.prefetching
+      ? ` downloading — ${st.images.toLocaleString()} / ~${st.images_total.toLocaleString()}…`
+      : ` ${st.images.toLocaleString()} / ~${st.images_total.toLocaleString()} cached`;
+    if (st.prefetch_error) $("#dlImgInfo").textContent += ` — failed: ${st.prefetch_error} (resumable)`;
+    $("#dlImgBtn").disabled = st.prefetching;
+    $("#dlImgBtn").textContent = st.prefetching ? "Downloading…" : "Download all";
+
+    clearTimeout(dlPoll);
+    if (st.building || st.prefetching) dlPoll = setTimeout(checkSetup, 5000);
   } catch(e){ /* server starting up */ }
 }
-$("#setupBuildBtn").addEventListener("click", async () => {
-  await jsend("/api/setup/build-index", "POST", {});
-  checkSetup();
+$("#dlBtn").addEventListener("click", () => { dlOpen = !dlOpen; checkSetup(); });
+$("#dlIndexBtn").addEventListener("click", async () => {
+  await jsend("/api/setup/build-index", "POST", {}); checkSetup();
+});
+$("#dlImgBtn").addEventListener("click", async () => {
+  await jsend("/api/setup/prefetch-images", "POST", {}); checkSetup();
 });
 checkSetup();
+
+/* ── manual sweep start ──────────────────────────────────────────────────── */
+$("#sweepStartBtn").addEventListener("click", async () => {
+  const r = await jsend("/api/scans/price-missing", "POST", {});
+  toast(r.already_running ? "Sweep already running"
+    : r.queued ? `Sweep started — ${r.queued} prices to fetch` : "Nothing needs pricing");
+  poll();
+});
 
 poll();
 setInterval(poll, 1500);

@@ -27,6 +27,7 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, Response
 from fastapi.staticfiles import StaticFiles
 
+from mtg_card_scanner.facetoface import F2FUnavailableError
 from server.export import build_mx_export
 from server.store import ScanStore
 
@@ -130,8 +131,27 @@ def create_app(
     # ── first-run setup ────────────────────────────────────────────────────────
     # A fresh install has no art index; the desktop shows a Build button with
     # live progress instead of pointing users at a CLI command.
-    setup = {"building": False, "error": None}
+    setup = {"building": False, "error": None,
+             "prefetching": False, "prefetch_error": None}
     _EXPECTED_INDEX = 49500          # display denominator (approx artwork count)
+    _EXPECTED_IMAGES = 115000        # approx printings with images
+
+    # Counting ~115k cache files takes ~100ms — cache it briefly so status
+    # polls stay cheap while still showing live prefetch progress.
+    _img_count_cache: dict[str, Any] = {"n": None, "at": 0.0}
+
+    def _image_count() -> int:
+        if (_img_count_cache["n"] is not None
+                and time.monotonic() - _img_count_cache["at"] < 15):
+            return _img_count_cache["n"]
+        try:
+            from mtg_card_scanner.visual_match import _DEFAULT_CACHE_DIR
+            d = Path(_DEFAULT_CACHE_DIR)
+            n = sum(1 for _ in os.scandir(d)) if d.exists() else 0
+        except Exception:
+            n = 0
+        _img_count_cache.update(n=n, at=time.monotonic())
+        return n
 
     def _index_count() -> int:
         try:
@@ -149,6 +169,10 @@ def create_app(
             "total": _EXPECTED_INDEX,
             "building": setup["building"],
             "error": setup["error"],
+            "images": _image_count(),
+            "images_total": _EXPECTED_IMAGES,
+            "prefetching": setup["prefetching"],
+            "prefetch_error": setup["prefetch_error"],
         }
 
     @app.post("/api/setup/build-index")
@@ -173,6 +197,32 @@ def create_app(
         setup["building"] = True
         setup["error"] = None
         threading.Thread(target=_build, daemon=True, name="index-build").start()
+        return {"started": True}
+
+    @app.post("/api/setup/prefetch-images")
+    def setup_prefetch_images():
+        """
+        Download EVERY printing's ranking image into the local cache
+        (~115k images, ~10 GB, hours; resumable — skips what's cached) so
+        printing ranking and the pick grids never wait on Scryfall.
+        """
+        if setup["prefetching"]:
+            return {"started": False, "already_running": True}
+
+        def _prefetch() -> None:
+            try:
+                from mtg_card_scanner.art_index import ArtIndexBuilder
+                ArtIndexBuilder().prefetch_printings()
+                setup["prefetch_error"] = None
+            except Exception as exc:
+                setup["prefetch_error"] = str(exc)
+                print(f"  [server] image prefetch failed: {exc}")
+            finally:
+                setup["prefetching"] = False
+
+        setup["prefetching"] = True
+        setup["prefetch_error"] = None
+        threading.Thread(target=_prefetch, daemon=True, name="image-prefetch").start()
         return {"started": True}
 
     @app.get("/api/phone-qr")
@@ -266,6 +316,8 @@ def create_app(
             top = cands[0]
 
             def _price_top(scan_id: int, c: dict) -> None:
+                if sweep["active"]:
+                    return          # the per-print sweep covers pending scans
                 try:
                     p = _safe_get_price(c.get("name", ""), c.get("set", ""),
                                         c.get("collector_number", ""), False,
@@ -301,6 +353,10 @@ def create_app(
                 {"error": "nothing to price — no selection or candidates"},
                 status_code=400,
             )
+        if sweep["active"]:
+            scan = dict(scan)
+            scan["f2f_search"] = "sweeping"
+            return scan
         was_selected = bool(scan.get("selection"))
         pid = printing.get("scryfall_id") or printing.get("id") or ""
         from mtg_card_scanner.facetoface import F2FUnavailableError
@@ -356,6 +412,8 @@ def create_app(
             "done": sweep["done"],
             "current": sweep["current"],
             "cancelling": bool(sweep.get("cancel")),
+            "cooldown_s": (round(max(0.0, sweep["backoff_until"] - time.monotonic()))
+                           if sweep.get("backoff_until") else 0),
             "rate_per_s": round(rate, 2) if rate else None,
             "eta_s": round(remaining / rate) if rate else None,
         }
@@ -406,6 +464,13 @@ def create_app(
 
     def _run_sweep(items: list[tuple[str, int, dict, bool]]) -> None:
         """Requires a successful _claim_sweep by the caller."""
+        # Circuit breaker: when the storefront is rate-limiting, every fetch
+        # burns its full backoff budget and still fails — and the 60s auto-
+        # sweep retrying the whole failing list kept the limiter permanently
+        # tripped (observed: ~30s/target, ETA climbing forever). Five
+        # consecutive unavailable targets → abort and cool down 10 minutes so
+        # the bucket actually recovers; a manual start overrides the cooldown.
+        unavailable_streak = 0
         try:
             for kind, sid, c, foil in items:
                 if sweep.get("cancel"):
@@ -416,6 +481,7 @@ def create_app(
                     p = f2f.get_price(c.get("name", ""), c.get("set", ""),
                                       c.get("collector_number", ""), foil,
                                       c.get("set_name", ""))
+                    unavailable_streak = 0
                     if kind == "scan":
                         with select_lock:
                             # Recheck: the selection (printing AND foil) may
@@ -440,12 +506,17 @@ def create_app(
                                     if cc.get("id") == c.get("id"):
                                         cc["f2f_conditions"] = p.conditions if p else {}
                                 store.update_scan(sid, candidates=cands)
+                except F2FUnavailableError as exc:
+                    # No writes — the target stays unsearched and retryable.
+                    print(f"  [server] F2F unavailable for #{sid}: {exc}")
+                    unavailable_streak += 1
+                    if unavailable_streak >= 5:
+                        sweep["backoff_until"] = time.monotonic() + 600
+                        print("  [server] storefront throttling — sweep aborted, cooling down 10 min")
+                        break              # finally still increments done
                 except Exception as exc:
-                    # Includes F2FUnavailableError: an unreachable storefront
-                    # skips ALL writes, so the target stays unsearched and the
-                    # next sweep retries it. Only a real fetch that returned
-                    # no match records the searched-empty marker above —
-                    # get_price returning None now MEANS "confirmed unlisted".
+                    # get_price returning None MEANS "confirmed unlisted" and
+                    # is recorded above; any other exception skips all writes.
                     print(f"  [server] pricing failed for #{sid}: {exc}")
                 finally:
                     sweep["done"] += 1
@@ -492,6 +563,9 @@ def create_app(
                 stopped_at = sweep.get("manual_stop_at")
                 if stopped_at is not None and time.monotonic() - stopped_at < 600:
                     continue
+                until = sweep.get("backoff_until")
+                if until and time.monotonic() < until:
+                    continue           # storefront cooling down — don't re-trip it
                 items = _collect_price_targets()
                 if items and _claim_sweep(items):
                     print(f"  [server] auto-sweep: {len(items)} prices to fetch")
@@ -512,6 +586,7 @@ def create_app(
         via /api/price-status.  Also clears a manual-stop pause.
         """
         sweep["manual_stop_at"] = None
+        sweep["backoff_until"] = None      # manual start overrides the cooldown
         targets = _collect_price_targets()
         if not targets:
             return {"queued": 0, "already_running": sweep["active"]}
@@ -590,7 +665,8 @@ def create_app(
             # error=None: a best-guess scan the user then picks must stop
             # showing "No confident art match" and leave the Problems view.
             return store.update_scan(
-                scan_id, status="selected", selection=selection, error=None)
+                scan_id, status="selected", selection=selection, error=None,
+                f2f=None)
 
     def _safe_get_price(name: str, set_code: str, collector_number: str,
                         foil: bool, set_name: str):
@@ -636,7 +712,10 @@ def create_app(
                                auto: bool = False) -> dict:
         result = _apply_selection_core(scan_id, printing, condition, finish,
                                        quantity, auto=auto)
-        if auto or result.get("merged_into"):
+        # ONE F2F consumer at a time: while a sweep runs, no other pricing
+        # fires (rate-limit safety). f2f was cleared by the claim, so the
+        # sweep collects and prices this selection on its next pass.
+        if auto or result.get("merged_into") or sweep["active"]:
             return result
         sel = result["selection"]
         price = await run_in_threadpool(
@@ -692,6 +771,10 @@ def create_app(
                 scan = store.update_scan(scan_id, **fields)
 
         if changed and selection and "finish" in body:
+            if sweep["active"]:
+                # One F2F consumer at a time: clear the now-wrong-finish price
+                # and let the sweep re-price it with the new foil flag.
+                return store.update_scan(scan_id, f2f=None)
             # foil status may have flipped — reprice (guarded: a re-pick that
             # lands during this fetch keeps ITS price, not this stale one)
             price = await run_in_threadpool(

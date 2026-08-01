@@ -36,7 +36,7 @@ _USER_AGENT = "MTGCardScanner/1.0 facetoface (contact: your-email@example.com)"
 # old 0.15s spacing a sweep tripped it and every quick retry 429'd too, so
 # whole cards went "unavailable" each pass (observed live: persistent 429s on
 # duskhunter-bat/hunt-for-specimens while a lone curl returned 200).
-_MIN_DELAY = 0.5           # ~2 req/s — matches the storefront's real bucket
+_MIN_DELAY = 1.0           # 1 req/s — even 2/s sustained kept the bucket tripped
 _TIMEOUT = 8               # fail fast rather than hang a scan
 _SUGGEST_LIMIT = 10
 _DEFAULT_CACHE_DIR = Path.home() / ".cache" / "mtg-card-scanner" / "facetoface"
