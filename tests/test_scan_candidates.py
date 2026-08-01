@@ -268,6 +268,26 @@ def test_scan_candidates_tight_cluster_stays_manual():
     assert "manual search" in out["error"].lower()
 
 
+def test_unconfident_scan_still_offers_best_guess_candidates():
+    """Refused-band scans (e.g. d=116 gap 12) attach the top guess's ranked
+    printings so the fix is one tap — while identified stays False."""
+    idx = FakeIndex([_match(distance=116), _match(name="Oculus", distance=128)])
+    p = _pipeline(idx, FakeScryfall([_printing("id", "m10", "146", "Magic 2010")]))
+    out = p.scan_candidates(FRAME)
+    assert out["identified"] is False
+    assert out["candidates"]
+    assert "manual search" in out["error"].lower()
+
+
+def test_noise_floor_gets_no_best_guess_grid():
+    """Above the margin ceiling the guess is junk — no grid, just the error."""
+    idx = FakeIndex([_match(distance=150)])
+    p = _pipeline(idx, FakeScryfall([_printing("id", "m10", "146", "Magic 2010")]))
+    out = p.scan_candidates(FRAME)
+    assert out["identified"] is False
+    assert out["candidates"] == []
+
+
 def test_scan_candidates_margin_cannot_rescue_noise_floor():
     """A huge gap does not make a noise-floor score (>140) trustworthy."""
     idx = FakeIndex([_match(distance=150),

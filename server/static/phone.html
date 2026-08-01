@@ -241,7 +241,7 @@ async function jsend(url, method, body) {
 }
 
 /* ── version banner — proves which page+server combo is running ────────────── */
-const UI_VERSION = 'v9';
+const UI_VERSION = 'v10';
 fetch('/api/version').then(r => r.json())
   .then(d => { $('#ver').textContent = `${UI_VERSION} · ${d.version}`; })
   .catch(() => { $('#ver').textContent = UI_VERSION; });
@@ -380,9 +380,13 @@ async function submitScan(frames) {
         emptyRef = s; emptyGrad = gradMap(s);
       }
     } else if (data.identified) {
-      const n = (data.candidates || []).length;
       setStatus(`✓ ${data.card_read.name} — tap a printing below, or just scan the next.`, 'ok');
       qpShow(data);
+    } else if ((data.candidates || []).length) {
+      // Unconfident, but the top guess's printings are attached — verify by
+      // eye and tap; the alternates and search live in Details.
+      setStatus(`? Best guess ${data.card_read?.name || '?'} — CHECK the card, tap if right.`, 'err');
+      qpShow(data, true);
     } else {
       setStatus('✗ ' + (data.error || 'Could not read card. Try again.'), 'err');
       qpHide();
@@ -399,9 +403,10 @@ $('#qp-cond').innerHTML = CONDITIONS.map(c => `<option>${c}</option>`).join('');
 $('#qp-fin').innerHTML = FINISHES.map(f => `<option>${f}</option>`).join('');
 let qpScan = null;
 
-function qpShow(scan) {
+function qpShow(scan, uncertain = false) {
   qpScan = scan;
-  qpName.textContent = scan.card_read?.name || '?';
+  qpName.textContent = (uncertain ? '? ' : '') + (scan.card_read?.name || '?');
+  qpName.style.color = uncertain ? 'var(--warn)' : '';
   const cands = (scan.candidates || []).slice(0, 6);
   qpGrid.innerHTML = cands.map(c => `
     <div class="qpc" data-pick="${escHtml(c.id)}">

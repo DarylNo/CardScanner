@@ -236,17 +236,29 @@ class Pipeline:
         }
 
         if not _is_confident(matches):
+            # Best-guess candidates: even in this refused band the top guess is
+            # right most of the time (live data: 4/5) — surface its printings
+            # so the fix is ONE TAP on the grid rather than a manual search.
+            # identified stays False and the warning stays visible; nothing is
+            # auto-trusted (the gap rule exists because this band DOES contain
+            # wrong guesses). Junk at the noise floor gets no grid.
+            candidates = []
+            if distance <= _MARGIN_CONFIDENT_DISTANCE:
+                try:
+                    candidates = self._ranked_candidates(frames[0], best["name"], top_n)
+                except Exception:
+                    pass                     # best-guess grid is best-effort
             return {
                 "identified": False,
                 "card_read": read_dict,
                 "confidence": confidence,
-                "candidates": [],
+                "candidates": candidates,
                 "error": f"No confident art match (best: {guesses}). Use manual search.",
             }
 
         # ── fetch printings + rank by art ─────────────────────────────────────
         try:
-            printings = self.scryfall.get_all_printings(best["name"])
+            candidates = self._ranked_candidates(frames[0], best["name"], top_n)
         except ScryfallError as exc:
             return {
                 "identified": True,
@@ -256,19 +268,6 @@ class Pipeline:
                 "error": f"No printings found for '{_safe(best['name'])}': {_safe(str(exc))}",
             }
 
-        ranked = self.art_matcher.rank_printings(frames[0], printings)
-        # Secondary printing verification: order candidates by the multi-region
-        # distance (art×4 + title×1 + textbox×1).  Same-artwork reprints tie on
-        # art alone; the title/textbox regions — valid here because each
-        # printing is compared against its OWN image — break those ties toward
-        # the actual frame/typesetting in front of the camera.
-        ranked = sorted(
-            ranked,
-            key=lambda p: p["multi_distance"] if p.get("multi_distance") is not None
-            else p.get("phash_distance", 1 << 30),
-        )
-        candidates = [_candidate_dict(p) for p in ranked[:top_n]]
-
         return {
             "identified": True,
             "card_read": read_dict,
@@ -276,6 +275,25 @@ class Pipeline:
             "candidates": candidates,
             "error": None,
         }
+
+    def _ranked_candidates(self, frame: np.ndarray, name: str, top_n: int) -> list[dict]:
+        """
+        All paper printings of *name*, art-ranked against *frame*, best first.
+
+        Secondary printing verification: candidates are ordered by the
+        multi-region distance (art×4 + title×1 + textbox×1).  Same-artwork
+        reprints tie on art alone; the title/textbox regions — valid here
+        because each printing is compared against its OWN image — break those
+        ties toward the actual frame/typesetting in front of the camera.
+        """
+        printings = self.scryfall.get_all_printings(name)
+        ranked = self.art_matcher.rank_printings(frame, printings)
+        ranked = sorted(
+            ranked,
+            key=lambda p: p["multi_distance"] if p.get("multi_distance") is not None
+            else p.get("phash_distance", 1 << 30),
+        )
+        return [_candidate_dict(p) for p in ranked[:top_n]]
 
     def search_candidates(self, name: str, top_n: int = 40) -> list[dict]:
         """
