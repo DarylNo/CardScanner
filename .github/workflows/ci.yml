@@ -18,7 +18,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install . pytest
+      - run: pip install ".[test]"
       - run: pytest tests/ -q
       # The launcher's cold-start path (cert generation, LAN IP) must work
       # everywhere — it IS the install experience.

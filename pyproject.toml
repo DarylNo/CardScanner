@@ -22,6 +22,9 @@ dependencies = [
     "segno>=1.6",          # QR codes for connecting the phone
 ]
 
+[project.optional-dependencies]
+test = ["pytest>=7.4", "httpx2"]   # httpx2: starlette TestClient transport
+
 [project.scripts]
 mtg-card-scanner = "mtg_card_scanner.launch:main"
 
