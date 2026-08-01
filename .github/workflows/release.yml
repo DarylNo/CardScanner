@@ -31,8 +31,13 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install . pyinstaller
+      # --paths .: without the repo root on the analysis path the entry
+      # script can't resolve the packages and the exe dies on
+      # ModuleNotFoundError (caught in local validation before v1.0.0).
       - run: >
           pyinstaller --onefile --name mtg-card-scanner
+          --paths .
+          --copy-metadata mtg-card-scanner
           --collect-data server
           --collect-submodules uvicorn
           scripts/pyinstaller_entry.py
