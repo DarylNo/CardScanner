@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MTG Card Scanner — Download</title>
+<style>
+  :root { color-scheme: dark;
+    --bg:#0f1115; --panel:#12141a; --card:#171a21; --line:#23262e;
+    --text:#e8eaed; --muted:#8b93a1; --accent:#3b82f6; --good:#6ee7a0; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:system-ui,-apple-system,sans-serif; background:var(--bg);
+         color:var(--text); display:flex; flex-direction:column; align-items:center;
+         min-height:100dvh; padding:40px 20px; }
+  main { max-width:680px; width:100%; }
+  h1 { font-size:32px; margin:0 0 6px; }
+  .tag { color:var(--muted); font-size:16px; margin:0 0 30px; line-height:1.5; }
+  .tag b { color:var(--text); }
+  #primary { display:block; text-align:center; background:var(--accent); color:#fff;
+             text-decoration:none; font-size:20px; font-weight:700; padding:18px 24px;
+             border-radius:14px; margin:10px 0 6px; }
+  #primary:hover { filter:brightness(1.1); }
+  #primary small { display:block; font-size:13px; font-weight:400; opacity:.85; margin-top:4px; }
+  #ver { text-align:center; color:var(--muted); font-size:13px; min-height:1.2em; margin-bottom:26px; }
+  h2 { font-size:15px; color:var(--muted); font-weight:600; letter-spacing:.05em;
+       text-transform:uppercase; margin:30px 0 10px; }
+  .plats { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; }
+  .plat { display:block; background:var(--card); border:1px solid var(--line); color:var(--text);
+          text-decoration:none; border-radius:10px; padding:12px 14px; font-size:14px; }
+  .plat:hover { border-color:var(--accent); }
+  .plat small { display:block; color:var(--muted); font-size:12px; margin-top:2px; }
+  pre { background:var(--card); border:1px solid var(--line); border-radius:10px;
+        padding:14px 16px; overflow-x:auto; font-size:13px; line-height:1.6; }
+  pre b { color:var(--good); }
+  .note { color:var(--muted); font-size:13px; line-height:1.55; }
+  .note code { background:var(--card); padding:1px 6px; border-radius:5px; }
+  a { color:#7cc4ff; }
+  footer { margin-top:auto; padding-top:40px; color:#565d68; font-size:12px; }
+  .steps { color:var(--muted); font-size:14px; line-height:1.7; padding-left:18px; }
+  .steps b { color:var(--text); }
+</style>
+</head>
+<body>
+<main>
+  <h1>🃏 MTG Card Scanner</h1>
+  <p class="tag">Turn a phone and a tray into a hands-free card scanner.
+    <b>Local artwork identification</b> — no cloud AI, no API keys — with live
+    pricing and one-click export.</p>
+
+  <a id="primary" href="#" style="display:none"></a>
+  <div id="ver"></div>
+
+  <div id="fallback" style="display:none">
+    <p class="note">No packaged release is published yet — install from the
+    command line instead (everything below still applies).</p>
+  </div>
+
+  <h2>All downloads</h2>
+  <div class="plats" id="plats">
+    <span class="note">Loading latest release…</span>
+  </div>
+
+  <h2>Or install from the command line</h2>
+  <p class="note"><b>macOS / Linux</b> — no prerequisites (installs Python if needed):</p>
+  <pre>curl -fsSL https://raw.githubusercontent.com/DarylNo/CardScanner/master/install.sh | bash
+mtg-card-scanner</pre>
+  <p class="note"><b>Any platform</b> with Python 3.11+ or <code>uv</code>:</p>
+  <pre>pipx install git+https://github.com/DarylNo/CardScanner
+mtg-card-scanner</pre>
+
+  <h2>Then</h2>
+  <ol class="steps">
+    <li>The desktop UI opens itself; first run shows a one-click
+        <b>Build card database</b> step (~1 hour, once).</li>
+    <li>Scan the QR code with your phone, accept the one-time certificate
+        warning, and mount the phone over a tray.</li>
+    <li>Tap <b>Area</b> on the phone, drag a box around the tray — done.
+        Drop cards in; they identify, price, and file themselves.</li>
+  </ol>
+  <p class="note">macOS binaries are unsigned — right-click → Open the first
+  time. Windows will ask to allow the app through the firewall so the phone
+  can connect. Source &amp; issues on
+  <a href="https://github.com/DarylNo/CardScanner">GitHub</a>.</p>
+</main>
+<footer>MIT licensed · identification runs entirely on your machine</footer>
+
+<script>
+const REPO = "DarylNo/CardScanner";
+const ASSETS = [
+  { match: /windows/,          label: "Windows",              file: "mtg-card-scanner-windows.exe" },
+  { match: /mac|darwin/,       label: "macOS (Apple Silicon)", file: "mtg-card-scanner-macos-arm64" },
+  { match: /mac|darwin/,       label: "macOS (Intel)",        file: "mtg-card-scanner-macos-x86_64" },
+  { match: /linux/,            label: "Linux (x86_64)",       file: "mtg-card-scanner-linux-x86_64" },
+];
+function detectOS() {
+  const ua = navigator.userAgent.toLowerCase();
+  if (ua.includes("windows")) return "Windows";
+  // Browsers report Intel even on Apple Silicon — offer arm64 as primary,
+  // Intel stays one click away in the grid.
+  if (ua.includes("mac")) return "macOS (Apple Silicon)";
+  if (ua.includes("linux")) return "Linux (x86_64)";
+  return null;
+}
+(async () => {
+  const plats = document.getElementById("plats");
+  const primary = document.getElementById("primary");
+  try {
+    const r = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`);
+    if (!r.ok) throw new Error(r.status);
+    const rel = await r.json();
+    const byName = Object.fromEntries((rel.assets || []).map(a => [a.name, a]));
+    const rows = ASSETS.filter(a => byName[a.file]);
+    if (!rows.length) throw new Error("no assets");
+    document.getElementById("ver").textContent =
+      `${rel.tag_name} · released ${new Date(rel.published_at).toLocaleDateString()}`;
+    plats.innerHTML = rows.map(a => {
+      const asset = byName[a.file];
+      const mb = (asset.size / 1048576).toFixed(0);
+      return `<a class="plat" href="${asset.browser_download_url}">${a.label}
+        <small>${a.file} · ${mb} MB</small></a>`;
+    }).join("");
+    const os = detectOS();
+    const hit = rows.find(a => a.label === os);
+    if (hit) {
+      const asset = byName[hit.file];
+      primary.href = asset.browser_download_url;
+      primary.innerHTML = `⬇ Download for ${hit.label}
+        <small>${rel.tag_name} · ${(asset.size/1048576).toFixed(0)} MB · free &amp; open source</small>`;
+      primary.style.display = "block";
+    }
+  } catch (e) {
+    plats.innerHTML = "";
+    document.getElementById("fallback").style.display = "block";
+  }
+})();
+</script>
+</body>
+</html>
