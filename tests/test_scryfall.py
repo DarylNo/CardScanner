@@ -35,6 +35,29 @@ def _not_found(detail: str = "Card not found.") -> MagicMock:
     return r
 
 
+class TestGetAllPrintings:
+    def test_drops_digital_only_printings(self):
+        """Arena/MTGO printings can't be in the tray — paper only."""
+        cards = [
+            {"id": "paper", "games": ["paper", "mtgo"], "image_uris": {"small": "u"}},
+            {"id": "arena", "games": ["arena"], "image_uris": {"small": "u"}},
+            {"id": "mtgo", "games": ["mtgo"], "image_uris": {"small": "u"}},
+            {"id": "legacy-no-games", "image_uris": {"small": "u"}},  # treated as paper
+        ]
+        client = ScryfallClient()
+        with patch.object(client._session, "get", return_value=_ok({"data": cards})):
+            out = client.get_all_printings("Lightning Bolt")
+        assert [c["id"] for c in out] == ["paper", "legacy-no-games"]
+
+    def test_grafts_dfc_face_images(self):
+        cards = [{"id": "dfc", "games": ["paper"],
+                  "card_faces": [{"image_uris": {"small": "front"}}]}]
+        client = ScryfallClient()
+        with patch.object(client._session, "get", return_value=_ok({"data": cards})):
+            out = client.get_all_printings("Delver of Secrets")
+        assert out[0]["image_uris"]["small"] == "front"
+
+
 class TestLookupBySetCollector:
     def test_success(self):
         client = ScryfallClient()

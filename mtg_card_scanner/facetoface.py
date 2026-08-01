@@ -36,6 +36,10 @@ _MIN_DELAY = 0.15          # ~6 req/s — polite to the storefront
 _TIMEOUT = 8               # fail fast rather than hang a scan
 _SUGGEST_LIMIT = 10
 _DEFAULT_CACHE_DIR = Path.home() / ".cache" / "mtg-card-scanner" / "facetoface"
+# Storefront prices move; the cache previously never expired, so a listing
+# priced once was quoted at that price forever. A day keeps repeat scans of
+# the same set cheap while staying honest for an active selling session.
+_CACHE_TTL = 24 * 3600     # seconds
 
 # F2F condition code -> Mana Exchange condition code. F2F's grades are coarser
 # than MX's five; used only to pick ONE price for a chosen MX condition — the UI
@@ -157,7 +161,7 @@ def _default_get_json(cache_dir: Path) -> Callable[[str], Any]:
     def get_json(url: str) -> Any:
         key = hashlib.sha1(url.encode()).hexdigest()
         cached = cache_dir / f"{key}.json"
-        if cached.exists():
+        if cached.exists() and time.time() - cached.stat().st_mtime < _CACHE_TTL:
             return json.loads(cached.read_text(encoding="utf-8"))
         # The storefront intermittently rejects a request (bot protection,
         # blips) — observed live returning fine on the very next attempt. One

@@ -113,3 +113,39 @@ def test_collector_collision_across_sets_does_not_return_wrong_set():
     # m25 #141 resolves correctly
     m25 = c.get_price("Lightning Bolt", "m25", "141", foil=False)
     assert m25 is not None and m25.conditions == {"NM": 9.99}
+
+
+def test_price_cache_expires_after_ttl(tmp_path, monkeypatch):
+    """Cached prices previously lived forever; they must refetch after the TTL."""
+    import hashlib
+    import os
+    import time as time_mod
+
+    from mtg_card_scanner import facetoface as f2f_mod
+
+    calls = []
+
+    class FakeResp:
+        status_code = 200
+        def raise_for_status(self): pass
+        def json(self): return {"fetch": len(calls)}
+
+    class FakeSession:
+        def __init__(self): self.headers = {}
+        def get(self, url, timeout=None):
+            calls.append(url)
+            return FakeResp()
+
+    monkeypatch.setattr(f2f_mod.requests, "Session", FakeSession)
+    get_json = f2f_mod._default_get_json(tmp_path)
+
+    assert get_json("http://x") == {"fetch": 1}
+    assert get_json("http://x") == {"fetch": 1}     # fresh cache — no refetch
+    assert len(calls) == 1
+
+    # Age the cache file past the TTL — the next call must hit the network.
+    key = hashlib.sha1(b"http://x").hexdigest()
+    old = time_mod.time() - f2f_mod._CACHE_TTL - 10
+    os.utime(tmp_path / f"{key}.json", (old, old))
+    assert get_json("http://x") == {"fetch": 2}
+    assert len(calls) == 2

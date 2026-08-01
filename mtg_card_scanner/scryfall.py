@@ -96,10 +96,14 @@ class ScryfallClient:
 
     def get_all_printings(self, name: str) -> list[dict[str, Any]]:
         """
-        Fetch all printings of a card by exact name, sorted oldest-first.
+        Fetch all PAPER printings of a card by exact name, sorted oldest-first.
 
-        Returns only cards that have image_uris (needed for pHash comparison).
-        Raises ScryfallError if the card name is not found at all.
+        Arena/MTGO-only printings are dropped: they can't be physically in the
+        tray, aren't sellable, and were showing up in the pick-a-printing grid.
+        (The identification INDEX deliberately keeps digital representatives —
+        see art_index._SKIP_LAYOUTS — that concerns recognising artwork, not
+        listing printings.)  Returns only cards that have image_uris (needed
+        for pHash comparison).  Raises ScryfallError if the name is unknown.
         """
         print(f"  [scryfall] Fetching all printings of '{_safe_print(name)}'...")
         data = self._get(
@@ -111,16 +115,19 @@ class ScryfallClient:
             include_extras="true",
         )
         cards = data.get("data", [])
+        # Missing `games` (old/fixture data) is treated as paper, not dropped.
+        paper = [c for c in cards if "paper" in (c.get("games") or ["paper"])]
         # Double-faced cards keep their images on card_faces, not top-level —
         # graft the front face's image_uris on so pHash ranking and the UI
         # treat them like any other printing.
-        for c in cards:
+        for c in paper:
             if not c.get("image_uris"):
                 faces = c.get("card_faces") or []
                 if faces and faces[0].get("image_uris"):
                     c["image_uris"] = faces[0]["image_uris"]
-        with_images = [c for c in cards if c.get("image_uris")]
-        print(f"  [scryfall] {len(with_images)} printings with images (of {len(cards)} total)")
+        with_images = [c for c in paper if c.get("image_uris")]
+        print(f"  [scryfall] {len(with_images)} paper printings with images "
+              f"(of {len(cards)} total, {len(cards) - len(paper)} digital-only dropped)")
         return with_images
 
     def lookup(self, set_code: str, collector_number: str, name: str,

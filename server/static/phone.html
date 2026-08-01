@@ -220,7 +220,7 @@ function setStatus(msg, cls='') { statusEl.textContent = msg; statusEl.className
 // UI_VERSION identifies THIS page; the fetched hash identifies the server.
 // Both are shown so a stale cached page (which cost a debugging round once)
 // is visible at a glance. Bump UI_VERSION on every phone.html change.
-const UI_VERSION = 'v6';
+const UI_VERSION = 'v7';
 fetch('/api/version').then(r => r.json())
   .then(d => { document.getElementById('ver').textContent = `${UI_VERSION} · ${d.version}`; })
   .catch(() => { document.getElementById('ver').textContent = UI_VERSION; });
@@ -370,21 +370,42 @@ async function captureBurst() {
   return frames;
 }
 
+// Capture, then hand off. scanOnce resolves as soon as the BURST is captured —
+// that is the only part that needs the tray untouched. The upload and server
+// identification (seconds: index hashing + printing ranking) continue in the
+// background via submitScan, so the state machine — and the blue check mark —
+// release after ~0.4 s and the next card can go straight in.
 async function scanOnce() {
   setStatus('Capturing…');
+  let frames;
   try {
-    const frames = await captureBurst();
-    setStatus('Scanning…');
+    frames = await captureBurst();
+  } catch (e) {
+    setStatus('Capture failed: ' + e.message, 'err');
+    return;
+  }
+  submitScan(frames);            // deliberately NOT awaited
+}
+
+async function submitScan(frames) {
+  const capturedScene = scannedFrame;   // what the tray held at capture time
+  setStatus('Scanning…');
+  try {
     const fd = new FormData();
     frames.forEach((b, i) => fd.append('files', b, `frame${i}.jpg`));
     const r = await fetch('/api/scan', { method: 'POST', body: fd });
     const data = await r.json();
     if (data.no_card) {
       // Server saw nothing card-like — whatever we thought was a card isn't.
-      // Adopt the current scene as the new "empty" so we stop firing on it.
+      // Adopt the scene as the new "empty" so we stop firing on it — but ONLY
+      // if the tray still shows what we scanned; the response arrives seconds
+      // later and the user may already have swapped in a real card.
       setStatus('No card detected.', 'err');
       const s = sampleSmallGray();
-      if (s) { emptyRef = s; emptyGrad = gradMap(s); }
+      if (s && capturedScene && s.length === capturedScene.length
+          && changedFrac(s, capturedScene) < SWAP_FRAC) {
+        emptyRef = s; emptyGrad = gradMap(s);
+      }
     } else if (data.identified) {
       const n = (data.candidates || []).length;
       setStatus(`✓ ${data.card_read.name} — ${n} printings. Swap card for the next.`, 'ok');
