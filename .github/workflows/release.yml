@@ -1,13 +1,30 @@
-# Build a double-clickable Windows exe on every version tag (v*).
-# NOTE: authored but not yet exercised in CI — verify the artifact boots
-# before announcing a release.
+# Build double-clickable binaries for every platform on version tags (v*).
+# NOTE: authored but not yet exercised in CI — verify each artifact boots
+# before announcing a release. Unsigned macOS binaries need right-click→Open
+# on first launch (Gatekeeper); avoiding that requires Apple notarization.
 name: release
 on:
   push:
     tags: ["v*"]
 jobs:
-  windows-exe:
-    runs-on: windows-latest
+  binaries:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            artifact: mtg-card-scanner-windows.exe
+            built: dist/mtg-card-scanner.exe
+          - os: macos-14          # Apple Silicon
+            artifact: mtg-card-scanner-macos-arm64
+            built: dist/mtg-card-scanner
+          - os: macos-13          # Intel
+            artifact: mtg-card-scanner-macos-x86_64
+            built: dist/mtg-card-scanner
+          - os: ubuntu-22.04      # older glibc = wider compatibility
+            artifact: mtg-card-scanner-linux-x86_64
+            built: dist/mtg-card-scanner
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -19,10 +36,19 @@ jobs:
           --collect-data server
           --collect-submodules uvicorn
           scripts/pyinstaller_entry.py
+      - run: cp "${{ matrix.built }}" "${{ matrix.artifact }}"
+        shell: bash
       - uses: actions/upload-artifact@v4
         with:
-          name: mtg-card-scanner-windows
-          path: dist/mtg-card-scanner.exe
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.artifact }}
+  publish:
+    needs: binaries
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
       - uses: softprops/action-gh-release@v2
         with:
-          files: dist/mtg-card-scanner.exe
+          files: mtg-card-scanner-*

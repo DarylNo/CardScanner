@@ -23,10 +23,27 @@ collector number), which is what downstream pricing and export depend on.
 
 ### Install & run (one command)
 
+**macOS / Linux** — no Python required (the script installs everything, plus a
+double-clickable launcher in ~/Applications / your app menu):
+
 ```bash
-pipx install git+https://github.com/DarylNo/CardScanner   # or: pip install .
+curl -fsSL https://raw.githubusercontent.com/DarylNo/CardScanner/master/install.sh | bash
 mtg-card-scanner
 ```
+
+**Windows** — grab `mtg-card-scanner-windows.exe` from
+[Releases](https://github.com/DarylNo/CardScanner/releases) and double-click it,
+or use the Python route below.
+
+**Any platform with Python 3.11+** (or `uv`):
+
+```bash
+pipx install git+https://github.com/DarylNo/CardScanner   # or: uv tool install git+…
+mtg-card-scanner
+```
+
+Prebuilt macOS/Linux binaries are also on the Releases page (macOS: the
+binaries are unsigned — right-click → Open the first time).
 
 The launcher does everything `run_server.sh` used to require by hand:
 
@@ -52,6 +69,8 @@ Tips:
 - Windows asks to allow Python through the firewall on first launch — allow
   it on private networks so the phone can reach the server.
 - `mtg-card-scanner --help` for port/data-dir options.
+- Linux: if launch fails with a `libGL` error, `sudo apt install libgl1`
+  (or swap in `opencv-python-headless`).
 
 <details>
 <summary>Manual / development run (the old way)</summary>
