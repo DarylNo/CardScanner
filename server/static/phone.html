@@ -26,10 +26,6 @@
   #overlay { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
 
   footer { padding:8px 12px 12px; display:flex; flex-direction:column; gap:8px; flex:0 0 auto; }
-  #recent { display:flex; gap:6px; overflow-x:auto; min-height:26px; }
-  .chip { font-size:12px; padding:3px 10px; border-radius:999px; background:var(--line);
-          color:#cbd2dc; white-space:nowrap; flex:0 0 auto; }
-  .chip.selchip { background:#14532d; color:#86efac; }
   #status { min-height:1.3em; text-align:center; font-size:14px; color:#aeb4bf; }
   #status.ok { color:var(--good); } #status.err { color:var(--bad); }
   .btnrow { display:flex; gap:10px; }
@@ -112,13 +108,12 @@
   </div>
 
   <footer>
-    <div id="recent"></div>
     <div id="status">Starting camera…</div>
     <div class="btnrow">
       <button id="autoBtn">Auto: ON</button>
       <button id="shoot" disabled>Scan Card</button>
     </div>
-    <div class="hint">Place a card in the frame — it scans by itself. Pick printings on the desktop.</div>
+    <div class="hint">Auto: scans by itself, pick on desktop. Tap Scan Card to pick here.</div>
   </footer>
 
   <div class="panel" id="scansPanel">
@@ -213,7 +208,7 @@ async function jsend(url, method, body) {
 }
 
 /* ── version banner — proves which page+server combo is running ────────────── */
-const UI_VERSION = 'v19';
+const UI_VERSION = 'v20';
 fetch('/api/version').then(r => r.json())
   .then(d => { $('#ver').textContent = `${UI_VERSION} · ${d.version}`; })
   .catch(() => { $('#ver').textContent = UI_VERSION; });
@@ -327,14 +322,14 @@ async function captureBurst() {
   return frames;
 }
 // scanOnce resolves at end-of-capture; identification continues in background.
-async function scanOnce() {
+async function scanOnce(manual = false) {
   setStatus('Capturing…');
   let frames;
   try { frames = await captureBurst(); }
   catch (e) { setStatus('Capture failed: ' + e.message, 'err'); return; }
-  submitScan(frames);            // deliberately NOT awaited
+  submitScan(frames, manual);    // deliberately NOT awaited
 }
-async function submitScan(frames) {
+async function submitScan(frames, manual = false) {
   const capturedScene = scannedFrame;
   setStatus('Scanning…');
   try {
@@ -358,9 +353,13 @@ async function submitScan(frames) {
     } else if (data.identified) {
       setStatus(data.selection?.auto_picked
         ? `✓ ${data.card_read.name} — only one printing, auto-filed ⚠`
-        : `✓ ${data.card_read.name} — filed for desktop pick. Next card…`, 'ok');
+        : `✓ ${data.card_read.name}${manual ? ' — pick a printing.' : ' — filed for desktop pick. Next card…'}`, 'ok');
+      // Manual mode: open the printing picker right here so the operator can
+      // choose on the phone. Auto mode stays hands-free (desktop picks).
+      if (manual && !data.selection?.auto_picked) openDetail(data.id);
     } else if ((data.candidates || []).length) {
-      setStatus(`? Best guess ${data.card_read?.name || '?'} — verify on desktop.`, 'err');
+      setStatus(`? Best guess ${data.card_read?.name || '?'}${manual ? ' — verify & pick.' : ' — verify on desktop.'}`, 'err');
+      if (manual) openDetail(data.id);
     } else {
       setStatus('✗ ' + (data.error || 'Could not read card. Try again.'), 'err');
     }
@@ -625,7 +624,7 @@ shoot.addEventListener('click', async () => {
   // against scannedFrame, and setting it only afterwards handed the guard the
   // PREVIOUS scan's scene (or null on a fresh page).
   scannedFrame = sampleSmallGray() || scannedFrame;
-  try { await scanOnce(); }
+  try { await scanOnce(true); }   // manual → show the printing picker
   finally {
     mode = 'awaitNext';
     setTimeout(() => { shoot.disabled = false; }, 400);
@@ -639,7 +638,7 @@ stageEl.addEventListener('dblclick', () => {
 /* ── scans data + signature-diffed rendering ───────────────────────────────── */
 const scansPanel = $('#scansPanel'), scansList = $('#scansList'), scansBtn = $('#scansBtn');
 let scans = [], scansView = 'all', priceMin = null, priceMax = null;
-let lastRecentSig = '', lastListSig = '', lastStatSig = '';
+let lastListSig = '', lastStatSig = '';
 let scansTimer = null;
 
 function f2fBest(scan) {
@@ -693,27 +692,6 @@ function inPriceRange(s) {
   return vals.some(inBand);
 }
 
-function renderRecent() {
-  // /api/scans is newest-first — take the head as-is (slice(-8).reverse()
-  // on a descending list showed the 8 OLDEST scans).
-  const slice = scans.slice(0, 8);
-  // Every rendered field must be in the sig: name (re-picks change it), qty,
-  // auto flag, prices — else the chip silently keeps stale content.
-  const sig = slice.map(s => `${s.id}~${s.status}~${s.selection?.name||s.card_read?.name||''}~${s.selection?.quantity||0}~${s.selection?.auto_picked?'a':''}~${JSON.stringify(s.f2f?.conditions||0)}~${printInfo(s).vals.join(';')}`).join('|');
-  if (sig === lastRecentSig) return;
-  lastRecentSig = sig;
-  const el = $('#recent');
-  el.innerHTML = slice.map(s => {
-    const selc = s.status === 'selected';
-    const name = s.selection?.name || s.card_read?.name || '?';
-    const pr = priceRange(s);
-    const qty = s.selection?.quantity > 1 ? ` ×${s.selection.quantity}` : '';
-    const auto = s.selection?.auto_picked ? '⚠' : '';
-    return `<span class="chip ${selc?'selchip':''}" data-sid="${s.id}">${auto}${escHtml(name)}${qty}${pr ? ' · ' + pr : ''}</span>`;
-  }).join('');
-  el.querySelectorAll('.chip[data-sid]').forEach(chip =>
-    chip.addEventListener('click', () => openDetail(Number(chip.dataset.sid))));
-}
 
 function renderScansPanel() {
   if (!scansPanel.classList.contains('open')) return;
@@ -815,7 +793,6 @@ async function refreshScans() {
     scans = await scansRes.json();
     renderSweep(await sweepRes.json());
     scansBtn.textContent = `Scans (${scans.length})`;
-    renderRecent();
     renderScansPanel();
   } catch (e) { /* server momentarily unreachable */ }
 }
