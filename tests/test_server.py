@@ -452,3 +452,44 @@ def test_price_debug_endpoint(client):
     d = client.get("/api/price-debug").json()
     assert "events" in d and isinstance(d["events"], list)
     assert "pace_s" in d
+
+
+class FakeMX:
+    def __init__(self, results=None):
+        self.results = results or {}
+        self.calls = []
+
+    def get_prices(self, ids):
+        self.calls.append(list(ids))
+        return {k: v for k, v in self.results.items() if k in ids}
+
+
+def test_scan_fetches_mx_inventory(tmp_path):
+    """Every scan gets ONE batched Mana Exchange lookup covering all its
+    candidate printings; the result lands on scan.mx."""
+    mx = FakeMX({"id-m10": {"nonfoil": {"price": 0.49, "quantity": 3,
+                                        "conditions": {"NM": 0.49}}}})
+    app = create_app(pipeline_factory=lambda: FakePipeline(),
+                     store=ScanStore(tmp_path / "s.db"), f2f=FakeF2F(), mx=mx,
+                     scan_images_dir=tmp_path / "imgs",
+                     auto_sweep_interval=None)
+    c = TestClient(app)
+    sid = c.post("/api/scan", files={"files": ("c.jpg", _jpeg_bytes(), "image/jpeg")}).json()["id"]
+    scan = c.get(f"/api/scans/{sid}").json()
+    assert scan["mx"]["id-m10"]["nonfoil"]["quantity"] == 3
+    assert len(mx.calls) == 1
+    assert set(mx.calls[0]) == {"id-m10", "id-m11"}   # all candidates, one call
+
+
+def test_mx_failure_never_breaks_a_scan(tmp_path):
+    class BrokenMX:
+        def get_prices(self, ids):
+            raise RuntimeError("mx down")
+    app = create_app(pipeline_factory=lambda: FakePipeline(),
+                     store=ScanStore(tmp_path / "s.db"), f2f=FakeF2F(), mx=BrokenMX(),
+                     scan_images_dir=tmp_path / "imgs",
+                     auto_sweep_interval=None)
+    c = TestClient(app)
+    r = c.post("/api/scan", files={"files": ("c.jpg", _jpeg_bytes(), "image/jpeg")})
+    assert r.status_code == 200
+    assert r.json()["identified"] is True

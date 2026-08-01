@@ -326,8 +326,12 @@ function updateStats(){
 function focusScan(id){ focusedId = id; detailSig = ""; renderDetail(); listSig=""; renderList(); }
 
 /* ── candidate cards ───────────────────────────────────────────────────── */
-function candCard(c, chosenId, idx){
+function candCard(c, chosenId, idx, mxMap){
   const badges = (c.finishes||[]).map(f=>`<span class="pill">${esc(f)}</span>`).join("");
+  const mxE = mxMap?.[c.id]?.nonfoil || mxMap?.[c.id]?.foil;
+  const mxPill = mxE
+    ? `<span class="pill" style="background:#14532d;color:#86efac" title="already listed in your store">MX ×${mxE.quantity}${mxE.price!=null?` $${Number(mxE.price).toFixed(2)}`:''}</span>`
+    : "";
   // multi = art×4 + title + textbox — the order candidates are shown in.
   const d = c.multi_distance!=null
     ? `<span class="pill" title="combined match: art×4 + title + textbox (lower = closer)">Δ${c.multi_distance}</span>`
@@ -336,7 +340,7 @@ function candCard(c, chosenId, idx){
   return `<div class="card ${c.id===chosenId?'chosen':''}" data-pick="${esc(c.id)}">
     <img src="${esc(c.image_normal||c.image_small)}" loading="lazy" onerror="this.style.visibility='hidden'">
     <div class="t"><b>${esc(c.set_name)}</b>#${esc(c.collector_number)} · ${esc(c.rarity||"")}</div>
-    <div class="badges">${best}${d}${badges}</div>
+    <div class="badges">${best}${mxPill}${d}${badges}</div>
   </div>`;
 }
 
@@ -378,7 +382,26 @@ function f2fBoxHtml(scan){
     inner = `<div class="muted" style="font-size:13px;margin:4px 0">${
       scan.f2f ? 'No Face to Face listing found.' : 'Not priced yet.'}</div>`;
   }
+  // Mana Exchange (our own store): does this exact printing already sit in
+  // inventory, and at what price — one glance answers "scan or skip".
+  const mxSid = sel?.scryfall_id || scan.candidates?.[0]?.id;
+  const mxKey = sel?.foil ? "foil" : "nonfoil";
+  const mxE = mxSid ? scan.mx?.[mxSid]?.[mxKey] : null;
+  let mxLine;
+  if (scan.mx == null){
+    mxLine = `<span class="muted" style="font-size:13px">checking…</span>`;
+  } else if (mxE){
+    const conds = Object.entries(mxE.conditions||{})
+      .map(([k,v])=>`${esc(k)} $${Number(v).toFixed(2)}`).join(" · ");
+    mxLine = `<span style="color:var(--good);font-weight:700">In stock ×${mxE.quantity}` +
+      `${mxE.price!=null?` from $${Number(mxE.price).toFixed(2)}`:''}</span>` +
+      (conds?`<span class="muted" style="font-size:12px;margin-left:8px">${conds}</span>`:'');
+  } else {
+    mxLine = `<span class="muted" style="font-size:13px">not currently listed</span>`;
+  }
   return `<div class="f2fbox">
+    <div class="boxlabel">MANA EXCHANGE — YOUR STORE</div>
+    <div style="margin:2px 0 10px">${mxLine}</div>
     <div class="boxlabel">FACE TO FACE PRICE</div>
     ${inner}
     <div style="margin-top:8px">
@@ -419,7 +442,7 @@ function renderDetail(){
     <div class="sechead"><h2>${sel?"Re-pick printing":"Pick the printing"}</h2>
       <span class="muted" style="font-size:12px">ranked closest first — art ×4 + title + textbox</span></div>`;
   html += (scan.candidates||[]).length
-    ? `<div class="grid" id="cands">${scan.candidates.map((c,i)=>candCard(c,chosenId,i)).join("")}</div>`
+    ? `<div class="grid" id="cands">${scan.candidates.map((c,i)=>candCard(c,chosenId,i,scan.mx)).join("")}</div>`
     : `<p class="muted">No art candidates — use the search below.</p>`;
   html += `</div>`;
 
@@ -514,7 +537,7 @@ function wireDetail(scan){
     const q = $("#msearch").value.trim(); if (!q) return;
     $("#msearchResults").innerHTML = `<p class="muted">Searching…</p>`;
     const { candidates } = await jget(`/api/search?q=${encodeURIComponent(q)}`);
-    $("#msearchResults").innerHTML = candidates.map((c,i)=>candCard(c,scan.selection?.scryfall_id,-1)).join("")
+    $("#msearchResults").innerHTML = candidates.map((c,i)=>candCard(c,scan.selection?.scryfall_id,-1,scan.mx)).join("")
       || `<p class="muted">No results.</p>`;
     const searchPick = pickFrom(candidates);
     $("#msearchResults").querySelectorAll(".card[data-pick]").forEach(el =>
@@ -553,12 +576,13 @@ function sigOf(scan){
           scan.selection?.scryfall_id, scan.selection?.condition, scan.selection?.finish,
           scan.selection?.quantity, scan.selection?.auto_picked, scan.error,
           scan.f2f ? JSON.stringify(scan.f2f.conditions||{}) : "null",
+          scan.mx ? Object.keys(scan.mx).length : "null",
           printInfo(scan).vals.join(";"), scan.included].join("|");
 }
 
 // Version banner — page version · server git hash. Same rationale as the
 // phone: without it, "is this the old page?" is undebuggable.
-const UI_VERSION = "d10";
+const UI_VERSION = "d11";
 $("#sweepStopBtn").addEventListener("click", async () => {
   await jsend("/api/price-sweep/stop", "POST", {});
   toast("Sweep stopping — auto-sweep paused 10 min");
