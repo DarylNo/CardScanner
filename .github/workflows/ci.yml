@@ -1,0 +1,35 @@
+# Cross-OS test matrix on every push/PR — the mechanism that catches
+# platform-specific bugs BEFORE a release exists, so master stays releasable
+# from one branch (no per-OS forks/branches).
+name: ci
+on:
+  push:
+    branches: [master]
+  pull_request:
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install . pytest
+      - run: pytest tests/ -q
+      # The launcher's cold-start path (cert generation, LAN IP) must work
+      # everywhere — it IS the install experience.
+      - run: |
+          python - <<'EOF'
+          import tempfile
+          from pathlib import Path
+          from mtg_card_scanner.launch import ensure_certs, lan_ip
+          with tempfile.TemporaryDirectory() as d:
+              k, c = ensure_certs(Path(d))
+              assert k.exists() and c.exists()
+          print("launcher cold-start OK on this OS; lan_ip:", lan_ip())
+          EOF
+        shell: bash

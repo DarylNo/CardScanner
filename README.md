@@ -72,6 +72,13 @@ Tips:
 - Linux: if launch fails with a `libGL` error, `sudo apt install libgl1`
   (or swap in `opencv-python-headless`).
 
+### Updating
+
+- **install.sh / pipx / uv users:** re-run the install one-liner (or
+  `pipx upgrade mtg-card-scanner`) — it reinstalls the latest master.
+- **Binary users:** download the newest release and replace the old file.
+- Your data (`~/.mtg-card-scanner/`, art index cache) is untouched by updates.
+
 <details>
 <summary>Manual / development run (the old way)</summary>
 
