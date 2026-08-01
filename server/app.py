@@ -24,7 +24,7 @@ import cv2
 import numpy as np
 from fastapi import BackgroundTasks, Body, FastAPI, File, UploadFile
 from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
+from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from server.export import build_mx_export
@@ -121,6 +121,29 @@ def create_app(
     @app.get("/api/version")
     def version():
         return {"version": APP_VERSION}
+
+    # ── live debug peek ────────────────────────────────────────────────────────
+    # The camera stream is local to the phone browser; these two endpoints
+    # give the operator a periscope: /phone?debug pushes a full frame every
+    # ~2s, and GET returns the latest one (X-Frame-Age says how stale).
+    _debug_frame: dict[str, Any] = {"jpeg": None, "at": 0.0}
+
+    @app.post("/api/debug/frame")
+    async def debug_frame_post(file: UploadFile = File(...)):
+        _debug_frame["jpeg"] = await file.read()
+        _debug_frame["at"] = time.time()
+        return {"ok": True}
+
+    @app.get("/api/debug/frame")
+    def debug_frame_get():
+        if not _debug_frame["jpeg"]:
+            return JSONResponse(
+                {"error": "no frame yet — open /phone?debug on the phone"},
+                status_code=404)
+        return Response(
+            content=_debug_frame["jpeg"], media_type="image/jpeg",
+            headers={"X-Frame-Age": f"{time.time() - _debug_frame['at']:.1f}",
+                     **_NO_STORE})
 
     # ── scan (phone → server) ──────────────────────────────────────────────────
     @app.post("/api/scan")

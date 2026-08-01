@@ -213,7 +213,7 @@ async function jsend(url, method, body) {
 }
 
 /* ── version banner — proves which page+server combo is running ────────────── */
-const UI_VERSION = 'v15';
+const UI_VERSION = 'v16';
 fetch('/api/version').then(r => r.json())
   .then(d => { $('#ver').textContent = `${UI_VERSION} · ${d.version}`; })
   .catch(() => { $('#ver').textContent = UI_VERSION; });
@@ -527,6 +527,27 @@ function drawOverlay(box, color, captured = false) {
   }
 }
 function dbg(msg) { if (DEBUG) setStatus(msg); }
+
+// ── live debug peek ──────────────────────────────────────────────────────────
+// In ?debug mode, push the FULL camera frame (not the ROI crop) every 2s to
+// /api/debug/frame so what the camera sees can be inspected remotely.
+// Separate canvas: sharing the capture canvas could corrupt a scan burst
+// that fires mid-tick.
+if (DEBUG) {
+  const peekCanvas = document.createElement('canvas');
+  setInterval(async () => {
+    if (!video.videoWidth) return;
+    const scale = Math.min(1, MAX_UPLOAD_DIM / Math.max(video.videoWidth, video.videoHeight));
+    const w = Math.round(video.videoWidth * scale), h = Math.round(video.videoHeight * scale);
+    peekCanvas.width = w; peekCanvas.height = h;
+    peekCanvas.getContext('2d').drawImage(video, 0, 0, w, h);
+    const blob = await new Promise(r => peekCanvas.toBlob(r, 'image/jpeg', 0.8));
+    if (!blob) return;
+    const fd = new FormData();
+    fd.append('file', blob, 'debug.jpg');
+    fetch('/api/debug/frame', { method: 'POST', body: fd }).catch(() => {});
+  }, 2000);
+}
 
 /* ── auto-scan state machine ───────────────────────────────────────────────── */
 function tick() {
