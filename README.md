@@ -71,6 +71,12 @@ Tips:
 - `mtg-card-scanner --help` for port/data-dir options.
 - Linux: if launch fails with a `libGL` error, `sudo apt install libgl1`
   (or swap in `opencv-python-headless`).
+- **Chromebook**: enable Linux mode (Settings → Advanced → Developers →
+  Turn on Linux), run the macOS/Linux one-liner inside it (ARM Chromebooks:
+  use the script, not the binary), then add a port forward for TCP 8443
+  (Settings → Linux → Port forwarding) so the phone can reach the server.
+  No install needed to use a Chromebook as just the control screen or the
+  camera — both are plain browser pages served by a scanner running elsewhere.
 
 ### Updating
 
