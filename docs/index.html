@@ -77,9 +77,11 @@ mtg-card-scanner</pre>
     <li>Tap <b>Area</b> on the phone, drag a box around the tray — done.
         Drop cards in; they identify, price, and file themselves.</li>
   </ol>
-  <p class="note">macOS binaries are unsigned — right-click → Open the first
-  time. Windows will ask to allow the app through the firewall so the phone
-  can connect. Source &amp; issues on
+  <p class="note">macOS/Linux downloads are .tar.gz — extract, then run
+  <code>mtg-card-scanner</code> (the executable bit is preserved). macOS
+  binaries are unsigned — right-click → Open the first time. Windows will ask
+  to allow the app through the firewall so the phone can connect. Source
+  &amp; issues on
   <a href="https://github.com/DarylNo/CardScanner">GitHub</a>.</p>
 </main>
 <footer>MIT licensed · identification runs entirely on your machine</footer>
@@ -88,9 +90,9 @@ mtg-card-scanner</pre>
 const REPO = "DarylNo/CardScanner";
 const ASSETS = [
   { match: /windows/,          label: "Windows",              file: "mtg-card-scanner-windows.exe" },
-  { match: /mac|darwin/,       label: "macOS (Apple Silicon)", file: "mtg-card-scanner-macos-arm64" },
-  { match: /mac|darwin/,       label: "macOS (Intel)",        file: "mtg-card-scanner-macos-x86_64" },
-  { match: /linux/,            label: "Linux (x86_64)",       file: "mtg-card-scanner-linux-x86_64" },
+  { match: /mac|darwin/,       label: "macOS (Apple Silicon)", file: "mtg-card-scanner-macos-arm64.tar.gz" },
+  { match: /mac|darwin/,       label: "macOS (Intel)",        file: "mtg-card-scanner-macos-x86_64.tar.gz" },
+  { match: /linux/,            label: "Linux (x86_64)",       file: "mtg-card-scanner-linux-x86_64.tar.gz" },
 ];
 function detectOS() {
   const ua = navigator.userAgent.toLowerCase();

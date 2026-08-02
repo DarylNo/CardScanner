@@ -15,14 +15,17 @@ jobs:
           - os: windows-latest
             artifact: mtg-card-scanner-windows.exe
             built: dist/mtg-card-scanner.exe
+          # mac/linux ship as .tar.gz: a raw binary download loses its
+          # executable bit — the tarball preserves it, so extract-and-run
+          # works without chmod.
           - os: macos-14          # Apple Silicon
-            artifact: mtg-card-scanner-macos-arm64
+            artifact: mtg-card-scanner-macos-arm64.tar.gz
             built: dist/mtg-card-scanner
           - os: macos-13          # Intel
-            artifact: mtg-card-scanner-macos-x86_64
+            artifact: mtg-card-scanner-macos-x86_64.tar.gz
             built: dist/mtg-card-scanner
           - os: ubuntu-22.04      # older glibc = wider compatibility
-            artifact: mtg-card-scanner-linux-x86_64
+            artifact: mtg-card-scanner-linux-x86_64.tar.gz
             built: dist/mtg-card-scanner
     runs-on: ${{ matrix.os }}
     steps:
@@ -41,7 +44,12 @@ jobs:
           --collect-data server
           --collect-submodules uvicorn
           scripts/pyinstaller_entry.py
-      - run: cp "${{ matrix.built }}" "${{ matrix.artifact }}"
+      - run: |
+          if [[ "${{ matrix.artifact }}" == *.tar.gz ]]; then
+            tar -czf "${{ matrix.artifact }}" -C dist mtg-card-scanner
+          else
+            cp "${{ matrix.built }}" "${{ matrix.artifact }}"
+          fi
         shell: bash
       - uses: actions/upload-artifact@v4
         with:
