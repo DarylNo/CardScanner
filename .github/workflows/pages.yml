@@ -23,5 +23,10 @@ jobs:
       - uses: actions/upload-pages-artifact@v3
         with:
           path: docs
+      # continue-on-error: until Pages is enabled in repo settings (and the
+      # repo is public), this step 404s by design — don't paint every docs
+      # push red for a pending settings flip. Once enabled it deploys
+      # normally; a broken page after that shows up as the site not updating.
       - id: deployment
         uses: actions/deploy-pages@v4
+        continue-on-error: true
