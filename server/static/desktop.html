@@ -232,6 +232,9 @@ function priceOf(scan){
 }
 const inBand = p => (priceMin == null || p >= priceMin) && (priceMax == null || p <= priceMax);
 function inPriceRange(scan){
+  // A "check" row means the scan needs human eyes — no filter may ever
+  // hide one, whatever the price band says.
+  if (isProblem(scan)) return true;
   if (priceMin == null && priceMax == null) return true;
   if (scan.status === "selected"){
     const p = priceOf(scan);
@@ -563,7 +566,7 @@ function sigOf(scan){
 
 // Version banner — page version · server git hash. Same rationale as the
 // phone: without it, "is this the old page?" is undebuggable.
-const UI_VERSION = "d12";
+const UI_VERSION = "d13";
 $("#sweepStopBtn").addEventListener("click", async () => {
   await jsend("/api/price-sweep/stop", "POST", {});
   toast("Sweep stopping — auto-sweep paused 10 min");

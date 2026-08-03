@@ -208,7 +208,7 @@ async function jsend(url, method, body) {
 }
 
 /* ── version banner — proves which page+server combo is running ────────────── */
-const UI_VERSION = 'v20';
+const UI_VERSION = 'v21';
 fetch('/api/version').then(r => r.json())
   .then(d => { $('#ver').textContent = `${UI_VERSION} · ${d.version}`; })
   .catch(() => { $('#ver').textContent = UI_VERSION; });
@@ -681,6 +681,8 @@ const isProblem = s => !!s.error || !(s.candidates || []).length;
 function priceOf(s) { const p = f2fBest(s); return p == null ? null : Number(p); }
 const inBand = p => (priceMin == null || p >= priceMin) && (priceMax == null || p <= priceMax);
 function inPriceRange(s) {
+  // "check" rows need human eyes — never price-filtered away.
+  if (isProblem(s)) return true;
   if (priceMin == null && priceMax == null) return true;
   if (s.status === 'selected') {
     const p = priceOf(s);
