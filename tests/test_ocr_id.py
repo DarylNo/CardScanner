@@ -45,3 +45,16 @@ def test_ambiguous_resolved_by_collector():
 def test_list_copy_wins_over_original_set():
     # a List card prints "A25-85": compound collector beats the bare set hit
     assert match_printing("A25-85 PW", CANDS) == "plst"
+
+
+def test_art_double_check_blocks_disagreeing_promotions():
+    """A misread set code naming an alt-art printing must be ignored: the
+    OCR'd candidate's art distance has to sit within the same-art band."""
+    from mtg_card_scanner.pipeline import _art_agrees
+    cands = [{"id": "a", "multi_distance": 124},
+             {"id": "b", "multi_distance": 156},
+             {"id": "c", "multi_distance": 208}]
+    assert _art_agrees(cands[0], cands) is True    # the best itself
+    assert _art_agrees(cands[1], cands) is True    # same-art band (+32)
+    assert _art_agrees(cands[2], cands) is False   # alt-art (+84) — blocked
+    assert _art_agrees({"id": "d"}, cands) is True # no art data — don't block

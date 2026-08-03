@@ -59,6 +59,24 @@ def _confidence_for(distance: int) -> str:
     return "low"
 
 
+# OCR may promote a candidate only when its ART also agrees with the scan:
+# within this many points of the best-ranked candidate. Same-art/frame
+# printings cluster within ~60 of each other; a DIFFERENT-art printing sits
+# ~+80 or more (measured: Bone Splinters same-art Δ124-190, alt-art Δ208).
+# This is the double-check that a misread set code can never promote — let
+# alone AUTO-PICK — a printing that doesn't even look like the scan.
+_OCR_ART_SLACK = 60
+
+
+def _art_agrees(hit: dict, candidates: list[dict], slack: int = _OCR_ART_SLACK) -> bool:
+    dists = [c.get("multi_distance") for c in candidates
+             if c.get("multi_distance") is not None]
+    hd = hit.get("multi_distance")
+    if hd is None or not dists:
+        return True                     # no art data — don't block on absence
+    return hd <= min(dists) + slack
+
+
 def _is_confident(matches: list[dict[str, Any]]) -> bool:
     """
     Accept the top art match either on absolute score or on MARGIN: a best
@@ -322,6 +340,13 @@ class Pipeline:
             if not sid:
                 return candidates
             hit = next(c for c in candidates if c["id"] == sid)
+            # Art double-check: the OCR'd printing must also LOOK like the
+            # scan. A misread code naming an alt-art printing gets ignored.
+            if not _art_agrees(hit, candidates):
+                print(f"  [pipeline] OCR named {hit['set'].upper()} "
+                      f"#{hit['collector_number']} but its art disagrees "
+                      f"(Δ{hit.get('multi_distance')}) — ignoring")
+                return candidates
             hit["ocr_confirmed"] = True
             print(f"  [pipeline] OCR confirmed printing: "
                   f"{hit['set'].upper()} #{hit['collector_number']}")

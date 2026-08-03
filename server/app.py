@@ -741,6 +741,9 @@ def create_app(
             hit = next((c for c in cands if c.get("id") == sid), None)
             if hit is None:
                 continue
+            from mtg_card_scanner.pipeline import _art_agrees
+            if not _art_agrees(hit, cands):
+                continue                # art disagrees — never auto-pick
             hit["ocr_confirmed"] = True
             with select_lock:
                 row = store.get_scan(s["id"])

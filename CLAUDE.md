@@ -66,6 +66,9 @@ set-symbol template matching are pure noise for same-art same-frame reprints
 RapidOCR (pip-only, never system tesseract) reads the bottom strip;
 confusion-tolerant (I≈1, S≈5…) UNIQUE set-code match; compound collectors
 ("A25-85") win outright so List copies don't misattribute; ambiguity = no-op.
+An OCR promotion also requires ART AGREEMENT (within _OCR_ART_SLACK of the
+best candidate) — a misread code can never promote or auto-pick a printing
+that doesn't look like the scan.
 
 **Auto-pick grounds** (server, scan time): exactly one printing exists, OR
 the top candidate is OCR-confirmed — both file NM/Non-Foil/×1 with the
