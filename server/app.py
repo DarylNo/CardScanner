@@ -359,13 +359,17 @@ def create_app(
         except Exception as exc:
             print(f"  [server] could not save scan image for #{scan['id']}: {exc}")
 
-        # Single-printing auto-pick: when the identified card has exactly ONE
-        # printing there is nothing to choose — select it (NM / Non-Foil / x1)
-        # with auto_picked set, which the UIs render as a small warning so the
-        # user knows it was filed for them and can glance-confirm. Auto-merge
-        # applies, so a repeat copy lands as +1 quantity.
+        # Auto-pick, two grounds:
+        #  - exactly ONE printing exists → nothing to choose; or
+        #  - the top candidate is OCR-CONFIRMED → the printing's set code was
+        #    read off the card's own collector line, which is stronger
+        #    evidence than any art delta (deltas compress into noise across
+        #    same-art reprints — measured).
+        # Either way: NM / Non-Foil / ×1, auto_picked flag (⚠ in the UIs),
+        # auto-merge applies so a repeat copy lands as +1 quantity.
         cands = result.get("candidates") or []
-        if result["identified"] and len(cands) == 1:
+        if result["identified"] and cands and (
+                len(cands) == 1 or cands[0].get("ocr_confirmed")):
             scan = await _apply_selection(scan["id"], cands[0], "NM", "Non-Foil", 1, auto=True)
             if scan.get("merged_into"):
                 return scan
@@ -698,6 +702,56 @@ def create_app(
             if s.get("identified") and len(kept) == 1:
                 _apply_selection_core(s["id"], kept[0], "NM", "Non-Foil", 1, auto=True)
 
+    def _retro_ocr_scans(budget: int = 8) -> None:
+        """
+        Backlog OCR: pending identified scans that predate OCR printing-ID
+        get their stored photo read once — a unique collector-line match
+        reorders candidates and auto-picks, same as scan time. Attempts are
+        marked (card_read.ocr_retro_done) so each scan is OCR'd at most once;
+        *budget* keeps a tick short (~1s per scan).
+        """
+        try:
+            import cv2
+            from mtg_card_scanner.ocr_id import match_printing, read_bottom_strip
+        except Exception:
+            return
+        done = 0
+        for s in store.list_scans():
+            if done >= budget:
+                return
+            if s.get("selection") or not s.get("identified"):
+                continue
+            cr = dict(s.get("card_read") or {})
+            if cr.get("ocr_retro_done"):
+                continue
+            cands = s.get("candidates") or []
+            img_path = scan_images_dir / f"{s['id']}.jpg"
+            cr["ocr_retro_done"] = True
+            store.update_scan(s["id"], card_read=cr)
+            done += 1
+            if len(cands) < 2 or not img_path.exists():
+                continue
+            try:
+                img = cv2.imread(str(img_path))
+                sid = match_printing(read_bottom_strip(img), cands) if img is not None else None
+            except Exception:
+                continue
+            if not sid:
+                continue
+            hit = next((c for c in cands if c.get("id") == sid), None)
+            if hit is None:
+                continue
+            hit["ocr_confirmed"] = True
+            with select_lock:
+                row = store.get_scan(s["id"])
+                if row and not row.get("selection"):
+                    store.update_scan(
+                        s["id"],
+                        candidates=[hit] + [c for c in cands if c.get("id") != sid])
+            print(f"  [server] retro-OCR confirmed #{s['id']}: "
+                  f"{hit.get('set','').upper()} #{hit.get('collector_number','')}")
+            _apply_selection_core(s["id"], hit, "NM", "Non-Foil", 1, auto=True)
+
     # Auto-sweep: any unpriced work is picked up every minute without the user
     # pressing anything. A manual stop pauses it for 10 minutes; a manual
     # start clears the pause.
@@ -709,6 +763,7 @@ def create_app(
                 if sweep["active"]:
                     continue
                 _retro_fix_scans()
+                _retro_ocr_scans()
                 stopped_at = sweep.get("manual_stop_at")
                 if stopped_at is not None and time.monotonic() - stopped_at < 600:
                     continue

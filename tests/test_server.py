@@ -473,3 +473,35 @@ def test_update_check_endpoint_shape(client):
     assert set(u) >= {"current", "latest", "update_available",
                       "can_self_update", "download_url"}
     assert u["can_self_update"] is True      # tests never run frozen
+
+
+class OcrConfirmedPipeline(FakePipeline):
+    def scan_candidates(self, frames, top_n=12):
+        out = dict(super().scan_candidates(frames, top_n))
+        cands = [dict(c) for c in out["candidates"]]
+        cands[0]["ocr_confirmed"] = True     # collector line named this print
+        out["candidates"] = cands
+        return out
+
+
+def test_ocr_confirmed_top_candidate_auto_picks(tmp_path):
+    """Reading the printing off the card beats any art delta — an OCR-
+    confirmed top candidate auto-files like a single-printing card."""
+    app = create_app(pipeline_factory=lambda: OcrConfirmedPipeline(),
+                     store=ScanStore(tmp_path / "s.db"), f2f=FakeF2F(),
+                     scan_images_dir=tmp_path / "imgs",
+                     auto_sweep_interval=None)
+    c = TestClient(app)
+    scan = c.post("/api/scan", files={"files": ("c.jpg", _jpeg_bytes(), "image/jpeg")}).json()
+    assert scan["status"] == "selected"
+    assert scan["selection"]["auto_picked"] is True
+    assert scan["selection"]["scryfall_id"] == "id-m10"
+
+    # unconfirmed multi-candidate scans still wait for a human
+    app2 = create_app(pipeline_factory=lambda: FakePipeline(),
+                      store=ScanStore(tmp_path / "s2.db"), f2f=FakeF2F(),
+                      scan_images_dir=tmp_path / "imgs2",
+                      auto_sweep_interval=None)
+    c2 = TestClient(app2)
+    scan2 = c2.post("/api/scan", files={"files": ("c.jpg", _jpeg_bytes(), "image/jpeg")}).json()
+    assert scan2["status"] == "candidates"
