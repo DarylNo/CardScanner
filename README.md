@@ -117,9 +117,13 @@ changes. Tap **Area** once and drag a box around your tray — detection and cap
 to it, so clutter around the rig can't interfere. The page holds a screen wake-lock so a
 mounted phone doesn't sleep.
 
-Two modes: **Auto ON** is fully hands-free — cards identify, single-printing cards
-auto-file (marked ⚠), duplicates merge into quantity, and printing picks happen on the
-desktop. **Auto OFF + Scan Card** opens the printing picker right on the phone.
+Two modes: **Auto ON** is fully hands-free — cards identify, and a card auto-files
+(marked ⚠) when either only one printing exists **or the exact printing is confirmed by
+OCR of the card's own collector line** (`087/254 · MH1` — the only reliable way to
+separate same-art reprints; art hashing is measurably blind to them). Duplicates merge
+into quantity; anything ambiguous waits on the desktop, where the confirmed printing
+wears a "✓ matches card text" badge. **Auto OFF + Scan Card** opens the printing picker
+right on the phone.
 
 Start the page with the tray **empty** — the first steady second seeds the "empty" reference.
 
@@ -175,6 +179,8 @@ Phone camera → POST /api/scan → card_detect.py (find + warp card)
   data); nearest-neighbour query over jittered scan crops, scored `4·d64 + d256`
 - **scryfall.py** — Scryfall API client (printings by name, set+collector lookup, rate-limited)
 - **visual_match.py** — ranks a name's printings against the scan by multi-region pHash
+- **ocr_id.py** — reads the collector/set line (pip-only OCR) to confirm the exact
+  printing among same-art reprints — the layer pHash cannot be
 - **pipeline.py** — orchestrates identify → printings → rank; graceful "use manual search"
   result when the art match isn't confident
 - **server/** — FastAPI app, SQLite scan store, F2F client, Mana Exchange export

@@ -67,6 +67,14 @@ RapidOCR (pip-only, never system tesseract) reads the bottom strip;
 confusion-tolerant (I≈1, S≈5…) UNIQUE set-code match; compound collectors
 ("A25-85") win outright so List copies don't misattribute; ambiguity = no-op.
 
+**Auto-pick grounds** (server, scan time): exactly one printing exists, OR
+the top candidate is OCR-confirmed — both file NM/Non-Foil/×1 with the
+`auto_picked` flag (⚠ in the UIs) and auto-merge duplicates into quantity.
+Unconfirmed multi-candidate scans always wait for a human. The auto-sweep
+tick also runs retro passes: strip stale art-series candidates, retro-OCR
+pending scans from their stored photos (once each, budgeted), auto-pick
+newly-single/confirmed ones.
+
 **F2F client (`facetoface.py`):**
 - `curl_cffi` Chrome TLS impersonation is THE 429 fix — Shopify fingerprints
   the TLS handshake, not the UA (same URL: python-requests 429'd, Chrome
