@@ -100,6 +100,34 @@ def lan_ip() -> str:
         s.close()
 
 
+def _load_config(data_dir: Path) -> None:
+    """
+    Load <data-dir>/config.env (simple KEY=VALUE lines) into the environment,
+    without overriding anything already set. This is how the operator supplies
+    MX_URL and SCANNER_F2F_TOKEN once, in a file, so they reach the server no
+    matter how it's launched — a GUI app-drawer click on ChromeOS/Crostini
+    does NOT inherit shell env vars, so ~/.bashrc exports don't work there.
+
+        # ~/.mtg-card-scanner/config.env
+        MX_URL=https://www.manaexchange.ca
+        SCANNER_F2F_TOKEN=your-shared-secret
+    """
+    cfg = Path(data_dir) / "config.env"
+    try:
+        if not cfg.exists():
+            return
+        for line in cfg.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, _, val = line.partition("=")
+            key, val = key.strip(), val.strip().strip('"').strip("'")
+            if key and key not in os.environ:
+                os.environ[key] = val
+    except OSError:
+        pass
+
+
 def _print_qr(url: str) -> None:
     try:
         import segno
@@ -152,6 +180,8 @@ def main(argv: list[str] | None = None) -> None:
                         help="don't auto-open the desktop UI")
     parser.add_argument("--serve", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
+
+    _load_config(args.data_dir)      # config.env → env, before anything reads it
 
     if not args.serve:
         _supervise(args)

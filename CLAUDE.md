@@ -86,7 +86,7 @@ this (public) repo. Kept locally: 24h disk cache, gentle pacing to our own
 backend, interruptible waits (Stop), request debug log. `F2FUnavailableError`
 ≠ "no listing" — a 5xx/timeout raises (stays retryable), a clean not-found
 returns None (records empty marker). The scraping method itself lives in
-`DarylNo/v0-ManaExchange` `lib/f2f-scraper.ts` (private).
+`DarylNo/v0-ManaExchange` `lib/f2f-scraper.ts` (private). Scanner config (`MX_URL`, `SCANNER_F2F_TOKEN`) comes from env or `<data-dir>/config.env`.
 
 **Pricing sweep (`server/app.py`):** ONE F2F consumer while active (all other
 pricers stand down); selected scans price ONLY their selection; unpicked

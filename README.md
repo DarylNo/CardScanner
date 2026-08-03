@@ -71,12 +71,35 @@ Tips:
 - `mtg-card-scanner --help` for port/data-dir options.
 - Linux: if launch fails with a `libGL` error, `sudo apt install libgl1`
   (or swap in `opencv-python-headless`).
-- **Chromebook**: enable Linux mode (Settings → Advanced → Developers →
-  Turn on Linux), run the macOS/Linux one-liner inside it (ARM Chromebooks:
-  use the script, not the binary), then add a port forward for TCP 8443
-  (Settings → Linux → Port forwarding) so the phone can reach the server.
-  No install needed to use a Chromebook as just the control screen or the
-  camera — both are plain browser pages served by a scanner running elsewhere.
+- **Chromebook**: see the step-by-step below.
+- **Pricing config** (`<data-dir>/config.env`, i.e. `~/.mtg-card-scanner/config.env`):
+  set `MX_URL` and, if you gate the proxy, `SCANNER_F2F_TOKEN`. Read at launch
+  regardless of how the app is started (a GUI click doesn't inherit shell env
+  vars). Env vars still win over the file.
+
+### Chromebook install (Linux mode)
+
+1. **Enable Linux**: Settings → Advanced → Developers → Linux development
+   environment → Turn on (accept the default disk size). Opens the Terminal app.
+2. **Install** (in Terminal): `curl -fsSL https://raw.githubusercontent.com/DarylNo/CardScanner/master/install.sh | bash`
+   — installs uv + the scanner and drops an app-drawer launcher. ARM Chromebooks
+   use this script path (no ARM binary is built). If launch later errors on
+   `libGL`: `sudo apt install -y libgl1`.
+3. **Pricing token** (only if you gated the proxy):
+   `mkdir -p ~/.mtg-card-scanner && nano ~/.mtg-card-scanner/config.env`, then add:
+   ```
+   MX_URL=https://www.manaexchange.ca
+   SCANNER_F2F_TOKEN=your-shared-secret
+   ```
+4. **Port forward** (so the phone can reach the NAT'd container): Settings →
+   Advanced → Developers → Linux → Port forwarding → Add → TCP **8443**, toggle on.
+5. **Run**: `mtg-card-scanner` (or the app-drawer icon → right-click → Pin to shelf).
+   The desktop UI opens; first run shows a one-click Build card database step.
+   Scan the QR with the phone, accept the cert warning, tap Area over the tray.
+
+A Chromebook can also be *just* the control screen or the camera with **no
+install** — both are plain browser pages: point Chrome at
+`https://<server-ip>:8443/` (or `/phone`) of a scanner running on any machine.
 
 ### Updating
 
