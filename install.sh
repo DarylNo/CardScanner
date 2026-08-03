@@ -57,6 +57,20 @@ EOF
     ;;
 esac
 
+# ── 4. make sure `mtg-card-scanner` works in THIS shell and future ones ───────
+# uv/pipx install to ~/.local/bin, which a terminal opened BEFORE the install
+# may not have on PATH ("command not found" right after a successful install).
+case ":$PATH:" in
+  *":$HOME/.local/bin:"*) ;;
+  *) if ! grep -qs '\.local/bin' "$HOME/.bashrc" 2>/dev/null; then
+       printf '\nexport PATH="$HOME/.local/bin:$PATH"\n' >> "$HOME/.bashrc"
+     fi ;;
+esac
+
 say ""
 say "Done. Start it with:  mtg-card-scanner"
+if ! command -v mtg-card-scanner >/dev/null 2>&1; then
+  say "(This terminal was opened before the install — close it and open a new"
+  say " one first, or just launch \"MTG Card Scanner\" from the app menu.)"
+fi
 say "It opens the desktop UI and shows a QR code to connect your phone."
