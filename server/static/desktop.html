@@ -566,7 +566,7 @@ function sigOf(scan){
 
 // Version banner — page version · server git hash. Same rationale as the
 // phone: without it, "is this the old page?" is undebuggable.
-const UI_VERSION = "d13";
+const UI_VERSION = "d14";
 $("#sweepStopBtn").addEventListener("click", async () => {
   await jsend("/api/price-sweep/stop", "POST", {});
   toast("Sweep stopping — auto-sweep paused 10 min");
@@ -682,7 +682,23 @@ async function clearScans(only){
 $("#clearJunkBtn").addEventListener("click", () => clearScans("unselected"));
 $("#clearAllBtn").addEventListener("click", () => clearScans(null));
 $("#exportBtn").addEventListener("click", () => { window.location = "/api/export"; });
-$("#phoneLink").textContent = "Phone: " + location.origin + "/phone";
+// Advertise the PHONE-reachable address from the server's detected LAN IP,
+// not location.origin — which is "localhost" whenever the operator opens the
+// UI on the server machine (e.g. a Chromebook running the scanner locally).
+jget("/api/version").then(d => {
+  const port = location.port || "8443";
+  if (d.is_lan && d.lan_ip){
+    $("#phoneLink").textContent = `Phone: https://${d.lan_ip}:${port}/phone`;
+    $("#phoneLink").title = "Click for a QR code to open the scanner on your phone";
+  } else {
+    // Container / localhost-only: the server can't see a phone-reachable IP
+    // (classic Crostini). Tell the operator where to find it.
+    $("#phoneLink").textContent = "Phone: find your Wi-Fi IP → :" + port + "/phone";
+    $("#phoneLink").title = "The server can't detect a phone-reachable address "
+      + "(common on Chromebooks). Find this device's Wi-Fi IP in Settings → "
+      + "Network, then open https://THAT-IP:" + port + "/phone on the phone.";
+  }
+}).catch(() => { $("#phoneLink").textContent = "Phone: " + location.origin + "/phone"; });
 // Click the phone link -> QR code in the lightbox; point the phone camera at it.
 $("#phoneLink").addEventListener("click", () => openLightbox("/api/phone-qr"));
 

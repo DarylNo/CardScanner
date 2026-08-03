@@ -127,7 +127,14 @@ def create_app(
 
     @app.get("/api/version")
     def version():
-        return {"version": APP_VERSION}
+        # lan_ip: the phone-reachable address the desktop should advertise —
+        # NOT location.origin, which is "localhost" when the operator opens the
+        # UI on the server machine. On Crostini the container may only know its
+        # internal IP; is_lan says whether it's a real phone-reachable LAN
+        # address so the UI can fall back to a "find it in Settings" hint.
+        from mtg_card_scanner.launch import _is_private_lan, lan_ip
+        ip = lan_ip()
+        return {"version": APP_VERSION, "lan_ip": ip, "is_lan": _is_private_lan(ip)}
 
     # ── in-app updates ─────────────────────────────────────────────────────────
     # Detect: compare our version against GitHub (latest release tag for

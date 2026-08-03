@@ -88,16 +88,55 @@ def ensure_certs(cert_dir: Path) -> tuple[Path, Path]:
     return key_path, crt_path
 
 
+def _is_private_lan(ip: str) -> bool:
+    """True for a real home-LAN address (192.168/16, 10/8, 172.16-31)."""
+    if ip.startswith("192.168.") or ip.startswith("10."):
+        return True
+    if ip.startswith("172."):
+        try:
+            return 16 <= int(ip.split(".")[1]) <= 31
+        except (IndexError, ValueError):
+            return False
+    return False
+
+
 def lan_ip() -> str:
-    """This machine's LAN address (the one the phone must dial)."""
+    """
+    This machine's LAN address — the one the PHONE must dial.
+
+    The route-to-8.8.8.8 trick returns the container's internal address inside
+    ChromeOS Crostini (100.115.92.x), which the phone can't reach. So prefer a
+    genuine private-LAN interface address when one exists, and fall back to the
+    route trick only if none is found (native Windows/Mac/Linux, where the
+    route address IS the LAN one).
+    """
+    candidates: list[str] = []
+    try:
+        host = socket.gethostname()
+        for info in socket.getaddrinfo(host, None, socket.AF_INET):
+            candidates.append(info[4][0])
+    except OSError:
+        pass
+    for ip in candidates:
+        if _is_private_lan(ip):
+            return ip
+
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
         s.connect(("8.8.8.8", 80))     # no packets sent — just picks a route
-        return s.getsockname()[0]
+        route_ip = s.getsockname()[0]
     except OSError:
-        return "127.0.0.1"
+        route_ip = "127.0.0.1"
     finally:
         s.close()
+    # A private-LAN route wins; otherwise take any earlier candidate that is
+    # private-LAN (Crostini: route is 100.115.x but a real 192.168.x may exist).
+    if _is_private_lan(route_ip):
+        return route_ip
+    for ip in candidates:
+        if _is_private_lan(ip):
+            return ip
+    return route_ip
 
 
 def _load_config(data_dir: Path) -> None:

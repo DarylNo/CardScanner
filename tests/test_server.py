@@ -505,3 +505,9 @@ def test_ocr_confirmed_top_candidate_auto_picks(tmp_path):
     c2 = TestClient(app2)
     scan2 = c2.post("/api/scan", files={"files": ("c.jpg", _jpeg_bytes(), "image/jpeg")}).json()
     assert scan2["status"] == "candidates"
+
+
+def test_version_reports_lan_ip(client):
+    d = client.get("/api/version").json()
+    assert "lan_ip" in d and "is_lan" in d
+    assert isinstance(d["is_lan"], bool)
