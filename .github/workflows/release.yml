@@ -21,13 +21,16 @@ jobs:
           - os: macos-14          # Apple Silicon
             artifact: mtg-card-scanner-macos-arm64.tar.gz
             built: dist/mtg-card-scanner
-          - os: macos-13          # Intel
+          - os: macos-15-intel    # GitHub retired macos-13; this is the
+                                  # remaining Intel label — if it also goes
+                                  # away, publish ships the other legs anyway
             artifact: mtg-card-scanner-macos-x86_64.tar.gz
             built: dist/mtg-card-scanner
           - os: ubuntu-22.04      # older glibc = wider compatibility
             artifact: mtg-card-scanner-linux-x86_64.tar.gz
             built: dist/mtg-card-scanner
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -57,6 +60,10 @@ jobs:
           path: ${{ matrix.artifact }}
   publish:
     needs: binaries
+    # always(): publish whatever legs produced artifacts — a dead runner
+    # label (macos-13 queued forever, got cancelled, publish skipped, release
+    # v1.0.0 shipped NOTHING) must never zero out the whole release.
+    if: ${{ always() }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
