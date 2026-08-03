@@ -466,3 +466,10 @@ def test_single_printing_auto_pick_gets_priced_immediately(tmp_path):
     scan = c.get(f"/api/scans/{sid}").json()          # bg tasks ran inline
     assert scan["selection"]["auto_picked"] is True
     assert scan["f2f"]["conditions"] == {"NM": 3.49, "PL": 2.79}
+
+
+def test_update_check_endpoint_shape(client):
+    u = client.get("/api/update-check").json()
+    assert set(u) >= {"current", "latest", "update_available",
+                      "can_self_update", "download_url"}
+    assert u["can_self_update"] is True      # tests never run frozen

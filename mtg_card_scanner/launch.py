@@ -16,13 +16,37 @@ from __future__ import annotations
 
 import argparse
 import os
+import shutil
 import socket
+import subprocess
+import sys
 import threading
 import webbrowser
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 _DEFAULT_DATA_DIR = Path.home() / ".mtg-card-scanner"
+
+# The server child exits with this code to request "update me, then restart".
+UPDATE_EXIT_CODE = 42
+_TARBALL_SPEC = ("mtg-card-scanner @ "
+                 "https://github.com/DarylNo/CardScanner/archive/refs/heads/master.tar.gz")
+
+
+def _run_update() -> None:
+    """Apply an update using whatever installed us."""
+    repo_root = Path(__file__).resolve().parents[1]
+    if (repo_root / ".git").exists():                     # dev checkout
+        print("  [launch] updating via git pull …")
+        subprocess.call(["git", "-C", str(repo_root), "pull", "--ff-only"])
+    elif shutil.which("uv"):                              # install.sh path
+        print("  [launch] updating via uv tool install …")
+        subprocess.call(["uv", "tool", "install", "--force", _TARBALL_SPEC])
+    else:                                                 # pip/pipx-ish venv
+        print("  [launch] updating via pip …")
+        subprocess.call([sys.executable, "-m", "pip", "install", "--quiet",
+                         "--force-reinstall",
+                         "https://github.com/DarylNo/CardScanner/archive/refs/heads/master.tar.gz"])
 
 
 def ensure_certs(cert_dir: Path) -> tuple[Path, Path]:
@@ -86,6 +110,35 @@ def _print_qr(url: str) -> None:
         pass                            # terminal can't render it — URL is printed anyway
 
 
+def _supervise(args) -> None:
+    """
+    Run the server as a child and restart it forever. This is what makes the
+    browser's "Update & restart" button possible: the server exits with
+    UPDATE_EXIT_CODE, we apply the update, and the loop relaunches the NEW
+    code on the same port. Any other exit code ends the supervisor too.
+    """
+    passthrough = ["--serve", "--port", str(args.port), "--host", args.host,
+                   "--data-dir", str(args.data_dir)]
+    if args.no_browser:
+        passthrough.append("--no-browser")
+    first = True
+    while True:
+        if getattr(sys, "frozen", False):        # PyInstaller bundle
+            cmd = [sys.executable, *passthrough]
+        else:
+            cmd = [sys.executable, "-m", "mtg_card_scanner.launch", *passthrough]
+        # After an update-restart, don't pop a second browser tab.
+        if not first and "--no-browser" not in cmd:
+            cmd.append("--no-browser")
+        rc = subprocess.call(cmd)
+        if rc != UPDATE_EXIT_CODE:
+            sys.exit(rc)
+        print("  [launch] update requested from the browser …")
+        _run_update()
+        print("  [launch] restarting on the new version …")
+        first = False
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(
         prog="mtg-card-scanner",
@@ -97,7 +150,12 @@ def main(argv: list[str] | None = None) -> None:
                         help="where scans, photos, and certs live (default: ~/.mtg-card-scanner)")
     parser.add_argument("--no-browser", action="store_true",
                         help="don't auto-open the desktop UI")
+    parser.add_argument("--serve", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
+
+    if not args.serve:
+        _supervise(args)
+        return
 
     data_dir: Path = args.data_dir
     data_dir.mkdir(parents=True, exist_ok=True)

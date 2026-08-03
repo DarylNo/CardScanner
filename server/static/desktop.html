@@ -118,6 +118,10 @@
 <header>
   <h1>🃏 MTG Card Scanner</h1>
   <span class="stat" id="dver" style="font-size:11px"></span>
+  <span id="updBanner" style="display:none;align-items:center;gap:8px">
+    <span class="stat" style="color:var(--good)" id="updText"></span>
+    <button class="btn sm" id="updBtn">Update &amp; restart</button>
+  </span>
   <span class="pill" id="phoneLink" style="cursor:pointer" title="Click for a QR code to open the scanner on your phone"></span>
   <span class="sp"></span>
   <span class="stat" id="sweepStat" style="color:var(--warn)"></span>
@@ -558,7 +562,7 @@ function sigOf(scan){
 
 // Version banner — page version · server git hash. Same rationale as the
 // phone: without it, "is this the old page?" is undebuggable.
-const UI_VERSION = "d10";
+const UI_VERSION = "d11";
 $("#sweepStopBtn").addEventListener("click", async () => {
   await jsend("/api/price-sweep/stop", "POST", {});
   toast("Sweep stopping — auto-sweep paused 10 min");
@@ -566,6 +570,41 @@ $("#sweepStopBtn").addEventListener("click", async () => {
 });
 jget("/api/version").then(d => { $("#dver").textContent = `${UI_VERSION} · ${d.version}`; })
   .catch(() => { $("#dver").textContent = UI_VERSION; });
+
+/* ── in-app update: banner + one-click update-and-restart ────────────────── */
+async function checkForUpdate(){
+  try {
+    const u = await jget("/api/update-check");
+    if (!u.update_available) return;
+    $("#updBanner").style.display = "inline-flex";
+    $("#updText").textContent = `⬆ update available (${u.current} → ${u.latest})`;
+    if (!u.can_self_update){
+      $("#updBtn").textContent = "Download new version";
+      $("#updBtn").onclick = () => window.open(u.download_url, "_blank");
+    }
+  } catch(e){ /* offline / rate-limited — try again next hour */ }
+}
+$("#updBtn").addEventListener("click", async () => {
+  if ($("#updBtn").textContent.startsWith("Download")) return;   // frozen build path
+  $("#updBtn").disabled = true;
+  const before = (await jget("/api/version").catch(()=>({version:""}))).version;
+  await jsend("/api/update", "POST", {}).catch(()=>{});
+  $("#updText").textContent = "updating — the server is restarting…";
+  // Poll until the server is back with a DIFFERENT version, then reload.
+  const t0 = Date.now();
+  const poll = setInterval(async () => {
+    try {
+      const v = (await jget("/api/version")).version;
+      if (v && v !== before){ clearInterval(poll); location.reload(); }
+    } catch(e){ /* still restarting */ }
+    if (Date.now() - t0 > 180000){                    // 3 min — give up gracefully
+      clearInterval(poll);
+      $("#updText").textContent = "update taking long — refresh manually when it returns";
+    }
+  }, 2000);
+});
+checkForUpdate();
+setInterval(checkForUpdate, 3600 * 1000);
 
 async function poll(){
   try {

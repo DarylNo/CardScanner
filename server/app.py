@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import sys
 import threading
 import time
 from pathlib import Path
@@ -127,6 +128,66 @@ def create_app(
     @app.get("/api/version")
     def version():
         return {"version": APP_VERSION}
+
+    # ── in-app updates ─────────────────────────────────────────────────────────
+    # Detect: compare our version against GitHub (latest release tag for
+    # packaged versions, master HEAD for git-hash versions), cached hourly.
+    # Apply: the server exits with UPDATE_EXIT_CODE; the launcher's supervisor
+    # runs the updater and relaunches the new code on the same port.
+    _upd = {"at": 0.0, "latest": None, "available": None}
+    _REPO_API = "https://api.github.com/repos/DarylNo/CardScanner"
+
+    def _check_update(force: bool = False) -> None:
+        now = time.monotonic()
+        if not force and _upd["at"] and now - _upd["at"] < 3600:
+            return
+        _upd["at"] = now
+        try:
+            import requests as _rq
+            if APP_VERSION.startswith("v"):
+                r = _rq.get(f"{_REPO_API}/releases/latest", timeout=6)
+                r.raise_for_status()
+                latest = r.json().get("tag_name", "")
+                _upd.update(latest=latest,
+                            available=bool(latest) and latest != APP_VERSION)
+            elif APP_VERSION != "unknown":
+                r = _rq.get(f"{_REPO_API}/commits/master", timeout=6)
+                r.raise_for_status()
+                sha = r.json().get("sha", "")
+                _upd.update(latest=sha[:7],
+                            available=bool(sha) and not sha.startswith(APP_VERSION))
+            else:
+                _upd.update(latest=None, available=None)
+        except Exception:
+            _upd.update(latest=None, available=None)   # offline/private → unknown
+
+    @app.get("/api/update-check")
+    def update_check(force: bool = False):
+        _check_update(force)
+        frozen = bool(getattr(sys, "frozen", False))
+        return {
+            "current": APP_VERSION,
+            "latest": _upd["latest"],
+            "update_available": _upd["available"],
+            # Packaged single-file builds can't safely replace themselves;
+            # they get a download link instead of the button.
+            "can_self_update": not frozen,
+            "download_url": "https://github.com/DarylNo/CardScanner/releases/latest",
+        }
+
+    @app.post("/api/update")
+    def do_update():
+        if getattr(sys, "frozen", False):
+            return JSONResponse(
+                {"error": "packaged build — download the new version instead"},
+                status_code=400)
+
+        def _exit_for_update() -> None:
+            time.sleep(0.6)              # let the response flush first
+            os._exit(42)                 # UPDATE_EXIT_CODE — supervisor takes over
+
+        threading.Thread(target=_exit_for_update, daemon=True).start()
+        return {"updating": True}
 
     # ── first-run setup ────────────────────────────────────────────────────────
     # A fresh install has no art index; the desktop shows a Build button with
