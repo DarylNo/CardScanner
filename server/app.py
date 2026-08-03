@@ -294,14 +294,22 @@ def create_app(
         return {"started": True}
 
     @app.get("/api/phone-qr")
-    def phone_qr(request: Request):
-        """QR of the phone URL — point the phone camera at the desktop screen."""
+    def phone_qr(request: Request, ip: str = ""):
+        """QR of the phone URL — point the phone camera at the desktop screen.
+
+        ?ip= overrides the detected address: inside ChromeOS Crostini the
+        server can only see the container's internal IP (100.115.x — not
+        phone-reachable), so the desktop asks the operator for the real
+        Wi-Fi IP and passes it here.
+        """
         import io
+        import re
         import segno
         from mtg_card_scanner.launch import lan_ip
+        host = ip.strip() if re.fullmatch(r"[0-9.]{7,15}", ip.strip()) else lan_ip()
         port = request.url.port or 8443
         buf = io.BytesIO()
-        segno.make(f"https://{lan_ip()}:{port}/phone").save(
+        segno.make(f"https://{host}:{port}/phone").save(
             buf, kind="svg", scale=6, dark="#e8eaed", light="#171a21")
         return Response(buf.getvalue(), media_type="image/svg+xml", headers=_NO_STORE)
 

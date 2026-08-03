@@ -25,3 +25,8 @@ def test_lan_ip_prefers_private_over_container(monkeypatch):
 
 def test_lan_ip_returns_a_string():
     assert isinstance(lan_ip(), str)
+
+
+def test_lan_ip_env_override(monkeypatch):
+    monkeypatch.setenv("LAN_IP", "192.168.9.9")
+    assert lan_ip() == "192.168.9.9"

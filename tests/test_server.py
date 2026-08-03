@@ -511,3 +511,15 @@ def test_version_reports_lan_ip(client):
     d = client.get("/api/version").json()
     assert "lan_ip" in d and "is_lan" in d
     assert isinstance(d["is_lan"], bool)
+
+
+def test_phone_qr_accepts_ip_override(client):
+    r = client.get("/api/phone-qr", params={"ip": "192.168.1.73"})
+    assert r.status_code == 200
+    assert b"svg" in r.content[:200].lower()
+
+
+def test_phone_qr_rejects_garbage_ip(client):
+    # Non-numeric override falls back to detection rather than encoding junk.
+    r = client.get("/api/phone-qr", params={"ip": "evil.example.com"})
+    assert r.status_code == 200

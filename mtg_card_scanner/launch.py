@@ -109,7 +109,13 @@ def lan_ip() -> str:
     genuine private-LAN interface address when one exists, and fall back to the
     route trick only if none is found (native Windows/Mac/Linux, where the
     route address IS the LAN one).
+
+    LAN_IP env (or config.env) overrides everything — classic Crostini can't
+    see the host's Wi-Fi IP at all, so the operator can pin it once.
     """
+    override = os.getenv("LAN_IP", "").strip()
+    if override:
+        return override
     candidates: list[str] = []
     try:
         host = socket.gethostname()
