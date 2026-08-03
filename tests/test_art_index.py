@@ -456,3 +456,24 @@ def test_prefetch_printings_downloads_and_resumes(tmp_path, monkeypatch):
     builder2.prefetch_printings()
     # only manifest hit again (bulk file + all images already present)
     assert [u for u in builder2._session.fetched if u.startswith("https://img/")] == []
+
+
+def test_identify_canonicalizes_alchemy_names(tmp_path, monkeypatch):
+    """Arena rebalances ("A-Name") share the paper card's art — the A- twin
+    must merge into the paper name, never surface as its own card (its
+    printings are all digital, which the paper filter empties into a
+    0-candidate check row — observed live with A-Return Upon the Tide)."""
+    _seed_index(tmp_path, [
+        ("idA", "A-Return Upon the Tide", "ykhm", "A-106", "X", f"{0x0:016x}", _Z256),
+        ("idP", "Return Upon the Tide",   "khm",  "106",   "X", f"{0x0:016x}", _Z256),
+        ("id3", "Fly",                    "akh",  "1",     "Y", f"{0xFF:016x}", _Z256),
+    ])
+    idx = ArtIndex(index_dir=tmp_path)
+    monkeypatch.setattr(ArtIndex, "_hash_variants", _fake_variants(0x0))
+
+    results = idx.identify(FRAME, top_n=5)
+
+    names = [r["name"] for r in results]
+    assert "A-Return Upon the Tide" not in names
+    assert names[0] == "Return Upon the Tide"      # single merged entry
+    assert names.count("Return Upon the Tide") == 1

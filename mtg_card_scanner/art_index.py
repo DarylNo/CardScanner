@@ -337,6 +337,13 @@ class ArtIndex:
         seen_names: set[str] = set()
         for idx in order:
             sid, name, set_code, num, artist = self._meta[idx]
+            # Arena Alchemy rebalances ("A-Return Upon the Tide") share the
+            # paper card's artwork under a digital-only name Scryfall prefixes
+            # with "A-". Canonicalize to the paper name: otherwise the A- twin
+            # can win the dedupe tie and its printings lookup finds only
+            # digital cards, which the paper filter (correctly) empties.
+            if name.startswith("A-"):
+                name = name[2:]
             if name in seen_names:
                 continue
             seen_names.add(name)
