@@ -78,15 +78,15 @@ tick also runs retro passes: strip stale art-series candidates, retro-OCR
 pending scans from their stored photos (once each, budgeted), auto-pick
 newly-single/confirmed ones.
 
-**F2F client (`facetoface.py`):**
-- `curl_cffi` Chrome TLS impersonation is THE 429 fix — Shopify fingerprints
-  the TLS handshake, not the UA (same URL: python-requests 429'd, Chrome
-  handshake 6/6 200s). Keep the browser UA + exact-first query ladder
-  ("name collector setname [foil]") ported from the ManaExchange store.
-- Adaptive pacing: slow-start 2s, ×0.9 per success, ×2 per 429, idle reset.
-- `F2FUnavailableError` ≠ "no listing". Only a completed search may record
-  the empty marker; failures stay unsearched and retryable. Never conflate.
-- All waits are interruptible (`threading.Event`) so Stop works mid-backoff.
+**F2F client (`facetoface.py`) — PROXY, no local scraping:** the scanner
+does NOT scrape F2F. It calls the operator's ManaExchange backend
+(`{MX_URL}/api/scanner/f2f-price`, gated by `SCANNER_F2F_TOKEN`), which runs
+the Redis-cached scraper server-side. This keeps the scraping METHOD out of
+this (public) repo. Kept locally: 24h disk cache, gentle pacing to our own
+backend, interruptible waits (Stop), request debug log. `F2FUnavailableError`
+≠ "no listing" — a 5xx/timeout raises (stays retryable), a clean not-found
+returns None (records empty marker). The scraping method itself lives in
+`DarylNo/v0-ManaExchange` `lib/f2f-scraper.ts` (private).
 
 **Pricing sweep (`server/app.py`):** ONE F2F consumer while active (all other
 pricers stand down); selected scans price ONLY their selection; unpicked

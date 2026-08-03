@@ -1,245 +1,91 @@
-"""Tests for the Face to Face pricing client, driven by captured JSON fixtures."""
-
-import json
-from pathlib import Path
+"""Tests for the Face to Face pricing client (thin proxy over ManaExchange)."""
 
 import pytest
+import requests
 
 from mtg_card_scanner.facetoface import (
-    FaceToFaceClient,
-    F2FPrice,
-    _parse_title_brackets,
-    _sku_matches_set,
+    F2FPrice, F2FUnavailableError, FaceToFaceClient,
 )
 
-_FIX = Path(__file__).parent / "fixtures" / "facetoface"
+
+def _client(responder):
+    """FaceToFaceClient whose transport is a fake get_json(url, headers)."""
+    return FaceToFaceClient(get_json=lambda url, headers=None: responder(url, headers))
 
 
-def _fixture_get_json(url: str):
-    """Serve captured fixtures by URL shape, mimicking the live endpoints."""
-    if "/search/suggest.json" in url:
-        return json.loads((_FIX / "suggest_lightning_bolt.json").read_text())
-    if "/products/" in url:
-        handle = url.rsplit("/products/", 1)[1].rsplit(".json", 1)[0]
-        path = _FIX / f"product_{handle}.json"
-        if not path.exists():
-            raise FileNotFoundError(f"no product fixture for {handle}")
-        return json.loads(path.read_text())
-    raise AssertionError(f"unexpected url: {url}")
+def test_returns_conditions_on_found():
+    def r(url, headers):
+        assert "/api/scanner/f2f-price" in url
+        return {"found": True, "conditions": {"NM": 3.49, "PL": 2.79},
+                "url": "http://f2f/x"}
+    p = _client(r).get_price("Lightning Bolt", "m10", "146", False, "Magic 2010")
+    assert isinstance(p, F2FPrice)
+    assert p.conditions == {"NM": 3.49, "PL": 2.79}
+    assert p.url == "http://f2f/x"
 
 
-@pytest.fixture
-def client():
-    return FaceToFaceClient(get_json=_fixture_get_json)
+def test_not_found_returns_none():
+    p = _client(lambda u, h: {"found": False, "conditions": {}}).get_price(
+        "Nope", "xxx", "1")
+    assert p is None
 
 
-def test_parse_title_brackets_full():
-    parts = _parse_title_brackets("Lightning Bolt [149] [Magic 2011] [Non-Foil]")
-    assert parts == {"collector": "149", "set_name": "Magic 2011", "foil_label": "Non-Foil"}
+def test_backend_error_raises_unavailable_not_none():
+    """A 5xx / connection failure is UNKNOWN, not 'no listing' — it must raise
+    so the sweep keeps the card retryable rather than marking it unlisted."""
+    def r(url, headers):
+        raise requests.ConnectionError("backend down")
+    with pytest.raises(F2FUnavailableError):
+        _client(r).get_price("Mold Folk", "clb", "133")
 
 
-def test_parse_title_brackets_promo_without_collector():
-    parts = _parse_title_brackets("Lightning Bolt [MagicFest 2019] [Foil]")
-    assert parts["collector"] == ""
-    assert parts["set_name"] == "MagicFest 2019"
-    assert parts["foil_label"] == "Foil"
+def test_http_404_is_confirmed_unlisted():
+    def r(url, headers):
+        resp = requests.Response(); resp.status_code = 404
+        raise requests.HTTPError(response=resp)
+    assert _client(r).get_price("Ghost", "zzz", "9") is None
 
 
-def test_sku_matches_set():
-    # old format: set code at segment 2
-    assert _sku_matches_set("M-M11-Lightning_-149-NM-NF", "m11")
-    # current format: set code at segment 3
-    assert _sku_matches_set("SIN-MTG-CLB-309-ENG-NM-NF", "clb")
-    assert not _sku_matches_set("SIN-MTG-CLB-309-ENG-NM-NF", "m11")
-    assert not _sku_matches_set("", "clb")
-    assert not _sku_matches_set("SIN-MTG-CLB-309-ENG-NM-NF", "")
+def test_http_500_is_unavailable():
+    def r(url, headers):
+        resp = requests.Response(); resp.status_code = 500
+        raise requests.HTTPError(response=resp)
+    with pytest.raises(F2FUnavailableError):
+        _client(r).get_price("Blip", "zzz", "9")
 
 
-def test_get_price_matches_exact_printing_by_set_and_collector(client):
-    # m10 #146 must resolve to the Magic 2010 product, not Magic 2011 (#149).
-    price = client.get_price("Lightning Bolt", "m10", "146", foil=False)
-    assert isinstance(price, F2FPrice)
-    assert price.handle == "lightning-bolt-146-magic-2010-non-foil"
-    assert price.conditions == {"NM": 3.49, "PL": 2.79}
-    assert price.url.endswith("/products/lightning-bolt-146-magic-2010-non-foil")
+def test_sends_token_when_configured():
+    seen = {}
+    def r(url, headers):
+        seen["headers"] = headers
+        return {"found": True, "conditions": {"NM": 1.0}, "url": ""}
+    c = FaceToFaceClient(get_json=r, token="s3cret")
+    c.get_price("X", "s", "1")
+    assert seen["headers"]["x-scanner-token"] == "s3cret"
 
 
-def test_get_price_disambiguates_same_name_different_set(client):
-    price = client.get_price("Lightning Bolt", "m11", "149", foil=False)
-    assert price.handle == "lightning-bolt-149-magic-2011-non-foil"
-    assert price.conditions["NM"] == 3.49
+def test_query_encodes_finish_and_setname():
+    seen = {}
+    def r(url, headers):
+        seen["url"] = url
+        return {"found": True, "conditions": {"NM": 1.0}, "url": ""}
+    _client(r).get_price("A B", "iko", "211", True, "Ikoria: Lair of Behemoths")
+    assert "finish=foil" in seen["url"]
+    assert "setName=Ikoria" in seen["url"]
 
 
-def test_price_for_mx_condition_mapping(client):
-    price = client.get_price("Lightning Bolt", "m10", "146", foil=False)
-    assert price.price_for_mx_condition("NM") == 3.49
-    # LP maps to F2F "PL"
-    assert price.price_for_mx_condition("LP") == 2.79
-    # MP/HP/DMG fall back through PL when no exact grade exists
-    assert price.price_for_mx_condition("MP") == 2.79
+def test_price_for_mx_condition_fallback():
+    p = F2FPrice("X", "m10", "146", False, "", "", {"NM": 3.49, "PL": 2.79})
+    assert p.price_for_mx_condition("NM") == 3.49
+    assert p.price_for_mx_condition("LP") == 2.79     # LP → PL
+    assert p.price_for_mx_condition("MP") == 2.79     # falls through to PL
 
 
-def test_get_price_foil_mismatch_returns_none(client):
-    # There is no foil Magic 2010 #146 product in the fixture -> no match.
-    price = client.get_price("Lightning Bolt", "m10", "146", foil=True)
-    assert price is None
+def test_empty_name_returns_none():
+    assert _client(lambda u, h: {}).get_price("", "m10", "146") is None
 
 
-def test_get_price_unknown_name_returns_none():
-    empty = FaceToFaceClient(get_json=lambda url: {"resources": {"results": {"products": []}}})
-    assert empty.get_price("Nonexistent Card", "xxx", "1", foil=False) is None
-
-
-def test_collector_collision_across_sets_does_not_return_wrong_set():
-    """Collector #141 exists in both Masters 25 (m25) and Clue Edition (clu).
-
-    A lookup for the clu printing must NOT return the m25 price just because the
-    collector number + foil match — the SKU set code disproves it.
-    """
-    def get_json(url):
-        if "/search/suggest.json" in url:
-            return {"resources": {"results": {"products": [
-                {"title": "Lightning Bolt [141] [Masters 25] [Non-Foil]",
-                 "handle": "lightning-bolt-141-masters-25-non-foil"},
-            ]}}}
-        # only the m25 product exists on F2F
-        return {"product": {"handle": "lightning-bolt-141-masters-25-non-foil",
-                            "variants": [
-                                {"option1": "NM", "price": "9.99", "sku": "M-M25-Lightning_-141-NM-NF"},
-                            ]}}
-    c = FaceToFaceClient(get_json=get_json)
-    # clu #141 has no F2F listing -> must be None, not the m25 price
-    assert c.get_price("Lightning Bolt", "clu", "141", foil=False) is None
-    # m25 #141 resolves correctly
-    m25 = c.get_price("Lightning Bolt", "m25", "141", foil=False)
-    assert m25 is not None and m25.conditions == {"NM": 9.99}
-
-
-def test_price_cache_expires_after_ttl(tmp_path, monkeypatch):
-    """Cached prices previously lived forever; they must refetch after the TTL."""
-    import hashlib
-    import os
-    import time as time_mod
-
-    from mtg_card_scanner import facetoface as f2f_mod
-
-    calls = []
-
-    class FakeResp:
-        status_code = 200
-        def raise_for_status(self): pass
-        def json(self): return {"fetch": len(calls)}
-
-    class FakeSession:
-        def __init__(self): self.headers = {}
-        def get(self, url, timeout=None):
-            calls.append(url)
-            return FakeResp()
-
-    monkeypatch.setattr(f2f_mod, "_new_session", lambda: FakeSession())
-    get_json = f2f_mod._default_get_json(tmp_path)
-
-    assert get_json("http://x") == {"fetch": 1}
-    assert get_json("http://x") == {"fetch": 1}     # fresh cache — no refetch
-    assert len(calls) == 1
-
-    # Age the cache file past the TTL — the next call must hit the network.
-    key = hashlib.sha1(b"http://x").hexdigest()
-    old = time_mod.time() - f2f_mod._CACHE_TTL - 10
-    os.utime(tmp_path / f"{key}.json", (old, old))
-    assert get_json("http://x") == {"fetch": 2}
-    assert len(calls) == 2
-
-
-def test_unreachable_storefront_raises_not_none():
-    """A failed fetch must raise F2FUnavailableError — returning None meant
-    'confirmed unlisted' and froze transient blips into permanent no-listing
-    markers (a live Mold Folk listing was marked not-found forever)."""
-    import pytest as _pytest
-    from mtg_card_scanner.facetoface import F2FUnavailableError
-    down = FaceToFaceClient(get_json=lambda url: None)
-    with _pytest.raises(F2FUnavailableError):
-        down.get_price("Mold Folk", "clb", "133", foil=False)
-
-
-def test_429_backs_off_and_recovers(tmp_path, monkeypatch):
-    """Shopify's rate limit must be waited out, not treated as a failure —
-    persistent 429s made whole cards 'unavailable' every sweep."""
-    from mtg_card_scanner import facetoface as f2f_mod
-
-    sleeps = []
-    monkeypatch.setattr(f2f_mod.time, "sleep", lambda s: sleeps.append(s))
-    calls = []
-
-    class Resp:
-        def __init__(self, code):
-            self.status_code = code
-            self.headers = {}
-        def raise_for_status(self): pass
-        def json(self): return {"ok": True}
-
-    class Sess:
-        def __init__(self): self.headers = {}
-        def get(self, url, timeout=None):
-            calls.append(url)
-            return Resp(429 if len(calls) < 2 else 200)
-
-    monkeypatch.setattr(f2f_mod, "_new_session", lambda: Sess())
-    get_json = f2f_mod._default_get_json(tmp_path)
-    assert get_json("http://x") == {"ok": True}
-    assert len(calls) == 2                      # one 429 (waited out), then success
-    assert any(s >= 2.0 for s in sleeps)        # real backoff, not the 0.8s blip retry
-
-
-def test_adaptive_pacing_slow_start_speedup_and_backoff(tmp_path, monkeypatch):
-    """Slow start at 1/2s; successes speed the pace up toward the floor;
-    a 429 storm slows it multiplicatively toward the ceiling."""
-    from mtg_card_scanner import facetoface as m
-    monkeypatch.setattr(m.time, "sleep", lambda s: None)
-    codes = {"value": 200}
-
-    class Resp:
-        def __init__(self):
-            self.status_code = codes["value"]
-            self.headers = {}
-        def raise_for_status(self): pass
-        def json(self): return {"ok": True}
-
-    class Sess:
-        def __init__(self): self.headers = {}
-        def get(self, url, timeout=None): return Resp()
-
-    monkeypatch.setattr(m, "_new_session", lambda: Sess())
-    get_json = m._default_get_json(tmp_path)
-    assert get_json.current_delay() == m._START_DELAY
-
-    for i in range(5):                       # distinct URLs to dodge the cache
-        get_json(f"http://ok/{i}")
-    sped_up = get_json.current_delay()
-    assert sped_up < m._START_DELAY
-
-    codes["value"] = 429                     # storm: every attempt 429s
-    assert get_json("http://throttled") is None
-    assert get_json.current_delay() > sped_up
-    assert get_json.current_delay() <= m._CEIL_DELAY
-
-
-def test_interrupt_aborts_fetch_without_touching_network(tmp_path, monkeypatch):
-    """A fired interrupt makes get_json bail before any request — this is
-    what lets Stop cut through minutes of 429 backoff instantly."""
-    import threading as _threading
-    from mtg_card_scanner import facetoface as m
-    calls = []
-
-    class Sess:
-        def __init__(self): self.headers = {}
-        def get(self, url, timeout=None):
-            calls.append(url)
-            raise AssertionError("must not fetch after interrupt")
-
-    monkeypatch.setattr(m, "_new_session", lambda: Sess())
-    evt = _threading.Event()
-    evt.set()
-    get_json = m._default_get_json(tmp_path, evt)
-    assert get_json("http://x") is None
-    assert calls == []
+def test_client_exposes_pace_and_debug():
+    c = FaceToFaceClient(get_json=lambda u, h=None: {"found": False})
+    assert c.pacing_delay() is not None
+    assert isinstance(c.recent_requests(), list)
