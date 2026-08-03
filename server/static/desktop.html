@@ -337,10 +337,11 @@ function candCard(c, chosenId, idx){
     ? `<span class="pill" title="combined match: art×4 + title + textbox (lower = closer)">Δ${c.multi_distance}</span>`
     : (c.phash_distance!=null ? `<span class="pill">art Δ${c.phash_distance}</span>` : "");
   const best = idx===0 ? `<span class="pill" style="background:#1c2740;color:#cfe1ff">closest</span>` : "";
+  const ocr = c.ocr_confirmed ? `<span class="pill" style="background:#14532d;color:#86efac" title="the set code printed on your card's bottom line matches this printing">✓ matches card text</span>` : "";
   return `<div class="card ${c.id===chosenId?'chosen':''}" data-pick="${esc(c.id)}">
     <img src="${esc(c.image_normal||c.image_small)}" loading="lazy" onerror="this.style.visibility='hidden'">
     <div class="t"><b>${esc(c.set_name)}</b>#${esc(c.collector_number)} · ${esc(c.rarity||"")}</div>
-    <div class="badges">${best}${d}${badges}</div>
+    <div class="badges">${ocr}${best}${d}${badges}</div>
   </div>`;
 }
 
@@ -562,7 +563,7 @@ function sigOf(scan){
 
 // Version banner — page version · server git hash. Same rationale as the
 // phone: without it, "is this the old page?" is undebuggable.
-const UI_VERSION = "d11";
+const UI_VERSION = "d12";
 $("#sweepStopBtn").addEventListener("click", async () => {
   await jsend("/api/price-sweep/stop", "POST", {});
   toast("Sweep stopping — auto-sweep paused 10 min");

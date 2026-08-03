@@ -21,6 +21,8 @@ dependencies = [
     "curl_cffi>=0.7",      # Chrome TLS impersonation — Shopify fingerprints the handshake
     "cryptography>=42.0",  # self-signed TLS cert generation (no openssl binary)
     "segno>=1.6",          # QR codes for connecting the phone
+    "rapidocr-onnxruntime>=1.3",  # reads the collector/set line — the only way
+                                  # to separate same-art same-frame reprints
 ]
 
 [project.optional-dependencies]

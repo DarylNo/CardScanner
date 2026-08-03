@@ -13,3 +13,4 @@ python-multipart>=0.0.9     # multipart image upload from the phone
 cryptography>=42.0
 segno>=1.6
 curl_cffi>=0.7
+rapidocr-onnxruntime>=1.3

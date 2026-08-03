@@ -297,7 +297,37 @@ class Pipeline:
             key=lambda p: p["multi_distance"] if p.get("multi_distance") is not None
             else p.get("phash_distance", 1 << 30),
         )
-        return [_candidate_dict(p) for p in ranked[:top_n]]
+        candidates = [_candidate_dict(p) for p in ranked[:top_n]]
+        return self._apply_ocr_hint(frame, candidates)
+
+    def _apply_ocr_hint(self, frame: np.ndarray, candidates: list[dict]) -> list[dict]:
+        """
+        Read the card's own collector/set line and, when it uniquely names one
+        candidate, move that printing to the FRONT (flagged ocr_confirmed).
+        This is the discriminator pHash cannot be: same-art same-frame
+        reprints are visually identical at hash resolution, but the printing
+        identity is literally printed on modern cards. Old frames have no
+        such line — OCR finds nothing and the art ranking stands untouched.
+        Fails silently on any error or missing OCR dependency.
+        """
+        if len(candidates) < 2:
+            return candidates
+        try:
+            from mtg_card_scanner.card_detect import extract_card
+            from mtg_card_scanner.ocr_id import match_printing, read_bottom_strip
+            card_img, detected = extract_card(frame)
+            if not detected:
+                return candidates
+            sid = match_printing(read_bottom_strip(card_img), candidates)
+            if not sid:
+                return candidates
+            hit = next(c for c in candidates if c["id"] == sid)
+            hit["ocr_confirmed"] = True
+            print(f"  [pipeline] OCR confirmed printing: "
+                  f"{hit['set'].upper()} #{hit['collector_number']}")
+            return [hit] + [c for c in candidates if c["id"] != sid]
+        except Exception:
+            return candidates
 
     def search_candidates(self, name: str, top_n: int = 40) -> list[dict]:
         """
