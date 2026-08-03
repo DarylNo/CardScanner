@@ -6,6 +6,8 @@ name: release
 on:
   push:
     tags: ["v*"]
+permissions:
+  contents: write   # create the GitHub Release + upload assets (default token is read-only)
 jobs:
   binaries:
     strategy:
