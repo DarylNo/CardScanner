@@ -477,3 +477,54 @@ def test_identify_canonicalizes_alchemy_names(tmp_path, monkeypatch):
     assert "A-Return Upon the Tide" not in names
     assert names[0] == "Return Upon the Tide"      # single merged entry
     assert names.count("Return Upon the Tide") == 1
+
+
+# ── 2026+ Scryfall bulk format: jsonl_download_uri, gzipped JSONL ─────────────
+
+def test_build_with_jsonl_gz_manifest(tmp_path):
+    """Scryfall dropped download_uri for jsonl_download_uri (gzipped JSONL);
+    the builder must accept the new manifest and file format end to end."""
+    import gzip
+    entries = [
+        _entry(id="j1", name="Jsonl One", image_uris={"small": "https://img/j1.jpg"}),
+        _entry(id="j2", name="Jsonl Two", image_uris={"small": "https://img/j2.jpg"}),
+    ]
+    bulk_url = "https://bulk/unique-artwork.jsonl.gz"
+    manifest = FakeResponse(json_data={"data": [{
+        "type": "unique_artwork",
+        "updated_at": "2026-08-03T00:00:00Z",
+        "compressed_size": 1000,                      # no "size" either
+        "jsonl_download_uri": bulk_url,               # no "download_uri"
+    }]})
+    jsonl = "\n".join(json.dumps(e) for e in entries).encode()
+    responses = {_MANIFEST_URL: manifest, bulk_url: FakeResponse(content=gzip.compress(jsonl))}
+    jpeg = _jpeg_bytes()
+    for e in entries:
+        responses[_image_url(e)] = FakeResponse(content=jpeg)
+    builder = ArtIndexBuilder(index_dir=tmp_path, request_delay=0,
+                              session=FakeSession(responses))
+    builder.build()
+    assert ArtIndex(index_dir=tmp_path).count() == 2
+
+
+def test_load_bulk_entries_sniffs_all_formats(tmp_path):
+    import gzip
+    entries = [{"id": "a"}, {"id": "b"}]
+    legacy = tmp_path / "legacy.json"
+    legacy.write_text(json.dumps(entries), encoding="utf-8")
+    plain_jsonl = tmp_path / "plain.jsonl"
+    plain_jsonl.write_text("\n".join(json.dumps(e) for e in entries), encoding="utf-8")
+    gz = tmp_path / "bulk.jsonl.gz"
+    gz.write_bytes(gzip.compress(b'{"id": "a"}\n{"id": "b"}\n'))
+    for p in (legacy, plain_jsonl, gz):
+        assert ArtIndexBuilder._load_bulk_entries(p) == entries, p.name
+
+
+def test_manifest_without_any_download_url_is_clear_error(tmp_path):
+    manifest = FakeResponse(json_data={"data": [{
+        "type": "unique_artwork", "updated_at": "x", "compressed_size": 1,
+    }]})
+    builder = ArtIndexBuilder(index_dir=tmp_path, request_delay=0,
+                              session=FakeSession({_MANIFEST_URL: manifest}))
+    with pytest.raises(ArtIndexError, match="no download URL"):
+        builder.build()

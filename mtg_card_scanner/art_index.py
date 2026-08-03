@@ -404,7 +404,15 @@ class ArtIndexBuilder:
         dest = dest or self.bulk_path
         bulk_type = manifest.get("type", _BULK_TYPE)
         updated_at = manifest.get("updated_at", "")
-        size_mb = manifest.get("size", 0) / 1e6
+        # 2026-08: Scryfall replaced download_uri (raw JSON array) with
+        # jsonl_download_uri (gzipped JSONL) and size with compressed_size.
+        # Accept either; _load_bulk_entries sniffs the actual file format.
+        url = manifest.get("download_uri") or manifest.get("jsonl_download_uri")
+        if not url:
+            raise ArtIndexError(
+                f"Scryfall '{bulk_type}' manifest has no download URL "
+                f"(fields: {sorted(manifest)})")
+        size_mb = (manifest.get("size") or manifest.get("compressed_size", 0)) / 1e6
         with _connect(self.db_path) as conn:
             row = conn.execute(
                 "SELECT value FROM meta WHERE key=?", (meta_key,)
@@ -415,7 +423,7 @@ class ArtIndexBuilder:
             return
 
         print(f"  [art_index] downloading {bulk_type} bulk ({size_mb:.0f} MB, {updated_at}) ...")
-        resp = self._session.get(manifest["download_uri"], stream=True, timeout=60)
+        resp = self._session.get(url, stream=True, timeout=60)
         resp.raise_for_status()
         done = 0
         with open(dest, "wb") as fh:
@@ -430,6 +438,21 @@ class ArtIndexBuilder:
                 (meta_key, updated_at),
             )
         print(f"  [art_index] bulk file saved ({done / 1e6:.0f} MB)")
+
+    @staticmethod
+    def _load_bulk_entries(path: Path) -> list[dict[str, Any]]:
+        """Parse a bulk file in either Scryfall format, sniffed from the bytes:
+        legacy raw JSON array, or the 2026+ (optionally gzipped) JSONL."""
+        import gzip
+        with open(path, "rb") as fh:
+            magic = fh.read(2)
+        opener = gzip.open if magic == b"\x1f\x8b" else open
+        with opener(path, "rt", encoding="utf-8") as fh:      # type: ignore[operator]
+            first = fh.read(1)
+            fh.seek(0)
+            if first == "[":
+                return json.load(fh)
+            return [json.loads(line) for line in fh if line.strip()]
 
     def _fetch_image(self, url: str, scryfall_id: str) -> Any:
         """Return a PIL Image for the artwork — disk-cached like ArtMatcher."""
@@ -474,9 +497,8 @@ class ArtIndexBuilder:
         manifest = self._fetch_manifest()
         self._download_bulk(manifest, force)
 
-        print("  [art_index] parsing bulk JSON (large — one-off memory spike is expected) ...")
-        with open(self.bulk_path, encoding="utf-8") as fh:
-            entries = json.load(fh)
+        print("  [art_index] parsing bulk data (large — one-off memory spike is expected) ...")
+        entries = self._load_bulk_entries(self.bulk_path)
 
         candidates = [e for e in entries if _should_index(e)]
         skipped_filter = len(entries) - len(candidates)
@@ -570,8 +592,7 @@ class ArtIndexBuilder:
                             meta_key="printings_bulk_updated_at")
 
         print("  [art_index] parsing printings bulk (large — one-off memory spike is expected) ...")
-        with open(bulk_dest, encoding="utf-8") as fh:
-            entries = json.load(fh)
+        entries = self._load_bulk_entries(bulk_dest)
 
         def rank_url(e: dict[str, Any]) -> Optional[str]:
             # Mirror rank_printings: `small` — the ranking cache is hash-only
