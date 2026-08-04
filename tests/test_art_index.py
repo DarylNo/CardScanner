@@ -528,3 +528,29 @@ def test_manifest_without_any_download_url_is_clear_error(tmp_path):
                               session=FakeSession({_MANIFEST_URL: manifest}))
     with pytest.raises(ArtIndexError, match="no download URL"):
         builder.build()
+
+
+def test_build_reports_progress(tmp_path):
+    """build(progress=cb) must report download and hash stages with totals."""
+    entries = [
+        _entry(id="p1", name="Prog One", image_uris={"small": "https://img/p1.jpg"}),
+        _entry(id="p2", name="Prog Two", image_uris={"small": "https://img/p2.jpg"}),
+    ]
+    bulk_url = "https://bulk/unique-artwork.json"
+    manifest = FakeResponse(json_data={"data": [{
+        "type": "unique_artwork", "updated_at": "2026-08-03", "size": 1000,
+        "download_uri": bulk_url,
+    }]})
+    responses = {_MANIFEST_URL: manifest,
+                 bulk_url: FakeResponse(content=json.dumps(entries).encode())}
+    jpeg = _jpeg_bytes()
+    for e in entries:
+        responses[_image_url(e)] = FakeResponse(content=jpeg)
+    builder = ArtIndexBuilder(index_dir=tmp_path, request_delay=0,
+                              session=FakeSession(responses))
+    seen = []
+    builder.build(progress=seen.append)
+    stages = {p["stage"] for p in seen}
+    assert "download" in stages and "hash" in stages
+    hash_reports = [p for p in seen if p["stage"] == "hash"]
+    assert hash_reports[0] == {"stage": "hash", "done": 0, "total": 2}

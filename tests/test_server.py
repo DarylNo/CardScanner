@@ -523,3 +523,9 @@ def test_phone_qr_rejects_garbage_ip(client):
     # Non-numeric override falls back to detection rather than encoding junk.
     r = client.get("/api/phone-qr", params={"ip": "evil.example.com"})
     assert r.status_code == 200
+
+
+def test_setup_status_has_progress_fields(client):
+    d = client.get("/api/setup/status").json()
+    assert "build_progress" in d and "prefetch_progress" in d
+    assert d["build_progress"] is None          # nothing running

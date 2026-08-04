@@ -399,6 +399,7 @@ class ArtIndexBuilder:
         force: bool,
         dest: Optional[Path] = None,
         meta_key: str = "bulk_updated_at",
+        progress: Optional[Any] = None,
     ) -> None:
         """Download a bulk JSON unless a copy from this bulk revision exists."""
         dest = dest or self.bulk_path
@@ -430,6 +431,9 @@ class ArtIndexBuilder:
             for chunk in resp.iter_content(chunk_size=1 << 20):
                 fh.write(chunk)
                 done += len(chunk)
+                if progress:
+                    progress({"stage": "download", "unit": "MB",
+                              "done": int(done / 1e6), "total": int(size_mb)})
                 if done % (50 << 20) < (1 << 20):
                     print(f"  [art_index] downloaded {done / 1e6:.0f}/{size_mb:.0f} MB")
         with _connect(self.db_path) as conn:
@@ -485,17 +489,21 @@ class ArtIndexBuilder:
             "index_dir": str(self.index_dir),
         }
 
-    def build(self, limit: Optional[int] = None, force: bool = False) -> None:
+    def build(self, limit: Optional[int] = None, force: bool = False,
+              progress: Optional[Any] = None) -> None:
         """
         Build (or resume) the index.  Idempotent: already-indexed artworks are
         skipped, so an interrupted build continues where it left off and a
         re-run after a bulk refresh only fetches new artworks.
+
+        `progress` (optional callable) receives {stage, done, total, unit?}
+        dicts — the server forwards them to the setup UI as %/ETA.
         """
         import imagehash
         from mtg_card_scanner.visual_match import crop_art_region
 
         manifest = self._fetch_manifest()
-        self._download_bulk(manifest, force)
+        self._download_bulk(manifest, force, progress=progress)
 
         print("  [art_index] parsing bulk data (large — one-off memory spike is expected) ...")
         entries = self._load_bulk_entries(self.bulk_path)
@@ -524,6 +532,8 @@ class ArtIndexBuilder:
                 todo = todo[:limit]
                 print(f"  [art_index] --limit {limit}: building {len(todo)} this run")
 
+            if progress:
+                progress({"stage": "hash", "done": len(have), "total": len(candidates)})
             started = time.monotonic()
             new_rows = 0
             failures = 0
@@ -557,6 +567,9 @@ class ArtIndexBuilder:
                 new_rows += 1
                 if new_rows % _COMMIT_EVERY == 0:
                     conn.commit()
+                if progress and (new_rows + failures) % 25 == 0:
+                    progress({"stage": "hash", "done": len(have) + new_rows,
+                              "total": len(candidates)})
                 if new_rows % _PROGRESS_EVERY == 0:
                     elapsed = time.monotonic() - started
                     rate = new_rows / elapsed if elapsed > 0 else 0.0
@@ -574,7 +587,8 @@ class ArtIndexBuilder:
             f"{self.status()['indexed']} total indexed"
         )
 
-    def prefetch_printings(self, limit: Optional[int] = None, force: bool = False) -> None:
+    def prefetch_printings(self, limit: Optional[int] = None, force: bool = False,
+                           progress: Optional[Any] = None) -> None:
         """
         Predownload the ranking image of EVERY printing into ArtMatcher's disk
         cache so rank_printings never waits on Scryfall at scan time.
@@ -589,7 +603,7 @@ class ArtIndexBuilder:
         manifest = self._fetch_manifest("default_cards")
         bulk_dest = self.index_dir / "default-cards.json"
         self._download_bulk(manifest, force, dest=bulk_dest,
-                            meta_key="printings_bulk_updated_at")
+                            meta_key="printings_bulk_updated_at", progress=progress)
 
         print("  [art_index] parsing printings bulk (large — one-off memory spike is expected) ...")
         entries = self._load_bulk_entries(bulk_dest)
@@ -634,6 +648,9 @@ class ArtIndexBuilder:
             todo = todo[:limit]
             print(f"  [art_index] --limit {limit}: fetching {len(todo)} this run")
 
+        if progress:
+            progress({"stage": "fetch", "done": len(wanted) - len(todo),
+                      "total": len(wanted)})
         started = time.monotonic()
         fetched = 0
         failures = 0
@@ -650,6 +667,10 @@ class ArtIndexBuilder:
                 print(f"  [art_index] skip {sid}: {exc}")
                 continue
             fetched += 1
+            if progress and (fetched + failures) % 25 == 0:
+                progress({"stage": "fetch",
+                          "done": len(wanted) - len(todo) + fetched + failures,
+                          "total": len(wanted)})
             if fetched % 500 == 0:
                 elapsed = time.monotonic() - started
                 rate = fetched / elapsed if elapsed > 0 else 0.0

@@ -200,7 +200,32 @@ def create_app(
     # A fresh install has no art index; the desktop shows a Build button with
     # live progress instead of pointing users at a CLI command.
     setup = {"building": False, "error": None,
-             "prefetching": False, "prefetch_error": None}
+             "prefetching": False, "prefetch_error": None,
+             "build_progress": None, "prefetch_progress": None}
+
+    def _mk_progress(key: str):
+        """Progress sink for ArtIndexBuilder: stores {stage, done, total, pct,
+        rate_per_s, eta_s} in setup[key]. Rate/ETA are measured from the first
+        report of each stage IN THIS RUN, so resumed work (already-done items)
+        never inflates the rate. Server-side so page reloads keep the ETA."""
+        state: dict[str, Any] = {}
+
+        def cb(p: dict[str, Any]) -> None:
+            now = time.monotonic()
+            if state.get("stage") != p.get("stage"):
+                state.clear()
+                state.update(stage=p.get("stage"), t0=now, d0=p.get("done", 0))
+            done, total = p.get("done", 0), p.get("total", 0)
+            elapsed = now - state["t0"]
+            rate = (done - state["d0"]) / elapsed if elapsed > 2 else 0.0
+            setup[key] = {
+                "stage": p.get("stage"), "unit": p.get("unit"),
+                "done": done, "total": total,
+                "pct": round(100 * done / total, 1) if total else 0.0,
+                "rate_per_s": round(rate, 2),
+                "eta_s": int((total - done) / rate) if rate > 0 else None,
+            }
+        return cb
     _EXPECTED_INDEX = 49500          # display denominator (approx artwork count)
     _EXPECTED_IMAGES = 100000        # approx PAPER printings (small imgs, non-paper skipped)
 
@@ -241,6 +266,9 @@ def create_app(
             "images_total": _EXPECTED_IMAGES,
             "prefetching": setup["prefetching"],
             "prefetch_error": setup["prefetch_error"],
+            "build_progress": setup["build_progress"] if setup["building"] else None,
+            "prefetch_progress": (setup["prefetch_progress"]
+                                  if setup["prefetching"] else None),
         }
 
     @app.post("/api/setup/build-index")
@@ -251,7 +279,7 @@ def create_app(
         def _build() -> None:
             try:
                 from mtg_card_scanner.art_index import ArtIndexBuilder
-                ArtIndexBuilder().build()
+                ArtIndexBuilder().build(progress=_mk_progress("build_progress"))
                 setup["error"] = None
                 # The lazily-built pipeline may hold an empty index — force a
                 # reload so the first scan after building actually works.
@@ -261,6 +289,7 @@ def create_app(
                 print(f"  [server] index build failed: {exc}")
             finally:
                 setup["building"] = False
+                setup["build_progress"] = None
 
         setup["building"] = True
         setup["error"] = None
@@ -280,13 +309,15 @@ def create_app(
         def _prefetch() -> None:
             try:
                 from mtg_card_scanner.art_index import ArtIndexBuilder
-                ArtIndexBuilder().prefetch_printings()
+                ArtIndexBuilder().prefetch_printings(
+                    progress=_mk_progress("prefetch_progress"))
                 setup["prefetch_error"] = None
             except Exception as exc:
                 setup["prefetch_error"] = str(exc)
                 print(f"  [server] image prefetch failed: {exc}")
             finally:
                 setup["prefetching"] = False
+                setup["prefetch_progress"] = None
 
         setup["prefetching"] = True
         setup["prefetch_error"] = None

@@ -566,7 +566,7 @@ function sigOf(scan){
 
 // Version banner — page version · server git hash. Same rationale as the
 // phone: without it, "is this the old page?" is undebuggable.
-const UI_VERSION = "d15";
+const UI_VERSION = "d16";
 $("#sweepStopBtn").addEventListener("click", async () => {
   await jsend("/api/price-sweep/stop", "POST", {});
   toast("Sweep stopping — auto-sweep paused 10 min");
@@ -735,8 +735,25 @@ async function checkSetup(){
     $("#dlBar").style.display =
       (dlOpen || needIndex || st.building || st.prefetching) ? "flex" : "none";
 
+    // "12,345 / 49,500 (24.9%) · 8.2/s · ~1h 23m left"; stage-aware (the bulk
+    // download reports MB, the hash/fetch loops report items).
+    const fmtEta = s => s == null ? "estimating time left…"
+      : s >= 5400 ? `~${Math.floor(s/3600)}h ${Math.round(s%3600/60)}m left`
+      : s >= 90 ? `~${Math.round(s/60)} min left` : `~${Math.max(s,5)} s left`;
+    const fmtProg = (p, noun) => {
+      if (!p || !p.total) return null;
+      const unit = p.unit || noun;
+      const stage = p.stage === "download" ? "downloading card data" :
+                    p.stage === "hash" ? "hashing artworks" : "downloading images";
+      return ` ${stage} — ${p.done.toLocaleString()} / ${p.total.toLocaleString()} ${unit}`
+        + ` (${p.pct}%)` + (p.rate_per_s ? ` · ${p.rate_per_s}/s` : "")
+        + ` · ${fmtEta(p.eta_s)}`;
+    };
+
     $("#dlIndexInfo").textContent = st.building
-      ? ` building — ${st.indexed.toLocaleString()} / ~${st.total.toLocaleString()} artworks… (keep this window open)`
+      ? (fmtProg(st.build_progress, "artworks")
+         || ` building — ${st.indexed.toLocaleString()} / ~${st.total.toLocaleString()} artworks…`)
+        + " (keep this window open)"
       : st.index_built ? ` ✓ ${st.indexed.toLocaleString()} artworks`
       : st.indexed > 0 ? ` ${st.indexed.toLocaleString()} done — resumable`
       : " not built — scanning won't work until it is.";
@@ -746,7 +763,8 @@ async function checkSetup(){
       : st.index_built ? "Check for new sets" : "Build (~1 hr, one-time)";
 
     $("#dlImgInfo").textContent = st.prefetching
-      ? ` downloading — ${st.images.toLocaleString()} / ~${st.images_total.toLocaleString()}…`
+      ? (fmtProg(st.prefetch_progress, "images")
+         || ` downloading — ${st.images.toLocaleString()} / ~${st.images_total.toLocaleString()}…`)
       : ` ${st.images.toLocaleString()} / ~${st.images_total.toLocaleString()} cached`;
     if (st.prefetch_error) $("#dlImgInfo").textContent += ` — failed: ${st.prefetch_error} (resumable)`;
     $("#dlImgBtn").disabled = st.prefetching;
