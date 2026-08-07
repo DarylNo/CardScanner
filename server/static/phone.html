@@ -209,7 +209,7 @@ async function jsend(url, method, body) {
 }
 
 /* ── version banner — proves which page+server combo is running ────────────── */
-const UI_VERSION = 'v22';
+const UI_VERSION = 'v23';
 fetch('/api/version').then(r => r.json())
   .then(d => { $('#ver').textContent = `${UI_VERSION} · ${d.version}`; })
   .catch(() => { $('#ver').textContent = UI_VERSION; });
@@ -376,7 +376,7 @@ async function submitScan(frames, manual = false, replaceId = 0) {
         + (data.included === false ? ' ⚠ row excluded from export' : ''), 'ok');
     } else if (data.identified) {
       setStatus(data.selection?.auto_picked
-        ? `✓ ${data.card_read.name} — only one printing, auto-filed ⚠`
+        ? `✓ ${data.card_read.name} — exact printing confident, auto-filed ⚠`
         : `✓ ${data.card_read.name}${manual ? ' — pick a printing.' : ' — filed for desktop pick. Next card…'}`, 'ok');
       // Manual mode: open the printing picker right here so the operator can
       // choose on the phone. Auto mode stays hands-free (desktop picks).

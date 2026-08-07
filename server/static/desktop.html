@@ -410,7 +410,7 @@ function renderDetail(){
       <div class="cap">your card · click to enlarge</div>
     </div>
     <div class="dinfo">
-      <div class="dname">${esc(titleFor(scan))}${sel?.auto_picked ? ` <span title="auto-picked — this card has only one printing; glance to confirm" style="color:var(--warn);font-size:16px;cursor:help">⚠</span>` : ''}</div>
+      <div class="dname">${esc(titleFor(scan))}${sel?.auto_picked ? ` <span title="auto-picked (single printing, OCR-read, or decisive art match) — glance to confirm" style="color:var(--warn);font-size:16px;cursor:help">⚠</span>` : ''}</div>
       <div class="dsub">${sel
         ? `${esc(sel.set_name)} · ${esc((sel.set||'').toUpperCase())} #${esc(sel.collector_number)}`
         : `matched by art as <b>${esc(cr.name||'?')}</b> — pick the exact printing below`}</div>
@@ -566,7 +566,7 @@ function sigOf(scan){
 
 // Version banner — page version · server git hash. Same rationale as the
 // phone: without it, "is this the old page?" is undebuggable.
-const UI_VERSION = "d16";
+const UI_VERSION = "d17";
 $("#sweepStopBtn").addEventListener("click", async () => {
   await jsend("/api/price-sweep/stop", "POST", {});
   toast("Sweep stopping — auto-sweep paused 10 min");

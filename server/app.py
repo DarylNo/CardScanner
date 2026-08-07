@@ -416,17 +416,21 @@ def create_app(
         except Exception as exc:
             print(f"  [server] could not save scan image for #{scan['id']}: {exc}")
 
-        # Auto-pick, two grounds:
+        # Auto-pick, three grounds:
         #  - exactly ONE printing exists → nothing to choose; or
         #  - the top candidate is OCR-CONFIRMED → the printing's set code was
         #    read off the card's own collector line, which is stronger
         #    evidence than any art delta (deltas compress into noise across
-        #    same-art reprints — measured).
+        #    same-art reprints — measured); or
+        #  - the top candidate is ART-DECISIVE → its distance lead over #2 is
+        #    beyond same-art noise (different artworks/frames; measured on the
+        #    rig's review history — see _mark_art_decisive).
         # Either way: NM / Non-Foil / ×1, auto_picked flag (⚠ in the UIs),
         # auto-merge applies so a repeat copy lands as +1 quantity.
         cands = result.get("candidates") or []
         if result["identified"] and cands and (
-                len(cands) == 1 or cands[0].get("ocr_confirmed")):
+                len(cands) == 1 or cands[0].get("ocr_confirmed")
+                or cands[0].get("art_decisive")):
             scan = await _apply_selection(scan["id"], cands[0], "NM", "Non-Foil", 1, auto=True)
             if scan.get("merged_into"):
                 return scan
@@ -742,9 +746,13 @@ def create_app(
             fetch time, but rows scanned earlier stored them — observed: an
             'Art Series' printing sitting in a pick grid);
           - then auto-pick identified scans left with exactly ONE printing,
-            same as scan-time auto-pick (never unconfident best-guess rows).
+            same as scan-time auto-pick (never unconfident best-guess rows);
+          - and auto-pick pending rows whose stored deltas are ART-DECISIVE
+            (rows scanned before that rule existed — the distances are
+            already in the row, so this is pure re-evaluation, no I/O).
         Runs every auto-sweep tick; no-ops once the backlog is clean.
         """
+        from mtg_card_scanner.pipeline import _mark_art_decisive
         for s in store.list_scans():
             if s.get("selection"):
                 continue
@@ -756,7 +764,9 @@ def create_app(
                     row = store.get_scan(s["id"])
                     if row and not row.get("selection"):
                         store.update_scan(s["id"], candidates=kept)
-            if s.get("identified") and len(kept) == 1:
+            _mark_art_decisive(kept)
+            if s.get("identified") and kept and (
+                    len(kept) == 1 or kept[0].get("art_decisive")):
                 _apply_selection_core(s["id"], kept[0], "NM", "Non-Foil", 1, auto=True)
 
     def _retro_ocr_scans(budget: int = 8) -> None:

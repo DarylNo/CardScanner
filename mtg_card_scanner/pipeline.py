@@ -51,6 +51,29 @@ def _candidate_dict(p: dict) -> dict:
     }
 
 
+# Art-decisive printing pick: when the top candidate's combined distance beats
+# the runner-up by a WIDE margin, the printings differ in artwork/frame and the
+# camera has already discriminated them — a human pick adds nothing (e.g. the
+# two Homelands Willow Faerie artworks: Δ118 vs Δ174). Same-art reprints can
+# never trip this: their deltas compress into noise. Thresholds measured on
+# the rig's 24 human-reviewed picks: every WRONG #1 had a gap ≤8, right picks
+# ranged to 90 — 30 gives ~4× headroom over the worst observed wrong gap.
+# The ceiling keeps it below the noise floor (matches _MARGIN_CONFIDENT ceiling).
+_ART_DECISIVE_GAP = 30
+_ART_DECISIVE_CEILING = 140
+
+
+def _mark_art_decisive(candidates: list[dict]) -> None:
+    """Flag candidates[0] art_decisive when its lead is beyond-doubt wide."""
+    if len(candidates) < 2 or candidates[0].get("ocr_confirmed"):
+        return
+    d0 = candidates[0].get("multi_distance")
+    d1 = candidates[1].get("multi_distance")
+    if (d0 is not None and d1 is not None and d0 <= _ART_DECISIVE_CEILING
+            and d1 - d0 >= _ART_DECISIVE_GAP):
+        candidates[0]["art_decisive"] = True
+
+
 def _confidence_for(distance: int) -> str:
     if distance <= _HIGH_CONFIDENCE_DISTANCE:
         return "high"
@@ -316,7 +339,9 @@ class Pipeline:
             else p.get("phash_distance", 1 << 30),
         )
         candidates = [_candidate_dict(p) for p in ranked[:top_n]]
-        return self._apply_ocr_hint(frame, candidates)
+        candidates = self._apply_ocr_hint(frame, candidates)
+        _mark_art_decisive(candidates)
+        return candidates
 
     def _apply_ocr_hint(self, frame: np.ndarray, candidates: list[dict]) -> list[dict]:
         """

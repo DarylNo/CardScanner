@@ -145,3 +145,37 @@ class TestOutputWriter:
         records = json.loads(path.read_text(encoding="utf-8"))
         assert len(records) == 2
         assert records[0]["scryfall_name"] == "Lightning Bolt"
+
+
+# ── art-decisive printing pick ────────────────────────────────────────────────
+
+def _cd(id, multi):
+    return {"id": id, "multi_distance": multi}
+
+
+def test_art_decisive_marks_wide_gap():
+    from mtg_card_scanner.pipeline import _mark_art_decisive
+    cands = [_cd("a", 118), _cd("b", 174)]        # the Willow Faerie case
+    _mark_art_decisive(cands)
+    assert cands[0].get("art_decisive") is True
+
+
+def test_art_decisive_rejects_narrow_gap_and_noise():
+    from mtg_card_scanner.pipeline import _mark_art_decisive
+    close = [_cd("a", 100), _cd("b", 108)]        # same-art cluster (gap 8 =
+    _mark_art_decisive(close)                     # worst observed WRONG pick)
+    assert "art_decisive" not in close[0]
+    noisy = [_cd("a", 150), _cd("b", 200)]        # top above the ceiling
+    _mark_art_decisive(noisy)
+    assert "art_decisive" not in noisy[0]
+    single = [_cd("a", 90)]
+    _mark_art_decisive(single)                    # no runner-up, no crash
+    assert "art_decisive" not in single[0]
+
+
+def test_art_decisive_defers_to_ocr():
+    from mtg_card_scanner.pipeline import _mark_art_decisive
+    cands = [{"id": "a", "multi_distance": 100, "ocr_confirmed": True},
+             _cd("b", 200)]
+    _mark_art_decisive(cands)
+    assert "art_decisive" not in cands[0]         # OCR already settled it
