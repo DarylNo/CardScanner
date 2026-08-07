@@ -23,7 +23,7 @@ from typing import Any, Callable, Optional
 
 import cv2
 import numpy as np
-from fastapi import BackgroundTasks, Body, FastAPI, File, Request, UploadFile
+from fastapi import BackgroundTasks, Body, FastAPI, File, Form, Request, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -369,7 +369,9 @@ def create_app(
 
     # ── scan (phone → server) ──────────────────────────────────────────────────
     @app.post("/api/scan")
-    async def scan(background_tasks: BackgroundTasks, files: list[UploadFile] = File(...)):
+    async def scan(background_tasks: BackgroundTasks,
+                   files: list[UploadFile] = File(...),
+                   replace_scan_id: int = Form(0)):
         frames = []
         for f in files:
             img = _decode_image(await f.read())
@@ -382,6 +384,15 @@ def create_app(
             # Empty tray / nothing card-like — report it but never store a row.
             return {"no_card": True, "identified": False,
                     "error": result.get("error", "No card detected.")}
+        # Retry of a no-match scan (phone's Retry button): the fresh attempt
+        # replaces the failed row rather than stacking a duplicate — but only
+        # while the old row is still an unresolved problem; if the operator
+        # already picked something for it on the desktop, leave it alone.
+        if replace_scan_id:
+            old = store.get_scan(replace_scan_id)
+            if old and old["status"] != "selected":
+                (scan_images_dir / f"{replace_scan_id}.jpg").unlink(missing_ok=True)
+                store.delete_scan(replace_scan_id)
         scan = store.create_scan(
             identified=result["identified"],
             card_read=result["card_read"],

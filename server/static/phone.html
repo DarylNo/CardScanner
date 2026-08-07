@@ -112,6 +112,7 @@
     <div class="btnrow">
       <button id="autoBtn">Auto: ON</button>
       <button id="shoot" disabled>Scan Card</button>
+      <button id="retryBtn" style="display:none;background:#3f2d10;color:var(--warn);border-color:#6b4e14">Retry</button>
     </div>
     <div class="hint">Auto: scans by itself, pick on desktop. Tap Scan Card to pick here.</div>
   </footer>
@@ -208,7 +209,7 @@ async function jsend(url, method, body) {
 }
 
 /* ── version banner — proves which page+server combo is running ────────────── */
-const UI_VERSION = 'v21';
+const UI_VERSION = 'v22';
 fetch('/api/version').then(r => r.json())
   .then(d => { $('#ver').textContent = `${UI_VERSION} · ${d.version}`; })
   .catch(() => { $('#ver').textContent = UI_VERSION; });
@@ -329,12 +330,33 @@ async function scanOnce(manual = false) {
   catch (e) { setStatus('Capture failed: ' + e.message, 'err'); return; }
   submitScan(frames, manual);    // deliberately NOT awaited
 }
-async function submitScan(frames, manual = false) {
+// No-match retry: the card is still in the tray (the trigger waits for a tray
+// CHANGE, so a failed card would otherwise just sit there unscannable). Offer
+// a fresh capture; a successful retry REPLACES the failed row server-side.
+const retryBtn = $('#retryBtn');
+let retryReplaceId = 0;
+function offerRetry(failedId) {
+  retryReplaceId = failedId || 0;
+  retryBtn.style.display = '';
+}
+function hideRetry() { retryBtn.style.display = 'none'; }
+retryBtn.addEventListener('click', async () => {
+  hideRetry();
+  setStatus('Retrying — capturing…');
+  let frames;
+  try { frames = await captureBurst(); }
+  catch (e) { setStatus('Capture failed: ' + e.message, 'err'); return; }
+  submitScan(frames, false, retryReplaceId);
+});
+
+async function submitScan(frames, manual = false, replaceId = 0) {
   const capturedScene = scannedFrame;
+  hideRetry();
   setStatus('Scanning…');
   try {
     const fd = new FormData();
     frames.forEach((b, i) => fd.append('files', b, `frame${i}.jpg`));
+    if (replaceId) fd.append('replace_scan_id', String(replaceId));
     const r = await fetch('/api/scan', { method: 'POST', body: fd });
     const data = await r.json();
     if (data.no_card) {
@@ -346,6 +368,8 @@ async function submitScan(frames, manual = false) {
           && changedFrac(s, capturedScene) < SWAP_FRAC) {
         emptyRef = s; emptyGrad = gradMap(s);
       }
+      // The failed row (if this was a retry) is still there — keep offering.
+      if (replaceId) offerRetry(replaceId);
     } else if (data.merged_into) {
       // Single-printing card, repeat copy — auto-filed as +1 on the row.
       setStatus(`✓ ${data.selection?.name} — duplicate, merged (now ×${data.selection?.quantity})`
@@ -361,7 +385,8 @@ async function submitScan(frames, manual = false) {
       setStatus(`? Best guess ${data.card_read?.name || '?'}${manual ? ' — verify & pick.' : ' — verify on desktop.'}`, 'err');
       if (manual) openDetail(data.id);
     } else {
-      setStatus('✗ ' + (data.error || 'Could not read card. Try again.'), 'err');
+      setStatus('✗ ' + (data.error || 'No match.') + ' — Retry with a fresh capture?', 'err');
+      offerRetry(data.id);
     }
     refreshScans();
   } catch (e) {
@@ -600,6 +625,8 @@ function tick() {
                  && changedFrac(cur, prevFrame) < STABLE_FRAC;
     if (removed || swapped) {
       mode = 'watching'; stableCount = 0;
+      hideRetry();   // the failed card left the tray — a retry now would
+                     // capture (and replace the old row with) the WRONG card
       setStatus(removed ? 'Auto: watching for a card…' : 'New card…');
     } else {
       dbg('awaiting next card (remove or swap)');

@@ -529,3 +529,39 @@ def test_setup_status_has_progress_fields(client):
     d = client.get("/api/setup/status").json()
     assert "build_progress" in d and "prefetch_progress" in d
     assert d["build_progress"] is None          # nothing running
+
+
+def _retry_rig(tmp_path):
+    store = ScanStore(tmp_path / "retry.db")
+    app = create_app(pipeline_factory=lambda: FakePipeline(), store=store,
+                     f2f=FakeF2F(), scan_images_dir=tmp_path / "imgs",
+                     auto_sweep_interval=None)
+    return TestClient(app), store
+
+
+def _post_scan(client, replace_id):
+    files = [("files", ("f.jpg", _jpeg_bytes(), "image/jpeg"))]
+    return client.post("/api/scan", files=files,
+                       data={"replace_scan_id": str(replace_id)})
+
+
+def test_retry_replaces_unresolved_no_match_row(tmp_path):
+    client, store = _retry_rig(tmp_path)
+    old = store.create_scan(identified=False, card_read={}, confidence=None,
+                            candidates=[], error="no match")
+    r = _post_scan(client, replace_id=old["id"])
+    assert r.status_code == 200
+    assert store.get_scan(old["id"]) is None          # failed row replaced
+    assert store.get_scan(r.json()["id"]) is not None  # by the fresh attempt
+
+
+def test_retry_never_deletes_a_selected_row(tmp_path):
+    client, store = _retry_rig(tmp_path)
+    old = store.create_scan(identified=True, card_read={"name": "X"},
+                            confidence="high", candidates=[{"name": "X"}],
+                            error=None)
+    store.update_scan(old["id"], status="selected",
+                      selection={"name": "X", "scryfall_id": "s1"})
+    r = _post_scan(client, replace_id=old["id"])
+    assert r.status_code == 200
+    assert store.get_scan(old["id"]) is not None       # picked row untouched
