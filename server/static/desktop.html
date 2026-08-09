@@ -108,6 +108,16 @@
               align-items: center; justify-content: center; cursor: zoom-out; }
   #lightbox.open { display: flex; }
   #lightbox img { max-width: 92vw; max-height: 92vh; border-radius: 12px; }
+  /* side-by-side compare: scan photo vs a candidate printing, as big as fits */
+  #lbDuo .duo { display: flex; gap: 24px; align-items: flex-start; justify-content: center; }
+  #lbDuo figure { margin: 0; text-align: center; }
+  #lbDuo .duo img { max-width: 44vw; max-height: 80vh; border-radius: 12px; }
+  #lbDuo figcaption { color: #aeb4bf; font-size: 13px; margin-top: 8px; }
+  .card { position: relative; }
+  .cmp { position: absolute; top: 12px; right: 12px; z-index: 2; font-size: 11px;
+         padding: 3px 9px; border-radius: 999px; background: rgba(15,17,21,.85);
+         color: #cbd2dc; border: 1px solid var(--line); cursor: zoom-in; opacity: 0; }
+  .card:hover .cmp { opacity: 1; }
   .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
            background: var(--card); border: 1px solid var(--line); padding: 10px 18px;
            border-radius: 10px; z-index: 50; display: none; }
@@ -169,7 +179,7 @@
   </div>
   <div id="right"><div class="empty">Scan a card on your phone to begin.</div></div>
 </main>
-<div id="lightbox"><img id="lightboxImg" alt=""></div>
+<div id="lightbox"><img id="lightboxImg" alt=""><div id="lbDuo" style="display:none"></div></div>
 <div class="toast" id="toast"></div>
 
 <script>
@@ -342,6 +352,7 @@ function candCard(c, chosenId, idx){
   const best = idx===0 ? `<span class="pill" style="background:#1c2740;color:#cfe1ff">closest</span>` : "";
   const ocr = c.ocr_confirmed ? `<span class="pill" style="background:#14532d;color:#86efac" title="the set code printed on your card's bottom line matches this printing">✓ matches card text</span>` : "";
   return `<div class="card ${c.id===chosenId?'chosen':''}" data-pick="${esc(c.id)}">
+    <span class="cmp" data-cmp="${esc(c.id)}" title="Compare side-by-side with your card photo">⇆ compare</span>
     <img src="${esc(c.image_normal||c.image_small)}" loading="lazy" onerror="this.style.visibility='hidden'">
     <div class="t"><b>${esc(c.set_name)}</b>#${esc(c.collector_number)} · ${esc(c.rarity||"")}</div>
     <div class="badges">${ocr}${best}${d}${badges}</div>
@@ -479,6 +490,17 @@ function wireDetail(scan){
   const candPick = pickFrom(scan.candidates);
   $("#cands")?.querySelectorAll(".card[data-pick]").forEach(el =>
     el.addEventListener("click", () => candPick(el)));
+  // Compare chip: opens the big side-by-side instead of picking; e.stop so
+  // the card's own click-to-pick doesn't fire underneath it.
+  const wireCompare = (rootSel, pool, pick) =>
+    $(rootSel)?.querySelectorAll(".cmp[data-cmp]").forEach(el =>
+      el.addEventListener("click", e => {
+        e.stopPropagation();
+        const cand = (pool || []).find(c => c.id === el.dataset.cmp);
+        const cardEl = el.closest(".card");
+        if (cand) openCompare(scan.id, cand, () => pick(cardEl));
+      }));
+  wireCompare("#cands", scan.candidates, candPick);
 
   $("#scanShot")?.addEventListener("click", () => openLightbox(`/api/scans/${scan.id}/image`));
 
@@ -527,6 +549,7 @@ function wireDetail(scan){
     const searchPick = pickFrom(candidates);
     $("#msearchResults").querySelectorAll(".card[data-pick]").forEach(el =>
       el.addEventListener("click", () => searchPick(el)));
+    wireCompare("#msearchResults", candidates, searchPick);
   };
   $("#msearchBtn")?.addEventListener("click", doSearch);
   $("#msearch")?.addEventListener("keydown", e => { if (e.key==="Enter") doSearch(); });
@@ -548,7 +571,31 @@ function wireDetail(scan){
 }
 
 /* ── lightbox ──────────────────────────────────────────────────────────── */
-function openLightbox(src){ $("#lightboxImg").src = src; $("#lightbox").classList.add("open"); }
+function openLightbox(src){
+  $("#lbDuo").style.display = "none"; $("#lightboxImg").style.display = "";
+  $("#lightboxImg").src = src; $("#lightbox").classList.add("open");
+}
+// Side-by-side compare: the scan photo next to one candidate printing, both
+// as large as the screen allows, with the pick action right there.
+function openCompare(scanId, cand, onPick){
+  const duo = $("#lbDuo");
+  duo.innerHTML = `<div class="duo">
+    <figure><img src="/api/scans/${scanId}/image" onerror="this.style.visibility='hidden'">
+      <figcaption>your card</figcaption></figure>
+    <figure><img src="${esc(cand.image_normal||cand.image_small)}">
+      <figcaption>${esc(cand.set_name)} #${esc(cand.collector_number)}</figcaption>
+      ${onPick ? `<button class="btn" id="lbPickBtn" style="margin-top:10px">Pick this printing</button>` : ""}
+    </figure></div>`;
+  $("#lightboxImg").style.display = "none"; duo.style.display = "";
+  $("#lightbox").classList.add("open");
+  // Clicks on the images/captions shouldn't close — only backdrop or Esc.
+  duo.querySelector(".duo").addEventListener("click", e => e.stopPropagation());
+  duo.querySelector("#lbPickBtn")?.addEventListener("click", e => {
+    e.stopPropagation();
+    $("#lightbox").classList.remove("open");
+    onPick();
+  });
+}
 $("#lightbox").addEventListener("click", () => $("#lightbox").classList.remove("open"));
 document.addEventListener("keydown", e => {
   if (e.key === "Escape") $("#lightbox").classList.remove("open");
@@ -566,7 +613,7 @@ function sigOf(scan){
 
 // Version banner — page version · server git hash. Same rationale as the
 // phone: without it, "is this the old page?" is undebuggable.
-const UI_VERSION = "d18";
+const UI_VERSION = "d19";
 $("#sweepStopBtn").addEventListener("click", async () => {
   await jsend("/api/price-sweep/stop", "POST", {});
   toast("Sweep stopping — auto-sweep paused 10 min");
