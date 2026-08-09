@@ -97,7 +97,7 @@
 <body>
   <header><span>📷 Scanner<span id="ver"></span></span>
     <span style="display:flex;gap:6px">
-      <button class="hbtn" id="camBtn" style="display:none" title="Switch camera">Cam</button>
+      <select class="hbtn" id="camSel" style="display:none;max-width:38vw" title="Choose camera"></select>
       <button class="hbtn" id="areaBtn">Area</button>
       <button class="hbtn" id="scansBtn">Scans</button>
     </span>
@@ -210,7 +210,7 @@ async function jsend(url, method, body) {
 }
 
 /* ── version banner — proves which page+server combo is running ────────────── */
-const UI_VERSION = 'v24';
+const UI_VERSION = 'v25';
 fetch('/api/version').then(r => r.json())
   .then(d => { $('#ver').textContent = `${UI_VERSION} · ${d.version}`; })
   .catch(() => { $('#ver').textContent = UI_VERSION; });
@@ -282,8 +282,8 @@ updateAreaBtn();
 /* ── camera + wake lock ────────────────────────────────────────────────────── */
 // Camera choice: phones default to the rear camera, but this page also runs on
 // a laptop with a USB webcam over the tray (the no-port-forward Chromebook
-// setup) — there facingMode would grab the built-in selfie cam. The Cam button
-// cycles through every attached camera; the choice sticks (localStorage).
+// setup) — there facingMode would grab the built-in selfie cam. The dropdown
+// lists every attached camera by name; the choice sticks (localStorage).
 let camDevices = [];
 async function startCamera(deviceId = localStorage.getItem('camId') || '') {
   if (!navigator.mediaDevices?.getUserMedia) {
@@ -309,21 +309,21 @@ async function startCamera(deviceId = localStorage.getItem('camId') || '') {
     shoot.disabled = false;
     camDevices = (await navigator.mediaDevices.enumerateDevices())
       .filter(d => d.kind === 'videoinput');
-    $('#camBtn').style.display = camDevices.length > 1 ? '' : 'none';
-    const cur = stream.getVideoTracks()[0];
-    setStatus('Auto: waiting for a steady view…'
-      + (camDevices.length > 1 ? ` (${cur.label.split('(')[0].trim()})` : ''));
+    const sel = $('#camSel');
+    sel.style.display = camDevices.length > 1 ? '' : 'none';
+    const curId = stream.getVideoTracks()[0]?.getSettings().deviceId;
+    sel.innerHTML = camDevices.map((d, i) => {
+      const label = (d.label || `Camera ${i + 1}`).split('(')[0].trim();
+      return `<option value="${d.deviceId}"${d.deviceId === curId ? ' selected' : ''}>${escHtml(label)}</option>`;
+    }).join('');
+    setStatus('Auto: waiting for a steady view…');
   } catch (e) {
     setStatus('Camera blocked: ' + e.message + ' (HTTPS required on phones).', 'err');
   }
 }
-$('#camBtn').addEventListener('click', () => {
-  if (camDevices.length < 2) return;
-  const curId = video.srcObject?.getVideoTracks()[0]?.getSettings().deviceId;
-  const i = camDevices.findIndex(d => d.deviceId === curId);
-  const next = camDevices[(i + 1) % camDevices.length];
-  localStorage.setItem('camId', next.deviceId);
-  startCamera(next.deviceId);
+$('#camSel').addEventListener('change', () => {
+  localStorage.setItem('camId', $('#camSel').value);
+  startCamera($('#camSel').value);
 });
 let wakeLock = null;
 async function acquireWakeLock() {
