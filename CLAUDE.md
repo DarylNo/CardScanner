@@ -111,8 +111,11 @@ every field a row renders MUST be in its signature or edits go stale.
   `permissions: contents: write`; `macos-13` label is DEAD, use
   `macos-15-intel`; publish runs `if: always()`; PyInstaller needs
   `--paths . --copy-metadata mtg-card-scanner`).
-- Repo is PRIVATE by user choice — distribution is hand-out-files (option 3).
-  The in-app update banner needs a public repo to detect.
+- Repo is PUBLIC. **ALWAYS end a push session by bumping `version` in
+  pyproject.toml and tagging a release** — script installs (uv/pipx)
+  identify as the package version and their update banner compares against
+  the latest RELEASE tag; master-only commits are invisible to them.
+  Bump BEFORE tagging or updated installs loop on "update available".
 - The ManaExchange store is the user's own project (`DarylNo/v0-ManaExchange`);
   an MX-inventory integration was built and REVERTED — ask before rebuilding.
 
