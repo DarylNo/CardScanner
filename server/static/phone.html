@@ -97,6 +97,7 @@
 <body>
   <header><span>📷 Scanner<span id="ver"></span></span>
     <span style="display:flex;gap:6px">
+      <button class="hbtn" id="camBtn" style="display:none" title="Switch camera">Cam</button>
       <button class="hbtn" id="areaBtn">Area</button>
       <button class="hbtn" id="scansBtn">Scans</button>
     </span>
@@ -209,7 +210,7 @@ async function jsend(url, method, body) {
 }
 
 /* ── version banner — proves which page+server combo is running ────────────── */
-const UI_VERSION = 'v23';
+const UI_VERSION = 'v24';
 fetch('/api/version').then(r => r.json())
   .then(d => { $('#ver').textContent = `${UI_VERSION} · ${d.version}`; })
   .catch(() => { $('#ver').textContent = UI_VERSION; });
@@ -279,23 +280,51 @@ stageEl.addEventListener('pointerup', e => {
 updateAreaBtn();
 
 /* ── camera + wake lock ────────────────────────────────────────────────────── */
-async function startCamera() {
+// Camera choice: phones default to the rear camera, but this page also runs on
+// a laptop with a USB webcam over the tray (the no-port-forward Chromebook
+// setup) — there facingMode would grab the built-in selfie cam. The Cam button
+// cycles through every attached camera; the choice sticks (localStorage).
+let camDevices = [];
+async function startCamera(deviceId = localStorage.getItem('camId') || '') {
   if (!navigator.mediaDevices?.getUserMedia) {
     setStatus('Camera needs HTTPS. Open this page over https://.', 'err'); return;
   }
   try {
+    if (video.srcObject) video.srcObject.getTracks().forEach(t => t.stop());
+    const base = { width: { ideal: 1920 }, height: { ideal: 1080 } };
     const stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+      video: deviceId ? { ...base, deviceId: { exact: deviceId } }
+                      : { ...base, facingMode: { ideal: 'environment' } },
       audio: false,
+    }).catch(e => {
+      // A remembered webcam may be unplugged today — fall back to default.
+      if (deviceId) return navigator.mediaDevices.getUserMedia(
+        { video: { ...base, facingMode: { ideal: 'environment' } }, audio: false });
+      throw e;
     });
     video.srcObject = stream;
     await video.play();
+    // References learned on the old camera are wrong geometry for the new one.
+    emptyRef = null; emptyGrad = null; prevFrame = null; bootCount = 0;
     shoot.disabled = false;
-    setStatus('Auto: waiting for a steady view…');
+    camDevices = (await navigator.mediaDevices.enumerateDevices())
+      .filter(d => d.kind === 'videoinput');
+    $('#camBtn').style.display = camDevices.length > 1 ? '' : 'none';
+    const cur = stream.getVideoTracks()[0];
+    setStatus('Auto: waiting for a steady view…'
+      + (camDevices.length > 1 ? ` (${cur.label.split('(')[0].trim()})` : ''));
   } catch (e) {
     setStatus('Camera blocked: ' + e.message + ' (HTTPS required on phones).', 'err');
   }
 }
+$('#camBtn').addEventListener('click', () => {
+  if (camDevices.length < 2) return;
+  const curId = video.srcObject?.getVideoTracks()[0]?.getSettings().deviceId;
+  const i = camDevices.findIndex(d => d.deviceId === curId);
+  const next = camDevices[(i + 1) % camDevices.length];
+  localStorage.setItem('camId', next.deviceId);
+  startCamera(next.deviceId);
+});
 let wakeLock = null;
 async function acquireWakeLock() {
   try { wakeLock = await navigator.wakeLock?.request('screen'); } catch (e) { /* unsupported */ }
