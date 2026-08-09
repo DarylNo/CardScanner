@@ -144,7 +144,7 @@
     <span id="dlIndexInfo" class="muted"></span>
     <button class="btn sm" id="dlIndexBtn" style="margin-left:10px">Build</button>
     </div>
-  <div><b>Card images</b> <span class="muted">(every printing's image, ~10&nbsp;GB — makes ranking &amp; pick grids instant/offline; optional, resumable)</span>
+  <div><b>Card images</b> <span class="muted">(every printing's image, ~2&nbsp;GB — makes ranking &amp; pick grids instant/offline; optional, resumable)</span>
     <span id="dlImgInfo" class="muted"></span>
     <button class="btn sm" id="dlImgBtn" style="margin-left:10px">Download all</button>
     </div>
@@ -566,7 +566,7 @@ function sigOf(scan){
 
 // Version banner — page version · server git hash. Same rationale as the
 // phone: without it, "is this the old page?" is undebuggable.
-const UI_VERSION = "d17";
+const UI_VERSION = "d18";
 $("#sweepStopBtn").addEventListener("click", async () => {
   await jsend("/api/price-sweep/stop", "POST", {});
   toast("Sweep stopping — auto-sweep paused 10 min");
