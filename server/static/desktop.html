@@ -118,6 +118,16 @@
          padding: 3px 9px; border-radius: 999px; background: rgba(15,17,21,.85);
          color: #cbd2dc; border: 1px solid var(--line); cursor: zoom-in; opacity: 0; }
   .card:hover .cmp { opacity: 1; }
+  /* compare-first picker: the big side-by-side IS the picking surface; the
+     grid below is a thumbnail selector. viewing = in the comparer (blue),
+     chosen = actually picked (green). */
+  #cmpMain { display: flex; gap: 22px; margin-bottom: 16px; align-items: flex-start; }
+  #cmpMain figure { margin: 0; text-align: center; flex: 1; min-width: 0; }
+  #cmpMain img { max-width: 100%; max-height: 62vh; border-radius: 12px; background: var(--line); }
+  #cmpMain figcaption { color: var(--muted); font-size: 13px; margin-top: 6px; }
+  #cmpNav { display: flex; gap: 10px; justify-content: center; align-items: center;
+            margin-top: 10px; flex-wrap: wrap; }
+  .card.viewing { border-color: var(--accent); }
   .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
            background: var(--card); border: 1px solid var(--line); padding: 10px 18px;
            border-radius: 10px; z-index: 50; display: none; }
@@ -343,7 +353,7 @@ function updateStats(){
 function focusScan(id){ focusedId = id; detailSig = ""; renderDetail(); listSig=""; renderList(); }
 
 /* ── candidate cards ───────────────────────────────────────────────────── */
-function candCard(c, chosenId, idx){
+function candBadges(c, idx){
   const badges = (c.finishes||[]).map(f=>`<span class="pill">${esc(f)}</span>`).join("");
   // multi = art×4 + title + textbox — the order candidates are shown in.
   const d = c.multi_distance!=null
@@ -351,11 +361,15 @@ function candCard(c, chosenId, idx){
     : (c.phash_distance!=null ? `<span class="pill">art Δ${c.phash_distance}</span>` : "");
   const best = idx===0 ? `<span class="pill" style="background:#1c2740;color:#cfe1ff">closest</span>` : "";
   const ocr = c.ocr_confirmed ? `<span class="pill" style="background:#14532d;color:#86efac" title="the set code printed on your card's bottom line matches this printing">✓ matches card text</span>` : "";
+  return `${ocr}${best}${d}${badges}`;
+}
+
+function candCard(c, chosenId, idx){
   return `<div class="card ${c.id===chosenId?'chosen':''}" data-pick="${esc(c.id)}">
-    <span class="cmp" data-cmp="${esc(c.id)}" title="Compare side-by-side with your card photo">⇆ compare</span>
+    <span class="cmp" data-cmp="${esc(c.id)}" title="Compare full-screen with your card photo">⇆ compare</span>
     <img src="${esc(c.image_normal||c.image_small)}" loading="lazy" onerror="this.style.visibility='hidden'">
     <div class="t"><b>${esc(c.set_name)}</b>#${esc(c.collector_number)} · ${esc(c.rarity||"")}</div>
-    <div class="badges">${ocr}${best}${d}${badges}</div>
+    <div class="badges">${candBadges(c, idx)}</div>
   </div>`;
 }
 
@@ -436,9 +450,21 @@ function renderDetail(){
 
   html += `<div class="sec">
     <div class="sechead"><h2>${sel?"Re-pick printing":"Pick the printing"}</h2>
-      <span class="muted" style="font-size:12px">ranked closest first — art ×4 + title + textbox</span></div>`;
+      <span class="muted" style="font-size:12px">your card vs each printing — click a thumbnail or use ← → · double-click a thumbnail to pick it directly</span></div>`;
   html += (scan.candidates||[]).length
-    ? `<div class="grid" id="cands">${scan.candidates.map((c,i)=>candCard(c,chosenId,i)).join("")}</div>`
+    ? `<div id="cmpMain">
+        <figure><img src="/api/scans/${scan.id}/image" onerror="this.parentNode.style.display='none'">
+          <figcaption>your card</figcaption></figure>
+        <figure><img id="cmpCand"><figcaption id="cmpCap"></figcaption>
+          <div id="cmpNav">
+            <button class="btn ghost" id="cmpPrev" title="previous printing (←)">←</button>
+            <button class="btn" id="cmpPick">Pick this printing</button>
+            <button class="btn ghost" id="cmpNext" title="next printing (→)">→</button>
+          </div>
+          <div class="badges" id="cmpBadges" style="justify-content:center;margin-top:8px"></div>
+        </figure>
+      </div>
+      <div class="grid" id="cands">${scan.candidates.map((c,i)=>candCard(c,chosenId,i)).join("")}</div>`
     : `<p class="muted">No art candidates — use the search below.</p>`;
   html += `</div>`;
 
@@ -488,10 +514,40 @@ function wireDetail(scan){
     await poll(); detailSig=""; renderDetail(); listSig=""; renderList();
   };
   const candPick = pickFrom(scan.candidates);
-  $("#cands")?.querySelectorAll(".card[data-pick]").forEach(el =>
-    el.addEventListener("click", () => candPick(el)));
-  // Compare chip: opens the big side-by-side instead of picking; e.stop so
-  // the card's own click-to-pick doesn't fire underneath it.
+
+  // Compare-FIRST picking: the big side-by-side is the main surface. A
+  // thumbnail click loads that printing into the comparer (double-click
+  // still picks instantly); ←/→ cycle; Pick files the one on screen.
+  const cands = scan.candidates || [];
+  if ($("#cmpMain") && cands.length){
+    let ci = Math.max(0, cands.findIndex(c => c.id === scan.selection?.scryfall_id));
+    const showCmp = (i) => {
+      ci = ((i % cands.length) + cands.length) % cands.length;
+      const c = cands[ci];
+      $("#cmpCand").src = c.image_normal || c.image_small;
+      $("#cmpCap").textContent =
+        `${c.set_name} #${c.collector_number} · ${ci+1} of ${cands.length}`;
+      $("#cmpBadges").innerHTML = candBadges(c, ci);
+      $("#cands").querySelectorAll(".card").forEach(el =>
+        el.classList.toggle("viewing", el.dataset.pick === c.id));
+    };
+    showCmp(ci);
+    $("#cmpPrev").addEventListener("click", () => showCmp(ci - 1));
+    $("#cmpNext").addEventListener("click", () => showCmp(ci + 1));
+    $("#cmpPick").addEventListener("click", () => {
+      const el = $("#cands").querySelector(`.card[data-pick="${CSS.escape(cands[ci].id)}"]`);
+      if (el) candPick(el);
+    });
+    cmpKeyNav = (dir) => showCmp(ci + dir);
+    $("#cands").querySelectorAll(".card[data-pick]").forEach(el => {
+      el.addEventListener("click", () =>
+        showCmp(cands.findIndex(c => c.id === el.dataset.pick)));
+      el.addEventListener("dblclick", () => candPick(el));
+    });
+  } else {
+    cmpKeyNav = null;
+  }
+  // ⇆ chip: full-screen overlay compare (even bigger than the inline view).
   const wireCompare = (rootSel, pool, pick) =>
     $(rootSel)?.querySelectorAll(".cmp[data-cmp]").forEach(el =>
       el.addEventListener("click", e => {
@@ -597,6 +653,14 @@ function openCompare(scanId, cand, onPick){
   });
 }
 $("#lightbox").addEventListener("click", () => $("#lightbox").classList.remove("open"));
+// ←/→ drive the inline comparer (set per-render; null when no candidates).
+let cmpKeyNav = null;
+document.addEventListener("keydown", e => {
+  if (!cmpKeyNav || $("#lightbox").classList.contains("open")) return;
+  if (/^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement?.tagName || "")) return;
+  if (e.key === "ArrowLeft"){ e.preventDefault(); cmpKeyNav(-1); }
+  if (e.key === "ArrowRight"){ e.preventDefault(); cmpKeyNav(1); }
+});
 document.addEventListener("keydown", e => {
   if (e.key === "Escape") $("#lightbox").classList.remove("open");
 });
@@ -613,7 +677,7 @@ function sigOf(scan){
 
 // Version banner — page version · server git hash. Same rationale as the
 // phone: without it, "is this the old page?" is undebuggable.
-const UI_VERSION = "d19";
+const UI_VERSION = "d20";
 $("#sweepStopBtn").addEventListener("click", async () => {
   await jsend("/api/price-sweep/stop", "POST", {});
   toast("Sweep stopping — auto-sweep paused 10 min");
