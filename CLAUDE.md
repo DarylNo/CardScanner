@@ -60,6 +60,13 @@ separated right from wrong exactly). Blank guard before hashing. Digital
 printings stay IN the identification index (an artwork's only representative
 may be digital — M15 Shivan Dragon) but OUT of candidates/prefetch.
 
+**Scryfall search is PAGED at 175** (`scryfall._search_all`): every
+`/cards/search` caller must follow `has_more`/`next_page`. Reading page 1
+only truncated heavily-reprinted cards to their OLDEST 175 printings — a
+Forest has 865 paper printings, so no modern basic land could be ranked
+*or* found by manual search. `visual_match._cap_candidates` still bounds
+ranking work at 120 (oldest 60 + newest 60); that cap is deliberate.
+
 **pHash limits — measured, don't retry:** 256-bit region hashes and
 set-symbol template matching are pure noise for same-art same-frame reprints
 (photo-vs-CDN noise floor ~20 bits/64). That's what `ocr_id.py` is for:

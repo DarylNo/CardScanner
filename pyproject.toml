@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mtg-card-scanner"
-version = "1.0.1"
+version = "1.0.2"
 description = "Hands-free MTG card scanner: phone camera + local art-hash identification + pricing + export"
 readme = "README.md"
 requires-python = ">=3.11"

@@ -222,8 +222,16 @@ class FaceToFaceClient:
         except (requests.RequestException, ValueError) as exc:
             raise F2FUnavailableError(f"proxy unreachable: {exc}") from exc
 
-        conditions = {k.upper(): float(v)
-                      for k, v in (data.get("conditions") or {}).items()}
+        # Tolerate a malformed conditions payload rather than raising: an
+        # exception here is NOT F2FUnavailableError, so it escaped get_price
+        # as a 500 on /price and left the sweep retrying that target forever.
+        raw = data.get("conditions")
+        conditions: dict[str, float] = {}
+        for k, v in (raw.items() if isinstance(raw, dict) else ()):
+            try:
+                conditions[str(k).upper()] = float(v)
+            except (TypeError, ValueError):
+                continue                   # null / non-numeric grade — skip it
         if not data.get("found") or not conditions:
             return None                    # confirmed unlisted
         return F2FPrice(

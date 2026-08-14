@@ -219,3 +219,52 @@ class TestLanguageAwareLookup:
         ):
             result = client.lookup_by_set_collector("m10", "146", language="jp")
         assert result["name"] == "Lightning Bolt"
+
+
+class TestSearchPagination:
+    """/cards/search pages at 175 — a basic land has ~966 printings, so page 1
+    alone hid every modern printing from both ranking and manual search."""
+
+    def _page(self, ids, has_more, next_page=None):
+        return _ok({
+            "data": [{"id": i, "games": ["paper"], "layout": "normal",
+                      "image_uris": {"small": "u"}} for i in ids],
+            "has_more": has_more,
+            **({"next_page": next_page} if next_page else {}),
+        })
+
+    def test_follows_next_page(self):
+        client = ScryfallClient()
+        pages = [self._page(["a", "b"], True, "https://api.scryfall.com/next?page=2"),
+                 self._page(["c"], False)]
+        with patch.object(client._session, "get", side_effect=pages) as mock_get:
+            out = client.get_all_printings("Forest")
+        assert [c["id"] for c in out] == ["a", "b", "c"]
+        assert mock_get.call_count == 2
+        assert mock_get.call_args_list[1][0][0] == "https://api.scryfall.com/next?page=2"
+
+    def test_single_page_response_makes_one_request(self):
+        client = ScryfallClient()
+        with patch.object(client._session, "get",
+                          return_value=self._page(["a"], False)) as mock_get:
+            out = client.get_all_printings("Lightning Bolt")
+        assert [c["id"] for c in out] == ["a"]
+        assert mock_get.call_count == 1
+
+    def test_has_more_without_next_page_stops(self):
+        """Malformed page (has_more but no next_page) must not loop forever."""
+        client = ScryfallClient()
+        with patch.object(client._session, "get",
+                          return_value=self._page(["a"], True)) as mock_get:
+            out = client.get_all_printings("Forest")
+        assert [c["id"] for c in out] == ["a"]
+        assert mock_get.call_count == 1
+
+    def test_page_cap_bounds_a_runaway_response(self):
+        from mtg_card_scanner.scryfall import _MAX_SEARCH_PAGES
+        client = ScryfallClient()
+        endless = self._page(["x"], True, "https://api.scryfall.com/next")
+        with patch.object(client._session, "get", return_value=endless) as mock_get:
+            out = client.get_all_printings("Forest")
+        assert mock_get.call_count == _MAX_SEARCH_PAGES
+        assert len(out) == _MAX_SEARCH_PAGES

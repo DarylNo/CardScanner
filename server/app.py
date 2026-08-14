@@ -85,6 +85,31 @@ def _foil_from_finish(finish: str) -> bool:
     return str(finish or "").strip().lower() not in ("non-foil", "nonfoil", "")
 
 
+def _version_tuple(v: str) -> tuple[int, ...]:
+    """(1, 0, 2) from 'v1.0.2'; () when *v* isn't a release version."""
+    parts = str(v or "").strip().lstrip("vV").split(".")
+    try:
+        return tuple(int(p) for p in parts) if parts and parts[0] else ()
+    except ValueError:
+        return ()
+
+
+def _is_newer_release(latest: str, current: str) -> bool:
+    """
+    True only when *latest* is a LATER release than *current*.
+
+    String inequality is not enough: installs come from master (install.sh),
+    so between a version bump and its tag being published an install reports
+    v1.0.2 while the latest release is still v1.0.1 — inequality then nags
+    forever and the button offers a downgrade.  Compare as versions and only
+    ever offer a step forward.
+    """
+    lp, cp = _version_tuple(latest), _version_tuple(current)
+    if lp and cp:
+        return lp > cp
+    return bool(latest) and latest != current      # unparseable — fall back
+
+
 def create_app(
     pipeline_factory: Optional[Callable[[], Any]] = None,
     store: Optional[ScanStore] = None,
@@ -156,7 +181,7 @@ def create_app(
                 r.raise_for_status()
                 latest = r.json().get("tag_name", "")
                 _upd.update(latest=latest,
-                            available=bool(latest) and latest != APP_VERSION)
+                            available=_is_newer_release(latest, APP_VERSION))
             elif APP_VERSION != "unknown":
                 r = _rq.get(f"{_REPO_API}/commits/master", timeout=6)
                 r.raise_for_status()
@@ -604,7 +629,7 @@ def create_app(
             return {"stopping": True}
         return {"stopping": False}
 
-    def _collect_price_targets() -> list[tuple[str, int, dict, bool]]:
+    def _collect_price_targets() -> list[tuple[str, int, dict, bool, str]]:
         """
         Everything the sweeper still owes a price:
           - scans with a chosen printing but no completed search → the selection
@@ -1032,8 +1057,12 @@ def create_app(
                 fields["included"] = bool(body["included"])
             selection = dict(scan.get("selection") or {})
             changed = False
+            # Only an ALREADY-selected scan has a selection to edit. Without
+            # this guard a stray PATCH invented one on a pending scan — a
+            # selection with no printing behind it, which then priced an empty
+            # name and confused every "has a pick?" check downstream.
             for key in ("condition", "finish", "quantity"):
-                if key in body:
+                if key in body and selection:
                     selection[key] = body[key]
                     changed = True
             if changed and selection:

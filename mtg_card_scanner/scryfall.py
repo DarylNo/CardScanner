@@ -40,6 +40,13 @@ class ScryfallError(Exception):
 # emblems can too. Mirrors art_index._SKIP_LAYOUTS.
 _SKIP_PRINT_LAYOUTS = frozenset({"token", "double_faced_token", "emblem", "art_series"})
 
+# Scryfall pages /cards/search at 175 results.  Reading only page 1 silently
+# truncated every heavily-reprinted card to its OLDEST 175 printings — a basic
+# land has ~966 (measured: Forest), so the printing actually in the tray was
+# never a candidate and manual search couldn't surface it either.  Following
+# has_more fixes both; the page cap only bounds a pathological response.
+_MAX_SEARCH_PAGES = 8          # 1,400 printings — beyond any real card
+
 
 class ScryfallClient:
     def __init__(self) -> None:
@@ -62,6 +69,24 @@ class ScryfallClient:
 
         resp.raise_for_status()
         return resp.json()
+
+    def _search_all(self, **params: str) -> list[dict[str, Any]]:
+        """Every result of a /cards/search query, following pagination.
+
+        `next_page` is a complete URL (query string included), so it is
+        fetched as-is.  A missing `has_more` (old fixtures, single-page
+        responses) simply ends the loop after page 1.
+        """
+        data = self._get(f"{SCRYFALL_BASE}/cards/search", **params)
+        cards = list(data.get("data") or [])
+        pages = 1
+        while data.get("has_more") and data.get("next_page") and pages < _MAX_SEARCH_PAGES:
+            data = self._get(data["next_page"])
+            cards.extend(data.get("data") or [])
+            pages += 1
+        if data.get("has_more"):
+            print(f"  [scryfall] page cap reached — using the first {len(cards)} printings")
+        return cards
 
     def lookup_by_set_collector(self, set_code: str, collector_number: str,
                                 language: str = "") -> dict[str, Any]:
@@ -104,6 +129,9 @@ class ScryfallClient:
         """
         Fetch all PAPER printings of a card by exact name, sorted oldest-first.
 
+        ALL of them: the search endpoint pages at 175, which used to cut basic
+        lands (~966 printings) off at their oldest page — see _search_all.
+
         Arena/MTGO-only printings are dropped: they can't be physically in the
         tray, aren't sellable, and were showing up in the pick-a-printing grid.
         (The identification INDEX deliberately keeps digital representatives —
@@ -112,15 +140,13 @@ class ScryfallClient:
         for pHash comparison).  Raises ScryfallError if the name is unknown.
         """
         print(f"  [scryfall] Fetching all printings of '{_safe_print(name)}'...")
-        data = self._get(
-            f"{SCRYFALL_BASE}/cards/search",
+        cards = self._search_all(
             q=f'!"{name}"',
             unique="prints",
             order="released",
             dir="asc",
             include_extras="true",
         )
-        cards = data.get("data", [])
         # Missing `games` (old/fixture data) is treated as paper, not dropped.
         paper = [c for c in cards
                  if "paper" in (c.get("games") or ["paper"])

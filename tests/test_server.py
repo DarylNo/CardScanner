@@ -565,3 +565,46 @@ def test_retry_never_deletes_a_selected_row(tmp_path):
     r = _post_scan(client, replace_id=old["id"])
     assert r.status_code == 200
     assert store.get_scan(old["id"]) is not None       # picked row untouched
+
+
+class TestUpdateBannerVersioning:
+    """The banner must only ever offer a step FORWARD.  Installs come from
+    master, so between a version bump and its tag going live an install
+    reports v1.0.2 while the latest release is still v1.0.1 — plain string
+    inequality nagged forever and the button offered a downgrade."""
+
+    def test_newer_release_is_offered(self):
+        from server.app import _is_newer_release
+        assert _is_newer_release("v1.0.2", "v1.0.1") is True
+        assert _is_newer_release("v1.1.0", "v1.0.9") is True
+
+    def test_same_version_is_not_offered(self):
+        from server.app import _is_newer_release
+        assert _is_newer_release("v1.0.1", "v1.0.1") is False
+
+    def test_older_release_is_never_offered(self):
+        from server.app import _is_newer_release
+        assert _is_newer_release("v1.0.1", "v1.0.2") is False
+        assert _is_newer_release("v1.0.9", "v1.1.0") is False
+
+    def test_unparseable_falls_back_to_inequality(self):
+        from server.app import _is_newer_release
+        assert _is_newer_release("v2.0", "unknown") is True
+        assert _is_newer_release("", "v1.0.1") is False
+
+
+def test_patch_never_invents_a_selection_on_a_pending_scan(client):
+    """A pending scan has nothing to edit — a stray PATCH must not create a
+    selection with no printing behind it."""
+    scan_id = client.post("/api/scan", files={"files": ("f.jpg", _jpeg_bytes(), "image/jpeg")}).json()["id"]
+    r = client.patch(f"/api/scans/{scan_id}", json={"condition": "LP", "quantity": 3})
+    assert r.status_code == 200
+    assert r.json()["selection"] is None
+    assert r.json()["status"] != "selected"
+
+
+def test_patch_included_still_works_on_a_pending_scan(client):
+    scan_id = client.post("/api/scan", files={"files": ("f.jpg", _jpeg_bytes(), "image/jpeg")}).json()["id"]
+    r = client.patch(f"/api/scans/{scan_id}", json={"included": False})
+    assert r.json()["included"] is False
+    assert r.json()["selection"] is None

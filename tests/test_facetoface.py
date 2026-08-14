@@ -89,3 +89,31 @@ def test_client_exposes_pace_and_debug():
     c = FaceToFaceClient(get_json=lambda u, h=None: {"found": False})
     assert c.pacing_delay() is not None
     assert isinstance(c.recent_requests(), list)
+
+
+class TestMalformedConditionsPayload:
+    """A bad conditions payload must degrade, not raise: anything other than
+    F2FUnavailableError escaping get_price 500s /price and leaves the sweep
+    retrying that target every tick forever."""
+
+    def test_null_grade_is_skipped_not_fatal(self):
+        p = _client(lambda u, h: {"found": True, "url": "",
+                                  "conditions": {"NM": 3.49, "PL": None}}).get_price(
+            "Lightning Bolt", "m10", "146")
+        assert p.conditions == {"NM": 3.49}
+
+    def test_non_numeric_grade_is_skipped(self):
+        p = _client(lambda u, h: {"found": True, "url": "",
+                                  "conditions": {"NM": "3.49", "PL": "n/a"}}).get_price(
+            "Lightning Bolt", "m10", "146")
+        assert p.conditions == {"NM": 3.49}
+
+    def test_all_grades_unusable_reads_as_no_listing(self):
+        assert _client(lambda u, h: {"found": True, "url": "",
+                                     "conditions": {"NM": None}}).get_price(
+            "Lightning Bolt", "m10", "146") is None
+
+    def test_conditions_not_a_dict_reads_as_no_listing(self):
+        assert _client(lambda u, h: {"found": True, "url": "",
+                                     "conditions": ["NM", 3.49]}).get_price(
+            "Lightning Bolt", "m10", "146") is None
