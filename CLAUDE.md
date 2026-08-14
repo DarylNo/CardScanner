@@ -118,11 +118,24 @@ every field a row renders MUST be in its signature or edits go stale.
   `permissions: contents: write`; `macos-13` label is DEAD, use
   `macos-15-intel`; publish runs `if: always()`; PyInstaller needs
   `--paths . --copy-metadata mtg-card-scanner`).
-- Repo is PUBLIC. **ALWAYS end a push session by bumping `version` in
+- **The repo MUST stay PUBLIC — every distribution path is anonymous.**
+  Found private on 2026-08-14: `install.sh`'s curl one-liner, the update
+  tarball, and `releases/latest` all 404'd, so `/api/update-check` swallowed
+  the error and reported `available: null` — no banner ever appeared for
+  anyone, however many releases were tagged, and the Update button's
+  `subprocess.call` ignored its 404 and claimed success. Tagging releases
+  does nothing while the repo is private. Verify with an UNAUTHENTICATED
+  request (a `git push` succeeding proves nothing — 404, not 403, is what
+  GitHub returns anonymously for a private repo).
+- **ALWAYS end a push session by bumping `version` in
   pyproject.toml and tagging a release** — script installs (uv/pipx)
   identify as the package version and their update banner compares against
   the latest RELEASE tag; master-only commits are invisible to them.
-  Bump BEFORE tagging or updated installs loop on "update available".
+  Bump BEFORE tagging: installs come from master, so an install made in the
+  gap between bump and tag reports a version AHEAD of the latest release.
+  `_is_newer_release` compares version tuples so that only means "no update"
+  — it used to be string inequality, which nagged forever and offered a
+  downgrade.
 - The ManaExchange store is the user's own project (`DarylNo/v0-ManaExchange`);
   an MX-inventory integration was built and REVERTED — ask before rebuilding.
 
