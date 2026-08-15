@@ -72,10 +72,11 @@ Tips:
 - Linux: if launch fails with a `libGL` error, `sudo apt install libgl1`
   (or swap in `opencv-python-headless`).
 - **Chromebook**: see the step-by-step below.
-- **Pricing config** (`<data-dir>/config.env`, i.e. `~/.mtg-card-scanner/config.env`):
-  set `MX_URL` and, if you gate the proxy, `SCANNER_F2F_TOKEN`. Read at launch
-  regardless of how the app is started (a GUI click doesn't inherit shell env
-  vars). Env vars still win over the file.
+- **Pricing needs no config** — each scanner queries the storefront's public
+  JSON from its own connection. `<data-dir>/config.env`
+  (`~/.mtg-card-scanner/config.env`) is still read at launch for optional
+  settings like `LAN_IP`, regardless of how the app is started (a GUI click
+  doesn't inherit shell env vars). Env vars still win over the file.
 
 ### Chromebook install (Linux mode)
 
@@ -85,11 +86,11 @@ Tips:
    — installs uv + the scanner and drops an app-drawer launcher. ARM Chromebooks
    use this script path (no ARM binary is built). If launch later errors on
    `libGL`: `sudo apt install -y libgl1`.
-3. **Pricing token** (only if you gated the proxy):
+3. **Pin the Wi-Fi IP** (only on classic Crostini, where the container can't
+   see the host's Wi-Fi address — the desktop will tell you if it can't):
    `mkdir -p ~/.mtg-card-scanner && nano ~/.mtg-card-scanner/config.env`, then add:
    ```
-   MX_URL=https://www.manaexchange.ca
-   SCANNER_F2F_TOKEN=your-shared-secret
+   LAN_IP=192.168.1.50
    ```
 4. **Port forward** (so the phone can reach the NAT'd container): Settings →
    Advanced → Developers → Linux → Port forwarding → Add → TCP **8443**, toggle on.

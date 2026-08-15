@@ -85,15 +85,29 @@ tick also runs retro passes: strip stale art-series candidates, retro-OCR
 pending scans from their stored photos (once each, budgeted), auto-pick
 newly-single/confirmed ones.
 
-**F2F client (`facetoface.py`) — PROXY, no local scraping:** the scanner
-does NOT scrape F2F. It calls the operator's ManaExchange backend
-(`{MX_URL}/api/scanner/f2f-price`, gated by `SCANNER_F2F_TOKEN`), which runs
-the Redis-cached scraper server-side. This keeps the scraping METHOD out of
-this (public) repo. Kept locally: 24h disk cache, gentle pacing to our own
-backend, interruptible waits (Stop), request debug log. `F2FUnavailableError`
-≠ "no listing" — a 5xx/timeout raises (stays retryable), a clean not-found
-returns None (records empty marker). The scraping method itself lives in
-`DarylNo/v0-ManaExchange` `lib/f2f-scraper.ts` (private). Scanner config (`MX_URL`, `SCANNER_F2F_TOKEN`) comes from env or `<data-dir>/config.env`.
+**F2F client (`facetoface.py`) — each scanner prices from ITS OWN IP.** No
+proxy, no shared backend: the client reads the storefront's public Shopify
+JSON (`/search/suggest.json` → `/products/<handle>.json`) directly. A brief
+2026-08 detour routed pricing through the ManaExchange backend; it was
+reverted 2026-08-15 — there is no reason to put every scanner's pricing
+load on the store, and the rate limit is per-IP anyway, so clients spread
+naturally. **Do not reintroduce the proxy without asking.** What makes it
+work, all measured — don't loosen any of it:
+- **curl_cffi Chrome TLS impersonation** (`_new_session`). Shopify
+  fingerprints the TLS handshake, not just the UA: plain `requests` draws a
+  tiny bucket (429 by the 3rd rapid call), a real Chrome handshake gets the
+  generous one. Falls back to `requests` if curl_cffi is missing.
+- **Browser UA**, never an honest bot UA (identified bots are throttled hard).
+- **Adaptive pacing** (slow start 2s → AIMD, floor 0.5s, ceil 10s, idle
+  reset 120s). Fixed rates all failed: 6.7/s tripped the bucket instantly,
+  2/s kept it tripped, 1/s still saw scattered 429s on a warm IP.
+- **Most-specific-first query ladder** ("name collector setname [foil]"),
+  so the usual card costs 1 suggest + 1 product fetch.
+- **SKU set-code confirmation** before trusting a match — collector numbers
+  collide across sets, and a wrong-set price is worse than no price.
+- 24h disk cache, interruptible waits (Stop), request debug log.
+`F2FUnavailableError` ≠ "no listing" — transport failure raises (stays
+retryable), a confirmed miss returns None (records an empty marker).
 
 **Pricing sweep (`server/app.py`):** ONE F2F consumer while active (all other
 pricers stand down); selected scans price ONLY their selection; unpicked

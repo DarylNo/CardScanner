@@ -104,11 +104,17 @@ def lan_ip() -> str:
     """
     This machine's LAN address — the one the PHONE must dial.
 
-    The route-to-8.8.8.8 trick returns the container's internal address inside
-    ChromeOS Crostini (100.115.92.x), which the phone can't reach. So prefer a
-    genuine private-LAN interface address when one exists, and fall back to the
-    route trick only if none is found (native Windows/Mac/Linux, where the
-    route address IS the LAN one).
+    The ROUTE-to-8.8.8.8 address wins whenever it is private-LAN: it names the
+    interface that actually carries traffic off this box, which is the network
+    the phone is on. Enumerating interfaces first was wrong on any Windows box
+    with WSL/Hyper-V/Docker installed — those add a private 172.x virtual
+    adapter that sorts ahead of the real Wi-Fi address, so the QR code and the
+    desktop's phone link both pointed at an unreachable host (observed on the
+    rig: advertised 172.23.144.1, reachable only on 192.168.1.118).
+
+    Only when the route address is NOT private-LAN do we fall back to scanning
+    interfaces — that is the ChromeOS Crostini case, where the route returns
+    the container's own 100.115.92.x but a real LAN address may still exist.
 
     LAN_IP env (or config.env) overrides everything — classic Crostini can't
     see the host's Wi-Fi IP at all, so the operator can pin it once.
@@ -116,16 +122,6 @@ def lan_ip() -> str:
     override = os.getenv("LAN_IP", "").strip()
     if override:
         return override
-    candidates: list[str] = []
-    try:
-        host = socket.gethostname()
-        for info in socket.getaddrinfo(host, None, socket.AF_INET):
-            candidates.append(info[4][0])
-    except OSError:
-        pass
-    for ip in candidates:
-        if _is_private_lan(ip):
-            return ip
 
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
@@ -135,27 +131,31 @@ def lan_ip() -> str:
         route_ip = "127.0.0.1"
     finally:
         s.close()
-    # A private-LAN route wins; otherwise take any earlier candidate that is
-    # private-LAN (Crostini: route is 100.115.x but a real 192.168.x may exist).
     if _is_private_lan(route_ip):
         return route_ip
-    for ip in candidates:
-        if _is_private_lan(ip):
-            return ip
+
+    # Route isn't a home-LAN address (Crostini container, CGNAT/VPN-only
+    # default route) — look for a real one among this host's interfaces.
+    try:
+        host = socket.gethostname()
+        for info in socket.getaddrinfo(host, None, socket.AF_INET):
+            if _is_private_lan(info[4][0]):
+                return info[4][0]
+    except OSError:
+        pass
     return route_ip
 
 
 def _load_config(data_dir: Path) -> None:
     """
     Load <data-dir>/config.env (simple KEY=VALUE lines) into the environment,
-    without overriding anything already set. This is how the operator supplies
-    MX_URL and SCANNER_F2F_TOKEN once, in a file, so they reach the server no
-    matter how it's launched — a GUI app-drawer click on ChromeOS/Crostini
-    does NOT inherit shell env vars, so ~/.bashrc exports don't work there.
+    without overriding anything already set. This is how the operator pins a
+    setting once, in a file, so it reaches the server no matter how the app is
+    launched — a GUI app-drawer click on ChromeOS/Crostini does NOT inherit
+    shell env vars, so ~/.bashrc exports don't work there.
 
         # ~/.mtg-card-scanner/config.env
-        MX_URL=https://www.manaexchange.ca
-        SCANNER_F2F_TOKEN=your-shared-secret
+        LAN_IP=192.168.1.50      # phone-reachable address, when undetectable
     """
     cfg = Path(data_dir) / "config.env"
     try:
