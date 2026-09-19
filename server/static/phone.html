@@ -63,6 +63,12 @@
   .spill { font-size:11px; padding:1px 7px; border-radius:999px; background:#3f2d10; color:var(--warn); }
   .spill.sel { background:#14532d; color:#86efac; }
   .spill.chk { background:#3a1c1c; color:#fca5a5; }
+  /* Popularity tiers (mtg_card_scanner/popularity.py) — only the top three
+     get a colour, so "played" never competes with the pending/check pills. */
+  .spill.pop { background:var(--line); color:#aeb4bf; }
+  .spill.pop.staple { background:#3a2e08; color:#fcd34d; font-weight:700; }
+  .spill.pop.strong { background:#2e1065; color:#c4b5fd; }
+  .spill.pop.solid  { background:#0c2a4d; color:#93c5fd; }
   .sprice { color:var(--good); font-weight:700; }
 
   /* detail */
@@ -209,8 +215,36 @@ async function jsend(url, method, body) {
                              body: JSON.stringify(body) })).json();
 }
 
+/* ── popularity (see mtg_card_scanner/popularity.py) ────────────────────────
+   Read off the SELECTION first: one card name can span two oracle cards with
+   very different play rates, so after a re-pick candidates[0] may not be the
+   printing actually chosen.  setStatus writes textContent, so popTag is plain
+   text; popPill goes through escHtml like every other row field. */
+function popOf(scan){
+  return scan?.selection?.popularity || (scan?.candidates||[])[0]?.popularity || null;
+}
+// Only the tiers worth interrupting a hands-free run for. "Played", "Fringe"
+// and "Unranked" say nothing useful mid-scan and would just add noise to a
+// status line the operator reads at arm's length.
+const POP_CALLOUT = { staple: '★ staple', strong: 'very popular', solid: 'popular' };
+function popTag(scan){
+  const p = popOf(scan);
+  const tag = p && POP_CALLOUT[p.tier];
+  return tag ? ` (${tag})` : '';
+}
+function popPill(scan){
+  const p = popOf(scan);
+  if (!p) return '';
+  return `<span class="spill pop ${escHtml(p.tier)}">${escHtml(p.label)}</span>`;
+}
+// Every popularity field the rows render, so the list signature covers it.
+function popSig(scan){
+  const p = popOf(scan);
+  return p ? p.tier + ':' + p.label : '';
+}
+
 /* ── version banner — proves which page+server combo is running ────────────── */
-const UI_VERSION = 'v25';
+const UI_VERSION = 'v26';
 fetch('/api/version').then(r => r.json())
   .then(d => { $('#ver').textContent = `${UI_VERSION} · ${d.version}`; })
   .catch(() => { $('#ver').textContent = UI_VERSION; });
@@ -404,14 +438,14 @@ async function submitScan(frames, manual = false, replaceId = 0) {
       setStatus(`✓ ${data.selection?.name} — duplicate, merged (now ×${data.selection?.quantity})`
         + (data.included === false ? ' ⚠ row excluded from export' : ''), 'ok');
     } else if (data.identified) {
-      setStatus(data.selection?.auto_picked
-        ? `✓ ${data.card_read.name} — exact printing confident, auto-filed ⚠`
-        : `✓ ${data.card_read.name}${manual ? ' — pick a printing.' : ' — filed for desktop pick. Next card…'}`, 'ok');
+      setStatus((data.selection?.auto_picked
+        ? `✓ ${data.card_read.name}${popTag(data)} — exact printing confident, auto-filed ⚠`
+        : `✓ ${data.card_read.name}${popTag(data)}${manual ? ' — pick a printing.' : ' — filed for desktop pick. Next card…'}`), 'ok');
       // Manual mode: open the printing picker right here so the operator can
       // choose on the phone. Auto mode stays hands-free (desktop picks).
       if (manual && !data.selection?.auto_picked) openDetail(data.id);
     } else if ((data.candidates || []).length) {
-      setStatus(`? Best guess ${data.card_read?.name || '?'}${manual ? ' — verify & pick.' : ' — verify on desktop.'}`, 'err');
+      setStatus(`? Best guess ${data.card_read?.name || '?'}${popTag(data)}${manual ? ' — verify & pick.' : ' — verify on desktop.'}`, 'err');
       if (manual) openDetail(data.id);
     } else {
       setStatus('✗ ' + (data.error || 'No match.') + ' — Retry with a fresh capture?', 'err');
@@ -770,7 +804,8 @@ function renderScansPanel() {
     scansView === 'selected' ? s.status === 'selected' :
     isProblem(s)));
   // Sig must cover every rendered field: selection identity (re-picks swap
-  // name/set/number/thumb), condition/finish edits, qty, flags, prices.
+  // name/set/number/thumb), condition/finish edits, qty, flags, prices,
+  // popularity.
   const listSig = scansView + '~' + priceMin + '~' + priceMax + '~' +
     rows.map(s => [s.id, s.status, s.included,
                    s.selection?.scryfall_id, s.selection?.condition,
@@ -779,7 +814,7 @@ function renderScansPanel() {
                    s.card_read?.name, s.error ? 'e' : '',
                    (s.candidates||[]).length,
                    JSON.stringify(s.f2f?.conditions||0),
-                   printInfo(s).vals.join(';')].join(',')).join('|');
+                   printInfo(s).vals.join(';'), popSig(s)].join(',')).join('|');
   if (listSig === lastListSig) return;
   lastListSig = listSig;
 
@@ -792,10 +827,10 @@ function renderScansPanel() {
     const sub = isSel
       ? `${(s.selection.set||'').toUpperCase()} #${s.selection.collector_number} · ${s.selection.condition} · ${s.selection.finish} · ×${s.selection.quantity}`
       : `${(s.candidates||[]).length} printings — tap to pick`;
-    const pill = isSel
+    const pill = (isSel
       ? `<span class="spill sel">${s.selection?.auto_picked ? '⚠ auto' : 'selected'}</span>`
       : isProblem(s) ? `<span class="spill chk">check</span>`
-      : `<span class="spill">pending</span>`;
+      : `<span class="spill">pending</span>`) + popPill(s);
     return `<div class="srow" data-sid="${s.id}">
       <img src="${escHtml(thumb)}" loading="lazy" onerror="this.style.visibility='hidden'">
       <div class="meta">
