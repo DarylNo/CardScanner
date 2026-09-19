@@ -23,16 +23,29 @@ from mtg_card_scanner.card_read import CardRead
 from mtg_card_scanner.card_detect import extract_card, frame_sharpness, is_blank_surface
 from mtg_card_scanner.scryfall import ScryfallClient, ScryfallError
 from mtg_card_scanner.output import ScanResult, OutputWriter, build_result, format_listing
+from mtg_card_scanner.popularity import (
+    oracle_key,
+    print_counts_by_oracle,
+    summarize as _popularity,
+)
 
 
 def _safe(s: str) -> str:
     return str(s).encode("ascii", errors="replace").decode("ascii")
 
 
-def _candidate_dict(p: dict) -> dict:
-    """Project a Scryfall printing (+pHash fields) to a UI-friendly candidate."""
+def _candidate_dict(p: dict, print_count: Optional[int] = None) -> dict:
+    """Project a Scryfall printing (+pHash fields) to a UI-friendly candidate.
+
+    `popularity` rides along per-candidate rather than per-scan because one card
+    NAME can cover two oracle cards with very different play rates (see
+    popularity.py) — the right answer depends on which printing is picked.  At
+    top_n=12 candidates that is ~1.5 KB a scan, against the ~30 KB of image URLs
+    already stored beside it.
+    """
     images = p.get("image_uris") or {}
     return {
+        "popularity": _popularity(p, print_count),
         "id": p.get("id", ""),
         "name": p.get("name", ""),
         "set": p.get("set", ""),
@@ -190,7 +203,7 @@ class Pipeline:
               "candidates": [ {id,name,set,set_name,collector_number,rarity,
                                released_at,border_color,frame,promo,finishes,
                                image_small,image_normal,phash_distance,
-                               multi_distance}... ],
+                               multi_distance,popularity}... ],
               "error": str | None,
             }
         """
@@ -338,7 +351,9 @@ class Pipeline:
             key=lambda p: p["multi_distance"] if p.get("multi_distance") is not None
             else p.get("phash_distance", 1 << 30),
         )
-        candidates = [_candidate_dict(p) for p in ranked[:top_n]]
+        counts = print_counts_by_oracle(printings)
+        candidates = [_candidate_dict(p, counts.get(oracle_key(p)))
+                      for p in ranked[:top_n]]
         candidates = self._apply_ocr_hint(frame, candidates)
         _mark_art_decisive(candidates)
         return candidates
@@ -388,7 +403,9 @@ class Pipeline:
         printings = sorted(
             printings, key=lambda p: p.get("released_at", ""), reverse=True
         )
-        return [_candidate_dict(p) for p in printings[:top_n]]
+        counts = print_counts_by_oracle(printings)
+        return [_candidate_dict(p, counts.get(oracle_key(p)))
+                for p in printings[:top_n]]
 
     # ── demo ──────────────────────────────────────────────────────────────────
 

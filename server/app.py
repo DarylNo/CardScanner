@@ -938,6 +938,11 @@ def create_app(
             "quantity": quantity,
             "foil": foil,
             "image_normal": printing.get("image_normal", ""),
+            # Carried onto the selection, not just left on the candidates: one
+            # card NAME can span two oracle cards with very different play
+            # rates (popularity.py), so after a re-pick candidates[0] is not
+            # necessarily the popularity of the printing actually chosen.
+            "popularity": printing.get("popularity"),
         }
         if auto:
             selection["auto_picked"] = True

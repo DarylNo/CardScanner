@@ -62,6 +62,17 @@
   .pill.sel { background: #14532d; color: #86efac; }
   .pill.cand { background: #3f2d10; color: var(--warn); }
   .pill.err { background: #3a1c1c; color: var(--bad); }
+  /* Popularity tiers (popularity.py). Only the top three get a colour — a
+     card being merely "played" is not news and must not compete with the
+     pick/selected pills for attention. */
+  .pill.pop { cursor: help; }
+  .pill.pop.staple  { background: #3a2e08; color: #fcd34d; font-weight: 700; }
+  .pill.pop.strong  { background: #2e1065; color: #c4b5fd; }
+  .pill.pop.solid   { background: #0c2a4d; color: #93c5fd; }
+  .pill.pop.fringe,
+  .pill.pop.unranked { color: var(--dim); }
+  .dpop { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  .dpop b { color: var(--text); }
   .row input[type=checkbox] { width: 18px; height: 18px; flex: 0 0 auto; }
   .empty { color: var(--dim); text-align: center; padding: 40px 20px; }
 
@@ -276,6 +287,38 @@ function thumbFor(scan){
 function titleFor(scan){ return scan.selection?.name || scan.card_read?.name || "(unidentified)"; }
 function isProblem(scan){ return !!scan.error || !(scan.candidates||[]).length; }
 
+/* ── popularity (see mtg_card_scanner/popularity.py) ────────────────────────
+   Read off the SELECTION first: one card name can span two oracle cards with
+   very different play rates, so after a re-pick candidates[0] may not be the
+   printing that was actually chosen. */
+function popOf(scan){
+  return scan?.selection?.popularity || (scan?.candidates||[])[0]?.popularity || null;
+}
+const POP_ICON = { staple: "★ ", strong: "", solid: "", played: "", fringe: "", unranked: "" };
+function popTitle(p){
+  const bits = [];
+  bits.push(p.edhrec_rank
+    ? `EDHREC rank ${p.edhrec_rank.toLocaleString()} of ${(32296).toLocaleString()} — `
+      + `top ${p.top_percent}% of Commander-played cards`
+    : (p.unranked_reason || "not ranked by EDHREC"));
+  if (p.print_count) bits.push(`${p.print_count} paper printing${p.print_count===1?"":"s"}`);
+  if (p.game_changer) bits.push("Commander Game Changer");
+  if (p.reserved) bits.push("Reserved List");
+  bits.push("popularity is a scan-time snapshot — EDHREC re-ranks continuously");
+  return bits.join(" · ");
+}
+function popPill(scan){
+  const p = popOf(scan);
+  if (!p) return "";
+  return `<span class="pill pop ${esc(p.tier)}" title="${esc(popTitle(p))}">`
+       + `${POP_ICON[p.tier]||""}${esc(p.label)}</span>`;
+}
+// Everything popPill/popDetail can render, so the row signature covers it.
+function popSig(scan){
+  const p = popOf(scan);
+  return p ? [p.tier,p.edhrec_rank,p.top_percent,p.print_count,p.game_changer,p.reserved].join(",") : "";
+}
+
 /* ── list ──────────────────────────────────────────────────────────────── */
 function visibleScans(){
   const q = filterText.toLowerCase();
@@ -298,7 +341,7 @@ function renderList(){
     s.selection?.scryfall_id,s.selection?.condition,s.selection?.finish,
     s.card_read?.name,s.error?'e':'',
     s.selection?.auto_picked?'a':'',JSON.stringify(s.f2f?.conditions||{}),
-    printInfo(s).vals.join(";"),s.id===focusedId].join("~")).join("|");
+    printInfo(s).vals.join(";"),popSig(s),s.id===focusedId].join("~")).join("|");
   if (sig === listSig) { updateStats(); return; }
   listSig = sig;
 
@@ -317,7 +360,7 @@ function renderList(){
       <div class="meta">
         <div class="nm">${esc(titleFor(s))}</div>
         <div class="sub">${esc(sub)}</div>
-        <div style="margin-top:4px">${pill}${sel?`<span class="pill">×${s.selection.quantity}</span>`:''}</div>
+        <div style="margin-top:4px">${pill}${sel?`<span class="pill">×${s.selection.quantity}</span>`:''}${popPill(s)}</div>
       </div>
       <div class="right">
         ${pr?`<span class="price">${pr}</span>`:''}
@@ -422,6 +465,20 @@ function f2fBoxHtml(scan){
 }
 
 /* ── detail ────────────────────────────────────────────────────────────── */
+function popDetailHtml(scan){
+  const p = popOf(scan);
+  if (!p) return "";
+  const flags = [p.game_changer ? "Game Changer" : "", p.reserved ? "Reserved List" : ""]
+    .filter(Boolean).map(f => ` · <b>${esc(f)}</b>`).join("");
+  const body = p.edhrec_rank
+    ? `<b>${esc(p.label)}</b> — EDHREC rank ${p.edhrec_rank.toLocaleString()}, `
+      + `top ${p.top_percent}% of Commander-played cards`
+    : `<b>Unranked</b> — ${esc(p.unranked_reason || "no EDHREC rank")}`;
+  const prints = p.print_count
+    ? ` · ${p.print_count} paper printing${p.print_count===1?"":"s"}` : "";
+  return `<div class="dpop" title="${esc(popTitle(p))}">${body}${prints}${flags}</div>`;
+}
+
 function renderDetail(){
   const scan = scans.find(s => s.id === focusedId);
   const right = $("#right");
@@ -442,6 +499,7 @@ function renderDetail(){
       ${(cr.alternates||[]).length ? `<div class="dsub">also possible: ${
         cr.alternates.map(a=>`<a href="#" class="alt-name" data-name="${esc(a.name)}">${esc(a.name)}</a> <span class="muted">(Δ${a.distance})</span>`).join(" · ")
       }</div>` : ''}
+      ${popDetailHtml(scan)}
       ${scan.error ? `<div class="dsub" style="color:var(--bad)">⚠ ${esc(scan.error)}</div>` : ''}
       ${f2fBoxHtml(scan)}
       ${controlsHtml(scan)}
@@ -672,12 +730,12 @@ function sigOf(scan){
           scan.selection?.scryfall_id, scan.selection?.condition, scan.selection?.finish,
           scan.selection?.quantity, scan.selection?.auto_picked, scan.error,
           scan.f2f ? JSON.stringify(scan.f2f.conditions||{}) : "null",
-          printInfo(scan).vals.join(";"), scan.included].join("|");
+          printInfo(scan).vals.join(";"), popSig(scan), scan.included].join("|");
 }
 
 // Version banner — page version · server git hash. Same rationale as the
 // phone: without it, "is this the old page?" is undebuggable.
-const UI_VERSION = "d20";
+const UI_VERSION = "d21";
 $("#sweepStopBtn").addEventListener("click", async () => {
   await jsend("/api/price-sweep/stop", "POST", {});
   toast("Sweep stopping — auto-sweep paused 10 min");

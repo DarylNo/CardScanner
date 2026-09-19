@@ -41,6 +41,8 @@ phone.html ──POST /api/scan──▶ card_detect.py   find+warp card (textur
                                     │
                               ocr_id.py         collector-line OCR → exact printing to #1
                                     │
+                              popularity.py     EDHREC rank → tier (no extra fetch)
+                                    │
               desktop.html    pick/review ──▶ facetoface.py price ──▶ export.py
 server/app.py                 FastAPI: scan store (SQLite), price sweeps, setup UI
 ```
@@ -84,6 +86,28 @@ Unconfirmed multi-candidate scans always wait for a human. The auto-sweep
 tick also runs retro passes: strip stale art-series candidates, retro-OCR
 pending scans from their stored photos (once each, budgeted), auto-pick
 newly-single/confirmed ones.
+
+**Popularity (`popularity.py`) costs NOTHING — keep it that way.** Every card
+object `/cards/search` returns already carries `edhrec_rank`, and
+`get_all_printings` already fetches them, so the tier is pure projection: no
+extra request, no added latency, nothing off the F2F rate budget. Do not add an
+EDHREC API client to "improve" it without asking. Three measured rules:
+- **No rank ≠ unpopular.** EDHREC ranks only Commander-legal cards, so Black
+  Lotus, Forest and Wastes all come back `None`. They are UNRANKED with the
+  reason shown — never bucketed as "fringe".
+- **Reprint count is NOT popularity.** The plausible "WotC reprints what sells"
+  idea dies on the data: Grizzly Bears has 25 printings at rank 8,181, Ragavan
+  12 at rank 280. `print_count` is displayed as its own fact and never moves a
+  tier.
+- **Read the rank off the PRINTING, not the name.** One name can span two oracle
+  cards — `!"Lightning Bolt"` is 68 printings at rank 158 plus 3 of the SOS
+  `prepare` card at 7,965. A min/mode across the name attributes the wrong
+  card's popularity. `reversible_card` printings (SLD Sol Ring, REX Forest)
+  carry `oracle_id` only on `card_faces`, same as their images — hence
+  `oracle_key()`.
+Tiers are percentiles of the ranked pool (32,296 cards), not raw ranks, so they
+survive the pool growing. The selection carries its own copy: after a re-pick
+`candidates[0]` is not necessarily what was chosen.
 
 **F2F client (`facetoface.py`) — each scanner prices from ITS OWN IP.** No
 proxy, no shared backend: the client reads the storefront's public Shopify
@@ -155,7 +179,7 @@ every field a row renders MUST be in its signature or edits go stale.
 
 ## Testing
 
-`pytest tests/` — ~290 tests, all fakes (no camera/network needed), runs on
+`pytest tests/` — ~350 tests, all fakes (no camera/network needed), runs on
 3-OS CI per push. Real-scan validation artifacts live in `scan_images/`
 (e.g. scan 837 = the Diabolic Edict OCR proof). When tuning detection or
 ranking, test against real scans before shipping — every threshold in this

@@ -10,13 +10,23 @@ from server.store import ScanStore
 from mtg_card_scanner.facetoface import F2FPrice
 
 
+# The two candidates carry DIFFERENT popularity on purpose: one card name can
+# span two oracle cards (measured — `!"Lightning Bolt"` returns rank 158 and
+# rank 7,977 printings), so a selection must take the picked printing's
+# popularity rather than the top candidate's.
 CANDIDATES = [
     {"id": "id-m10", "name": "Lightning Bolt", "set": "m10", "set_name": "Magic 2010",
      "collector_number": "146", "finishes": ["nonfoil"], "image_normal": "http://img/n.jpg",
-     "phash_distance": 0},
+     "phash_distance": 0,
+     "popularity": {"edhrec_rank": 158, "top_percent": 0.5, "tier": "staple",
+                    "label": "Staple", "print_count": 67,
+                    "game_changer": False, "reserved": False}},
     {"id": "id-m11", "name": "Lightning Bolt", "set": "m11", "set_name": "Magic 2011",
      "collector_number": "149", "finishes": ["nonfoil"], "image_normal": "http://img/n2.jpg",
-     "phash_distance": 6},
+     "phash_distance": 6,
+     "popularity": {"edhrec_rank": 7977, "top_percent": 24.7, "tier": "played",
+                    "label": "Played", "print_count": 3,
+                    "game_changer": False, "reserved": False}},
 ]
 
 
@@ -608,3 +618,40 @@ def test_patch_included_still_works_on_a_pending_scan(client):
     r = client.patch(f"/api/scans/{scan_id}", json={"included": False})
     assert r.json()["included"] is False
     assert r.json()["selection"] is None
+
+
+# ── popularity reaches the UI through both the scan and the selection ────────
+
+def test_scan_candidates_expose_popularity(client):
+    scan = client.post("/api/scan",
+                       files={"files": ("c.jpg", _jpeg_bytes(), "image/jpeg")}).json()
+    assert scan["candidates"][0]["popularity"]["tier"] == "staple"
+
+
+def test_selection_takes_the_picked_printings_popularity(client):
+    """Not candidates[0]'s — the two candidates are different oracle cards."""
+    scan = client.post("/api/scan",
+                       files={"files": ("c.jpg", _jpeg_bytes(), "image/jpeg")}).json()
+    r = client.post(f"/api/scans/{scan['id']}/select", json={"printing": CANDIDATES[1]})
+    pop = r.json()["selection"]["popularity"]
+    assert pop["tier"] == "played"
+    assert pop["edhrec_rank"] == 7977
+
+
+def test_selection_popularity_survives_a_store_round_trip(client):
+    """It lives in the selection JSON column — /api/scans must read it back."""
+    scan = client.post("/api/scan",
+                       files={"files": ("c.jpg", _jpeg_bytes(), "image/jpeg")}).json()
+    client.post(f"/api/scans/{scan['id']}/select", json={"printing": CANDIDATES[0]})
+    row = next(s for s in client.get("/api/scans").json() if s["id"] == scan["id"])
+    assert row["selection"]["popularity"]["label"] == "Staple"
+
+
+def test_selection_without_popularity_is_not_a_crash(client):
+    """Old scans (and trimmed payloads) have no popularity — select must still work."""
+    scan = client.post("/api/scan",
+                       files={"files": ("c.jpg", _jpeg_bytes(), "image/jpeg")}).json()
+    bare = {k: v for k, v in CANDIDATES[0].items() if k != "popularity"}
+    r = client.post(f"/api/scans/{scan['id']}/select", json={"printing": bare})
+    assert r.status_code == 200
+    assert r.json()["selection"]["popularity"] is None

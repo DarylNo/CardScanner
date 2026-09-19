@@ -59,8 +59,8 @@ def _match(name="Lightning Bolt", distance=4, **over):
     return m
 
 
-def _printing(pid, set_code, num, set_name):
-    return {
+def _printing(pid, set_code, num, set_name, **over):
+    p = {
         "id": pid,
         "name": "Lightning Bolt",
         "set": set_code,
@@ -74,6 +74,8 @@ def _printing(pid, set_code, num, set_name):
         "finishes": ["nonfoil"],
         "image_uris": {"small": f"http://img/{pid}-s.jpg", "normal": f"http://img/{pid}-n.jpg"},
     }
+    p.update(over)
+    return p
 
 
 def _pipeline(index, scryfall):
@@ -319,3 +321,50 @@ def test_scan_candidates_empty_tray_is_no_card_without_index():
     out = p.scan_candidates(np.full((480, 640, 3), 235, np.uint8))
     assert out.get("no_card") is True
     assert idx.calls == 0
+
+
+# ── popularity rides along on each candidate ─────────────────────────────────
+
+def test_candidates_carry_popularity_scoped_to_their_oracle_card():
+    """`!"Lightning Bolt"` really does span two oracle cards (rank 158 vs 7,977),
+    so each candidate must report ITS card's rank and ITS card's print count —
+    not a min, mode, or whole-name total."""
+    printings = [
+        _printing("id-m10", "m10", "146", "Magic 2010",
+                  oracle_id="oracle-bolt", edhrec_rank=158),
+        _printing("id-m11", "m11", "149", "Magic 2011",
+                  oracle_id="oracle-bolt", edhrec_rank=158),
+        _printing("id-sos", "sos", "113", "Secrets of Strixhaven",
+                  oracle_id="oracle-prepare", edhrec_rank=7977),
+    ]
+    p = _pipeline(FakeIndex([_match(distance=80)]), FakeScryfall(printings))
+
+    cands = p.scan_candidates(FRAME)["candidates"]
+
+    bolt, prepare = cands[0]["popularity"], cands[2]["popularity"]
+    assert bolt["edhrec_rank"] == 158 and bolt["tier"] == "staple"
+    assert prepare["edhrec_rank"] == 7977 and prepare["tier"] == "played"
+    assert bolt["print_count"] == 2       # only the two oracle-bolt printings
+    assert prepare["print_count"] == 1
+
+
+def test_popularity_survives_printings_without_a_rank():
+    """Basic lands and Commander-banned cards have no rank — still no crash,
+    and never labelled 'fringe'."""
+    p = _pipeline(FakeIndex([_match(distance=80)]),
+                  FakeScryfall([_printing("id", "m10", "146", "Magic 2010")]))
+    pop = p.scan_candidates(FRAME)["candidates"][0]["popularity"]
+    assert pop["tier"] == "unranked"
+    assert pop["edhrec_rank"] is None
+    assert pop["print_count"] == 1
+
+
+def test_search_candidates_carry_popularity_too():
+    """Manual re-identification must report the NEW card's popularity, not the
+    misidentified one's."""
+    printings = [_printing("id-a", "m10", "146", "Magic 2010",
+                           oracle_id="oracle-x", edhrec_rank=1)]
+    p = _pipeline(FakeIndex([]), FakeScryfall(printings))
+    out = p.search_candidates("Sol Ring")
+    assert out[0]["popularity"]["tier"] == "staple"
+    assert out[0]["popularity"]["print_count"] == 1
