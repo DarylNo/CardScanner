@@ -368,3 +368,26 @@ def test_search_candidates_carry_popularity_too():
     out = p.search_candidates("Sol Ring")
     assert out[0]["popularity"]["tier"] == "staple"
     assert out[0]["popularity"]["print_count"] == 1
+
+
+def test_candidates_carry_format_legality():
+    """Legality rides through the same projection as the rank, per printing."""
+    printings = [_printing("id", "lea", "1", "Limited Edition Alpha",
+                           oracle_id="oracle-lotus", edhrec_rank=None,
+                           legalities={"standard": "not_legal", "pioneer": "not_legal",
+                                       "modern": "not_legal", "legacy": "banned",
+                                       "vintage": "restricted", "pauper": "not_legal",
+                                       "commander": "banned", "penny": "not_legal"})]
+    p = _pipeline(FakeIndex([_match(distance=80)]), FakeScryfall(printings))
+    pop = p.scan_candidates(FRAME)["candidates"][0]["popularity"]
+    assert pop["formats"]["commander"] == "banned"
+    assert pop["formats"]["vintage"] == "restricted"
+    # The Commander ban is precisely why EDHREC has no rank for it.
+    assert pop["tier"] == "unranked"
+
+
+def test_candidates_without_legalities_omit_formats():
+    """Old fixtures and trimmed payloads must not grow an empty formats dict."""
+    p = _pipeline(FakeIndex([_match(distance=80)]),
+                  FakeScryfall([_printing("id", "m10", "146", "Magic 2010")]))
+    assert "formats" not in p.scan_candidates(FRAME)["candidates"][0]["popularity"]

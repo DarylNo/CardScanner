@@ -10,6 +10,7 @@ import pytest
 
 from mtg_card_scanner.popularity import (
     RANKED_CARD_COUNT,
+    TRACKED_FORMATS,
     print_counts_by_oracle,
     summarize,
     tier_for,
@@ -149,3 +150,88 @@ def test_oracle_key_falls_back_to_empty_string():
     from mtg_card_scanner.popularity import oracle_key
     assert oracle_key({}) == ""
     assert oracle_key({"card_faces": [{"name": "no oracle here"}]}) == ""
+
+
+# ── format legality (a different question from popularity) ───────────────────
+
+def _legal(**over):
+    base = {k: "not_legal" for k, _ in TRACKED_FORMATS}
+    base["penny"] = "not_legal"
+    base.update(over)
+    return {"edhrec_rank": 158, "legalities": base}
+
+
+def test_tracked_formats_are_all_reported():
+    """Every tracked key is present, so the UI can tell 'not legal in Standard'
+    apart from 'no legality data at all'."""
+    out = summarize(_legal(modern="legal"))
+    assert set(out["formats"]) == {k for k, _ in TRACKED_FORMATS}
+    assert out["formats"]["modern"] == "legal"
+    assert out["formats"]["standard"] == "not_legal"
+
+
+def test_untracked_formats_are_dropped():
+    """Scryfall reports 23 formats; the digital-only ones would bury the rest."""
+    out = summarize(_legal(modern="legal", alchemy="legal", timeless="legal"))
+    assert "alchemy" not in out["formats"]
+    assert "timeless" not in out["formats"]
+
+
+def test_banned_and_restricted_are_preserved():
+    """Black Lotus: restricted in Vintage, banned in Commander — and that ban is
+    exactly why EDHREC has no rank for it."""
+    out = summarize({"edhrec_rank": None,
+                     "legalities": {**_legal()["legalities"],
+                                    "vintage": "restricted", "commander": "banned"}})
+    assert out["formats"]["vintage"] == "restricted"
+    assert out["formats"]["commander"] == "banned"
+    assert out["tier"] == "unranked"
+
+
+def test_unknown_legality_value_degrades_to_not_legal():
+    """A new Scryfall value must never render as a mystery chip."""
+    out = summarize(_legal(modern="some_future_value"))
+    assert out["formats"]["modern"] == "not_legal"
+
+
+def test_formats_absent_when_the_payload_has_no_legalities():
+    assert "formats" not in summarize({"edhrec_rank": 158})
+
+
+def test_legality_never_moves_the_tier():
+    banned = summarize(_legal(commander="banned"))
+    legal = summarize(_legal(commander="legal"))
+    assert banned["tier"] == legal["tier"] == "staple"
+
+
+# ── penny_rank is gated on current penny legality ────────────────────────────
+
+def test_penny_rank_is_suppressed_when_not_penny_legal():
+    """Measured: Counterspell reports penny_rank 8 while legalities.penny reads
+    'not_legal' — the format rotates on MTGO price and the rank outlives it.
+    A stale rank is worse than no rank."""
+    out = summarize({"edhrec_rank": 16, "penny_rank": 8,
+                     "legalities": {**_legal()["legalities"], "penny": "not_legal"}})
+    assert "penny_rank" not in out
+
+
+def test_penny_rank_is_reported_when_penny_legal():
+    out = summarize({"edhrec_rank": 11124, "penny_rank": 11261,
+                     "legalities": {**_legal()["legalities"], "penny": "legal"}})
+    assert out["penny_rank"] == 11261
+
+
+def test_penny_legal_without_a_rank_reports_nothing():
+    """Forest is penny-legal but carries no penny_rank."""
+    out = summarize({"edhrec_rank": None, "penny_rank": None,
+                     "legalities": {**_legal()["legalities"], "penny": "legal"}})
+    assert "penny_rank" not in out
+
+
+def test_penny_rank_never_becomes_a_tier():
+    """It is absent on essentially every card worth money, so it can never be
+    the headline signal."""
+    out = summarize({"edhrec_rank": None, "penny_rank": 6,
+                     "legalities": {**_legal()["legalities"], "penny": "legal"}})
+    assert out["tier"] == "unranked"
+    assert out["label"] == "Unranked"

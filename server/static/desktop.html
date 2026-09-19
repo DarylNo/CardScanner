@@ -73,6 +73,13 @@
   .pill.pop.unranked { color: var(--dim); }
   .dpop { font-size: 12px; color: var(--muted); margin-top: 4px; }
   .dpop b { color: var(--text); }
+  /* Format legality — where the card may be PLAYED, which is not the same
+     question as how much it is played. Never coloured like a popularity tier. */
+  .dfmt { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; align-items: center; }
+  .fmt { font-size: 11px; padding: 1px 7px; border-radius: 4px; background: var(--line);
+         color: #aeb4bf; cursor: help; }
+  .fmt.banned { background: #3a1c1c; color: var(--bad); text-decoration: line-through; }
+  .fmt.restricted { background: #3f2d10; color: var(--warn); }
   .row input[type=checkbox] { width: 18px; height: 18px; flex: 0 0 auto; }
   .empty { color: var(--dim); text-align: center; padding: 40px 20px; }
 
@@ -313,10 +320,43 @@ function popPill(scan){
   return `<span class="pill pop ${esc(p.tier)}" title="${esc(popTitle(p))}">`
        + `${POP_ICON[p.tier]||""}${esc(p.label)}</span>`;
 }
-// Everything popPill/popDetail can render, so the row signature covers it.
+// Which formats a card may be PLAYED in — a different question from how much
+// it is played, so these never get a popularity colour. `not_legal` is dropped:
+// most cards are not legal in most formats and listing that buries the rest.
+const FORMAT_LABELS = { standard:"Standard", pioneer:"Pioneer", modern:"Modern",
+  legacy:"Legacy", vintage:"Vintage", pauper:"Pauper", commander:"Commander" };
+function formatChipsHtml(scan){
+  const f = popOf(scan)?.formats;
+  if (!f) return "";
+  const chip = k => `<span class="fmt ${esc(f[k])}" title="${esc(FORMAT_LABELS[k])}: `
+    + `${esc(f[k].replace("_"," "))}">${esc(FORMAT_LABELS[k])}</span>`;
+  const keys = Object.keys(FORMAT_LABELS);
+  const legal = keys.filter(k => f[k] === "legal");
+  const flagged = keys.filter(k => f[k] === "banned" || f[k] === "restricted");
+  const lbl = t => `<span class="muted" style="font-size:12px">${t}</span>`;
+  // "plays in" only leads when something is actually legal — Black Lotus is
+  // banned in Commander and restricted in Vintage, and "plays in Commander"
+  // over a struck-through chip reads as the opposite of the truth.
+  if (legal.length)
+    return `<div class="dfmt">${lbl("plays in")}${legal.map(chip).join("")}${flagged.map(chip).join("")}</div>`;
+  if (flagged.length)
+    return `<div class="dfmt">${flagged.map(chip).join("")}</div>`;
+  return `<div class="dfmt">${lbl("not legal in Standard, Pioneer, Modern, Legacy, "
+    + "Vintage, Pauper or Commander")}</div>`;
+}
+// Everything popPill/popDetail/formatChips can render, so the row signature
+// covers it. The list row renders only the pill, so this over-covers there —
+// an extra no-op re-render is harmless; a missed field is a stale badge.
 function popSig(scan){
   const p = popOf(scan);
-  return p ? [p.tier,p.edhrec_rank,p.top_percent,p.print_count,p.game_changer,p.reserved].join(",") : "";
+  if (!p) return "";
+  // Legality compresses to one letter per tracked format (l/n/b/r all differ in
+  // their first character), which distinguishes every combination without
+  // putting a 140-character blob in the signature of every row.
+  const fmt = p.formats
+    ? Object.keys(FORMAT_LABELS).map(k => (p.formats[k] || "-")[0]).join("") : "";
+  return [p.tier,p.edhrec_rank,p.top_percent,p.print_count,p.game_changer,p.reserved,
+          p.penny_rank, fmt].join(",");
 }
 
 /* ── list ──────────────────────────────────────────────────────────────── */
@@ -476,7 +516,11 @@ function popDetailHtml(scan){
     : `<b>Unranked</b> — ${esc(p.unranked_reason || "no EDHREC rank")}`;
   const prints = p.print_count
     ? ` · ${p.print_count} paper printing${p.print_count===1?"":"s"}` : "";
-  return `<div class="dpop" title="${esc(popTitle(p))}">${body}${prints}${flags}</div>`;
+  // Only ever shown when the printing is currently penny-legal (popularity.py
+  // gates it), so it can never contradict the Pauper/penny chips beside it.
+  const penny = p.penny_rank
+    ? ` · Penny Dreadful rank ${p.penny_rank.toLocaleString()}` : "";
+  return `<div class="dpop" title="${esc(popTitle(p))}">${body}${prints}${penny}${flags}</div>`;
 }
 
 function renderDetail(){
@@ -500,6 +544,7 @@ function renderDetail(){
         cr.alternates.map(a=>`<a href="#" class="alt-name" data-name="${esc(a.name)}">${esc(a.name)}</a> <span class="muted">(Δ${a.distance})</span>`).join(" · ")
       }</div>` : ''}
       ${popDetailHtml(scan)}
+      ${formatChipsHtml(scan)}
       ${scan.error ? `<div class="dsub" style="color:var(--bad)">⚠ ${esc(scan.error)}</div>` : ''}
       ${f2fBoxHtml(scan)}
       ${controlsHtml(scan)}
@@ -735,7 +780,7 @@ function sigOf(scan){
 
 // Version banner — page version · server git hash. Same rationale as the
 // phone: without it, "is this the old page?" is undebuggable.
-const UI_VERSION = "d21";
+const UI_VERSION = "d22";
 $("#sweepStopBtn").addEventListener("click", async () => {
   await jsend("/api/price-sweep/stop", "POST", {});
   toast("Sweep stopping — auto-sweep paused 10 min");
