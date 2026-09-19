@@ -20,7 +20,11 @@ CANDIDATES = [
      "phash_distance": 0,
      "popularity": {"edhrec_rank": 158, "top_percent": 0.5, "tier": "staple",
                     "label": "Staple", "print_count": 67,
-                    "game_changer": False, "reserved": False}},
+                    "game_changer": False, "reserved": False,
+                    "formats": {"standard": "not_legal", "pioneer": "not_legal",
+                                "modern": "legal", "legacy": "legal",
+                                "vintage": "legal", "pauper": "legal",
+                                "commander": "legal"}}},
     {"id": "id-m11", "name": "Lightning Bolt", "set": "m11", "set_name": "Magic 2011",
      "collector_number": "149", "finishes": ["nonfoil"], "image_normal": "http://img/n2.jpg",
      "phash_distance": 6,
@@ -645,6 +649,8 @@ def test_selection_popularity_survives_a_store_round_trip(client):
     client.post(f"/api/scans/{scan['id']}/select", json={"printing": CANDIDATES[0]})
     row = next(s for s in client.get("/api/scans").json() if s["id"] == scan["id"])
     assert row["selection"]["popularity"]["label"] == "Staple"
+    # Nested legality survives the JSON column too — the UI reads it from here.
+    assert row["selection"]["popularity"]["formats"]["modern"] == "legal"
 
 
 def test_selection_without_popularity_is_not_a_crash(client):

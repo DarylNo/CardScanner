@@ -41,6 +41,29 @@ EDHREC recomputes its ranks continuously (Shivan Dragon moved 11,114 -> 11,124
 between two probes minutes apart), so what a scan stores is a scan-time
 snapshot.  That is fine for "is this worth a second look?", and is why nothing
 downstream treats the number as stable.
+
+FORMATS BEYOND COMMANDER
+------------------------
+Scryfall ships no play-rate ranking for Modern, Standard, Pioneer, Legacy or
+Pauper, and there is no free API for one (measured 2026-09-19: MTGDecks and
+Moxfield both 403 a non-browser client; MTGGoldfish and MTGTop8 are HTML only).
+What the same payload DOES carry is `legalities` — where a card may legally be
+played — and that is what `format_legality` surfaces.  Legality is not
+popularity and is never mixed into a tier; it answers a different and genuinely
+useful question, and it explains an UNRANKED tier at a glance (Black Lotus is
+"banned" in Commander, which is exactly why EDHREC has no rank for it).
+
+`penny_rank` is the ONE other play-rate ranking in the payload, and measurement
+says to keep it firmly secondary:
+  * It is absent on essentially every card worth money — Lightning Bolt,
+    Thoughtseize, Sol Ring, Ragavan and Black Lotus all come back None, because
+    Penny Dreadful's card pool is DEFINED as cards worth under a tix on MTGO.
+    A scanner pricing cards to sell mostly sees cards it says nothing about.
+  * It goes stale against its own legality: Counterspell reports penny_rank 8
+    while `legalities.penny` reads "not_legal" (the format rotates on MTGO
+    price, and the rank outlives the rotation).
+So it is reported ONLY when the printing is currently penny-legal, and never
+as a tier — a stale rank is worse than no rank.  Do not promote it.
 """
 
 from __future__ import annotations
@@ -68,6 +91,56 @@ _UNRANKED = ("unranked", "Unranked")
 # Why a Commander-legal-only ranking has nothing to say about this card.  Shown
 # in the UI so an absent rank never reads as "nobody plays this".
 _UNRANKED_REASON = "not ranked by EDHREC — banned in Commander, a basic land, or too new"
+
+
+# The paper formats that actually drive singles demand, in the order a seller
+# thinks about them (newest-to-oldest constructed, then Pauper, then Commander).
+# Scryfall reports 23 formats; the rest are digital-only (historic, timeless,
+# alchemy, the Brawls) or vanishingly niche for a buylist, and listing them all
+# would bury the three that matter.  Commander stays in despite having its own
+# tier because a "banned" here is what explains an UNRANKED tier.
+TRACKED_FORMATS: tuple[tuple[str, str], ...] = (
+    ("standard",  "Standard"),
+    ("pioneer",   "Pioneer"),
+    ("modern",    "Modern"),
+    ("legacy",    "Legacy"),
+    ("vintage",   "Vintage"),
+    ("pauper",    "Pauper"),
+    ("commander", "Commander"),
+)
+
+# Scryfall's legality values.  Anything unrecognised is treated as not_legal
+# rather than shown raw, so a new value can never render as a mystery chip.
+_LEGALITY_VALUES = frozenset({"legal", "not_legal", "restricted", "banned"})
+
+
+def format_legality(printing: dict[str, Any]) -> dict[str, str]:
+    """Where this printing may legally be played, for TRACKED_FORMATS only.
+
+    Always returns every tracked key, so the UI can distinguish "not legal in
+    Standard" from "we have no legality data at all" (an empty dict).
+    """
+    legalities = printing.get("legalities") or {}
+    if not legalities:
+        return {}
+    out: dict[str, str] = {}
+    for key, _label in TRACKED_FORMATS:
+        value = legalities.get(key)
+        out[key] = value if value in _LEGALITY_VALUES else "not_legal"
+    return out
+
+
+def penny_rank(printing: dict[str, Any]) -> Optional[int]:
+    """Penny Dreadful rank, but ONLY while the printing is actually penny-legal.
+
+    The rank outlives the format's rotation — Counterspell reports rank 8 with
+    `legalities.penny` reading "not_legal" — so an ungated read would show a
+    number that no longer means anything.  See the module docstring.
+    """
+    if (printing.get("legalities") or {}).get("penny") != "legal":
+        return None
+    rank = printing.get("penny_rank")
+    return int(rank) if isinstance(rank, (int, float)) and rank else None
 
 
 def top_percent(rank: Optional[int]) -> Optional[float]:
@@ -142,4 +215,13 @@ def summarize(printing: dict[str, Any], print_count: Optional[int] = None) -> di
         out["unranked_reason"] = _UNRANKED_REASON
     if print_count is not None:
         out["print_count"] = int(print_count)
+    formats = format_legality(printing)
+    if formats:
+        out["formats"] = formats
+    # No percentile for the penny rank: Scryfall's search syntax exposes no
+    # `pennyrank` filter, so the size of the ranked pool cannot be measured the
+    # way the EDHREC pool was.  A raw rank it is, rather than an invented one.
+    penny = penny_rank(printing)
+    if penny is not None:
+        out["penny_rank"] = penny
     return out

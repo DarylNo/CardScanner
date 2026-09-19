@@ -69,6 +69,12 @@
   .spill.pop.staple { background:#3a2e08; color:#fcd34d; font-weight:700; }
   .spill.pop.strong { background:#2e1065; color:#c4b5fd; }
   .spill.pop.solid  { background:#0c2a4d; color:#93c5fd; }
+  /* Format legality — where the card may be PLAYED. Detail panel only: the
+     scan list is read at arm's length and has no room for seven more chips. */
+  .pfmt { display:flex; flex-wrap:wrap; gap:4px; margin-top:6px; align-items:center; }
+  .fmt { font-size:11px; padding:1px 6px; border-radius:4px; background:var(--line); color:#aeb4bf; }
+  .fmt.banned { background:#3a1c1c; color:#fca5a5; text-decoration:line-through; }
+  .fmt.restricted { background:#3f2d10; color:var(--warn); }
   .sprice { color:var(--good); font-weight:700; }
 
   /* detail */
@@ -238,13 +244,33 @@ function popPill(scan){
   return `<span class="spill pop ${escHtml(p.tier)}">${escHtml(p.label)}</span>`;
 }
 // Every popularity field the rows render, so the list signature covers it.
+// The format chips live in the detail panel, which re-fetches on open rather
+// than diffing, so they deliberately stay out of the list signature.
 function popSig(scan){
   const p = popOf(scan);
   return p ? p.tier + ':' + p.label : '';
 }
+// Which formats a card may be PLAYED in — a different question from how much
+// it is played, so these never get a popularity colour. `not_legal` is dropped:
+// most cards are not legal in most formats and listing that buries the rest.
+const FORMAT_LABELS = { standard:'Standard', pioneer:'Pioneer', modern:'Modern',
+  legacy:'Legacy', vintage:'Vintage', pauper:'Pauper', commander:'Commander' };
+function formatChipsHtml(scan){
+  const f = popOf(scan)?.formats;
+  if (!f) return '';
+  const chip = k => `<span class="fmt ${escHtml(f[k])}">${escHtml(FORMAT_LABELS[k])}</span>`;
+  const keys = Object.keys(FORMAT_LABELS);
+  const legal = keys.filter(k => f[k] === 'legal');
+  const flagged = keys.filter(k => f[k] === 'banned' || f[k] === 'restricted');
+  if (!legal.length && !flagged.length) return '';
+  // "plays in" only leads when something is actually legal (see desktop.html).
+  const lead = legal.length
+    ? `<span style="font-size:12px;color:var(--muted)">plays in</span>` : '';
+  return `<div class="pfmt">${lead}${legal.map(chip).join('')}${flagged.map(chip).join('')}</div>`;
+}
 
 /* ── version banner — proves which page+server combo is running ────────────── */
-const UI_VERSION = 'v26';
+const UI_VERSION = 'v27';
 fetch('/api/version').then(r => r.json())
   .then(d => { $('#ver').textContent = `${UI_VERSION} · ${d.version}`; })
   .catch(() => { $('#ver').textContent = UI_VERSION; });
@@ -1007,6 +1033,7 @@ async function renderScanDetail() {
         <div style="font-size:13px;color:var(--muted)">tap a printing below to select it</div>
         ${priceRange(scan) ? `<div class="pprice">~${priceRange(scan)} <span style="font-size:12px;color:var(--muted);font-weight:400">(top match)</span></div>` : ''}`}
       ${scan.error ? `<div style="font-size:12px;color:var(--bad);margin-top:6px">${escHtml(scan.error)}</div>` : ''}
+      ${formatChipsHtml(scan)}
     </div>
   </div>`;
   html += detailControls(scan);

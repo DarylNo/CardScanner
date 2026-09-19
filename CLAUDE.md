@@ -109,6 +109,31 @@ Tiers are percentiles of the ranked pool (32,296 cards), not raw ranks, so they
 survive the pool growing. The selection carries its own copy: after a re-pick
 `candidates[0]` is not necessarily what was chosen.
 
+**Formats beyond Commander — what exists and what doesn't.** Scryfall ships NO
+play-rate ranking for Modern/Standard/Pioneer/Legacy/Pauper, and there is no
+free API for one (measured 2026-09-19: MTGDecks and Moxfield both 403 a
+non-browser client; MTGGoldfish and MTGTop8 are HTML only). Two things in the
+same payload are worth having, and neither is popularity:
+- **`legalities`** → `format_legality()` surfaces 7 paper formats that drive
+  singles demand (the other 16 are digital-only or buylist-irrelevant).
+  Legality is WHERE a card may be played, never mixed into a tier — and it
+  explains an UNRANKED tier at a glance: Black Lotus reads "banned" in
+  Commander, which is exactly why EDHREC has no rank for it.
+- **`penny_rank`** is the only other play-rate number, and it stays secondary:
+  it is absent on essentially every card worth money (Penny Dreadful's pool is
+  DEFINED as cards under a tix on MTGO — Bolt, Thoughtseize, Sol Ring, Ragavan
+  and Black Lotus are all `None`; of 8 live cards probed only bulk Shivan
+  Dragon and Murder had one), and it goes stale against its own legality
+  (Counterspell reports rank 8 while `legalities.penny` reads `not_legal`).
+  It is shown ONLY when the printing is currently penny-legal. Don't promote it.
+The two live-data dead ends, so nobody retries them: **MTGO tix price is not a
+play-rate proxy** (it tracks demand against MTGO supply — Smothering Tithe
+$55.81/0.02 tix separates Commander-chase from constructed beautifully, then
+Lightning Bolt lands at 0.02 tix and Black Lotus at 61.08), and the open
+tournament dataset everyone cites, `Badaro/MTGODecklistCache`, **shut down in
+June 2025** (live successors: `fbettega/MTG_decklistcache`, and
+`davidfischer/modometa-mtgo-data` whose names are already Scryfall-normalized).
+
 **F2F client (`facetoface.py`) — each scanner prices from ITS OWN IP.** No
 proxy, no shared backend: the client reads the storefront's public Shopify
 JSON (`/search/suggest.json` → `/products/<handle>.json`) directly. A brief
