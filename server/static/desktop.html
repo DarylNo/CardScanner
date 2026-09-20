@@ -47,6 +47,12 @@
   .fchip { font-size: 12px; padding: 4px 10px; border-radius: 999px; background: var(--line);
            color: #cbd2dc; cursor: pointer; border: 1px solid transparent; }
   .fchip.on { background: #1c2740; border-color: var(--accent); color: #cfe1ff; }
+  .frow select { flex: 1 1 auto; min-width: 0; }
+  /* any/all toggle for how the price and popularity bars combine */
+  .mchip { font-size: 12px; padding: 6px 10px; border-radius: 8px; background: var(--line);
+           color: #cbd2dc; cursor: pointer; border: 1px solid transparent; white-space: nowrap; }
+  .mchip b { color: var(--accent); }
+  .fhint { font-size: 11px; color: var(--warn); margin-top: 6px; line-height: 1.35; }
 
   /* ── scan list ──────────────────────────────────────────────────────── */
   .row { display: flex; gap: 10px; padding: 10px 12px; border-bottom: 1px solid #1b1e26; cursor: pointer; align-items: center; }
@@ -194,8 +200,19 @@
       <div class="frow">
         <input id="pmin" class="price" type="number" min="0" step="0.25" placeholder="Min $">
         <input id="pmax" class="price" type="number" min="0" step="0.25" placeholder="Max $">
-        <button class="btn ghost sm" id="exclBtn" title="Exclude every priced card outside the range from the export (reversible per card)">Exclude filtered</button>
+        <button class="btn ghost sm" id="exclBtn" title="Exclude every priced card the filter hides from the export (reversible per card)">Exclude filtered</button>
       </div>
+      <div class="frow">
+        <select id="popmin" title="Hide cards played less than this in Commander (EDHREC)">
+          <option value="">Popularity: any</option>
+          <option value="played">Played or better</option>
+          <option value="solid">Popular or better</option>
+          <option value="strong">Very popular or better</option>
+          <option value="staple">Staples only</option>
+        </select>
+        <span class="mchip" id="fmode" title="ANY keeps a card that clears EITHER bar; ALL requires both">match <b>any</b></span>
+      </div>
+      <div class="fhint" id="fhint" style="display:none"></div>
       <div class="chipbar">
         <span class="fchip on" data-view="all">All</span>
         <span class="fchip" data-view="pending">Needs pick</span>
@@ -215,6 +232,11 @@ const CONDITIONS = ["NM","LP","MP","HP","DMG"];
 const FINISHES = ["Non-Foil","Foil","Etched"];
 let scans = [], focusedId = null, lastMaxId = 0, detailSig = "", listSig = "";
 let filterText = "", priceMin = null, priceMax = null, view = "all";
+// Popularity floor + how the two bars combine. "any" (OR) is the default and
+// the point of the pair: a price floor is what keeps an expensive UNRANKED
+// card (Black Lotus is Commander-banned, so EDHREC never ranks it) visible
+// when a popularity floor would otherwise drop it.
+let popMin = null, filterMode = "any";
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -359,11 +381,51 @@ function popSig(scan){
           p.penny_rank, fmt].join(",");
 }
 
+/* ── popularity floor + how the two bars combine ────────────────────────────
+   Tier order matches popularity.py. `unranked` sits at the bottom because it
+   is what basic lands and Commander-banned cards report — but "no EDHREC rank"
+   is NOT "unpopular" (see CLAUDE.md), so a popularity floor alone would drop
+   Black Lotus along with the bulk. That is exactly what "match any" is for:
+   the price floor rescues the valuable ones. */
+const POP_ORDER = ["staple", "strong", "solid", "played", "fringe", "unranked"];
+function meetsPopularity(scan){
+  if (popMin == null) return true;             // filter off
+  if (isProblem(scan)) return true;            // needs human eyes — never hidden
+  const tier = popOf(scan)?.tier;
+  if (!tier) return true;                      // no popularity data → never hide
+  const rank = POP_ORDER.indexOf(tier);
+  return rank !== -1 && rank <= POP_ORDER.indexOf(popMin);
+}
+// Which bars the user has actually switched on. An inactive bar never votes,
+// so "any" with one bar set behaves exactly like that bar alone.
+function activeFilters(){
+  return { price: priceMin != null || priceMax != null, pop: popMin != null };
+}
+function passesFilters(scan){
+  if (isProblem(scan)) return true;            // a "check" row is never filtered away
+  const on = activeFilters();
+  if (!on.price && !on.pop) return true;
+  const votes = [];
+  if (on.price) votes.push(inPriceRange(scan));
+  if (on.pop) votes.push(meetsPopularity(scan));
+  return filterMode === "all" ? votes.every(Boolean) : votes.some(Boolean);
+}
+// The one configuration that can hide a card worth money: a popularity floor
+// with no price floor beside it to catch the unranked.
+function renderFilterHint(){
+  const on = activeFilters();
+  const el = $("#fhint");
+  const risky = on.pop && filterMode === "any" && priceMin == null;
+  el.style.display = risky ? "block" : "none";
+  if (risky) el.textContent = "⚠ Unranked cards (basic lands, Commander-banned "
+    + "cards like Black Lotus) are hidden — set a Min $ so valuable ones still show.";
+}
+
 /* ── list ──────────────────────────────────────────────────────────────── */
 function visibleScans(){
   const q = filterText.toLowerCase();
   return scans.filter(s => {
-    if (!inPriceRange(s)) return false;
+    if (!passesFilters(s)) return false;
     if (view === "pending"  && s.status === "selected") return false;
     if (view === "selected" && s.status !== "selected") return false;
     if (view === "problem"  && !isProblem(s)) return false;
@@ -780,7 +842,7 @@ function sigOf(scan){
 
 // Version banner — page version · server git hash. Same rationale as the
 // phone: without it, "is this the old page?" is undebuggable.
-const UI_VERSION = "d22";
+const UI_VERSION = "d23";
 $("#sweepStopBtn").addEventListener("click", async () => {
   await jsend("/api/price-sweep/stop", "POST", {});
   toast("Sweep stopping — auto-sweep paused 10 min");
@@ -861,8 +923,17 @@ async function poll(){
 
 /* ── filters + actions ─────────────────────────────────────────────────── */
 $("#filter").addEventListener("input", e => { filterText = e.target.value; listSig=""; renderList(); });
-$("#pmin").addEventListener("input", e => { priceMin = e.target.value === "" ? null : Number(e.target.value); listSig=""; renderList(); });
-$("#pmax").addEventListener("input", e => { priceMax = e.target.value === "" ? null : Number(e.target.value); listSig=""; renderList(); });
+$("#pmin").addEventListener("input", e => { priceMin = e.target.value === "" ? null : Number(e.target.value); listSig=""; renderFilterHint(); renderList(); });
+$("#pmax").addEventListener("input", e => { priceMax = e.target.value === "" ? null : Number(e.target.value); listSig=""; renderFilterHint(); renderList(); });
+$("#popmin").addEventListener("change", e => {
+  popMin = e.target.value === "" ? null : e.target.value;
+  listSig=""; renderFilterHint(); renderList();
+});
+$("#fmode").addEventListener("click", () => {
+  filterMode = filterMode === "any" ? "all" : "any";
+  $("#fmode").innerHTML = `match <b>${filterMode}</b>`;
+  listSig=""; renderFilterHint(); renderList();
+});
 document.querySelectorAll(".fchip").forEach(chip =>
   chip.addEventListener("click", () => {
     document.querySelectorAll(".fchip").forEach(c => c.classList.remove("on"));
@@ -870,10 +941,12 @@ document.querySelectorAll(".fchip").forEach(chip =>
   }));
 
 $("#exclBtn").addEventListener("click", async () => {
-  // Bulk-exclude everything the price filter hides (priced, out of range,
-  // still included). Reversible per card via its include checkbox.
+  // Bulk-exclude everything the filter hides (priced, still included).
+  // Reversible per card via its include checkbox. The price requirement stays
+  // even when only the popularity bar is on: never drop a card from the export
+  // on a price we have not actually looked up.
   const targets = scans.filter(s =>
-    s.status === "selected" && s.included && priceOf(s) != null && !inPriceRange(s));
+    s.status === "selected" && s.included && priceOf(s) != null && !passesFilters(s));
   if (!targets.length) { toast("Nothing to exclude"); return; }
   for (const s of targets) await jsend(`/api/scans/${s.id}`, "PATCH", { included: false });
   poll(); toast(`Excluded ${targets.length} card${targets.length>1?'s':''}`);
