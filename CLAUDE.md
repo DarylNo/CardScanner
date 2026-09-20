@@ -176,19 +176,29 @@ every field a row renders MUST be in its signature or edits go stale.
 `/api/scans` returns newest-first. HTML is served `Cache-Control: no-store`.
 
 **List filters (both pages):** two bars — a price band and a popularity floor —
-combined by a match ANY/ALL toggle, ANY being the default. Rules that must hold:
-- **A "check" row is never filtered away**, by any bar. It needs human eyes.
-- **Partial knowledge never hides a card.** Unpriced scans and unsearched
-  candidate prints always show (see the price-sweep invariant above); a scan
-  with no popularity data always shows.
-- **ANY is what makes a popularity floor safe.** `unranked` sorts at the BOTTOM
-  of the tier order because that is what basic lands and Commander-banned cards
-  report — so a popularity floor ALONE hides Black Lotus along with the bulk.
-  The price floor ORed beside it is the rescue, and the UI warns (`#fhint`)
-  in exactly the one risky configuration: popularity floor set, no Min $.
+combined by a match ANY/ALL toggle, ANY being the default. Each bar votes
+**TRI-STATE**: pass, fail, or NULL = not known yet (unpriced, prints not all
+searched, or a scan carrying no popularity because it predates the feature).
+That third state is load-bearing — collapsing it to "pass" is the bug that made
+ALL barely differ from ANY (an unpriced card "satisfied" a Min $ it had never
+been measured against). Rules that must hold:
+- **A "check" row is never filtered away**, by any bar, in either mode.
+- **ANY (the default) never hides on ignorance.** Show on any pass; with no pass
+  but something still NULL, show anyway. Hide only when every active bar
+  actively fails. This is what keeps an unpriced Black Lotus on screen.
+- **ALL is the explicit opt-out.** Every active bar must be affirmatively
+  satisfied, so NULL does not count and anything unpriced or without popularity
+  is hidden. The `#fhint` line says so whenever ALL is on.
+- **`unranked` is an ANSWER, not a NULL.** It sorts at the BOTTOM of the tier
+  order (basic lands and Commander-banned cards report it), so a popularity
+  floor ALONE hides Black Lotus along with the bulk — the price floor ORed
+  beside it is the rescue, and `#fhint` warns in that configuration too.
 - **"Exclude filtered" still requires a known price** even when only the
   popularity bar is on — never drop a card from the export on a price that was
   never looked up.
+Verified by driving the real page in headless Chromium against stubbed
+`/api/scans` fixtures — not by reasoning about the predicates, which is how the
+ALL bug survived review in the first place.
 
 ## Release / distribution
 

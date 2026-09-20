@@ -287,7 +287,7 @@ function formatChipsHtml(scan){
 }
 
 /* ── version banner — proves which page+server combo is running ────────────── */
-const UI_VERSION = 'v28';
+const UI_VERSION = 'v29';
 fetch('/api/version').then(r => r.json())
   .then(d => { $('#ver').textContent = `${UI_VERSION} · ${d.version}`; })
   .catch(() => { $('#ver').textContent = UI_VERSION; });
@@ -817,18 +817,24 @@ function priceRange(s) {
 const isProblem = s => !!s.error || !(s.candidates || []).length;
 function priceOf(s) { const p = f2fBest(s); return p == null ? null : Number(p); }
 const inBand = p => (priceMin == null || p >= priceMin) && (priceMax == null || p <= priceMax);
-function inPriceRange(s) {
-  // "check" rows need human eyes — never price-filtered away.
-  if (isProblem(s)) return true;
-  if (priceMin == null && priceMax == null) return true;
+/* Tri-state vote: true = in band, false = out of band, null = NOT KNOWN YET
+   (unpriced, or an unpicked scan whose prints are not all searched). Folding
+   that third case into `true` is what made "match all" barely differ from
+   "match any" — see desktop.html. */
+function priceVote(s) {
+  if (priceMin == null && priceMax == null) return null;   // bar is off
   if (s.status === 'selected') {
     const p = priceOf(s);
-    return p == null ? true : inBand(p);
+    return p == null ? null : inBand(p);
   }
-  // Unpicked: hidden only when every print is searched AND none is in range.
   const { searched, vals } = printInfo(s);
-  if (!searched || !vals.length) return true;
+  if (!searched || !vals.length) return null;
   return vals.some(inBand);
+}
+// Old two-valued reading, where an unknown price counts as "do not hide".
+function inPriceRange(s) {
+  if (isProblem(s)) return true;
+  return priceVote(s) !== false;
 }
 
 /* Popularity floor. Tier order matches popularity.py; `unranked` sits at the
@@ -837,32 +843,45 @@ function inPriceRange(s) {
    drop Black Lotus with the bulk. "match any" is the guard: the price floor
    rescues the valuable ones. */
 const POP_ORDER = ['staple', 'strong', 'solid', 'played', 'fringe', 'unranked'];
-function meetsPopularity(s) {
-  if (popMin == null) return true;            // filter off
-  if (isProblem(s)) return true;              // needs human eyes — never hidden
+// Tri-state. null = the scan carries no popularity at all (scanned before the
+// feature existed) — NOT 'unranked', which is a real answer.
+function popVote(s) {
+  if (popMin == null) return null;            // bar is off
   const tier = popOf(s)?.tier;
-  if (!tier) return true;                     // no popularity data → never hide
+  if (!tier) return null;                     // not known
   const rank = POP_ORDER.indexOf(tier);
   return rank !== -1 && rank <= POP_ORDER.indexOf(popMin);
 }
+function meetsPopularity(s) { return popVote(s) !== false; }
 function activeFilters() {
   return { price: priceMin != null || priceMax != null, pop: popMin != null };
 }
+/* ANY: show on any PASS; with no pass but something unknown, show anyway —
+   we cannot rule the card out. Hide only when every active bar FAILS.
+   ALL: every active bar must be affirmatively satisfied, so an unknown does
+   not count and unpriced rows are hidden. See desktop.html for the rationale. */
 function passesFilters(s) {
   if (isProblem(s)) return true;
   const on = activeFilters();
   if (!on.price && !on.pop) return true;
   const votes = [];
-  if (on.price) votes.push(inPriceRange(s));
-  if (on.pop) votes.push(meetsPopularity(s));
-  return filterMode === 'all' ? votes.every(Boolean) : votes.some(Boolean);
+  if (on.price) votes.push(priceVote(s));
+  if (on.pop) votes.push(popVote(s));
+  if (filterMode === 'all') return votes.every(v => v === true);
+  return votes.some(v => v === true) || votes.some(v => v === null);
 }
 function renderFilterHint() {
   const el = $('#fhint');
-  const risky = popMin != null && filterMode === 'any' && priceMin == null;
-  el.style.display = risky ? 'block' : 'none';
-  if (risky) el.textContent = '⚠ Unranked cards (basics, Commander-banned) are '
-    + 'hidden — set a Min $ so valuable ones still show.';
+  const on = activeFilters();
+  let msg = '';
+  if ((on.price || on.pop) && filterMode === 'all')
+    msg = '⚠ “match all” hides cards not yet priced, or with no popularity data. '
+        + 'Switch to “any” to keep them.';
+  else if (on.pop && priceMin == null)
+    msg = '⚠ Unranked cards (basics, Commander-banned) are hidden — set a Min $ '
+        + 'so valuable ones still show.';
+  el.style.display = msg ? 'block' : 'none';
+  el.textContent = msg;
 }
 
 
