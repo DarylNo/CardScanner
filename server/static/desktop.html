@@ -291,20 +291,26 @@ function priceOf(scan){
   return p == null ? null : Number(p);
 }
 const inBand = p => (priceMin == null || p >= priceMin) && (priceMax == null || p <= priceMax);
-function inPriceRange(scan){
-  // A "check" row means the scan needs human eyes — no filter may ever
-  // hide one, whatever the price band says.
-  if (isProblem(scan)) return true;
-  if (priceMin == null && priceMax == null) return true;
+/* Tri-state vote: true = in band, false = out of band, null = NOT KNOWN YET.
+   The third case is the whole point. An unpriced scan, or an unpicked one whose
+   prints have not all been searched, is not "in band" — we simply cannot say.
+   Collapsing that to `true` is what made "match all" barely differ from "match
+   any": an unpriced card satisfied a Min $ it had never been measured against. */
+function priceVote(scan){
+  if (priceMin == null && priceMax == null) return null;   // bar is off
   if (scan.status === "selected"){
     const p = priceOf(scan);
-    return p == null ? true : inBand(p);   // unpriced never disappears
+    return p == null ? null : inBand(p);
   }
-  // Unpicked: hidden only when EVERY print it could be has been searched and
-  // none falls in the band — partial knowledge never hides a card.
   const { searched, vals } = printInfo(scan);
-  if (!searched || !vals.length) return true;
+  if (!searched || !vals.length) return null;
   return vals.some(inBand);
+}
+// Kept for anything that still wants the old two-valued reading, where an
+// unknown price counts as "do not hide".
+function inPriceRange(scan){
+  if (isProblem(scan)) return true;
+  return priceVote(scan) !== false;
 }
 
 function thumbFor(scan){
@@ -388,37 +394,57 @@ function popSig(scan){
    Black Lotus along with the bulk. That is exactly what "match any" is for:
    the price floor rescues the valuable ones. */
 const POP_ORDER = ["staple", "strong", "solid", "played", "fringe", "unranked"];
-function meetsPopularity(scan){
-  if (popMin == null) return true;             // filter off
-  if (isProblem(scan)) return true;            // needs human eyes — never hidden
+// Tri-state, same as priceVote. null = this scan carries no popularity at all
+// (scanned before the feature existed, or a trimmed payload) — NOT "unranked",
+// which is a real answer meaning EDHREC does not rank it.
+function popVote(scan){
+  if (popMin == null) return null;             // bar is off
   const tier = popOf(scan)?.tier;
-  if (!tier) return true;                      // no popularity data → never hide
+  if (!tier) return null;                      // not known
   const rank = POP_ORDER.indexOf(tier);
   return rank !== -1 && rank <= POP_ORDER.indexOf(popMin);
 }
+function meetsPopularity(scan){ return popVote(scan) !== false; }
 // Which bars the user has actually switched on. An inactive bar never votes,
 // so "any" with one bar set behaves exactly like that bar alone.
 function activeFilters(){
   return { price: priceMin != null || priceMax != null, pop: popMin != null };
 }
+/* ANY and ALL read an unknown differently, deliberately:
+
+   ANY (default, safe) — show on any PASS; with no pass but something still
+   unknown, show anyway, because we cannot rule the card out. Hide only when
+   every active bar actively FAILS. This is what keeps an unpriced Black Lotus
+   on screen under a popularity floor.
+
+   ALL (explicit narrow) — every active bar must be affirmatively satisfied, so
+   an unknown does NOT count. Anything not yet priced, or carrying no
+   popularity, is hidden. That is the point of asking for "all", and the hint
+   says so; ANY remains the default for anyone who does not want it. */
 function passesFilters(scan){
   if (isProblem(scan)) return true;            // a "check" row is never filtered away
   const on = activeFilters();
   if (!on.price && !on.pop) return true;
   const votes = [];
-  if (on.price) votes.push(inPriceRange(scan));
-  if (on.pop) votes.push(meetsPopularity(scan));
-  return filterMode === "all" ? votes.every(Boolean) : votes.some(Boolean);
+  if (on.price) votes.push(priceVote(scan));
+  if (on.pop) votes.push(popVote(scan));
+  if (filterMode === "all") return votes.every(v => v === true);
+  return votes.some(v => v === true) || votes.some(v => v === null);
 }
 // The one configuration that can hide a card worth money: a popularity floor
 // with no price floor beside it to catch the unranked.
 function renderFilterHint(){
   const on = activeFilters();
   const el = $("#fhint");
-  const risky = on.pop && filterMode === "any" && priceMin == null;
-  el.style.display = risky ? "block" : "none";
-  if (risky) el.textContent = "⚠ Unranked cards (basic lands, Commander-banned "
-    + "cards like Black Lotus) are hidden — set a Min $ so valuable ones still show.";
+  let msg = "";
+  if ((on.price || on.pop) && filterMode === "all")
+    msg = "⚠ “match all” requires every bar to be met, so cards not yet priced "
+        + "(or with no popularity data) are hidden too. Switch to “any” to keep them.";
+  else if (on.pop && priceMin == null)
+    msg = "⚠ Unranked cards (basic lands, Commander-banned cards like Black Lotus) "
+        + "are hidden — set a Min $ so valuable ones still show.";
+  el.style.display = msg ? "block" : "none";
+  el.textContent = msg;
 }
 
 /* ── list ──────────────────────────────────────────────────────────────── */
@@ -842,7 +868,7 @@ function sigOf(scan){
 
 // Version banner — page version · server git hash. Same rationale as the
 // phone: without it, "is this the old page?" is undebuggable.
-const UI_VERSION = "d23";
+const UI_VERSION = "d24";
 $("#sweepStopBtn").addEventListener("click", async () => {
   await jsend("/api/price-sweep/stop", "POST", {});
   toast("Sweep stopping — auto-sweep paused 10 min");
