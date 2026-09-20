@@ -53,6 +53,12 @@
   .bar button { flex:0 0 auto; font-size:13px; font-weight:600; padding:8px 12px;
                 border:0; border-radius:8px; background:var(--line); color:#cbd2dc; }
   .bar button.danger { background:#3a1c1c; color:#fca5a5; }
+  .bar select { flex:1 1 auto; min-width:0; padding:8px 10px; border-radius:8px;
+                border:1px solid #2a2f3a; background:var(--bg); color:var(--text); font:inherit; }
+  .bar .mchip { flex:0 0 auto; font-size:13px; padding:8px 12px; border-radius:8px;
+                background:var(--line); color:#cbd2dc; white-space:nowrap; }
+  .bar .mchip b { color:var(--accent); }
+  #fhint { font-size:11px; color:var(--warn); padding:0 12px 8px; line-height:1.35; }
   #scansStat { font-size:12px; color:var(--muted); padding:6px 12px; flex:0 0 auto; }
   #scansStat b { color:var(--text); } #scansStat .money { color:var(--good); }
   .srow { display:flex; gap:10px; padding:10px 14px; border-bottom:1px solid #1b1e26; align-items:center; }
@@ -145,6 +151,17 @@
       <input id="p-max" type="number" min="0" step="0.25" placeholder="Max $" inputmode="decimal">
       <button id="p-excl">Exclude filtered</button>
     </div>
+    <div class="bar">
+      <select id="p-popmin">
+        <option value="">Popularity: any</option>
+        <option value="played">Played or better</option>
+        <option value="solid">Popular or better</option>
+        <option value="strong">Very popular or better</option>
+        <option value="staple">Staples only</option>
+      </select>
+      <span class="mchip" id="p-fmode">match <b>any</b></span>
+    </div>
+    <div id="fhint" style="display:none"></div>
     <div id="scansStat"></div>
     <div class="bar" style="border-top:1px solid var(--line)">
       <button id="p-fill">Price missing</button>
@@ -270,7 +287,7 @@ function formatChipsHtml(scan){
 }
 
 /* ── version banner — proves which page+server combo is running ────────────── */
-const UI_VERSION = 'v27';
+const UI_VERSION = 'v28';
 fetch('/api/version').then(r => r.json())
   .then(d => { $('#ver').textContent = `${UI_VERSION} · ${d.version}`; })
   .catch(() => { $('#ver').textContent = UI_VERSION; });
@@ -754,6 +771,10 @@ stageEl.addEventListener('dblclick', () => {
 /* ── scans data + signature-diffed rendering ───────────────────────────────── */
 const scansPanel = $('#scansPanel'), scansList = $('#scansList'), scansBtn = $('#scansBtn');
 let scans = [], scansView = 'all', priceMin = null, priceMax = null;
+// Popularity floor + how the two bars combine (see desktop.html for why "any"
+// is the default: the price floor is what keeps an expensive UNRANKED card
+// visible when a popularity floor would otherwise drop it).
+let popMin = null, filterMode = 'any';
 let lastListSig = '', lastStatSig = '';
 let scansTimer = null;
 
@@ -810,6 +831,40 @@ function inPriceRange(s) {
   return vals.some(inBand);
 }
 
+/* Popularity floor. Tier order matches popularity.py; `unranked` sits at the
+   bottom because that is what basic lands and Commander-banned cards report —
+   but "no EDHREC rank" is NOT "unpopular", so a popularity floor alone would
+   drop Black Lotus with the bulk. "match any" is the guard: the price floor
+   rescues the valuable ones. */
+const POP_ORDER = ['staple', 'strong', 'solid', 'played', 'fringe', 'unranked'];
+function meetsPopularity(s) {
+  if (popMin == null) return true;            // filter off
+  if (isProblem(s)) return true;              // needs human eyes — never hidden
+  const tier = popOf(s)?.tier;
+  if (!tier) return true;                     // no popularity data → never hide
+  const rank = POP_ORDER.indexOf(tier);
+  return rank !== -1 && rank <= POP_ORDER.indexOf(popMin);
+}
+function activeFilters() {
+  return { price: priceMin != null || priceMax != null, pop: popMin != null };
+}
+function passesFilters(s) {
+  if (isProblem(s)) return true;
+  const on = activeFilters();
+  if (!on.price && !on.pop) return true;
+  const votes = [];
+  if (on.price) votes.push(inPriceRange(s));
+  if (on.pop) votes.push(meetsPopularity(s));
+  return filterMode === 'all' ? votes.every(Boolean) : votes.some(Boolean);
+}
+function renderFilterHint() {
+  const el = $('#fhint');
+  const risky = popMin != null && filterMode === 'any' && priceMin == null;
+  el.style.display = risky ? 'block' : 'none';
+  if (risky) el.textContent = '⚠ Unranked cards (basics, Commander-banned) are '
+    + 'hidden — set a Min $ so valuable ones still show.';
+}
+
 
 function renderScansPanel() {
   if (!scansPanel.classList.contains('open')) return;
@@ -824,7 +879,7 @@ function renderScansPanel() {
       `<span class="money">$${total.toFixed(2)}</span> to export`;
   }
 
-  const rows = scans.filter(s => inPriceRange(s) && (
+  const rows = scans.filter(s => passesFilters(s) && (
     scansView === 'all' ? true :
     scansView === 'pending' ? s.status !== 'selected' :
     scansView === 'selected' ? s.status === 'selected' :
@@ -832,7 +887,8 @@ function renderScansPanel() {
   // Sig must cover every rendered field: selection identity (re-picks swap
   // name/set/number/thumb), condition/finish edits, qty, flags, prices,
   // popularity.
-  const listSig = scansView + '~' + priceMin + '~' + priceMax + '~' +
+  const listSig = scansView + '~' + priceMin + '~' + priceMax +
+    '~' + popMin + '~' + filterMode + '~' +
     rows.map(s => [s.id, s.status, s.included,
                    s.selection?.scryfall_id, s.selection?.condition,
                    s.selection?.finish, s.selection?.quantity,
@@ -923,13 +979,22 @@ document.querySelectorAll('.vchip').forEach(chip =>
     scansView = chip.dataset.view;
     lastListSig = ''; renderScansPanel();
   }));
+$('#p-popmin').addEventListener('change', e => {
+  popMin = e.target.value === '' ? null : e.target.value;
+  renderFilterHint(); renderScansPanel();
+});
+$('#p-fmode').addEventListener('click', () => {
+  filterMode = filterMode === 'any' ? 'all' : 'any';
+  $('#p-fmode').innerHTML = `match <b>${filterMode}</b>`;
+  renderFilterHint(); renderScansPanel();
+});
 $('#p-min').addEventListener('input', e => {
   priceMin = e.target.value === '' ? null : Number(e.target.value);
-  lastListSig = ''; renderScansPanel();
+  lastListSig = ''; renderFilterHint(); renderScansPanel();
 });
 $('#p-max').addEventListener('input', e => {
   priceMax = e.target.value === '' ? null : Number(e.target.value);
-  lastListSig = ''; renderScansPanel();
+  lastListSig = ''; renderFilterHint(); renderScansPanel();
 });
 
 async function clearScans(only) {
@@ -960,7 +1025,7 @@ $('#p-fill').addEventListener('click', async () => {
 });
 $('#p-excl').addEventListener('click', async () => {
   const targets = scans.filter(s =>
-    s.status === 'selected' && s.included && priceOf(s) != null && !inPriceRange(s));
+    s.status === 'selected' && s.included && priceOf(s) != null && !passesFilters(s));
   if (!targets.length) { setStatus('Nothing to exclude.'); return; }
   for (const s of targets) await jsend(`/api/scans/${s.id}`, 'PATCH', { included: false });
   refreshScans();
