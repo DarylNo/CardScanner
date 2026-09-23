@@ -152,6 +152,8 @@
   #cmpNav { display: flex; gap: 10px; justify-content: center; align-items: center;
             margin-top: 10px; flex-wrap: wrap; }
   .card.viewing { border-color: var(--accent); }
+  .card.foldtile { display: flex; flex-direction: column; gap: 4px; align-items: center; justify-content: center; text-align: center;
+                   font-size: 13px; color: var(--muted); border: 2px dashed var(--line); min-height: 120px; }
   .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
            background: var(--card); border: 1px solid var(--line); padding: 10px 18px;
            border-radius: 10px; z-index: 50; display: none; }
@@ -535,6 +537,33 @@ function candBadges(c, idx){
   return `${ocr}${best}${d}${badges}`;
 }
 
+/* Artwork split. A name's printings usually fall into the artwork in front of
+   the camera and OTHER artworks far behind it — Fling: its four same-art
+   printings at Δ78–84, the next (a different artwork) at Δ146. Different
+   artworks are never the card, so when the distances break that cleanly they
+   are folded behind a "show" tile instead of crowding the picker.
+   Only on a clean break: the best match must be a good one (≤ the
+   art-decisive ceiling), and the jump between two neighbouring distances
+   must be ≥ ART_BREAK_GAP. Same-art neighbours sit ≤8 apart (the measured
+   wrong-#1 gaps behind _ART_DECISIVE_GAP), so 40 leaves wide headroom; when
+   a same-art spread is wide (Bone Splinters Δ124–190, alt art Δ208) there is
+   no such jump and nothing is folded. The OCR-confirmed printing and the
+   picked one are never folded. */
+const ART_BREAK_GAP = 40, ART_BREAK_CEILING = 140;
+let artExpandedFor = null;   // scan id whose other artworks are unfolded
+function artSplit(cands, chosenId){
+  const ds = cands.map(c => c.multi_distance);
+  if (cands.length < 2 || ds.some(d => d == null)) return { shown: cands, folded: [] };
+  const sorted = [...ds].sort((a, b) => a - b);
+  if (sorted[0] > ART_BREAK_CEILING) return { shown: cands, folded: [] };
+  let cut = null;
+  for (let i = 1; i < sorted.length; i++)
+    if (sorted[i] - sorted[i-1] >= ART_BREAK_GAP){ cut = sorted[i-1]; break; }
+  if (cut == null) return { shown: cands, folded: [] };
+  const keep = c => c.multi_distance <= cut || c.ocr_confirmed || c.id === chosenId;
+  return { shown: cands.filter(keep), folded: cands.filter(c => !keep(c)) };
+}
+
 function candCard(c, chosenId, idx){
   return `<div class="card ${c.id===chosenId?'chosen':''}" data-pick="${esc(c.id)}">
     <span class="cmp" data-cmp="${esc(c.id)}" title="Compare full-screen with your card photo">⇆ compare</span>
@@ -642,6 +671,15 @@ function renderDetail(){
   html += `<div class="sec">
     <div class="sechead"><h2>${sel?"Re-pick printing":"Pick the printing"}</h2>
       <span class="muted" style="font-size:12px">your card vs each printing — click a thumbnail or use ← → · double-click a thumbnail to pick it directly</span></div>`;
+  const split = artSplit(scan.candidates || [], chosenId);
+  const unfolded = artExpandedFor === scan.id;
+  const pickable = unfolded ? scan.candidates || [] : split.shown;
+  const foldTile = split.folded.length
+    ? `<div class="card foldtile" id="artFold">${unfolded
+        ? `Hide the ${split.folded.length} other artwork${split.folded.length===1?"":"s"}`
+        : `<b>+ ${split.folded.length} other artwork${split.folded.length===1?"":"s"}</b>
+           <span class="muted">don't look like your card · show</span>`}</div>`
+    : "";
   html += (scan.candidates||[]).length
     ? `<div id="cmpMain">
         <figure><img src="/api/scans/${scan.id}/image" onerror="this.parentNode.style.display='none'">
@@ -655,7 +693,7 @@ function renderDetail(){
           <div class="badges" id="cmpBadges" style="justify-content:center;margin-top:8px"></div>
         </figure>
       </div>
-      <div class="grid" id="cands">${scan.candidates.map((c,i)=>candCard(c,chosenId,i)).join("")}</div>`
+      <div class="grid" id="cands">${pickable.map((c,i)=>candCard(c,chosenId,i)).join("")}${foldTile}</div>`
     : `<p class="muted">No art candidates — use the search below.</p>`;
   html += `</div>`;
 
@@ -709,7 +747,13 @@ function wireDetail(scan){
   // Compare-FIRST picking: the big side-by-side is the main surface. A
   // thumbnail click loads that printing into the comparer (double-click
   // still picks instantly); ←/→ cycle; Pick files the one on screen.
-  const cands = scan.candidates || [];
+  const cands = artExpandedFor === scan.id
+    ? scan.candidates || [] : artSplit(scan.candidates || [], scan.selection?.scryfall_id).shown;
+  $("#artFold")?.addEventListener("click", () => {
+    artExpandedFor = artExpandedFor === scan.id ? null : scan.id;
+    const y = $("#right").scrollTop;
+    detailSig = ""; renderDetail(); $("#right").scrollTop = y;
+  });
   if ($("#cmpMain") && cands.length){
     let ci = Math.max(0, cands.findIndex(c => c.id === scan.selection?.scryfall_id));
     const showCmp = (i) => {
@@ -868,7 +912,7 @@ function sigOf(scan){
 
 // Version banner — page version · server git hash. Same rationale as the
 // phone: without it, "is this the old page?" is undebuggable.
-const UI_VERSION = "d24";
+const UI_VERSION = "d25";
 $("#sweepStopBtn").addEventListener("click", async () => {
   await jsend("/api/price-sweep/stop", "POST", {});
   toast("Sweep stopping — auto-sweep paused 10 min");
