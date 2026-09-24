@@ -220,8 +220,15 @@ ALL bug survived review in the first place.
   does nothing while the repo is private. Verify with an UNAUTHENTICATED
   request (a `git push` succeeding proves nothing — 404, not 403, is what
   GitHub returns anonymously for a private repo).
+- **Releasing = merging a version bump.** `auto-tag.yml` watches master:
+  when pyproject.toml's `version` has no `v<version>` tag, it tags that
+  commit and calls `release.yml` directly (a GITHUB_TOKEN tag push never
+  triggers `push: tags`). Claude Code cloud sessions can push ONLY their own
+  branch — every tag push is refused with 403 — so do not tag from a
+  session; bump the version in a PR and merge it. A hand-pushed tag still
+  works. Never bump without meaning to release: the merge IS the release.
 - **ALWAYS end a push session by bumping `version` in
-  pyproject.toml and tagging a release** — script installs (uv/pipx)
+  pyproject.toml** (which, merged, tags the release) — script installs (uv/pipx)
   identify as the package version and their update banner compares against
   the latest RELEASE tag; master-only commits are invisible to them.
   Bump BEFORE tagging: installs come from master, so an install made in the
