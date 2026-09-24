@@ -287,7 +287,7 @@ function formatChipsHtml(scan){
 }
 
 /* ── version banner — proves which page+server combo is running ────────────── */
-const UI_VERSION = 'v29';
+const UI_VERSION = 'v30';
 fetch('/api/version').then(r => r.json())
   .then(d => { $('#ver').textContent = `${UI_VERSION} · ${d.version}`; })
   .catch(() => { $('#ver').textContent = UI_VERSION; });
@@ -791,7 +791,9 @@ function f2fBest(scan) {
 // price filter hide the card, because only then is "no print it could be is
 // in range" actually known.
 function printInfo(s) {
-  const cands = s.candidates || [];
+  // A different artwork (server-set other_art — artwork.py) is never the card:
+  // unpriced by the sweep, outside the range, not needed for "searched".
+  const cands = (s.candidates || []).filter(c => !c.other_art);
   const searched = cands.length > 0 && cands.every(c => c.f2f_conditions != null);
   const vals = [];
   for (const c of cands) {

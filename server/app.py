@@ -28,6 +28,7 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, Response
 from fastapi.staticfiles import StaticFiles
 
+from mtg_card_scanner.artwork import flag_other_art
 from mtg_card_scanner.facetoface import F2FUnavailableError
 from server.export import build_mx_export
 from server.store import ScanStore
@@ -635,7 +636,9 @@ def create_app(
           - scans with a chosen printing but no completed search → the selection
           - UNPICKED scans → EVERY candidate printing not yet searched, so the
             price filter may hide a pending card only once every print it
-            could possibly be is known to be out of range.
+            could possibly be is known to be out of range. "Could be" excludes
+            a different ARTWORK past a clean distance break (artwork.py) —
+            those are never the card, so they cost no F2F budget.
         A search that found no listing is recorded (empty conditions) so it is
         not re-searched every sweep; the manual per-scan button still forces.
         """
@@ -648,8 +651,10 @@ def create_app(
                                     bool(sel.get("foil", False)),
                                     sel.get("name", "")))
             else:
+                flag_other_art(s)
                 pending = [c for c in (s.get("candidates") or [])
-                           if c.get("f2f_conditions") is None and c.get("name")]
+                           if c.get("f2f_conditions") is None and c.get("name")
+                           and not c["other_art"]]
                 for i, c in enumerate(pending, 1):
                     # Header readout: "Corpulent Corpse [TSR #104] · print 2/5"
                     label = c.get("name", "")
@@ -904,14 +909,17 @@ def create_app(
     # ── review (desktop) ───────────────────────────────────────────────────────
     @app.get("/api/scans")
     def list_scans():
-        return store.list_scans()
+        # other_art is derived per read (artwork.py), never stored: both
+        # pages fold those printings out of the picker and out of the
+        # pending card's price range/filter, matching what the sweep prices.
+        return [flag_other_art(s) for s in store.list_scans()]
 
     @app.get("/api/scans/{scan_id}")
     def get_scan(scan_id: int):
         scan = store.get_scan(scan_id)
         if not scan:
             return JSONResponse({"error": "not found"}, status_code=404)
-        return scan
+        return flag_other_art(scan)
 
     def _apply_selection_core(scan_id: int, printing: dict, condition: str,
                               finish: str, quantity: int,
