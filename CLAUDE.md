@@ -160,8 +160,13 @@ retryable), a confirmed miss returns None (records an empty marker).
 
 **Pricing sweep (`server/app.py`):** ONE F2F consumer while active (all other
 pricers stand down); selected scans price ONLY their selection; unpicked
-scans price EVERY candidate print (the price filter may hide a pending card
-only on full knowledge); targets are rechecked before each fetch (picks land
+scans price EVERY candidate print that shares the scanned ARTWORK (the price
+filter may hide a pending card only on full knowledge). A different artwork
+past a clean distance break (`artwork.py`: best ≤140, neighbour jump ≥40 —
+Fling's same-art Δ78–84 vs Δ146+, while Bone Splinters' wide same-art
+Δ124–190 splits nothing) is never the card: `other_art` is derived on every
+`/api/scans` read, never stored; the sweep skips it; both pages keep it out
+of the range, the filter and "searched", and the picker folds it; targets are rechecked before each fetch (picks land
 mid-sweep); circuit breaker after 5 consecutive unavailable → 10-min
 cooldown; manual start overrides.
 

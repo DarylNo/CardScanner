@@ -261,9 +261,11 @@ function f2fBest(scan){
 // Low–high across every listed condition — shown for pending scans too, since
 // Per-print F2F data on an unpicked scan (filled by the auto-sweeper).
 // searched is true once EVERY candidate print has a completed search — only
-// then may the price filter hide the card.
+// then may the price filter hide the card. A different artwork (other_art,
+// set by the server — artwork.py) is never the card: the sweep does not price
+// it, and it neither widens the range nor counts toward "searched".
 function printInfo(s){
-  const cands = s.candidates || [];
+  const cands = (s.candidates || []).filter(c => !c.other_art);
   const searched = cands.length > 0 && cands.every(c => c.f2f_conditions != null);
   const vals = [];
   for (const c of cands){
@@ -537,30 +539,14 @@ function candBadges(c, idx){
   return `${ocr}${best}${d}${badges}`;
 }
 
-/* Artwork split. A name's printings usually fall into the artwork in front of
-   the camera and OTHER artworks far behind it — Fling: its four same-art
-   printings at Δ78–84, the next (a different artwork) at Δ146. Different
-   artworks are never the card, so when the distances break that cleanly they
-   are folded behind a "show" tile instead of crowding the picker.
-   Only on a clean break: the best match must be a good one (≤ the
-   art-decisive ceiling), and the jump between two neighbouring distances
-   must be ≥ ART_BREAK_GAP. Same-art neighbours sit ≤8 apart (the measured
-   wrong-#1 gaps behind _ART_DECISIVE_GAP), so 40 leaves wide headroom; when
-   a same-art spread is wide (Bone Splinters Δ124–190, alt art Δ208) there is
-   no such jump and nothing is folded. The OCR-confirmed printing and the
-   picked one are never folded. */
-const ART_BREAK_GAP = 40, ART_BREAK_CEILING = 140;
+/* Artwork split. A different artwork past a clean distance break (the
+   server's other_art flag — artwork.py has the thresholds and the Fling /
+   Bone Splinters measurements) is folded behind a "show" tile instead of
+   crowding the picker. The picked printing is never folded; the server
+   already never flags the OCR-confirmed one. */
 let artExpandedFor = null;   // scan id whose other artworks are unfolded
 function artSplit(cands, chosenId){
-  const ds = cands.map(c => c.multi_distance);
-  if (cands.length < 2 || ds.some(d => d == null)) return { shown: cands, folded: [] };
-  const sorted = [...ds].sort((a, b) => a - b);
-  if (sorted[0] > ART_BREAK_CEILING) return { shown: cands, folded: [] };
-  let cut = null;
-  for (let i = 1; i < sorted.length; i++)
-    if (sorted[i] - sorted[i-1] >= ART_BREAK_GAP){ cut = sorted[i-1]; break; }
-  if (cut == null) return { shown: cands, folded: [] };
-  const keep = c => c.multi_distance <= cut || c.ocr_confirmed || c.id === chosenId;
+  const keep = c => !c.other_art || c.id === chosenId;
   return { shown: cands.filter(keep), folded: cands.filter(c => !keep(c)) };
 }
 
@@ -912,7 +898,7 @@ function sigOf(scan){
 
 // Version banner — page version · server git hash. Same rationale as the
 // phone: without it, "is this the old page?" is undebuggable.
-const UI_VERSION = "d25";
+const UI_VERSION = "d26";
 $("#sweepStopBtn").addEventListener("click", async () => {
   await jsend("/api/price-sweep/stop", "POST", {});
   toast("Sweep stopping — auto-sweep paused 10 min");

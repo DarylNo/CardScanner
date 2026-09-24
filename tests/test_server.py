@@ -344,6 +344,41 @@ def test_price_missing_prices_every_print_of_unpicked(tmp_path):
     assert f2f.calls == calls_before
 
 
+class TwoArtworkPipeline(FakePipeline):
+    """Fling-shaped: two same-art prints, then a different artwork (Δ146)."""
+    def scan_candidates(self, frames, top_n=12):
+        out = dict(super().scan_candidates(frames, top_n))
+        out["candidates"] = [
+            {**CANDIDATES[0], "multi_distance": 78},
+            {**CANDIDATES[1], "multi_distance": 80},
+            {**CANDIDATES[1], "id": "id-alt", "set": "pal01",
+             "collector_number": "6", "multi_distance": 146},
+        ]
+        return out
+
+
+def test_sweep_skips_a_different_artwork(tmp_path):
+    """A printing past a clean artwork break is never the card: the sweep
+    spends no F2F request on it, and /api/scans flags it other_art so the
+    pages keep it out of the pending card's price range and filter."""
+    f2f = FlakyF2F()
+    f2f.enabled = True
+    app = create_app(pipeline_factory=lambda: TwoArtworkPipeline(),
+                     store=ScanStore(tmp_path / "s.db"), f2f=f2f,
+                     scan_images_dir=tmp_path / "imgs",
+                     auto_sweep_interval=None)
+    c = TestClient(app)
+    c.post("/api/scan", files={"files": ("c.jpg", _jpeg_bytes(), "image/jpeg")})
+    assert c.post("/api/scans/price-missing").json()["queued"] == 2
+    (scan,) = c.get("/api/scans").json()
+    by_id = {cc["id"]: cc for cc in scan["candidates"]}
+    assert [cc["other_art"] for cc in scan["candidates"]] == [False, False, True]
+    assert by_id["id-alt"].get("f2f_conditions") is None
+    assert by_id["id-m10"]["f2f_conditions"] == {"NM": 1.99}
+    assert c.post("/api/scans/price-missing").json()["queued"] == 0
+    assert c.get(f"/api/scans/{scan['id']}").json()["candidates"][2]["other_art"] is True
+
+
 def test_failed_print_search_is_not_requeued(tmp_path):
     """A search that finds no listing records an empty result — the sweeper
     must not hammer F2F for the same unlisted prints every minute."""
