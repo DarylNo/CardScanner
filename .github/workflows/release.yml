@@ -1,4 +1,7 @@
 # Build double-clickable binaries for every platform on version tags (v*).
+# Two ways in: a hand-pushed tag, or auto-tag.yml calling this workflow after
+# a version bump lands on master (a tag pushed with GITHUB_TOKEN does NOT
+# trigger `push: tags`, so the caller passes the tag in instead).
 # NOTE: authored but not yet exercised in CI — verify each artifact boots
 # before announcing a release. Unsigned macOS binaries need right-click→Open
 # on first launch (Gatekeeper); avoiding that requires Apple notarization.
@@ -6,6 +9,12 @@ name: release
 on:
   push:
     tags: ["v*"]
+  workflow_call:
+    inputs:
+      tag:
+        description: "tag to build and publish, e.g. v1.0.6"
+        required: true
+        type: string
 permissions:
   contents: write   # create the GitHub Release + upload assets (default token is read-only)
 jobs:
@@ -35,6 +44,8 @@ jobs:
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -73,4 +84,5 @@ jobs:
           merge-multiple: true
       - uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ inputs.tag || github.ref_name }}
           files: mtg-card-scanner-*

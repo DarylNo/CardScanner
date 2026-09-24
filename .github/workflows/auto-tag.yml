@@ -1,0 +1,47 @@
+# Release = merge a version bump. When pyproject.toml's version on master has
+# no v<version> tag yet, tag that commit and run the release build.
+#
+# Why this exists: Claude Code cloud sessions can push only their own working
+# branch — every tag push is refused (403) — so a release used to need a human
+# terminal. It also keeps CLAUDE.md's "bump BEFORE tagging" rule by
+# construction: the tag is cut from the commit that carries the bump.
+#
+# A tag pushed with GITHUB_TOKEN does not trigger release.yml's `push: tags`,
+# so the build is called directly (and a hand-pushed tag still works as before).
+name: auto-tag
+on:
+  push:
+    branches: [master]
+    paths: [pyproject.toml, .github/workflows/auto-tag.yml]
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency: auto-tag      # two quick bumps must not race for the same tag
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.v.outputs.tag }}
+      created: ${{ steps.v.outputs.created }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: v
+        run: |
+          version=$(python3 -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+          tag="v$version"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null; then
+            echo "$tag already exists — nothing to release"
+            echo "created=false" >> "$GITHUB_OUTPUT"
+          else
+            git tag "$tag" "$GITHUB_SHA"
+            git push origin "refs/tags/$tag"
+            echo "tagged $GITHUB_SHA as $tag"
+            echo "created=true" >> "$GITHUB_OUTPUT"
+          fi
+  release:
+    needs: tag
+    if: needs.tag.outputs.created == 'true'
+    uses: ./.github/workflows/release.yml
+    with:
+      tag: ${{ needs.tag.outputs.tag }}
