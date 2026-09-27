@@ -835,3 +835,29 @@ def test_a_resent_upload_after_discard_stays_discarded(tmp_path):
     b = _post_upload(client, "job9-p").json()
     assert b["id"] == a["id"]
     assert store.list_scans() == []
+
+
+def test_concurrent_twins_of_one_upload_file_one_row(tmp_path):
+    # A client timeout re-sends while the first copy is still identifying:
+    # the twin waits for it instead of filing its own row.
+    import threading
+    import time
+
+    class Slow(FakePipeline):
+        def scan_candidates(self, frames, top_n=12):
+            time.sleep(0.4)
+            return super().scan_candidates(frames, top_n)
+
+    store = ScanStore(tmp_path / "twins.db")
+    app = create_app(pipeline_factory=Slow, store=store, f2f=FakeF2F(),
+                     scan_images_dir=tmp_path / "imgs", auto_sweep_interval=None)
+    out = []
+    with TestClient(app) as c:              # ONE event loop, as under uvicorn
+        ts = [threading.Thread(target=lambda: out.append(
+            _post_upload(c, "job11-p").json()["id"])) for _ in range(3)]
+        for t in ts:
+            t.start()
+        for t in ts:
+            t.join(10)
+    assert len(out) == 3 and len(set(out)) == 1
+    assert len(store.list_scans()) == 1

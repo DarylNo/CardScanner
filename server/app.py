@@ -435,9 +435,8 @@ def create_app(
         if uid:
             # Everything between these checks and the claim runs on the event
             # loop without an await, so two copies can't both claim the id.
-            waiter = upload_inflight.get(uid)
-            if waiter is not None:
-                await waiter.wait()
+            while uid in upload_inflight:          # a twin is mid-scan
+                await upload_inflight[uid].wait()
             if uid in upload_seen:
                 return _replay_upload(upload_seen[uid])
             upload_inflight[uid] = asyncio.Event()
@@ -967,10 +966,13 @@ def create_app(
     # Auto-sweep: any unpriced work is picked up every minute without the user
     # pressing anything. A manual stop pauses it for 10 minutes; a manual
     # start clears the pause.
+    auto_stop = threading.Event()
+
     def _auto_sweep_loop(interval: float) -> None:
         while True:
             sweep["next_check_at"] = time.monotonic() + interval
-            time.sleep(interval)
+            if auto_stop.wait(interval):
+                return
             try:
                 if sweep["active"]:
                     continue
@@ -989,6 +991,9 @@ def create_app(
             except Exception as exc:
                 print(f"  [server] auto-sweep error: {exc}")
 
+    # Tests stop it: a leftover tick loading the OCR engine in a daemon
+    # thread aborts the interpreter at exit (exit 134 after "all passed").
+    app.state.stop_auto_sweep = auto_stop.set
     if auto_sweep_interval:
         threading.Thread(target=_auto_sweep_loop, args=(auto_sweep_interval,),
                          daemon=True, name="price-auto-sweep").start()

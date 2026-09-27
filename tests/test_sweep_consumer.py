@@ -121,17 +121,25 @@ def test_price_check_leaves_the_breaker_cooldown_alone(tmp_path, monkeypatch):
     # mid-import aborts the process (exit 134) — keep OCR out of it.
     from mtg_card_scanner import ocr_id
     monkeypatch.setattr(ocr_id, "_ocr_status", {"available": False, "error": "test"})
+    # The thread is stopped at the end: left running, its next tick after
+    # monkeypatch undoes the stub loads the real engine anyway (measured).
     f2f = CountF2F()
     app, c = _app(tmp_path, f2f, interval=0.2)
-    sweep = app.state.sweep
-    ids = [_scan(c)["id"] for _ in range(3)]
-    time.sleep(0.5)
-    sweep["backoff_until"] = time.monotonic() + 600      # breaker just tripped
-    f2f.calls.clear()
-    c.post(f"/api/scans/{ids[0]}/price-check")
-    time.sleep(1.2)                                      # several auto-ticks
-    assert sweep["backoff_until"] is not None
-    assert all(cn.startswith("1") for cn in f2f.calls), f2f.calls   # only the checked card
+    try:
+        sweep = app.state.sweep
+        ids = [_scan(c)["id"] for _ in range(3)]
+        time.sleep(0.5)
+        sweep["backoff_until"] = time.monotonic() + 600      # breaker just tripped
+        f2f.calls.clear()
+        c.post(f"/api/scans/{ids[0]}/price-check")
+        time.sleep(1.2)                                      # several auto-ticks
+        assert sweep["backoff_until"] is not None
+        assert all(cn.startswith("1") for cn in f2f.calls), f2f.calls   # only the checked card
+    finally:
+        app.state.stop_auto_sweep()
+        for t in threading.enumerate():
+            if t.name == "price-auto-sweep":
+                t.join(5)
 
 
 def test_stop_does_not_strand_a_queued_price_check(tmp_path):
