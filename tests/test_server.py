@@ -732,3 +732,72 @@ def test_phone_qr_carries_the_cert_pin(client, monkeypatch, tmp_path):
     seen.clear()
     client.get("/api/phone-qr?ip=192.168.1.9")
     assert seen["url"].endswith("/phone")              # no cert known → plain URL
+
+
+# ── walk-around price check (POST /api/scans/{id}/price-check) ────────────────
+
+class NumberedPipeline(FakePipeline):
+    """Every scan gets its own collector numbers, so pricing ORDER is visible."""
+    def __init__(self):
+        self.n = 0
+
+    def scan_candidates(self, frames, top_n=12):
+        self.n += 1
+        out = dict(super().scan_candidates(frames, top_n))
+        out["candidates"] = [{**c, "id": f"{c['id']}-{self.n}",
+                              "collector_number": f"{self.n}{i}"}
+                             for i, c in enumerate(CANDIDATES)]
+        return out
+
+
+class RecordingF2F(FakeF2F):
+    def __init__(self):
+        self.calls = []
+
+    def get_price(self, name, set_code, collector_number, foil=False, set_name=""):
+        self.calls.append(collector_number)
+        return super().get_price(name, set_code, collector_number, foil, set_name)
+
+
+def _price_app(tmp_path):
+    f2f = RecordingF2F()
+    app = create_app(pipeline_factory=NumberedPipeline, store=ScanStore(tmp_path / "s.db"),
+                     f2f=f2f, scan_images_dir=tmp_path / "imgs", auto_sweep_interval=None)
+    c = TestClient(app)
+    ids = [c.post("/api/scan", files={"files": ("c.jpg", _jpeg_bytes(), "image/jpeg")}).json()["id"]
+           for _ in range(2)]
+    f2f.calls.clear()               # scan-time pricing of the top candidate
+    return app, c, f2f, ids
+
+
+def test_price_check_prices_only_that_scan(tmp_path):
+    app, c, f2f, (first, second) = _price_app(tmp_path)
+    r = c.post(f"/api/scans/{first}/price-check").json()
+    assert r["queued"] == 2 and not r.get("sweeping")
+    assert sorted(f2f.calls) == ["10", "11"]                 # scan 1's prints only
+    scan2 = c.get(f"/api/scans/{second}").json()
+    assert all(cc.get("f2f_conditions") is None for cc in scan2["candidates"])
+    assert c.post(f"/api/scans/{first}/price-check").json()["queued"] == 0   # all searched
+    assert c.post("/api/scans/999/price-check").status_code == 404
+
+
+def test_price_check_jumps_a_running_sweeps_queue(tmp_path):
+    app, c, f2f, (first, second) = _price_app(tmp_path)
+    sweep = app.state.sweep
+    sweep["active"] = True                                   # a sweep is mid-run
+    r = c.post(f"/api/scans/{first}/price-check").json()
+    assert r == {"queued": 2, "sweeping": True}
+    assert len(sweep["priority"]) == 2
+    sweep["active"] = False                                  # ...let the next sweep drain it
+    c.post("/api/scans/price-missing")
+    # Newest-first would price scan 2 first; the price check went to the front.
+    assert f2f.calls[:2] == ["10", "11"] and sorted(f2f.calls[2:]) == ["20", "21"]
+    assert not sweep["priority"] and not sweep["active"]
+    assert sweep["done"] == sweep["total"]
+
+
+def test_price_check_during_a_stop_queues_nothing(tmp_path):
+    app, c, f2f, (first, _) = _price_app(tmp_path)
+    app.state.sweep.update(active=True, cancel=True)
+    assert c.post(f"/api/scans/{first}/price-check").json() == {"queued": 0, "busy": True}
+    assert not app.state.sweep["priority"]

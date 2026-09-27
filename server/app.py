@@ -13,6 +13,7 @@ a built art index (inject a fake pipeline).
 
 from __future__ import annotations
 
+import collections
 import os
 import subprocess
 import sys
@@ -575,7 +576,10 @@ def create_app(
     # searched right now, how far along, how fast. The sweep was previously
     # invisible; the UIs poll /api/price-status to display it.
     sweep = {"active": False, "total": 0, "done": 0, "current": "", "started": 0.0,
-             "cancel": False, "manual_stop_at": None}
+             "cancel": False, "manual_stop_at": None,
+             # Price checks (POST /api/scans/{id}/price-check) jump the queue
+             # of a RUNNING sweep instead of starting a second F2F consumer.
+             "priority": collections.deque()}
     # Serializes sweep start (check-and-set) — without it, price_missing's
     # active check and the 60s auto-tick can both pass and run two sweeps
     # concurrently, whose finally-blocks then make the survivor uncancellable.
@@ -652,7 +656,7 @@ def create_app(
             return {"stopping": True}
         return {"stopping": False}
 
-    def _collect_price_targets() -> list[tuple[str, int, dict, bool, str]]:
+    def _collect_price_targets(only: Optional[int] = None) -> list[tuple[str, int, dict, bool, str]]:
         """
         Everything the sweeper still owes a price:
           - scans with a chosen printing but no completed search → the selection
@@ -663,9 +667,11 @@ def create_app(
             those are never the card, so they cost no F2F budget.
         A search that found no listing is recorded (empty conditions) so it is
         not re-searched every sweep; the manual per-scan button still forces.
+        *only* restricts it to one scan (a price check).
         """
         targets: list[tuple[str, int, dict, bool, str]] = []
-        for s in store.list_scans():
+        rows = store.list_scans() if only is None else [r for r in [store.get_scan(only)] if r]
+        for s in rows:
             if s.get("selection"):
                 if s.get("f2f") is None and s["selection"].get("name"):
                     sel = s["selection"]
@@ -694,8 +700,8 @@ def create_app(
         with sweep_lock:
             if sweep["active"]:
                 return False
-            sweep.update(active=True, total=len(targets), done=0, current="",
-                         cancel=False, started=time.monotonic())
+            sweep.update(active=True, total=len(targets) + len(sweep["priority"]),
+                         done=0, current="", cancel=False, started=time.monotonic())
             evt = getattr(f2f, "interrupt", None)
             if evt is not None:
                 evt.clear()
@@ -710,8 +716,21 @@ def create_app(
         # consecutive unavailable targets → abort and cool down 10 minutes so
         # the bucket actually recovers; a manual start overrides the cooldown.
         unavailable_streak = 0
+        queue = collections.deque(items)
         try:
-            for kind, sid, c, foil, label in items:
+            while True:
+                # Price-check targets first. Deciding "nothing left" and going
+                # inactive happen under ONE lock hold, so a price check either
+                # lands in this queue or sees the sweep inactive and claims
+                # its own — never stranded in between.
+                with sweep_lock:
+                    if sweep["priority"]:
+                        kind, sid, c, foil, label = sweep["priority"].popleft()
+                    elif queue:
+                        kind, sid, c, foil, label = queue.popleft()
+                    else:
+                        sweep["active"] = False
+                        break
                 if sweep.get("cancel"):
                     print(f"  [server] price sweep cancelled at {sweep['done']}/{sweep['total']}")
                     break
@@ -920,6 +939,36 @@ def create_app(
             return {"queued": 0, "already_running": True}
         background_tasks.add_task(_run_sweep, targets)
         return {"queued": len(targets)}
+
+    @app.post("/api/scans/{scan_id}/price-check")
+    async def price_check(scan_id: int, background_tasks: BackgroundTasks):
+        """
+        Price ONE scan now — the phone app's walk-around "what's it worth?"
+        (a handheld scan opens its card with prices filling in live). Prices
+        exactly what the sweep would for it: the selection, or every
+        same-artwork candidate print. Still ONE F2F consumer: a running sweep
+        takes these targets at the FRONT of its queue; otherwise a one-scan
+        sweep starts. A manual action, so it overrides the throttle cooldown
+        like price-missing — but it does not lift a manual-stop pause.
+        """
+        if not store.get_scan(scan_id):
+            return JSONResponse({"error": "not found"}, status_code=404)
+        targets = _collect_price_targets(only=scan_id)
+        if not targets:
+            return {"queued": 0}
+        sweep["backoff_until"] = None
+        for _ in range(3):      # a sweep may finish between our two checks
+            if _claim_sweep(targets):
+                background_tasks.add_task(_run_sweep, targets)
+                return {"queued": len(targets)}
+            with sweep_lock:
+                if sweep["active"]:
+                    if sweep.get("cancel"):
+                        return {"queued": 0, "busy": True}      # a stop is under way
+                    sweep["priority"].extend(targets)
+                    sweep["total"] += len(targets)
+                    return {"queued": len(targets), "sweeping": True}
+        return {"queued": 0, "busy": True}
 
     @app.get("/api/scans/{scan_id}/image")
     def scan_image(scan_id: int):
@@ -1170,6 +1219,7 @@ def create_app(
         )
 
     app.state.store = store
+    app.state.sweep = sweep          # tests drive the price-check/sweep interplay
     return app
 
 

@@ -98,6 +98,14 @@
                background:var(--line); display:block; }
   .pcard .pt { font-size:11px; margin-top:4px; line-height:1.25; color:#cbd2dc; }
   .pprice { font-size:18px; font-weight:700; color:var(--good); margin:6px 0; }
+  .pcard .pp { font-size:12px; font-weight:700; color:var(--good); margin-top:2px; }
+  .pcard .pp.none { color:var(--muted); font-weight:400; }
+  .pfold { grid-column:1/-1; font-size:12px; color:var(--muted); text-align:center;
+           padding:8px; border:1px dashed var(--line); border-radius:8px; }
+  #pcBar { position:sticky; bottom:0; display:flex; gap:10px; padding:10px 0 4px;
+           background:linear-gradient(transparent, var(--bg) 30%); }
+  #pcBar button { flex:1; font-size:16px; padding:12px; border-radius:10px; }
+  #pcDiscard { background:#3a1c1c; color:#fca5a5; border-color:#5b2a2a; }
   .msrow { display:flex; gap:8px; margin-top:8px; }
   .msrow input { flex:1; padding:8px 10px; border-radius:8px; border:1px solid #2a2f3a;
                  background:var(--bg); color:var(--text); font:inherit; }
@@ -229,6 +237,11 @@ const DEBUG = new URLSearchParams(location.search).has('debug');
 // camera section runs differently; the detection loop simply never starts.
 const PANEL = new URLSearchParams(location.search).has('panel');
 const PANEL_DETAIL = Number(new URLSearchParams(location.search).get('detail')) || 0;
+// &pricecheck=1 — the app's walk-around "what's it worth?": price this card
+// NOW (jumps the sweep queue server-side), show prices as they land, then
+// Keep (it stays filed) or Discard (deleted). Backing out keeps it — a scan
+// is never deleted without the explicit tap.
+const PRICE_CHECK = PANEL && new URLSearchParams(location.search).has('pricecheck');
 
 let autoEnabled = true;
 let mode = 'watching';        // watching | scanning | awaitNext
@@ -293,7 +306,7 @@ function formatChipsHtml(scan){
 }
 
 /* ── version banner — proves which page+server combo is running ────────────── */
-const UI_VERSION = 'v32';
+const UI_VERSION = 'v33';
 fetch('/api/version').then(r => r.json())
   .then(d => { $('#ver').textContent = `${UI_VERSION} · ${d.version}`; })
   .catch(() => { $('#ver').textContent = UI_VERSION; });
@@ -823,18 +836,14 @@ function printInfo(s) {
   return { searched, vals };
 }
 function priceRange(s) {
+  const fmt = (lo, hi) => lo === hi ? `$${lo.toFixed(2)}` : `$${lo.toFixed(2)}–$${hi.toFixed(2)}`;
   if (s.status !== 'selected') {
     const { vals } = printInfo(s);
-    if (vals.length) {
-      const lo = Math.min(...vals), hi = Math.max(...vals);
-      return lo === hi ? `$${lo}` : `$${lo}–$${hi}`;
-    }
+    if (vals.length) return fmt(Math.min(...vals), Math.max(...vals));
   }
-  const c = s.f2f?.conditions || {};
-  const vals = Object.values(c);
+  const vals = Object.values(s.f2f?.conditions || {}).map(Number);
   if (!vals.length) return null;
-  const lo = Math.min(...vals), hi = Math.max(...vals);
-  return lo === hi ? `$${lo}` : `$${lo}–$${hi}`;
+  return fmt(Math.min(...vals), Math.max(...vals));
 }
 const isProblem = s => !!s.error || !(s.candidates || []).length;
 function priceOf(s) { const p = f2fBest(s); return p == null ? null : Number(p); }
@@ -1093,13 +1102,29 @@ refreshScans();
 const detailPanel = $('#detailPanel'), detailBody = $('#detailBody'), detailTitle = $('#detailTitle');
 let detailScanId = null;
 
+// One printing's F2F price for the grid: NM first, else the best condition
+// listed. null conditions = not searched yet; {} = searched, no listing.
+const COND_LABEL = { NM:'NM', PL:'LP', MP:'MP', HP:'HP', DMG:'DMG' };
+function printPrice(c) {
+  const conds = c.f2f_conditions;
+  if (conds == null) return { text: '…', none: true };
+  for (const k of ['NM','PL','MP','HP','DMG']) {
+    if (conds[k] != null) return { text: `$${Number(conds[k]).toFixed(2)} ${COND_LABEL[k]}`, none: false };
+  }
+  return { text: 'no listing', none: true };
+}
 function pcandCard(c, chosenId) {
+  const pp = printPrice(c);
   return `<div class="pcard ${c.id===chosenId?'chosen':''}" data-pick="${escHtml(c.id)}">
     <img src="${escHtml(c.image_normal||c.image_small)}" loading="lazy" onerror="this.style.visibility='hidden'">
     <div class="pt"><b>${escHtml((c.set||'').toUpperCase())}</b> #${escHtml(c.collector_number)}
       ${c.multi_distance!=null?`· Δ${c.multi_distance}`:''}</div>
+    <div class="pp${pp.none?' none':''}" data-price-for="${escHtml(c.id)}">${escHtml(pp.text)}</div>
   </div>`;
 }
+// Different artworks (server-set other_art — artwork.py) fold behind a tile,
+// as on the desktop; the picked printing always shows.
+let detailShowAllArt = false;
 function detailControls(scan) {
   const cr = scan.card_read || {};
   const condDefault = scan.selection?.condition || (cr.condition_estimate||'NM').toUpperCase();
@@ -1121,39 +1146,80 @@ function detailCtl() {
 }
 async function openDetail(id) {
   detailScanId = id;
+  detailShowAllArt = false;
   detailPanel.classList.add('open');
   await renderScanDetail();
+}
+// Live prices while a card is open: prices land seconds after a scan (or a
+// price check) — update ONLY the price text in place, so a search being typed
+// or the scroll position is never disturbed by a re-render.
+let detailPollSig = '';
+setInterval(async () => {
+  if (!detailScanId || !detailPanel.classList.contains('open')) return;
+  let scan;
+  try { scan = await (await fetch(`/api/scans/${detailScanId}`)).json(); } catch (e) { return; }
+  if (!scan || !scan.id || scan.id !== detailScanId) return;
+  const sig = JSON.stringify([scan.f2f?.conditions, (scan.candidates||[]).map(c => c.f2f_conditions)]);
+  if (sig === detailPollSig) return;
+  detailPollSig = sig;
+  for (const c of scan.candidates || []) {
+    const el = detailBody.querySelector(`.pp[data-price-for="${CSS.escape(c.id)}"]`);
+    if (!el) continue;
+    const pp = printPrice(c);
+    el.textContent = pp.text; el.classList.toggle('none', pp.none);
+  }
+  const hp = $('#p-headprice');
+  if (hp) hp.innerHTML = headPriceHtml(scan);
+}, 2500);
+function headPriceHtml(scan) {
+  if (scan.selection) return `F2F: $${f2fBest(scan) ?? '—'}`;
+  const r = priceRange(scan);
+  return r ? `~${escHtml(r)} <span style="font-size:12px;color:var(--muted);font-weight:400">(same-art printings)</span>`
+           : `<span style="font-size:13px;color:var(--muted);font-weight:400">pricing…</span>`;
 }
 async function renderScanDetail() {
   const scan = await (await fetch(`/api/scans/${detailScanId}`)).json();
   if (scan.error && !scan.id) { detailBody.innerHTML = `<p>${escHtml(scan.error)}</p>`; return; }
   const sel = scan.selection || null;
   const cr = scan.card_read || {};
-  detailTitle.textContent = sel?.name || cr.name || '(unread)';
+  detailTitle.textContent = (PRICE_CHECK ? 'Price check · ' : '') + (sel?.name || cr.name || '(unread)');
+  detailPollSig = '';
 
   let html = `<div class="prow">
     <img src="/api/scans/${scan.id}/image" onerror="this.style.display='none'">
     <div>
       ${sel ? `<div><b>${escHtml(sel.name)}</b></div>
         <div style="font-size:13px;color:var(--muted)">${escHtml(sel.set_name)} · ${escHtml((sel.set||'').toUpperCase())} #${escHtml(sel.collector_number)} · ×${sel.quantity}</div>
-        <div class="pprice">F2F: $${f2fBest(scan) ?? '—'}</div>`
+        <div class="pprice" id="p-headprice">${headPriceHtml(scan)}</div>`
       : `<div><b>${escHtml(cr.name||'(unread)')}</b></div>
         <div style="font-size:13px;color:var(--muted)">tap a printing below to select it</div>
-        ${priceRange(scan) ? `<div class="pprice">~${priceRange(scan)} <span style="font-size:12px;color:var(--muted);font-weight:400">(top match)</span></div>` : ''}`}
+        <div class="pprice" id="p-headprice">${headPriceHtml(scan)}</div>`}
       ${scan.error ? `<div style="font-size:12px;color:var(--bad);margin-top:6px">${escHtml(scan.error)}</div>` : ''}
       ${formatChipsHtml(scan)}
     </div>
   </div>`;
   html += detailControls(scan);
   html += `<div class="subhead">${sel ? 'Re-pick printing' : 'Pick the printing'} — closest first</div>`;
-  html += (scan.candidates||[]).length
-    ? `<div class="pgrid" id="pcands">${scan.candidates.map(c=>pcandCard(c, sel?.scryfall_id)).join('')}</div>`
+  const cands = scan.candidates || [];
+  const folded = cands.filter(c => c.other_art && c.id !== sel?.scryfall_id);
+  const shown = detailShowAllArt ? cands : cands.filter(c => !folded.includes(c));
+  const foldTile = folded.length
+    ? `<div class="pfold" id="pfold">${detailShowAllArt ? 'Hide' : 'Show'} ${folded.length} other artwork${folded.length===1?'':'s'}</div>` : '';
+  html += cands.length
+    ? `<div class="pgrid" id="pcands">${shown.map(c=>pcandCard(c, sel?.scryfall_id)).join('')}${foldTile}</div>`
     : `<p style="color:var(--muted);font-size:13px">No candidates — search below.</p>`;
   html += `<div class="subhead">Wrong card? Search</div>
     <div class="msrow"><input id="p-search" placeholder="Card name…"><button id="p-searchBtn">Search</button></div>
     <div class="pgrid" id="psearchResults" style="margin-top:8px"></div>`;
   html += `<button class="dangerbtn" id="p-delete">Delete this scan</button>`;
+  if (PRICE_CHECK) html += `<div id="pcBar"><button id="pcDiscard">Discard</button><button id="pcKeep">Keep</button></div>`;
   detailBody.innerHTML = html;
+  $('#pfold')?.addEventListener('click', () => { detailShowAllArt = !detailShowAllArt; renderScanDetail(); });
+  $('#pcKeep')?.addEventListener('click', closePanelApp);
+  $('#pcDiscard')?.addEventListener('click', async () => {
+    await fetch(`/api/scans/${scan.id}`, { method: 'DELETE' });
+    closePanelApp();
+  });
 
   const scanImg = detailBody.querySelector('.prow img');
   scanImg?.addEventListener('click', () => openLightbox(scanImg.src));
@@ -1204,7 +1270,11 @@ async function renderScanDetail() {
     refreshScans();
   });
 }
+function closePanelApp() {
+  if (window.CardScannerApp) window.CardScannerApp.close(); else history.back();
+}
 $('#detailBack').addEventListener('click', () => {
+  if (PRICE_CHECK) { closePanelApp(); return; }      // back = Keep
   detailPanel.classList.remove('open');
   detailScanId = null;
   refreshScans();
@@ -1222,7 +1292,11 @@ if (PANEL) {
   document.querySelector('body > footer').style.display = 'none';
   $('#areaBtn').style.display = 'none';
   scansBtn.click();
-  if (PANEL_DETAIL) openDetail(PANEL_DETAIL);
+  if (PANEL_DETAIL) {
+    // Price check: start pricing THIS card right away (it jumps the sweep).
+    if (PRICE_CHECK) jsend(`/api/scans/${PANEL_DETAIL}/price-check`, 'POST', {}).catch(() => {});
+    openDetail(PANEL_DETAIL);
+  }
 } else {
   startCamera();
 }
