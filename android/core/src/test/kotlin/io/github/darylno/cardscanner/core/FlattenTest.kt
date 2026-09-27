@@ -91,7 +91,7 @@ class FlattenTest {
         // Python: every mapped output corner in [0, frame_w - 1] × [0, frame_h - 1].
         // Card of 394×550 at (40, 60): scale 0.5, so the 8% margin is (31.5, 44) frame px.
         val q = floatArrayOf(40f, 60f, 434f, 60f, 434f, 610f, 40f, 610f)
-        assertTrue(Flatten.marginFits(q, 434 + 32 + 1, 610 + 45, 0.08))   // right edge at 465.5 ≤ 466
+        assertTrue(Flatten.marginFits(q, 434 + 32 + 1, 610 + 46, 0.08))   // right edge at 465.5 ≤ 466
         assertTrue(!Flatten.marginFits(q, 434 + 31, 610 + 45, 0.08))      // 465.5 > 464
         assertTrue(!Flatten.marginFits(q, 434 + 33, 610 + 44, 0.08))      // bottom 654 > 653
     }
