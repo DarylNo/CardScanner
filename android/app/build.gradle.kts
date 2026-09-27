@@ -75,6 +75,7 @@ dependencies {
     implementation(libs.coroutines.android)
 
     testImplementation(libs.junit)
+    testImplementation(libs.opencv.jvm)   // CapturePipeline tests (natives via nu.pattern.OpenCV)
     testImplementation(libs.okhttp.mockwebserver)
     testImplementation(libs.okhttp.tls)
     testImplementation(libs.json)

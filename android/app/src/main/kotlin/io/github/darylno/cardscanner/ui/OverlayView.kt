@@ -59,7 +59,7 @@ class OverlayView @JvmOverloads constructor(
     var onAreaDrawn: ((RoiFrac?) -> Unit)? = null
     /** Double-tap = re-learn the empty tray. */
     var onDoubleTap: (() -> Unit)? = null
-    /** Single tap at (fx, fy) upright-frame fractions (Handheld tap-to-focus / Mount refocus). */
+    /** Single tap at view pixels (x, y) — the overlay exactly covers the PreviewView (tap-to-focus). */
     var onTap: ((Float, Float) -> Unit)? = null
 
     private val density = resources.displayMetrics.density
@@ -93,7 +93,7 @@ class OverlayView @JvmOverloads constructor(
         }
         override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
             val (fx, fy) = toFrac(e.x, e.y)
-            if (fx in 0f..1f && fy in 0f..1f) onTap?.invoke(fx, fy)
+            if (fx in 0f..1f && fy in 0f..1f) onTap?.invoke(e.x, e.y)
             return true
         }
     })

@@ -41,9 +41,12 @@ class PinMismatchException(val url: String, val seenFingerprintHex: String?) :
  * [pin] == null is the PROBE mode: record the leaf and throw, so the handshake
  * dies before a single request byte is sent.
  *
- * [getAcceptedIssuers] returns the pinned cert once seen: OkHttp's
- * `Handshake.peerCertificates` runs a chain cleaner that needs an accepted
- * issuer, and silently yields an empty list without one (measured, §1.3 case 4).
+ * [getAcceptedIssuers] returns the pinned cert once seen (non-empty for anything
+ * that consults it later). OkHttp itself snapshots the accepted issuers when the
+ * client is BUILT, so `Response.handshake.peerCertificates` stays empty for a
+ * pinned leaf (its chain cleaner finds no trusted root and returns `listOf()` —
+ * research_4 §1.3 case 4; re-measured in ServerClientTest). Nothing here reads
+ * it: the leaf is taken from [lastSeen] / the SSLSession, never the Handshake.
  */
 @SuppressLint("CustomX509TrustManager") // sole trust anchor = user-confirmed leaf hash (TOFU / QR pin)
 class PinnedTrustManager(pin: String?) : X509TrustManager {

@@ -59,6 +59,8 @@ object StatusText {
     /** Queue indicator: "2 uploading…" / "offline — 3 queued, retrying in 8s". */
     fun queue(pending: Int, lastError: String?, nextRetryInMs: Long?): String = when {
         pending <= 0 -> ""
+        // A pin mismatch is not "offline": say it (the queue waits until the user re-pairs).
+        lastError != null && lastError.contains("re-pair", ignoreCase = true) -> "$pending queued — $lastError"
         lastError != null && nextRetryInMs != null ->
             "offline — $pending queued, retrying in ${(nextRetryInMs + 999) / 1000}s"
         lastError != null -> "offline — $pending queued"

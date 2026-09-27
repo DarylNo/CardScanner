@@ -505,8 +505,13 @@ def create_app(
 
         if expect is not None:
             def _price_bg(scan_id: int, args: tuple, expect: dict) -> None:
-                if sweep["active"]:
-                    return          # one F2F consumer — the sweep covers it
+                # Claims the ONE F2F consumer slot for this fetch: a walk-around
+                # price check POSTed a second later queues behind it instead of
+                # racing it (measured: the same print fetched twice, two
+                # consumers in flight). A running sweep already covers this scan.
+                if not _claim_sweep([args]):
+                    return
+                sweep["current"] = args[0]
                 try:
                     p = _safe_get_price(*args)
                     if p:
@@ -515,6 +520,11 @@ def create_app(
                         _write_price_if_current(scan_id, expect, p.to_dict())
                 except Exception as exc:
                     print(f"  [server] scan-time pricing failed for #{scan_id}: {exc}")
+                finally:
+                    sweep["done"] += 1
+                    # Drain price checks that queued meanwhile, then go idle
+                    # through the sweep's single end-of-sweep reset.
+                    _run_sweep([])
 
             background_tasks.add_task(_price_bg, scan["id"], price_args, expect)
         return scan
@@ -708,6 +718,19 @@ def create_app(
                 evt.clear()
             return True
 
+    def _end_sweep_locked() -> None:
+        """Reset the sweep to idle. Caller holds sweep_lock. Price-check
+        targets still queued are dropped: after a Stop or the breaker nothing
+        would consume them, and the page re-requests while its prints are
+        unsearched."""
+        sweep["active"] = False
+        sweep["current"] = ""
+        sweep["cancel"] = False
+        sweep["priority"].clear()
+        evt = getattr(f2f, "interrupt", None)
+        if evt is not None:
+            evt.clear()
+
     def _run_sweep(items: list[tuple[str, int, dict, bool, str]]) -> None:
         """Requires a successful _claim_sweep by the caller."""
         # Circuit breaker: when the storefront is rate-limiting, every fetch
@@ -718,19 +741,23 @@ def create_app(
         # the bucket actually recovers; a manual start overrides the cooldown.
         unavailable_streak = 0
         queue = collections.deque(items)
+        ended = False
         try:
             while True:
-                # Price-check targets first. Deciding "nothing left" and going
-                # inactive happen under ONE lock hold, so a price check either
-                # lands in this queue or sees the sweep inactive and claims
-                # its own — never stranded in between.
+                # Price-check targets first. Deciding "nothing left" and the
+                # WHOLE reset to idle happen in ONE lock hold, exactly once: a
+                # price check either lands in this queue or sees the sweep idle
+                # and claims its own. (Resetting again afterwards, as the
+                # finally used to, clobbered a sweep claimed in between — it
+                # ran "inactive", unstoppable, beside a third.)
                 with sweep_lock:
                     if sweep["priority"]:
                         kind, sid, c, foil, label = sweep["priority"].popleft()
                     elif queue:
                         kind, sid, c, foil, label = queue.popleft()
                     else:
-                        sweep["active"] = False
+                        _end_sweep_locked()
+                        ended = True
                         break
                 if sweep.get("cancel"):
                     print(f"  [server] price sweep cancelled at {sweep['done']}/{sweep['total']}")
@@ -803,13 +830,11 @@ def create_app(
                 finally:
                     sweep["done"] += 1
         finally:
-            with sweep_lock:
-                sweep["active"] = False
-                sweep["current"] = ""
-                sweep["cancel"] = False
-            evt = getattr(f2f, "interrupt", None)
-            if evt is not None:
-                evt.clear()
+            # Stop / breaker / exception exits: still active here, so no other
+            # sweep can have been claimed — reset once.
+            if not ended:
+                with sweep_lock:
+                    _end_sweep_locked()
 
     def _retro_fix_scans() -> None:
         """
@@ -951,15 +976,14 @@ def create_app(
         exactly what the sweep would for it: the selection, or every
         same-artwork candidate print. Still ONE F2F consumer: a running sweep
         takes these targets at the FRONT of its queue; otherwise a one-scan
-        sweep starts. A manual action, so it overrides the throttle cooldown
-        like price-missing — but it does not lift a manual-stop pause.
+        sweep starts. It prices only this card: it neither lifts the breaker's
+        cooldown nor a manual-stop pause for everything else.
         """
         if not store.get_scan(scan_id):
             return JSONResponse({"error": "not found"}, status_code=404)
         targets = _collect_price_targets(only=scan_id)
         if not targets:
             return {"queued": 0}
-        sweep["backoff_until"] = None
         for _ in range(3):      # a sweep may finish between our two checks
             if _claim_sweep(targets):
                 background_tasks.add_task(_run_sweep, targets)
@@ -968,9 +992,13 @@ def create_app(
                 if sweep["active"]:
                     if sweep.get("cancel"):
                         return {"queued": 0, "busy": True}      # a stop is under way
-                    sweep["priority"].extend(targets)
-                    sweep["total"] += len(targets)
-                    return {"queued": len(targets), "sweeping": True}
+                    # The page re-requests while prints are unsearched — don't
+                    # stack duplicates of what is already queued.
+                    queued = {(k, s_, c.get("id")) for k, s_, c, _, _ in sweep["priority"]}
+                    fresh = [t for t in targets if (t[0], t[1], t[2].get("id")) not in queued]
+                    sweep["priority"].extend(fresh)
+                    sweep["total"] += len(fresh)
+                    return {"queued": len(fresh), "sweeping": True}
         return {"queued": 0, "busy": True}
 
     @app.get("/api/scans/{scan_id}/image")

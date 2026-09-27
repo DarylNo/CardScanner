@@ -50,8 +50,8 @@ def build_mx_export(selected_scans: list[dict[str, Any]]) -> str:
     Rows for the SAME printing+condition+finish are summed into one line: every
     scan keeps its own row in the app (scan order matters to the owner), but
     the import file stays one line per distinct card, exactly as it was when
-    repeat copies merged into a single row's quantity. Lines keep the order of
-    each card's first scan.
+    repeat copies merged into a single row's quantity. Rows arrive newest-first
+    (store.list_scans), so lines follow each card's NEWEST scan.
     """
     totals: dict[tuple[str, str, str, str], int] = {}
     for scan in selected_scans:

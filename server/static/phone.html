@@ -307,7 +307,7 @@ function formatChipsHtml(scan){
 }
 
 /* ── version banner — proves which page+server combo is running ────────────── */
-const UI_VERSION = 'v34';
+const UI_VERSION = 'v35';
 fetch('/api/version').then(r => r.json())
   .then(d => { $('#ver').textContent = `${UI_VERSION} · ${d.version}`; })
   .catch(() => { $('#ver').textContent = UI_VERSION; });
@@ -1110,13 +1110,18 @@ function printPrice(c) {
   }
   return { text: 'no listing', none: true };
 }
-function pcandCard(c, chosenId) {
+// priceMode: 'pending' — unpicked scan, the sweep prices every same-art print
+// ("…" until it lands); 'selected' — only the pick is priced, so other prints
+// show a price only if one exists (never a "…" that can't resolve); 'none' —
+// search results, which are never priced.
+function pcandCard(c, chosenId, priceMode = 'pending') {
   const pp = printPrice(c);
+  const showPrice = priceMode === 'pending' || (priceMode === 'selected' && !pp.none);
   return `<div class="pcard ${c.id===chosenId?'chosen':''}" data-pick="${escHtml(c.id)}">
     <img src="${escHtml(c.image_normal||c.image_small)}" loading="lazy" onerror="this.style.visibility='hidden'">
     <div class="pt"><b>${escHtml((c.set||'').toUpperCase())}</b> #${escHtml(c.collector_number)}
       ${c.multi_distance!=null?`· Δ${c.multi_distance}`:''}</div>
-    <div class="pp${pp.none?' none':''}" data-price-for="${escHtml(c.id)}">${escHtml(pp.text)}</div>
+    ${showPrice ? `<div class="pp${pp.none?' none':''}" data-price-for="${escHtml(c.id)}">${escHtml(pp.text)}</div>` : ''}
   </div>`;
 }
 // Different artworks (server-set other_art — artwork.py) fold behind a tile,
@@ -1150,12 +1155,18 @@ async function openDetail(id) {
 // Live prices while a card is open: prices land seconds after a scan (or a
 // price check) — update ONLY the price text in place, so a search being typed
 // or the scroll position is never disturbed by a re-render.
-let detailPollSig = '';
+let detailPollSig = '', detailPollN = 0;
 setInterval(async () => {
   if (!detailScanId || !detailPanel.classList.contains('open')) return;
   let scan;
   try { scan = await (await fetch(`/api/scans/${detailScanId}`)).json(); } catch (e) { return; }
   if (!scan || !scan.id || scan.id !== detailScanId) return;
+  // Price check: re-request every ~10 s while prints are unsearched — the
+  // first request can be refused (a Stop under way) or dropped by a Stop; the
+  // server de-duplicates, so repeats are cheap.
+  if (PRICE_CHECK && !scan.selection && !printInfo(scan).searched && ++detailPollN % 4 === 0) {
+    jsend(`/api/scans/${scan.id}/price-check`, 'POST', {}).catch(() => {});
+  }
   const sig = JSON.stringify([scan.f2f?.conditions, (scan.candidates||[]).map(c => c.f2f_conditions)]);
   if (sig === detailPollSig) return;
   detailPollSig = sig;
@@ -1169,10 +1180,14 @@ setInterval(async () => {
   if (hp) hp.innerHTML = headPriceHtml(scan);
 }, 2500);
 function headPriceHtml(scan) {
-  if (scan.selection) return `F2F: $${f2fBest(scan) ?? '—'}`;
+  if (scan.selection) {
+    const p = f2fBest(scan);
+    return `F2F: ${p == null ? '—' : '$' + Number(p).toFixed(2)}`;
+  }
   const r = priceRange(scan);
-  return r ? `~${escHtml(r)} <span style="font-size:12px;color:var(--muted);font-weight:400">(same-art printings)</span>`
-           : `<span style="font-size:13px;color:var(--muted);font-weight:400">pricing…</span>`;
+  const muted = t => `<span style="font-size:13px;color:var(--muted);font-weight:400">${t}</span>`;
+  if (r) return `~${escHtml(r)} <span style="font-size:12px;color:var(--muted);font-weight:400">(same-art printings)</span>`;
+  return printInfo(scan).searched ? muted('no F2F listing') : muted('pricing…');
 }
 async function renderScanDetail() {
   const scan = await (await fetch(`/api/scans/${detailScanId}`)).json();
@@ -1203,7 +1218,7 @@ async function renderScanDetail() {
   const foldTile = folded.length
     ? `<div class="pfold" id="pfold">${detailShowAllArt ? 'Hide' : 'Show'} ${folded.length} other artwork${folded.length===1?'':'s'}</div>` : '';
   html += cands.length
-    ? `<div class="pgrid" id="pcands">${shown.map(c=>pcandCard(c, sel?.scryfall_id)).join('')}${foldTile}</div>`
+    ? `<div class="pgrid" id="pcands">${shown.map(c=>pcandCard(c, sel?.scryfall_id, sel ? 'selected' : 'pending')).join('')}${foldTile}</div>`
     : `<p style="color:var(--muted);font-size:13px">No candidates — search below.</p>`;
   html += `<div class="subhead">Wrong card? Search</div>
     <div class="msrow"><input id="p-search" placeholder="Card name…"><button id="p-searchBtn">Search</button></div>
@@ -1247,7 +1262,7 @@ async function renderScanDetail() {
     const res = $('#psearchResults');
     res.innerHTML = `<p style="color:var(--muted)">Searching…</p>`;
     const { candidates } = await (await fetch(`/api/search?q=${encodeURIComponent(q)}`)).json();
-    res.innerHTML = candidates.map(c=>pcandCard(c, sel?.scryfall_id)).join('')
+    res.innerHTML = candidates.map(c=>pcandCard(c, sel?.scryfall_id, 'none')).join('')
       || `<p style="color:var(--muted)">No results.</p>`;
     const searchPick = pickFrom(candidates);
     res.querySelectorAll('.pcard[data-pick]').forEach(el =>

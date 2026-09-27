@@ -19,6 +19,8 @@ class Captured(
     val fallbacks: List<ByteArray>,
     val flattened: Boolean,
     val timings: String,
+    /** The detector's scene at capture time (Mount) — handed back on a no_card answer. */
+    val scene: io.github.darylno.cardscanner.core.Gray?,
 )
 
 /** Camera + detection + capture, confined behind the analysis thread by the adapter. */
@@ -28,6 +30,8 @@ interface CameraPort {
         fun onFrameSize(uprightW: Int, uprightH: Int)
         /** A detection tick. [sampleW]×[sampleH] = the Gray sample the box lives in. Any thread. */
         fun onDetection(event: AutoScanner.Event, sampleW: Int, sampleH: Int, debug: String?)
+        /** The burst exists (frames grabbed) — haptic "captured" now, before processing. */
+        fun onCaptureStarted(manual: Boolean)
         /** Frames captured and processed (auto trigger or manual). Any thread. */
         fun onCaptured(capture: Captured, manual: Boolean)
         fun onCaptureFailed(message: String)
@@ -43,12 +47,14 @@ interface CameraPort {
     fun relearn()
     fun pause(paused: Boolean)
     fun manualScan()
-    fun tapFocus(fx: Float, fy: Float)
-    /** A no_card answer: re-seed the empty reference (phone.html submitScan). */
-    fun noCard()
+    /** Tap on the preview, in PreviewView pixels. */
+    fun tapFocus(x: Float, y: Float)
+    /** A no_card answer for the capture whose scene was [scene]: re-seed the empty reference (phone.html submitScan). */
+    fun noCard(scene: io.github.darylno.cardscanner.core.Gray?)
     fun setTorch(on: Boolean)
     fun setAeLock(on: Boolean)
     fun setFocusLock(on: Boolean)
+    fun setHighRes(high: Boolean)
     fun diagnostics(): String
 }
 
@@ -65,12 +71,17 @@ sealed class Outcome {
 
 interface UploadPort {
     interface Listener {
-        /** Worker thread. [manual] = the job was a manual (tap) scan. */
-        fun onOutcome(manual: Boolean, outcome: Outcome)
+        /**
+         * Worker thread. [manual] = the job was a manual (tap) scan; [priceCheck] =
+         * it was taken in Handheld mode (persisted with the job, so it survives a
+         * process death while queued offline).
+         */
+        fun onOutcome(jobId: String, manual: Boolean, priceCheck: Boolean, outcome: Outcome)
         fun onState(pending: Int, lastError: String?, nextRetryInMs: Long?)
     }
 
-    fun enqueue(capture: Captured, manual: Boolean, replaceScanId: Long?)
+    /** Persist the capture (disk only, never network); returns the job id. */
+    fun enqueue(capture: Captured, manual: Boolean, priceCheck: Boolean, replaceScanId: Long?): String
     fun retryNow()
     fun addListener(l: Listener)
     fun removeListener(l: Listener)
@@ -101,6 +112,8 @@ interface ServerPort {
 interface GatewayPort {
     val running: Boolean
     val port: Int
+    /** Why the last start failed, if it did. */
+    val error: String?
     fun code(): String
     fun start()
     fun stop()
