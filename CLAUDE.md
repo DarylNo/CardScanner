@@ -229,6 +229,13 @@ from `android/` (Node on PATH, JDK 17); CI job `android` runs it per push.
   `android/core/src/test/resources/detect/` come from the SERVER's own code via
   `scripts/export_detect_fixtures.py`, and `--check` fails CI on any drift.
   Regenerate them, never hand-edit.
+- **Art fingerprint is a bit-exact PORT** (`PHash`/`ArtHasher`/`ArtMatcher`
+  in `:core`): Pillow's fixed-point L + LANCZOS and pocketfft's DCT-II are
+  transliterated, not re-derived — a textbook DCT or fdlibm twiddles moved
+  values by ~1e-11 and flipped `> median`. `HashParityTest` checks every
+  stage against `resources/arthash/expected.json`, made by the SERVER's code
+  via `scripts/export_hash_fixtures.py` (`--check` in CI). Never loosen it
+  to "close enough": the 110/140+20/210 thresholds only transfer on equal bits.
 - **The server stays the judge.** The phone flattens WITH A MARGIN so the
   server can re-detect; no_card / not identified → the 3 raw frames go up with
   `replace_scan_id` (the server's multi-frame retry). No phone-side card gates.
