@@ -110,6 +110,12 @@ def _is_newer_release(latest: str, current: str) -> bool:
     lp, cp = _version_tuple(latest), _version_tuple(current)
     if lp and cp:
         return lp > cp
+    if cp and not lp:
+        # A non-version tag is never an app release — e.g. the rolling
+        # `art-pack` data release (art-pack.yml). It is published prerelease
+        # + not-latest so releases/latest never returns it, but a release
+        # version must never be "updated" to a data tag regardless.
+        return False
     return bool(latest) and latest != current      # unparseable — fall back
 
 
