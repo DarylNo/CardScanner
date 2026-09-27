@@ -46,14 +46,23 @@ def build_mx_export(selected_scans: list[dict[str, Any]]) -> str:
     Each scan must carry a ``selection`` dict. Rows without a valid selection are
     skipped. Returns text with a trailing newline (empty string if nothing to
     export).
+
+    Rows for the SAME printing+condition+finish are summed into one line: every
+    scan keeps its own row in the app (scan order matters to the owner), but
+    the import file stays one line per distinct card, exactly as it was when
+    repeat copies merged into a single row's quantity. Lines keep the order of
+    each card's first scan.
     """
-    lines: list[str] = []
+    totals: dict[tuple[str, str, str, str], int] = {}
     for scan in selected_scans:
         selection = scan.get("selection")
         if not selection:
             continue
         try:
-            lines.append(selection_to_line(selection))
+            qty, set_code, collector, condition, finish = selection_to_line(selection).split(" ")
         except ValueError:
             continue
+        key = (set_code, collector, condition, finish)
+        totals[key] = totals.get(key, 0) + int(qty)
+    lines = [f"{qty} {' '.join(key)}" for key, qty in totals.items()]
     return ("\n".join(lines) + "\n") if lines else ""

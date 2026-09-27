@@ -196,7 +196,8 @@
 /* ═══ REBUILT FOR SPEED (v9+) ═══
    - Scan-only camera flow: the phone scans and reports; printings are picked
      on the DESKTOP (the on-phone picker was removed by request in v13).
-     Single-printing cards auto-file server-side; duplicates auto-merge.
+     Single-printing cards auto-file server-side; every scan keeps its own
+     row (repeat copies are not merged — scan order; the export sums them).
    - Signature-diffed rendering: the old page rebuilt the whole list DOM on
      every 3s poll (flicker, scroll loss, battery). Every render target now
      computes a cheap signature first and touches the DOM only on change —
@@ -306,7 +307,7 @@ function formatChipsHtml(scan){
 }
 
 /* ── version banner — proves which page+server combo is running ────────────── */
-const UI_VERSION = 'v33';
+const UI_VERSION = 'v34';
 fetch('/api/version').then(r => r.json())
   .then(d => { $('#ver').textContent = `${UI_VERSION} · ${d.version}`; })
   .catch(() => { $('#ver').textContent = UI_VERSION; });
@@ -507,10 +508,6 @@ async function submitScan(framesP, manual = false, replaceId = 0) {
       }
       // The failed row (if this was a retry) is still there — keep offering.
       if (replaceId) offerRetry(replaceId);
-    } else if (data.merged_into) {
-      // Single-printing card, repeat copy — auto-filed as +1 on the row.
-      setStatus(`✓ ${data.selection?.name} — duplicate, merged (now ×${data.selection?.quantity})`
-        + (data.included === false ? ' ⚠ row excluded from export' : ''), 'ok');
     } else if (data.identified) {
       setStatus((data.selection?.auto_picked
         ? `✓ ${data.card_read.name}${popTag(data)} — exact printing confident, auto-filed ⚠`
@@ -1228,13 +1225,8 @@ async function renderScanDetail() {
     const printing = (pool || []).find(c => c.id === el.dataset.pick);
     if (!printing) return;
     el.style.opacity = '0.5';
-    const res = await jsend(`/api/scans/${scan.id}/select`, 'POST', { printing, ...detailCtl() });
-    if (res.merged_into) {
-      // Duplicate copy — folded into the existing row; show that row instead.
-      detailScanId = res.merged_into;
-      setStatus(`Duplicate — merged (now ×${res.selection?.quantity})`
-        + (res.included === false ? ' — row is EXCLUDED from export' : ''), 'ok');
-    }
+    // Every scan keeps its own row (no merging of repeat copies — scan order).
+    await jsend(`/api/scans/${scan.id}/select`, 'POST', { printing, ...detailCtl() });
     await renderScanDetail(); refreshScans();
   };
   const candPick = pickFrom(scan.candidates);

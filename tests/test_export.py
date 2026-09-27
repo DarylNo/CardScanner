@@ -65,3 +65,22 @@ def test_export_lines_are_parseable_like_mana_exchange():
         parts = line.split()
         assert len(parts) >= 3
         assert parts[0].isdigit()  # qty
+
+
+def test_build_mx_export_sums_repeat_copies_in_first_seen_order():
+    # Every scan keeps its own row now; the import file still gets one line
+    # per distinct printing+condition+finish, in the order first scanned.
+    bolt = {"set": "m10", "collector_number": "146", "condition": "NM", "finish": "Non-Foil"}
+    rows = [
+        {"selection": {**bolt, "quantity": 1}},
+        {"selection": {"set": "akh", "collector_number": "132", "condition": "NM",
+                       "finish": "Foil", "quantity": 1}},
+        {"selection": {**bolt, "quantity": 2}},
+        {"selection": {**bolt, "condition": "LP", "quantity": 1}},
+        {"selection": {**bolt, "finish": "nonfoil", "quantity": 1}},   # normalises to Non-Foil
+    ]
+    assert build_mx_export(rows).splitlines() == [
+        "4 M10 146 NM Non-Foil",
+        "1 AKH 132 NM Foil",
+        "1 M10 146 LP Non-Foil",
+    ]

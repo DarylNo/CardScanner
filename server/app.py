@@ -474,15 +474,13 @@ def create_app(
         #  - the top candidate is ART-DECISIVE → its distance lead over #2 is
         #    beyond same-art noise (different artworks/frames; measured on the
         #    rig's review history — see _mark_art_decisive).
-        # Either way: NM / Non-Foil / ×1, auto_picked flag (⚠ in the UIs),
-        # auto-merge applies so a repeat copy lands as +1 quantity.
+        # Either way: NM / Non-Foil / ×1, auto_picked flag (⚠ in the UIs).
+        # A repeat copy stays its OWN row (see _apply_selection_core).
         cands = result.get("candidates") or []
         if result["identified"] and cands and (
                 len(cands) == 1 or cands[0].get("ocr_confirmed")
                 or cands[0].get("art_decisive")):
             scan = await _apply_selection(scan["id"], cands[0], "NM", "Non-Foil", 1, auto=True)
-            if scan.get("merged_into"):
-                return scan
 
         # Background pricing at scan time. A single-printing auto-pick is a
         # definite selection, so price that EXACT printing (not a range) right
@@ -584,10 +582,12 @@ def create_app(
     # active check and the 60s auto-tick can both pass and run two sweeps
     # concurrently, whose finally-blocks then make the survivor uncancellable.
     sweep_lock = threading.Lock()
-    # Serializes every selection read-modify-write (merge quantity bumps,
-    # select claims, PATCH edits): two concurrent selects of the same printing
-    # could otherwise both read qty 1 and both write qty 2 — a physical card
-    # silently vanishing from the export.
+    # Serializes every selection read-modify-write (select claims, PATCH
+    # edits, retro auto-picks). It was introduced when repeat copies merged
+    # into one row's quantity — two concurrent selects both read qty 1 and
+    # both wrote qty 2, a physical card silently vanishing from the export.
+    # Merging is gone (each scan keeps its own row), but a pick racing a
+    # PATCH or a retro pass still needs the same serialization.
     select_lock = threading.Lock()
 
     @app.get("/api/price-status")
@@ -997,13 +997,18 @@ def create_app(
                               auto: bool = False) -> dict:
         """
         Select *printing* on scan *scan_id* — the one path for user picks,
-        scan-time auto-picks, AND the retro repair thread.  Auto-merge: bulk
-        lots contain several copies of the same card (measured: 17% of a real
-        session), so selecting the EXACT printing+condition+finish an existing
-        selected row already holds folds this scan into it as added quantity
-        instead of a duplicate row.  Synchronous and price-free so it is
-        callable from plain threads; _apply_selection adds pricing for user
-        picks.  Auto picks carry auto_picked so the UIs can flag them.
+        scan-time auto-picks, AND the retro repair thread.  Synchronous and
+        price-free so it is callable from plain threads; _apply_selection adds
+        pricing for user picks.  Auto picks carry auto_picked so the UIs can
+        flag them.
+
+        Every scan keeps its OWN row, even a repeat copy of a printing already
+        picked. Repeat copies used to fold into the older row's quantity
+        (bulk lots run ~17% duplicates), but that pulled the newer scan out
+        of scan order, and the owner finds cards by scan order when searching
+        the list (2026-09-27). The Mana Exchange export sums identical
+        printing+condition+finish lines instead (server/export.py), so the
+        import file is unchanged.
         """
         foil = _foil_from_finish(finish)
         selection = {
@@ -1025,26 +1030,8 @@ def create_app(
         }
         if auto:
             selection["auto_picked"] = True
-        # The merge decision and the claim must be one atomic step: with the
-        # price fetch inside this window (as before), two concurrent selects
-        # of the same printing both missed each other (duplicate rows) or both
-        # read the same base quantity (lost copies). Claim under the lock,
-        # price AFTER.
+        # Claim under the lock, price AFTER (no network while locked).
         with select_lock:
-            if selection["scryfall_id"]:
-                for other in store.list_scans():
-                    if other["id"] == scan_id or other.get("status") != "selected":
-                        continue
-                    o = dict(other.get("selection") or {})
-                    if (o.get("scryfall_id") == selection["scryfall_id"]
-                            and o.get("condition") == condition
-                            and o.get("finish") == finish):
-                        o["quantity"] = int(o.get("quantity") or 1) + quantity
-                        merged = store.update_scan(other["id"], selection=o)
-                        (scan_images_dir / f"{scan_id}.jpg").unlink(missing_ok=True)
-                        store.delete_scan(scan_id)
-                        merged["merged_into"] = other["id"]
-                        return merged
             # error=None: a best-guess scan the user then picks must stop
             # showing "No confident art match" and leave the Problems view.
             return store.update_scan(
@@ -1098,7 +1085,7 @@ def create_app(
         # ONE F2F consumer at a time: while a sweep runs, no other pricing
         # fires (rate-limit safety). f2f was cleared by the claim, so the
         # sweep collects and prices this selection on its next pass.
-        if auto or result.get("merged_into") or sweep["active"]:
+        if auto or sweep["active"]:
             return result
         sel = result["selection"]
         price = await run_in_threadpool(
@@ -1130,7 +1117,7 @@ def create_app(
     @app.patch("/api/scans/{scan_id}")
     async def patch_scan(scan_id: int, body: dict = Body(...)):
         # Selection read-modify-write happens under select_lock (a concurrent
-        # merge bumping quantity could otherwise be overwritten); the reprice
+        # pick or retro auto-pick could otherwise be overwritten); the reprice
         # network call stays OUTSIDE the lock.
         with select_lock:
             scan = store.get_scan(scan_id)

@@ -517,7 +517,7 @@ function renderList(){
 function updateStats(){
   const sel = scans.filter(s => s.status==="selected");
   const inc = sel.filter(s => s.included);
-  // quantity matters: an auto-merged x3 row exports 3 copies
+  // quantity matters: a row set to ×3 exports 3 copies
   const total = inc.reduce((t,s) => t + (priceOf(s) ?? 0) * (s.selection?.quantity || 1), 0);
   $("#stats").innerHTML =
     `<b>${scans.length}</b> scans · <b>${scans.length-sel.length}</b> to pick · ` +
@@ -715,17 +715,10 @@ function wireDetail(scan){
     const printing = (pool || []).find(c => c.id === el.dataset.pick);
     if (!printing) return;
     el.style.opacity = ".5";
-    const res = await jsend(`/api/scans/${scan.id}/select`, "POST", { printing, ...currentControls() });
-    if (res.merged_into){
-      // Duplicate copy — folded into the existing row; follow it there. Say
-      // so when that row is export-excluded, or the copy silently vanishes
-      // from the export with a toast implying it was filed.
-      focusedId = res.merged_into;
-      toast(`Duplicate — merged into existing entry (now ×${res.selection?.quantity})`
-            + (res.included === false ? ' — NOTE: that row is excluded from export' : ''));
-    } else {
-      toast(`Selected ${printing.set_name} #${printing.collector_number}`);
-    }
+    // Every scan keeps its own row — repeat copies are no longer merged into
+    // an older row (that broke scan order); the export sums them instead.
+    await jsend(`/api/scans/${scan.id}/select`, "POST", { printing, ...currentControls() });
+    toast(`Selected ${printing.set_name} #${printing.collector_number}`);
     await poll(); detailSig=""; renderDetail(); listSig=""; renderList();
   };
   const candPick = pickFrom(scan.candidates);
@@ -898,7 +891,7 @@ function sigOf(scan){
 
 // Version banner — page version · server git hash. Same rationale as the
 // phone: without it, "is this the old page?" is undebuggable.
-const UI_VERSION = "d26";
+const UI_VERSION = "d27";
 $("#sweepStopBtn").addEventListener("click", async () => {
   await jsend("/api/price-sweep/stop", "POST", {});
   toast("Sweep stopping — auto-sweep paused 10 min");
