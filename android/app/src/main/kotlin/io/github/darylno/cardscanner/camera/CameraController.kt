@@ -1,0 +1,512 @@
+package io.github.darylno.cardscanner.camera
+
+import android.content.Context
+import android.graphics.ImageFormat
+import android.hardware.camera2.CameraCaptureSession
+import android.hardware.camera2.CameraCharacteristics
+import android.hardware.camera2.CameraManager
+import android.hardware.camera2.CaptureRequest
+import android.hardware.camera2.TotalCaptureResult
+import android.os.Build
+import android.os.Handler
+import android.os.Looper
+import android.util.Size
+import androidx.annotation.OptIn
+import androidx.camera.camera2.interop.Camera2CameraControl
+import androidx.camera.camera2.interop.Camera2CameraInfo
+import androidx.camera.camera2.interop.Camera2Interop
+import androidx.camera.camera2.interop.CaptureRequestOptions
+import androidx.camera.camera2.interop.ExperimentalCamera2Interop
+import androidx.camera.core.Camera
+import androidx.camera.core.CameraSelector
+import androidx.camera.core.CameraState
+import androidx.camera.core.FocusMeteringAction
+import androidx.camera.core.ImageAnalysis
+import androidx.camera.core.Preview
+import androidx.camera.core.SurfaceOrientedMeteringPointFactory
+import androidx.camera.core.resolutionselector.AspectRatioStrategy
+import androidx.camera.core.resolutionselector.ResolutionSelector
+import androidx.camera.core.resolutionselector.ResolutionStrategy
+import androidx.camera.lifecycle.ProcessCameraProvider
+import androidx.camera.view.PreviewView
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleOwner
+import io.github.darylno.cardscanner.capture.CapturePipeline
+import io.github.darylno.cardscanner.capture.CaptureResult
+import io.github.darylno.cardscanner.core.Gray
+import io.github.darylno.cardscanner.core.RoiFrac
+import io.github.darylno.cardscanner.core.Rotation
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
+
+/** A finished capture: [result] on success, else [error]. [scene] is for [CameraController.onNoCard]. */
+class CaptureOutcome(
+    val id: Long,
+    val trigger: CaptureTrigger,
+    val mode: ScanMode,
+    val scene: Gray?,
+    val result: CaptureResult?,
+    val error: Throwable?,
+)
+
+/**
+ * CameraX 1.5.3 front end for the scan screen: ONE bindToLifecycle of Preview
+ * + ImageAnalysis (no ImageCapture — the burst comes from the analysis ring),
+ * on camera "0" (the 13 MP main camera; the Nord N200's id 3 is a 2 MP
+ * fixed-focus module that must never be picked), falling back to
+ * DEFAULT_BACK_CAMERA.
+ *
+ * Both use cases share one 4:3 ResolutionSelector so the preview (FIT_CENTER)
+ * shows exactly the analysis field of view — the scan area maps linearly.
+ * Video stabilization is forced OFF on both (EIS crops/warps and hurt the
+ * fixed mount in Chrome).
+ *
+ * Focus: Mount locks AF (FLAG_AF + disableAutoCancel — CameraX then holds
+ * CONTROL_AF_MODE_AUTO, the lens stays put) once a card is present — the first
+ * Trigger after each bind, or [refocus]; a blank tray has no contrast to focus
+ * on. Handheld = continuous AF with tap-to-focus. Torch / AE+AWB lock / focus
+ * are re-applied after every bind AND every camera re-open (CameraControl
+ * state dies with the session).
+ *
+ * Threading: construct, command and [start] on the main thread. [Listener]
+ * callbacks arrive on the main thread. Analyzer commands are forwarded to the
+ * analysis thread by [ScanAnalyzer].
+ */
+@OptIn(markerClass = [ExperimentalCamera2Interop::class])
+class CameraController(
+    private val context: Context,
+    private val owner: LifecycleOwner,
+    private val listener: Listener,
+) {
+    enum class Resolution(val size: Size) { STANDARD(Size(1600, 1200)), HIGH(Size(2048, 1536)) }
+
+    /** All callbacks on the main thread. */
+    interface Listener {
+        /** Every detection tick (~5 Hz, Mount only). */
+        fun onDetection(update: DetectionUpdate) {}
+        /** The burst exists — "captured, swap the card" can be shown / haptic fired now. */
+        fun onCaptureStarted(request: CaptureBurst) {}
+        /** The pipeline finished (JPEGs ready) or failed. */
+        fun onCapture(outcome: CaptureOutcome) {}
+        /** Camera in use / disabled / fatal errors (and analyzer exceptions, fatal=false). */
+        fun onCameraError(message: String, fatal: Boolean) {}
+        /** Bound (after every bind): a one-line description of what was bound. */
+        fun onCameraReady(summary: String) {}
+    }
+
+    private val main = Handler(Looper.getMainLooper())
+    private val analysisExecutor: ExecutorService =
+        Executors.newSingleThreadExecutor { r -> Thread(r, "scan-analysis") }
+    val pipeline = CapturePipeline()
+
+    val analyzer = ScanAnalyzer(analysisExecutor, object : ScanAnalyzer.Sink {
+        override fun onDetection(update: DetectionUpdate) {
+            main.post { listener.onDetection(update) }
+        }
+
+        override fun onCaptureRequest(request: CaptureBurst) {
+            main.post {
+                listener.onCaptureStarted(request)
+                if (request.trigger == CaptureTrigger.AUTO && scanMode == ScanMode.MOUNT && !focusLocked) {
+                    lockFocus(request.box?.let { it to request.cropRoi })
+                }
+            }
+            val ok = pipeline.submit(request.frames, request.cropRoi) { r ->
+                val outcome = CaptureOutcome(
+                    request.id, request.trigger, request.mode, request.scene, r.getOrNull(), r.exceptionOrNull(),
+                )
+                main.post { listener.onCapture(outcome) }
+            }
+            if (!ok) main.post {
+                listener.onCapture(CaptureOutcome(
+                    request.id, request.trigger, request.mode, request.scene, null,
+                    IllegalStateException("capture pipeline is shut down"),
+                ))
+            }
+        }
+
+        override fun onAnalyzerError(error: Throwable) {
+            main.post { listener.onCameraError("analyzer: $error", false) }
+        }
+    })
+
+    private var provider: ProcessCameraProvider? = null
+    private var previewView: PreviewView? = null
+    private var camera: Camera? = null
+    private var analysis: ImageAnalysis? = null
+    private var preview: Preview? = null
+    private var boundCameraId: String? = null
+    private var lastStateType: CameraState.Type? = null
+    private var released = false
+
+    var resolution = Resolution.STANDARD
+        private set
+    var scanMode = ScanMode.MOUNT
+        private set
+    var torchOn = false
+        private set
+    var aeAwbLock = false
+        private set
+    private var roi: RoiFrac? = null
+    var focusLocked = false
+        private set
+    private var focusNote = "continuous (default)"
+
+    // Latest per-frame metadata (camera thread), for diagnostics only.
+    @Volatile private var metaAfState: Int? = null
+    @Volatile private var metaFocusDist: Float? = null
+    @Volatile private var metaExposureNs: Long? = null
+    @Volatile private var metaIso: Int? = null
+    @Volatile private var metaStab: Int? = null
+    private val metaCallback = object : CameraCaptureSession.CaptureCallback() {
+        override fun onCaptureCompleted(s: CameraCaptureSession, r: CaptureRequest, result: TotalCaptureResult) {
+            metaAfState = result.get(android.hardware.camera2.CaptureResult.CONTROL_AF_STATE)
+            metaFocusDist = result.get(android.hardware.camera2.CaptureResult.LENS_FOCUS_DISTANCE)
+            metaExposureNs = result.get(android.hardware.camera2.CaptureResult.SENSOR_EXPOSURE_TIME)
+            metaIso = result.get(android.hardware.camera2.CaptureResult.SENSOR_SENSITIVITY)
+            metaStab = result.get(android.hardware.camera2.CaptureResult.CONTROL_VIDEO_STABILIZATION_MODE)
+        }
+    }
+
+    /** Bind the camera into [view] (idempotent; rebinds with the current settings). */
+    fun start(view: PreviewView, res: Resolution = resolution) {
+        released = false
+        previewView = view
+        resolution = res
+        val p = provider
+        if (p != null) { bind(); return }
+        val f = ProcessCameraProvider.getInstance(context)
+        f.addListener({
+            try {
+                provider = f.get()
+                bind()
+            } catch (e: Exception) {
+                listener.onCameraError("camera provider unavailable: $e", true)
+            }
+        }, ContextCompat.getMainExecutor(context))
+    }
+
+    /** Standard 1600×1200 / High 2048×1536 — rebinds. */
+    fun setResolution(res: Resolution) {
+        if (res == resolution) return
+        resolution = res
+        if (camera != null) bind()
+    }
+
+    /** Unbind and stop the worker threads (Activity onDestroy). */
+    fun release() {
+        released = true
+        analysis?.clearAnalyzer()
+        camera?.cameraInfo?.cameraState?.removeObservers(owner)
+        // Only OUR use cases: the provider is a process singleton, and a
+        // Setup screen scanning a QR above us owns its own.
+        runCatching { provider?.unbind(*listOfNotNull(preview, analysis).toTypedArray()) }
+        camera = null; analysis = null; preview = null
+        analysisExecutor.shutdown()
+        pipeline.shutdown()
+    }
+
+    private fun resolutionSelector(): ResolutionSelector = ResolutionSelector.Builder()
+        .setAspectRatioStrategy(AspectRatioStrategy.RATIO_4_3_FALLBACK_AUTO_STRATEGY)
+        .setResolutionStrategy(
+            ResolutionStrategy(resolution.size, ResolutionStrategy.FALLBACK_RULE_CLOSEST_LOWER_THEN_HIGHER),
+        )
+        .build()
+
+    private fun bind() {
+        if (released) return
+        val p = provider ?: return
+        val view = previewView ?: return
+        if (owner.lifecycle.currentState == Lifecycle.State.DESTROYED) return
+
+        view.implementationMode = PreviewView.ImplementationMode.PERFORMANCE
+        view.scaleType = PreviewView.ScaleType.FIT_CENTER
+        val rs = resolutionSelector()
+
+        val pb = Preview.Builder().setResolutionSelector(rs)
+        Camera2Interop.Extender(pb).setCaptureRequestOption(
+            CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE, CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE_OFF,
+        )
+        val pv = pb.build()
+        pv.setSurfaceProvider(view.surfaceProvider)
+
+        val ab = ImageAnalysis.Builder()
+            .setResolutionSelector(rs)
+            .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+            .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_YUV_420_888)
+        Camera2Interop.Extender(ab)
+            .setCaptureRequestOption(
+                CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE, CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE_OFF,
+            )
+            .setSessionCaptureCallback(metaCallback)
+        val an = ab.build()
+        an.setAnalyzer(analysisExecutor, analyzer)
+
+        camera?.cameraInfo?.cameraState?.removeObservers(owner)
+        p.unbindAll()
+        camera = null; analysis = null; preview = null
+
+        val cam = try {
+            p.bindToLifecycle(owner, selectMainCamera(p), pv, an)
+        } catch (e: Exception) {
+            try {
+                p.unbindAll()
+                p.bindToLifecycle(owner, CameraSelector.DEFAULT_BACK_CAMERA, pv, an)
+            } catch (e2: Exception) {
+                listener.onCameraError("could not open the camera: ${e2.message ?: e2}", true)
+                return
+            }
+        }
+        camera = cam; analysis = an; preview = pv
+        boundCameraId = runCatching { Camera2CameraInfo.from(cam.cameraInfo).cameraId }.getOrNull()
+        lastStateType = null
+        cam.cameraInfo.cameraState.observe(owner) { st -> onCameraState(st) }
+        analyzer.cameraRestarted()
+        applySettings()
+        listener.onCameraReady(
+            "camera ${boundCameraId ?: "?"} · analysis ${an.resolutionInfo?.resolution ?: "?"} · " +
+                "preview ${pv.resolutionInfo?.resolution ?: "?"}",
+        )
+    }
+
+    /** Camera "0" if it exists and faces back, else the default back camera. */
+    private fun selectMainCamera(p: ProcessCameraProvider): CameraSelector {
+        val zero = CameraSelector.Builder()
+            .requireLensFacing(CameraSelector.LENS_FACING_BACK)
+            .addCameraFilter { infos -> infos.filter { runCatching { Camera2CameraInfo.from(it).cameraId }.getOrNull() == "0" } }
+            .build()
+        val ok = try { p.hasCamera(zero) } catch (e: Exception) { false }
+        return if (ok) zero else CameraSelector.DEFAULT_BACK_CAMERA
+    }
+
+    private fun onCameraState(st: CameraState) {
+        st.error?.let { err ->
+            val fatal = err.type == CameraState.ErrorType.CRITICAL
+            listener.onCameraError(describeError(err.code), fatal)
+        }
+        // A re-open after onStop/onStart (same binding): session-scoped controls were lost.
+        if (st.type == CameraState.Type.OPEN && lastStateType != null && lastStateType != CameraState.Type.OPEN) {
+            applySettings()
+        }
+        lastStateType = st.type
+    }
+
+    private fun describeError(code: Int): String = when (code) {
+        CameraState.ERROR_CAMERA_IN_USE -> "Camera in use by another app — close it and come back."
+        CameraState.ERROR_MAX_CAMERAS_IN_USE -> "Too many cameras open — close other camera apps."
+        CameraState.ERROR_OTHER_RECOVERABLE_ERROR -> "Camera error (recovering)…"
+        CameraState.ERROR_STREAM_CONFIG -> "Camera stream configuration failed."
+        CameraState.ERROR_CAMERA_DISABLED -> "Camera disabled by device policy."
+        CameraState.ERROR_CAMERA_FATAL_ERROR -> "Camera fatal error — restart the app / phone."
+        CameraState.ERROR_DO_NOT_DISTURB_MODE_ENABLED -> "Camera blocked by Do Not Disturb mode."
+        else -> "Camera error $code"
+    }
+
+    /** Torch, AE/AWB lock and focus mode — after every bind and re-open. */
+    private fun applySettings() {
+        val cam = camera ?: return
+        if (cam.cameraInfo.hasFlashUnit()) cam.cameraControl.enableTorch(torchOn)
+        applyAeAwbLock()
+        focusLocked = false
+        if (scanMode == ScanMode.HANDHELD) {
+            cam.cameraControl.cancelFocusAndMetering()
+            focusNote = "continuous (handheld)"
+        } else {
+            focusNote = "continuous until a card is present"
+        }
+    }
+
+    private fun applyAeAwbLock() {
+        val cam = camera ?: return
+        runCatching {
+            Camera2CameraControl.from(cam.cameraControl).addCaptureRequestOptions(
+                CaptureRequestOptions.Builder()
+                    .setCaptureRequestOption(CaptureRequest.CONTROL_AE_LOCK, aeAwbLock)
+                    .setCaptureRequestOption(CaptureRequest.CONTROL_AWB_LOCK, aeAwbLock)
+                    .build(),
+            )
+        }
+    }
+
+    // ---------------- commands (main thread) ----------------
+
+    fun setScanMode(m: ScanMode) {
+        if (m == scanMode) return
+        scanMode = m
+        analyzer.setMode(m)
+        focusLocked = false
+        val cam = camera ?: return
+        cam.cameraControl.cancelFocusAndMetering()   // both: back to continuous AF
+        focusNote = if (m == ScanMode.HANDHELD) "continuous (handheld)" else "continuous until a card is present"
+    }
+
+    fun setAuto(enabled: Boolean) = analyzer.setAuto(enabled)
+    fun reset() = analyzer.reset()
+    fun manualScan() = analyzer.manualScan()
+    fun setPaused(paused: Boolean) = analyzer.setPaused(paused)
+
+    fun setRoi(r: RoiFrac?) {
+        roi = r
+        analyzer.setRoi(r)
+        focusLocked = false   // new area: lock again on the next card
+    }
+
+    /** Server answered no_card for the capture whose [CaptureOutcome.scene] is [capturedScene]. */
+    fun onNoCard(capturedScene: Gray?) = analyzer.onNoCard(capturedScene)
+
+    fun setTorch(on: Boolean) {
+        torchOn = on
+        val cam = camera ?: return
+        if (cam.cameraInfo.hasFlashUnit()) cam.cameraControl.enableTorch(on)
+    }
+
+    fun hasTorch(): Boolean = camera?.cameraInfo?.hasFlashUnit() == true
+
+    fun setAeAwbLock(on: Boolean) {
+        aeAwbLock = on
+        applyAeAwbLock()
+    }
+
+    /**
+     * Mount: lock focus now on the card the mask sees (else the scan-area centre).
+     * Handheld: one-shot AF at the area centre, then back to continuous.
+     */
+    fun refocus() {
+        if (scanMode == ScanMode.MOUNT) lockFocus(analyzer.lastBoxInfo)
+        else focusAtSensor(areaCentreSensor(null) ?: return, lock = false)
+    }
+
+    /** Tap on the preview ([x],[y] in PreviewView pixels). Mount: lock there; Handheld: AF there, auto-cancel. */
+    fun tapToFocus(x: Float, y: Float) {
+        val cam = camera ?: return
+        val view = previewView ?: return
+        val pt = view.meteringPointFactory.createPoint(x, y)
+        val b = FocusMeteringAction.Builder(pt, FocusMeteringAction.FLAG_AF or FocusMeteringAction.FLAG_AE)
+        val lock = scanMode == ScanMode.MOUNT
+        if (lock) {
+            b.disableAutoCancel()
+            // The user chose this point: the next auto trigger must not re-lock
+            // on the box centre and throw the tap away.
+            focusLocked = true
+        }
+        runFocus(cam, b.build(), if (lock) "locked at tap" else "tap AF")
+    }
+
+    private fun lockFocus(boxInfo: Pair<io.github.darylno.cardscanner.core.Box, RoiFrac?>?) {
+        val c = areaCentreSensor(boxInfo) ?: return
+        focusAtSensor(c, lock = true)
+    }
+
+    /** Sensor-pixel point to focus on: the box centre (if known) else the scan-area centre. */
+    private fun areaCentreSensor(boxInfo: Pair<io.github.darylno.cardscanner.core.Box, RoiFrac?>?): FloatArray? {
+        val geo = analyzer.lastFrameGeometry ?: return null
+        val sw = geo[0]; val sh = geo[1]; val rot = geo[2]
+        val uw = Rotation.uprightWidth(sw, sh, rot); val uh = Rotation.uprightHeight(sw, sh, rot)
+        val area = boxInfo?.second ?: roi ?: RoiFrac(0.0, 0.0, 1.0, 1.0)
+        var fu = (area.x0 + area.x1) / 2; var fv = (area.y0 + area.y1) / 2
+        val dims = analyzer.lastGrayDims
+        val box = boxInfo?.first
+        if (box != null && dims != null) {
+            fu = area.x0 + (area.x1 - area.x0) * (box.x + box.w / 2.0) / dims[0]
+            fv = area.y0 + (area.y1 - area.y0) * (box.y + box.h / 2.0) / dims[1]
+        }
+        val u = (fu * uw).toInt().coerceIn(0, uw - 1)
+        val v = (fv * uh).toInt().coerceIn(0, uh - 1)
+        return floatArrayOf(
+            Rotation.sensorX(u, v, sw, sh, rot).toFloat(), Rotation.sensorY(u, v, sw, sh, rot).toFloat(),
+            sw.toFloat(), sh.toFloat(),
+        )
+    }
+
+    private fun focusAtSensor(c: FloatArray, lock: Boolean) {
+        val cam = camera ?: return
+        val an = analysis ?: return
+        // Analysis-buffer (sensor-oriented, unrotated) coordinates.
+        val factory = runCatching { SurfaceOrientedMeteringPointFactory(c[2], c[3], an) }
+            .getOrElse { SurfaceOrientedMeteringPointFactory(c[2], c[3]) }
+        val pt = factory.createPoint(c[0], c[1])
+        val b = FocusMeteringAction.Builder(pt, FocusMeteringAction.FLAG_AF)
+        if (lock) b.disableAutoCancel()
+        if (lock) focusLocked = true
+        runFocus(cam, b.build(), if (lock) "locked on card" else "one-shot AF")
+    }
+
+    private fun runFocus(cam: Camera, action: FocusMeteringAction, what: String) {
+        focusNote = "$what (running)"
+        val f = cam.cameraControl.startFocusAndMetering(action)
+        f.addListener({
+            focusNote = try {
+                "$what: " + if (f.get().isFocusSuccessful) "focused" else "NOT focused"
+            } catch (e: Exception) {
+                "$what: cancelled (${e.javaClass.simpleName})"
+            }
+        }, ContextCompat.getMainExecutor(context))
+    }
+
+    // ---------------- diagnostics ----------------
+
+    /** Multi-line report for the Diagnostics screen (Copy button). Main thread. */
+    fun diagnostics(): String = buildString {
+        appendLine("device: ${Build.MANUFACTURER} ${Build.MODEL} (API ${Build.VERSION.SDK_INT})")
+        if (Build.VERSION.SDK_INT >= 31) appendLine("soc: ${Build.SOC_MANUFACTURER} ${Build.SOC_MODEL}")
+        val cm = context.getSystemService(CameraManager::class.java)
+        runCatching {
+            for (id in cm.cameraIdList) {
+                val ch = cm.getCameraCharacteristics(id)
+                val facing = when (ch.get(CameraCharacteristics.LENS_FACING)) {
+                    CameraCharacteristics.LENS_FACING_BACK -> "back"
+                    CameraCharacteristics.LENS_FACING_FRONT -> "front"
+                    else -> "external"
+                }
+                appendLine("camera $id: $facing, level ${levelName(ch.get(CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL))}" +
+                    if (id == boundCameraId) "  ← bound" else "")
+            }
+        }.onFailure { appendLine("camera list: $it") }
+        val id = boundCameraId
+        if (id != null) runCatching {
+            val ch = cm.getCameraCharacteristics(id)
+            val caps = ch.get(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES)?.joinToString(",") { capName(it) }
+            appendLine("capabilities: $caps")
+            val yuv = ch.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
+                ?.getOutputSizes(ImageFormat.YUV_420_888)?.take(14)?.joinToString(" ")
+            appendLine("YUV sizes: $yuv")
+            appendLine("video stabilization modes: " +
+                ch.get(CameraCharacteristics.CONTROL_AVAILABLE_VIDEO_STABILIZATION_MODES)?.joinToString(","))
+            appendLine("OIS modes: " +
+                ch.get(CameraCharacteristics.LENS_INFO_AVAILABLE_OPTICAL_STABILIZATION)?.joinToString(","))
+            appendLine("min focus distance: ${ch.get(CameraCharacteristics.LENS_INFO_MINIMUM_FOCUS_DISTANCE)} dpt, " +
+                "calibration ${ch.get(CameraCharacteristics.LENS_INFO_FOCUS_DISTANCE_CALIBRATION)}")
+            appendLine("sensor orientation: ${ch.get(CameraCharacteristics.SENSOR_ORIENTATION)}")
+        }.onFailure { appendLine("characteristics: $it") }
+        appendLine("requested: ${resolution.name} ${resolution.size}")
+        appendLine("analysis: ${analysis?.resolutionInfo?.resolution} · preview: ${preview?.resolutionInfo?.resolution}")
+        appendLine("mode: $scanMode · focus: $focusNote · torch: $torchOn · AE/AWB lock: $aeAwbLock")
+        appendLine("camera state: ${camera?.cameraInfo?.cameraState?.value?.type}")
+        appendLine("last frame: AF state $metaAfState · focus ${metaFocusDist} dpt · exposure " +
+            "${metaExposureNs?.let { "%.1f ms".format(it / 1e6) }} · ISO $metaIso · stab $metaStab")
+        appendLine("analyzer: ${analyzer.stats()}")
+        appendLine("last capture: ${pipeline.lastSummary ?: "none"}")
+    }
+
+    private fun levelName(l: Int?) = when (l) {
+        CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL_LEGACY -> "LEGACY"
+        CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL_LIMITED -> "LIMITED"
+        CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL_FULL -> "FULL"
+        CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL_3 -> "LEVEL_3"
+        CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL_EXTERNAL -> "EXTERNAL"
+        else -> "$l"
+    }
+
+    private fun capName(c: Int) = when (c) {
+        CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES_BACKWARD_COMPATIBLE -> "BACKWARD_COMPATIBLE"
+        CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES_MANUAL_SENSOR -> "MANUAL_SENSOR"
+        CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES_MANUAL_POST_PROCESSING -> "MANUAL_POST_PROCESSING"
+        CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES_RAW -> "RAW"
+        CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES_READ_SENSOR_SETTINGS -> "READ_SENSOR_SETTINGS"
+        CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES_BURST_CAPTURE -> "BURST_CAPTURE"
+        CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES_YUV_REPROCESSING -> "YUV_REPROCESSING"
+        CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES_LOGICAL_MULTI_CAMERA -> "LOGICAL_MULTI_CAMERA"
+        else -> "$c"
+    }
+}

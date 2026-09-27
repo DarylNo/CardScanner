@@ -45,3 +45,7 @@ jobs:
     uses: ./.github/workflows/release.yml
     with:
       tag: ${{ needs.tag.outputs.tag }}
+    # A called workflow sees no secrets unless the caller hands them over;
+    # without this the Android APK would silently fall back to a debug key
+    # on the auto-tag path while a hand-pushed tag signed it properly.
+    secrets: inherit

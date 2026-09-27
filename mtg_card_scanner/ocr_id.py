@@ -45,6 +45,46 @@ _STRIP_Y = (0.88, 0.99)     # bottom strip of the 630x880 warp
 _STRIP_X = (0.02, 0.60)     # collector + set-code lines live bottom-left
 
 _ocr_engine = None
+_ocr_status: Optional[dict] = None
+
+
+def ocr_status() -> dict:
+    """
+    {"available": bool, "error": str | None} — whether the OCR engine imports.
+
+    read_bottom_strip swallows every failure (a missing optional engine must
+    never break a scan), which also made a MISSING engine indistinguishable
+    from "read nothing": a git-checkout rig updated by `git pull` never got
+    rapidocr-onnxruntime installed when it became a dependency, and every
+    printing silently went unconfirmed (the 2026-09 Fling / AKH #132 miss).
+    /api/health surfaces this and the desktop warns; the retro-OCR pass waits
+    for it instead of marking scans done.
+
+    Checks that the package is INSTALLED (find_spec) rather than importing it:
+    importing loads the ONNX runtime, whose native thread pool aborted the
+    process at interpreter exit (CI: exit 134 after every test passed) — a
+    health check must not start a 100 MB engine. An engine that is installed
+    but fails to load (e.g. a Windows DLL error) is recorded by
+    read_bottom_strip the first time it tries, via _mark_unavailable.
+    """
+    global _ocr_status
+    if _ocr_status is None:
+        import importlib.util
+        try:
+            found = importlib.util.find_spec("rapidocr_onnxruntime") is not None
+        except (ImportError, ValueError):
+            found = False
+        if found:
+            _ocr_status = {"available": True, "error": None}
+        else:
+            _mark_unavailable("rapidocr_onnxruntime is not installed")
+    return _ocr_status
+
+
+def _mark_unavailable(error: str) -> None:
+    global _ocr_status
+    _ocr_status = {"available": False, "error": error}
+    print(f"  [ocr] collector-line OCR unavailable — {error} (fix: pip install -e .)")
 
 
 def read_bottom_strip(card_bgr) -> str:
@@ -59,8 +99,12 @@ def read_bottom_strip(card_bgr) -> str:
     try:
         import cv2
         if _ocr_engine is None:
-            from rapidocr_onnxruntime import RapidOCR
-            _ocr_engine = RapidOCR()
+            try:
+                from rapidocr_onnxruntime import RapidOCR
+                _ocr_engine = RapidOCR()
+            except Exception as exc:          # missing package or native load failure
+                _mark_unavailable(f"{type(exc).__name__}: {exc}")
+                return ""
 
         h, w = card_bgr.shape[:2]
         strip = card_bgr[int(h * _STRIP_Y[0]):int(h * _STRIP_Y[1]),

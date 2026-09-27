@@ -38,7 +38,13 @@ def _run_update() -> None:
     repo_root = Path(__file__).resolve().parents[1]
     if (repo_root / ".git").exists():                     # dev checkout
         print("  [launch] updating via git pull …")
-        subprocess.call(["git", "-C", str(repo_root), "pull", "--ff-only"])
+        if subprocess.call(["git", "-C", str(repo_root), "pull", "--ff-only"]) == 0:
+            # A pull brings new CODE but never new DEPENDENCIES: the rig ran
+            # for weeks without rapidocr-onnxruntime after it joined
+            # pyproject, and OCR failed silently. Re-sync the editable install.
+            print("  [launch] syncing dependencies (pip install -e .) …")
+            subprocess.call([sys.executable, "-m", "pip", "install", "--quiet",
+                             "-e", str(repo_root)])
     elif shutil.which("uv"):                              # install.sh path
         print("  [launch] updating via uv tool install …")
         subprocess.call(["uv", "tool", "install", "--force", _TARBALL_SPEC])
@@ -86,6 +92,22 @@ def ensure_certs(cert_dir: Path) -> tuple[Path, Path]:
     crt_path.write_bytes(cert.public_bytes(serialization.Encoding.PEM))
     print(f"  [launch] generated self-signed TLS cert in {cert_dir}")
     return key_path, crt_path
+
+
+def cert_sha256(crt_path) -> str | None:
+    """SHA-256 of the server cert (DER), lowercase hex — what the phone app pins.
+
+    The desktop's phone QR carries it (as #pin=…) so pairing the app is
+    "scan the QR on your own screen" with no fingerprint to compare by eye:
+    the trusted desktop display vouches for the cert. None if unreadable.
+    """
+    import hashlib
+    import ssl
+    try:
+        der = ssl.PEM_cert_to_DER_cert(Path(crt_path).read_text())
+    except (OSError, ValueError):
+        return None
+    return hashlib.sha256(der).hexdigest()
 
 
 def _is_private_lan(ip: str) -> bool:
@@ -146,6 +168,75 @@ def lan_ip() -> str:
     return route_ip
 
 
+# ── Tailscale ──────────────────────────────────────────────────────────────────
+# The phone app scans away from home over Tailscale, so the server advertises
+# its tailnet addresses too (GET /api/addresses). The app learns them once,
+# over the home LAN, then falls back to them when the LAN address is
+# unreachable. The server already listens on 0.0.0.0, and its self-signed
+# cert names no host at all — the app pins the cert itself, so one pin
+# covers every address the same server answers on.
+
+_TAILSCALE_BINARIES = (
+    "tailscale",
+    r"C:\Program Files\Tailscale\tailscale.exe",
+    "/Applications/Tailscale.app/Contents/MacOS/Tailscale",
+)
+
+
+def _is_tailnet_ip(ip: str) -> bool:
+    """100.64.0.0/10 (Tailscale's CGNAT block), minus ChromeOS's 100.115.92.0/23
+    — Crostini's own container address lives inside that block too."""
+    try:
+        a, b, c, _ = (int(p) for p in ip.split("."))
+    except ValueError:
+        return False
+    if a != 100 or not 64 <= b <= 127:
+        return False
+    return not (b == 115 and c in (92, 93))
+
+
+def tailscale_addresses(timeout: float = 2.0) -> dict:
+    """
+    {"dns": MagicDNS name or None, "ips": [tailnet IPv4s]} for THIS machine.
+
+    TAILSCALE_HOST env (or config.env) overrides — e.g. a machine whose
+    tailscale CLI is not on PATH. Otherwise ask the tailscale CLI, and if it
+    is missing fall back to this host's interface addresses in the tailnet
+    range (no MagicDNS name then). Never raises: no Tailscale → empty.
+    """
+    override = os.getenv("TAILSCALE_HOST", "").strip()
+    if override:
+        if _is_tailnet_ip(override):
+            return {"dns": None, "ips": [override]}
+        return {"dns": override.rstrip("."), "ips": []}
+
+    import json
+    for exe in _TAILSCALE_BINARIES:
+        path = shutil.which(exe) or (exe if os.path.isabs(exe) and os.path.exists(exe) else None)
+        if not path:
+            continue
+        try:
+            out = subprocess.run([path, "status", "--json"], capture_output=True,
+                                 timeout=timeout, check=False).stdout
+            me = json.loads(out or b"{}").get("Self") or {}
+        except (OSError, ValueError, subprocess.SubprocessError):
+            continue
+        ips = [ip for ip in (me.get("TailscaleIPs") or []) if _is_tailnet_ip(ip)]
+        dns = (me.get("DNSName") or "").rstrip(".") or None
+        if ips or dns:
+            return {"dns": dns, "ips": ips}
+
+    ips: list[str] = []
+    try:
+        for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
+            ip = info[4][0]
+            if _is_tailnet_ip(ip) and ip not in ips:
+                ips.append(ip)
+    except OSError:
+        pass
+    return {"dns": None, "ips": ips}
+
+
 def _load_config(data_dir: Path) -> None:
     """
     Load <data-dir>/config.env (simple KEY=VALUE lines) into the environment,
@@ -156,6 +247,7 @@ def _load_config(data_dir: Path) -> None:
 
         # ~/.mtg-card-scanner/config.env
         LAN_IP=192.168.1.50      # phone-reachable address, when undetectable
+        TAILSCALE_HOST=pc.tailnet-name.ts.net   # when the tailscale CLI isn't found
     """
     cfg = Path(data_dir) / "config.env"
     try:
@@ -238,6 +330,8 @@ def main(argv: list[str] | None = None) -> None:
     os.environ.setdefault("SCAN_IMAGES_DIR", str(data_dir / "scan_images"))
 
     key_path, crt_path = ensure_certs(data_dir / "certs")
+    # The app process reads this to put the cert's pin in the phone QR.
+    os.environ.setdefault("SCAN_TLS_CERT", str(crt_path))
 
     ip = lan_ip()
     desktop_url = f"https://{ip}:{args.port}/"

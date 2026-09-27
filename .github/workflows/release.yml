@@ -5,6 +5,11 @@
 # NOTE: authored but not yet exercised in CI — verify each artifact boots
 # before announcing a release. Unsigned macOS binaries need right-click→Open
 # on first launch (Gatekeeper); avoiding that requires Apple notarization.
+#
+# The Android capture app ships in the same release (job `apk`), signed with
+# the release key from the ANDROID_KEYSTORE_* secrets (see android/README.md →
+# Signing). auto-tag.yml must pass them with `secrets: inherit` — a called
+# workflow sees no secrets otherwise.
 name: release
 on:
   push:
@@ -15,6 +20,15 @@ on:
         description: "tag to build and publish, e.g. v1.0.6"
         required: true
         type: string
+    # Optional: without them the APK is signed with a throwaway debug key
+    # (and the job summary says so).
+    secrets:
+      ANDROID_KEYSTORE_B64:
+        required: false
+      ANDROID_KEYSTORE_PASSWORD:
+        required: false
+      ANDROID_KEY_ALIAS:
+        required: false
 permissions:
   contents: write   # create the GitHub Release + upload assets (default token is read-only)
 jobs:
@@ -71,8 +85,73 @@ jobs:
         with:
           name: ${{ matrix.artifact }}
           path: ${{ matrix.artifact }}
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+      # The keystore lives ONLY in secrets (never in the repo). An APK signed
+      # with a different key can't update an installed one — the phone must
+      # uninstall first — so a debug-signed release is announced loudly.
+      - name: Build release APK
+        working-directory: android
+        env:
+          KS_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+          KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KS_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          if [ -n "$KS_B64" ]; then
+            if [ -z "$KS_PASS" ]; then
+              echo "::error::ANDROID_KEYSTORE_B64 is set but ANDROID_KEYSTORE_PASSWORD is not"
+              exit 1
+            fi
+            ks="$RUNNER_TEMP/cardscanner-release.p12"
+            printf '%s' "$KS_B64" | base64 -d > "$ks"
+            export ANDROID_KEYSTORE_PATH="$ks"
+            export ANDROID_KEYSTORE_PASSWORD="$KS_PASS"
+            export ANDROID_KEY_ALIAS="${KS_ALIAS:-cardscanner}"
+            echo "### Android APK: signed with the release key" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::warning::No ANDROID_KEYSTORE_B64 secret: the APK is signed with a DEBUG key"
+            {
+              echo "## WARNING: the Android APK is signed with a throwaway DEBUG key"
+              echo
+              echo "The ANDROID_KEYSTORE_B64 / ANDROID_KEYSTORE_PASSWORD / ANDROID_KEY_ALIAS"
+              echo "secrets are not set, so this build used the runner's auto-generated debug"
+              echo "key. It installs on a fresh phone, but it can NOT update an app signed with"
+              echo "any other key (every release built this way has a DIFFERENT key): users"
+              echo "must uninstall first, which loses the pairing and settings."
+              echo
+              echo "Fix once: run \`python scripts/make_android_keystore.py\` and add the three"
+              echo "secrets (android/README.md → Signing), then cut the next release."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+          ./gradlew --stacktrace :app:assembleRelease
+          cp app/build/outputs/apk/release/app-release.apk "$GITHUB_WORKSPACE/mtg-card-scanner-android.apk"
+      - name: Show the signing certificate
+        run: |
+          apksigner=$(printf '%s\n' "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
+          "$apksigner" verify --print-certs mtg-card-scanner-android.apk | tee signer.txt
+          {
+            echo
+            echo '```'
+            grep -E 'certificate DN|SHA-256' signer.txt || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mtg-card-scanner-android.apk
+          path: mtg-card-scanner-android.apk
+          if-no-files-found: error
   publish:
-    needs: binaries
+    needs: [binaries, apk]
     # always(): publish whatever legs produced artifacts — a dead runner
     # label (macos-13 queued forever, got cancelled, publish skipped, release
     # v1.0.0 shipped NOTHING) must never zero out the whole release.

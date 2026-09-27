@@ -252,35 +252,37 @@ class FlakyF2F:
                         conditions={"NM": 1.99})
 
 
-def test_select_merges_duplicate_printings(client):
-    """Selecting the exact printing+condition+finish an existing selected row
-    holds folds the new scan into it as quantity instead of a duplicate row."""
+def test_repeat_copies_keep_their_own_rows_in_scan_order(client):
+    """Picking the exact printing+condition+finish another row already holds
+    must NOT fold the scan into that row: the owner finds cards by scan order,
+    and merging pulled the newer scan out of it. Both rows stay, newest first,
+    each ×1 — and the export sums them into one line."""
     a = client.post("/api/scan", files={"files": ("c.jpg", _jpeg_bytes(), "image/jpeg")}).json()
     b = client.post("/api/scan", files={"files": ("c.jpg", _jpeg_bytes(), "image/jpeg")}).json()
-    client.post(f"/api/scans/{a['id']}/select",
-                json={"printing": CANDIDATES[0], "condition": "NM",
-                      "finish": "Non-Foil", "quantity": 1})
-    r = client.post(f"/api/scans/{b['id']}/select",
-                    json={"printing": CANDIDATES[0], "condition": "NM",
-                          "finish": "Non-Foil", "quantity": 1}).json()
-    assert r["merged_into"] == a["id"]
-    assert r["selection"]["quantity"] == 2
-    scans = client.get("/api/scans").json()
-    assert [s["id"] for s in scans] == [a["id"]]      # duplicate row is gone
-    assert client.get(f"/api/scans/{b['id']}/image").status_code == 404
-
-
-def test_select_does_not_merge_different_condition(client):
-    a = client.post("/api/scan", files={"files": ("c.jpg", _jpeg_bytes(), "image/jpeg")}).json()
-    b = client.post("/api/scan", files={"files": ("c.jpg", _jpeg_bytes(), "image/jpeg")}).json()
-    client.post(f"/api/scans/{a['id']}/select",
-                json={"printing": CANDIDATES[0], "condition": "NM",
-                      "finish": "Non-Foil", "quantity": 1})
-    r = client.post(f"/api/scans/{b['id']}/select",
-                    json={"printing": CANDIDATES[0], "condition": "LP",
-                          "finish": "Non-Foil", "quantity": 1}).json()
+    pick = {"printing": CANDIDATES[0], "condition": "NM", "finish": "Non-Foil", "quantity": 1}
+    client.post(f"/api/scans/{a['id']}/select", json=pick)
+    r = client.post(f"/api/scans/{b['id']}/select", json=pick).json()
     assert "merged_into" not in r
+    assert r["id"] == b["id"] and r["selection"]["quantity"] == 1
+    scans = client.get("/api/scans").json()
+    assert [s["id"] for s in scans] == [b["id"], a["id"]]
+    assert all(s["selection"]["quantity"] == 1 for s in scans)
+    assert client.get(f"/api/scans/{b['id']}/image").status_code == 200
+    assert client.get("/api/export").text == "2 M10 146 NM Non-Foil\n"
+
+
+def test_different_condition_rows_export_separately(client):
+    a = client.post("/api/scan", files={"files": ("c.jpg", _jpeg_bytes(), "image/jpeg")}).json()
+    b = client.post("/api/scan", files={"files": ("c.jpg", _jpeg_bytes(), "image/jpeg")}).json()
+    client.post(f"/api/scans/{a['id']}/select",
+                json={"printing": CANDIDATES[0], "condition": "NM",
+                      "finish": "Non-Foil", "quantity": 1})
+    client.post(f"/api/scans/{b['id']}/select",
+                json={"printing": CANDIDATES[0], "condition": "LP",
+                      "finish": "Non-Foil", "quantity": 1})
     assert len(client.get("/api/scans").json()) == 2
+    assert client.get("/api/export").text.splitlines() == ["1 M10 146 LP Non-Foil",
+                                                           "1 M10 146 NM Non-Foil"]
 
 
 def test_price_now_endpoint(tmp_path):
@@ -404,7 +406,7 @@ class SingleCandPipeline(FakePipeline):
 
 def test_single_printing_auto_picks_with_flag(tmp_path):
     """One printing → nothing to choose: auto-selected NM/Non-Foil ×1 with
-    auto_picked set; a second copy folds in as quantity via auto-merge."""
+    auto_picked set; a second copy is auto-picked into its OWN row."""
     app = create_app(pipeline_factory=lambda: SingleCandPipeline(),
                      store=ScanStore(tmp_path / "s.db"), f2f=FakeF2F(),
                      scan_images_dir=tmp_path / "imgs",
@@ -416,9 +418,9 @@ def test_single_printing_auto_picks_with_flag(tmp_path):
     assert first["selection"]["scryfall_id"] == "id-m10"
 
     second = c.post("/api/scan", files={"files": ("c.jpg", _jpeg_bytes(), "image/jpeg")}).json()
-    assert second["merged_into"] == first["id"]
-    assert second["selection"]["quantity"] == 2
-    assert [s["id"] for s in c.get("/api/scans").json()] == [first["id"]]
+    assert "merged_into" not in second
+    assert second["selection"]["auto_picked"] is True and second["selection"]["quantity"] == 1
+    assert [s["id"] for s in c.get("/api/scans").json()] == [second["id"], first["id"]]
 
 
 def test_sweep_stop_endpoint_when_idle(client):
@@ -696,3 +698,166 @@ def test_selection_without_popularity_is_not_a_crash(client):
     r = client.post(f"/api/scans/{scan['id']}/select", json={"printing": bare})
     assert r.status_code == 200
     assert r.json()["selection"]["popularity"] is None
+
+
+def test_addresses_lists_lan_then_tailscale(client, monkeypatch):
+    from mtg_card_scanner import launch
+    monkeypatch.setattr(launch, "lan_ip", lambda: "192.168.1.42")
+    monkeypatch.setattr(launch, "tailscale_addresses",
+                        lambda: {"dns": "rig.tail1234.ts.net", "ips": ["100.90.1.2"]})
+    body = client.get("/api/addresses").json()
+    assert body["lan_ip"] == "192.168.1.42"
+    assert body["urls"][0].startswith("https://192.168.1.42:")
+    assert [u.split("//")[1].rsplit(":", 1)[0] for u in body["urls"]] == \
+        ["192.168.1.42", "rig.tail1234.ts.net", "100.90.1.2"]
+
+
+def test_addresses_without_lan_or_tailscale(client, monkeypatch):
+    from mtg_card_scanner import launch
+    monkeypatch.setattr(launch, "lan_ip", lambda: "100.115.92.2")     # Crostini only
+    monkeypatch.setattr(launch, "tailscale_addresses", lambda: {"dns": None, "ips": []})
+    body = client.get("/api/addresses").json()
+    assert body["lan_ip"] is None and body["urls"] == []
+
+
+def test_phone_qr_carries_the_cert_pin(client, monkeypatch, tmp_path):
+    from mtg_card_scanner.launch import cert_sha256, ensure_certs
+    _, crt = ensure_certs(tmp_path / "certs")
+    monkeypatch.setenv("SCAN_TLS_CERT", str(crt))
+    seen = {}
+    import segno
+    real_make = segno.make
+    monkeypatch.setattr(segno, "make", lambda data, **k: seen.setdefault("url", data) and real_make(data, **k))
+    assert client.get("/api/phone-qr?ip=192.168.1.9").status_code == 200
+    assert seen["url"].endswith(f"/phone#pin={cert_sha256(crt)}")
+    monkeypatch.delenv("SCAN_TLS_CERT")
+    seen.clear()
+    client.get("/api/phone-qr?ip=192.168.1.9")
+    assert seen["url"].endswith("/phone")              # no cert known → plain URL
+
+
+# ── walk-around price check (POST /api/scans/{id}/price-check) ────────────────
+
+class NumberedPipeline(FakePipeline):
+    """Every scan gets its own collector numbers, so pricing ORDER is visible."""
+    def __init__(self):
+        self.n = 0
+
+    def scan_candidates(self, frames, top_n=12):
+        self.n += 1
+        out = dict(super().scan_candidates(frames, top_n))
+        out["candidates"] = [{**c, "id": f"{c['id']}-{self.n}",
+                              "collector_number": f"{self.n}{i}"}
+                             for i, c in enumerate(CANDIDATES)]
+        return out
+
+
+class RecordingF2F(FakeF2F):
+    def __init__(self):
+        self.calls = []
+
+    def get_price(self, name, set_code, collector_number, foil=False, set_name=""):
+        self.calls.append(collector_number)
+        return super().get_price(name, set_code, collector_number, foil, set_name)
+
+
+def _price_app(tmp_path):
+    f2f = RecordingF2F()
+    app = create_app(pipeline_factory=NumberedPipeline, store=ScanStore(tmp_path / "s.db"),
+                     f2f=f2f, scan_images_dir=tmp_path / "imgs", auto_sweep_interval=None)
+    c = TestClient(app)
+    ids = [c.post("/api/scan", files={"files": ("c.jpg", _jpeg_bytes(), "image/jpeg")}).json()["id"]
+           for _ in range(2)]
+    f2f.calls.clear()               # scan-time pricing of the top candidate
+    return app, c, f2f, ids
+
+
+def test_price_check_prices_only_that_scan(tmp_path):
+    app, c, f2f, (first, second) = _price_app(tmp_path)
+    r = c.post(f"/api/scans/{first}/price-check").json()
+    assert r["queued"] == 2 and not r.get("sweeping")
+    assert sorted(f2f.calls) == ["10", "11"]                 # scan 1's prints only
+    scan2 = c.get(f"/api/scans/{second}").json()
+    assert all(cc.get("f2f_conditions") is None for cc in scan2["candidates"])
+    assert c.post(f"/api/scans/{first}/price-check").json()["queued"] == 0   # all searched
+    assert c.post("/api/scans/999/price-check").status_code == 404
+
+
+def test_price_check_jumps_a_running_sweeps_queue(tmp_path):
+    app, c, f2f, (first, second) = _price_app(tmp_path)
+    sweep = app.state.sweep
+    sweep["active"] = True                                   # a sweep is mid-run
+    r = c.post(f"/api/scans/{first}/price-check").json()
+    assert r == {"queued": 2, "sweeping": True}
+    assert len(sweep["priority"]) == 2
+    sweep["active"] = False                                  # ...let the next sweep drain it
+    c.post("/api/scans/price-missing")
+    # Newest-first would price scan 2 first; the price check went to the front.
+    assert f2f.calls[:2] == ["10", "11"] and sorted(f2f.calls[2:]) == ["20", "21"]
+    assert not sweep["priority"] and not sweep["active"]
+    assert sweep["done"] == sweep["total"]
+
+
+def test_price_check_during_a_stop_queues_nothing(tmp_path):
+    app, c, f2f, (first, _) = _price_app(tmp_path)
+    app.state.sweep.update(active=True, cancel=True)
+    assert c.post(f"/api/scans/{first}/price-check").json() == {"queued": 0, "busy": True}
+    assert not app.state.sweep["priority"]
+
+
+def test_health_reports_whether_ocr_is_available(client, monkeypatch):
+    from mtg_card_scanner import ocr_id
+    monkeypatch.setattr(ocr_id, "_ocr_status", {"available": False, "error": "ImportError: x"})
+    assert client.get("/api/health").json()["ocr"] == {"available": False, "error": "ImportError: x"}
+
+
+def _post_upload(client, uid):
+    files = [("files", ("f.jpg", _jpeg_bytes(), "image/jpeg"))]
+    return client.post("/api/scan", files=files, data={"client_upload_id": uid})
+
+
+def test_a_resent_upload_files_one_row(tmp_path):
+    # The app re-sends after a lost response; the server must answer with the
+    # row the first copy filed, not stack a duplicate for one physical card.
+    client, store = _retry_rig(tmp_path)
+    a = _post_upload(client, "job7-p").json()
+    b = _post_upload(client, "job7-p").json()
+    assert a["id"] == b["id"]
+    assert len(store.list_scans()) == 1
+    c = _post_upload(client, "job8-p").json()          # a new id is a new card
+    assert c["id"] != a["id"] and len(store.list_scans()) == 2
+
+
+def test_a_resent_upload_after_discard_stays_discarded(tmp_path):
+    client, store = _retry_rig(tmp_path)
+    a = _post_upload(client, "job9-p").json()
+    client.delete(f"/api/scans/{a['id']}")
+    b = _post_upload(client, "job9-p").json()
+    assert b["id"] == a["id"]
+    assert store.list_scans() == []
+
+
+def test_concurrent_twins_of_one_upload_file_one_row(tmp_path):
+    # A client timeout re-sends while the first copy is still identifying:
+    # the twin waits for it instead of filing its own row.
+    import threading
+    import time
+
+    class Slow(FakePipeline):
+        def scan_candidates(self, frames, top_n=12):
+            time.sleep(0.4)
+            return super().scan_candidates(frames, top_n)
+
+    store = ScanStore(tmp_path / "twins.db")
+    app = create_app(pipeline_factory=Slow, store=store, f2f=FakeF2F(),
+                     scan_images_dir=tmp_path / "imgs", auto_sweep_interval=None)
+    out = []
+    with TestClient(app) as c:              # ONE event loop, as under uvicorn
+        ts = [threading.Thread(target=lambda: out.append(
+            _post_upload(c, "job11-p").json()["id"])) for _ in range(3)]
+        for t in ts:
+            t.start()
+        for t in ts:
+            t.join(10)
+    assert len(out) == 3 and len(set(out)) == 1
+    assert len(store.list_scans()) == 1

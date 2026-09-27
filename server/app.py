@@ -13,6 +13,8 @@ a built art index (inject a fake pipeline).
 
 from __future__ import annotations
 
+import asyncio
+import collections
 import os
 import subprocess
 import sys
@@ -149,7 +151,8 @@ def create_app(
 
     @app.get("/api/health")
     def health():
-        return {"ok": True, "version": APP_VERSION}
+        from mtg_card_scanner.ocr_id import ocr_status
+        return {"ok": True, "version": APP_VERSION, "ocr": ocr_status()}
 
     @app.get("/api/version")
     def version():
@@ -161,6 +164,23 @@ def create_app(
         from mtg_card_scanner.launch import _is_private_lan, lan_ip
         ip = lan_ip()
         return {"version": APP_VERSION, "lan_ip": ip, "is_lan": _is_private_lan(ip)}
+
+    @app.get("/api/addresses")
+    def addresses(request: Request):
+        """
+        Every base URL this server answers on, best first: the home LAN, then
+        the Tailscale MagicDNS name, then tailnet IPs. The phone app fetches
+        this once at home and falls back down the list when away, so scanning
+        over Tailscale needs no typing. One self-signed cert serves them all.
+        """
+        from mtg_card_scanner.launch import _is_private_lan, lan_ip, tailscale_addresses
+        port = request.url.port or 8443
+        ip = lan_ip()
+        ts = tailscale_addresses()
+        hosts = ([ip] if _is_private_lan(ip) else []) + ([ts["dns"]] if ts["dns"] else []) + ts["ips"]
+        return {"port": port, "lan_ip": ip if _is_private_lan(ip) else None,
+                "tailscale": ts,
+                "urls": [f"https://{h}:{port}" for h in dict.fromkeys(hosts)]}
 
     # ── in-app updates ─────────────────────────────────────────────────────────
     # Detect: compare our version against GitHub (latest release tag for
@@ -366,7 +386,12 @@ def create_app(
         host = ip.strip() if re.fullmatch(r"[0-9.]{7,15}", ip.strip()) else lan_ip()
         port = request.url.port or 8443
         buf = io.BytesIO()
-        segno.make(f"https://{host}:{port}/phone").save(
+        # #pin=<sha256>: the phone APP pins the server cert straight from this
+        # QR (the desktop screen vouches for it). A browser never sends the
+        # fragment, so the web /phone flow is untouched.
+        from mtg_card_scanner.launch import cert_sha256
+        pin = cert_sha256(os.getenv("SCAN_TLS_CERT", "")) if os.getenv("SCAN_TLS_CERT") else None
+        segno.make(f"https://{host}:{port}/phone" + (f"#pin={pin}" if pin else "")).save(
             buf, kind="svg", scale=6, dark="#e8eaed", light="#171a21")
         return Response(buf.getvalue(), media_type="image/svg+xml", headers=_NO_STORE)
 
@@ -394,10 +419,51 @@ def create_app(
                      **_NO_STORE})
 
     # ── scan (phone → server) ──────────────────────────────────────────────────
+    # Idempotent uploads: the Android app tags every upload with a
+    # client_upload_id and re-sends it after a lost response (timeout, Wi-Fi
+    # drop mid-reply). A repeat id answers with what the first one filed —
+    # never a second row for one physical card. Bounded; newest kept.
+    upload_seen: "collections.OrderedDict[str, dict]" = collections.OrderedDict()
+    upload_inflight: dict = {}
+
     @app.post("/api/scan")
     async def scan(background_tasks: BackgroundTasks,
                    files: list[UploadFile] = File(...),
-                   replace_scan_id: int = Form(0)):
+                   replace_scan_id: int = Form(0),
+                   client_upload_id: str = Form("")):
+        uid = client_upload_id.strip()[:128]
+        if uid:
+            # Everything between these checks and the claim runs on the event
+            # loop without an await, so two copies can't both claim the id.
+            while uid in upload_inflight:          # a twin is mid-scan
+                await upload_inflight[uid].wait()
+            if uid in upload_seen:
+                return _replay_upload(upload_seen[uid])
+            upload_inflight[uid] = asyncio.Event()
+        try:
+            resp = await _scan_once(background_tasks, files, replace_scan_id)
+            if uid and not (isinstance(resp, JSONResponse)):
+                upload_seen[uid] = resp
+                while len(upload_seen) > 500:
+                    upload_seen.popitem(last=False)
+            return resp
+        finally:
+            if uid:
+                ev = upload_inflight.pop(uid, None)
+                if ev is not None:
+                    ev.set()
+
+    def _replay_upload(first: dict) -> dict:
+        # The row as it is NOW (a pick may have landed since); a row deleted
+        # since (Discard) stays deleted — answer with the original reply.
+        if first.get("id") is not None:
+            cur = store.get_scan(first["id"])
+            if cur is not None:
+                return cur
+        return first
+
+    async def _scan_once(background_tasks: BackgroundTasks,
+                         files: list[UploadFile], replace_scan_id: int):
         frames = []
         for f in files:
             img = _decode_image(await f.read())
@@ -451,15 +517,13 @@ def create_app(
         #  - the top candidate is ART-DECISIVE → its distance lead over #2 is
         #    beyond same-art noise (different artworks/frames; measured on the
         #    rig's review history — see _mark_art_decisive).
-        # Either way: NM / Non-Foil / ×1, auto_picked flag (⚠ in the UIs),
-        # auto-merge applies so a repeat copy lands as +1 quantity.
+        # Either way: NM / Non-Foil / ×1, auto_picked flag (⚠ in the UIs).
+        # A repeat copy stays its OWN row (see _apply_selection_core).
         cands = result.get("candidates") or []
         if result["identified"] and cands and (
                 len(cands) == 1 or cands[0].get("ocr_confirmed")
                 or cands[0].get("art_decisive")):
             scan = await _apply_selection(scan["id"], cands[0], "NM", "Non-Foil", 1, auto=True)
-            if scan.get("merged_into"):
-                return scan
 
         # Background pricing at scan time. A single-printing auto-pick is a
         # definite selection, so price that EXACT printing (not a range) right
@@ -483,8 +547,13 @@ def create_app(
 
         if expect is not None:
             def _price_bg(scan_id: int, args: tuple, expect: dict) -> None:
-                if sweep["active"]:
-                    return          # one F2F consumer — the sweep covers it
+                # Claims the ONE F2F consumer slot for this fetch: a walk-around
+                # price check POSTed a second later queues behind it instead of
+                # racing it (measured: the same print fetched twice, two
+                # consumers in flight). A running sweep already covers this scan.
+                if not _claim_sweep([args]):
+                    return
+                sweep["current"] = args[0]
                 try:
                     p = _safe_get_price(*args)
                     if p:
@@ -493,6 +562,11 @@ def create_app(
                         _write_price_if_current(scan_id, expect, p.to_dict())
                 except Exception as exc:
                     print(f"  [server] scan-time pricing failed for #{scan_id}: {exc}")
+                finally:
+                    sweep["done"] += 1
+                    # Drain price checks that queued meanwhile, then go idle
+                    # through the sweep's single end-of-sweep reset.
+                    _run_sweep([])
 
             background_tasks.add_task(_price_bg, scan["id"], price_args, expect)
         return scan
@@ -553,15 +627,20 @@ def create_app(
     # searched right now, how far along, how fast. The sweep was previously
     # invisible; the UIs poll /api/price-status to display it.
     sweep = {"active": False, "total": 0, "done": 0, "current": "", "started": 0.0,
-             "cancel": False, "manual_stop_at": None}
+             "cancel": False, "manual_stop_at": None,
+             # Price checks (POST /api/scans/{id}/price-check) jump the queue
+             # of a RUNNING sweep instead of starting a second F2F consumer.
+             "priority": collections.deque()}
     # Serializes sweep start (check-and-set) — without it, price_missing's
     # active check and the 60s auto-tick can both pass and run two sweeps
     # concurrently, whose finally-blocks then make the survivor uncancellable.
     sweep_lock = threading.Lock()
-    # Serializes every selection read-modify-write (merge quantity bumps,
-    # select claims, PATCH edits): two concurrent selects of the same printing
-    # could otherwise both read qty 1 and both write qty 2 — a physical card
-    # silently vanishing from the export.
+    # Serializes every selection read-modify-write (select claims, PATCH
+    # edits, retro auto-picks). It was introduced when repeat copies merged
+    # into one row's quantity — two concurrent selects both read qty 1 and
+    # both wrote qty 2, a physical card silently vanishing from the export.
+    # Merging is gone (each scan keeps its own row), but a pick racing a
+    # PATCH or a retro pass still needs the same serialization.
     select_lock = threading.Lock()
 
     @app.get("/api/price-status")
@@ -630,7 +709,7 @@ def create_app(
             return {"stopping": True}
         return {"stopping": False}
 
-    def _collect_price_targets() -> list[tuple[str, int, dict, bool, str]]:
+    def _collect_price_targets(only: Optional[int] = None) -> list[tuple[str, int, dict, bool, str]]:
         """
         Everything the sweeper still owes a price:
           - scans with a chosen printing but no completed search → the selection
@@ -641,9 +720,11 @@ def create_app(
             those are never the card, so they cost no F2F budget.
         A search that found no listing is recorded (empty conditions) so it is
         not re-searched every sweep; the manual per-scan button still forces.
+        *only* restricts it to one scan (a price check).
         """
         targets: list[tuple[str, int, dict, bool, str]] = []
-        for s in store.list_scans():
+        rows = store.list_scans() if only is None else [r for r in [store.get_scan(only)] if r]
+        for s in rows:
             if s.get("selection"):
                 if s.get("f2f") is None and s["selection"].get("name"):
                     sel = s["selection"]
@@ -672,12 +753,25 @@ def create_app(
         with sweep_lock:
             if sweep["active"]:
                 return False
-            sweep.update(active=True, total=len(targets), done=0, current="",
-                         cancel=False, started=time.monotonic())
+            sweep.update(active=True, total=len(targets) + len(sweep["priority"]),
+                         done=0, current="", cancel=False, started=time.monotonic())
             evt = getattr(f2f, "interrupt", None)
             if evt is not None:
                 evt.clear()
             return True
+
+    def _end_sweep_locked() -> None:
+        """Reset the sweep to idle. Caller holds sweep_lock. Price-check
+        targets still queued are dropped: after a Stop or the breaker nothing
+        would consume them, and the page re-requests while its prints are
+        unsearched."""
+        sweep["active"] = False
+        sweep["current"] = ""
+        sweep["cancel"] = False
+        sweep["priority"].clear()
+        evt = getattr(f2f, "interrupt", None)
+        if evt is not None:
+            evt.clear()
 
     def _run_sweep(items: list[tuple[str, int, dict, bool, str]]) -> None:
         """Requires a successful _claim_sweep by the caller."""
@@ -688,8 +782,25 @@ def create_app(
         # consecutive unavailable targets → abort and cool down 10 minutes so
         # the bucket actually recovers; a manual start overrides the cooldown.
         unavailable_streak = 0
+        queue = collections.deque(items)
+        ended = False
         try:
-            for kind, sid, c, foil, label in items:
+            while True:
+                # Price-check targets first. Deciding "nothing left" and the
+                # WHOLE reset to idle happen in ONE lock hold, exactly once: a
+                # price check either lands in this queue or sees the sweep idle
+                # and claims its own. (Resetting again afterwards, as the
+                # finally used to, clobbered a sweep claimed in between — it
+                # ran "inactive", unstoppable, beside a third.)
+                with sweep_lock:
+                    if sweep["priority"]:
+                        kind, sid, c, foil, label = sweep["priority"].popleft()
+                    elif queue:
+                        kind, sid, c, foil, label = queue.popleft()
+                    else:
+                        _end_sweep_locked()
+                        ended = True
+                        break
                 if sweep.get("cancel"):
                     print(f"  [server] price sweep cancelled at {sweep['done']}/{sweep['total']}")
                     break
@@ -761,13 +872,11 @@ def create_app(
                 finally:
                     sweep["done"] += 1
         finally:
-            with sweep_lock:
-                sweep["active"] = False
-                sweep["current"] = ""
-                sweep["cancel"] = False
-            evt = getattr(f2f, "interrupt", None)
-            if evt is not None:
-                evt.clear()
+            # Stop / breaker / exception exits: still active here, so no other
+            # sweep can have been claimed — reset once.
+            if not ended:
+                with sweep_lock:
+                    _end_sweep_locked()
 
     def _retro_fix_scans() -> None:
         """
@@ -809,9 +918,11 @@ def create_app(
         """
         try:
             import cv2
-            from mtg_card_scanner.ocr_id import match_printing, read_bottom_strip
+            from mtg_card_scanner.ocr_id import match_printing, ocr_status, read_bottom_strip
         except Exception:
             return
+        if not ocr_status()["available"]:
+            return      # don't mark scans done — read them once OCR is installed
         done = 0
         for s in store.list_scans():
             if done >= budget:
@@ -855,10 +966,13 @@ def create_app(
     # Auto-sweep: any unpriced work is picked up every minute without the user
     # pressing anything. A manual stop pauses it for 10 minutes; a manual
     # start clears the pause.
+    auto_stop = threading.Event()
+
     def _auto_sweep_loop(interval: float) -> None:
         while True:
             sweep["next_check_at"] = time.monotonic() + interval
-            time.sleep(interval)
+            if auto_stop.wait(interval):
+                return
             try:
                 if sweep["active"]:
                     continue
@@ -877,6 +991,9 @@ def create_app(
             except Exception as exc:
                 print(f"  [server] auto-sweep error: {exc}")
 
+    # Tests stop it: a leftover tick loading the OCR engine in a daemon
+    # thread aborts the interpreter at exit (exit 134 after "all passed").
+    app.state.stop_auto_sweep = auto_stop.set
     if auto_sweep_interval:
         threading.Thread(target=_auto_sweep_loop, args=(auto_sweep_interval,),
                          daemon=True, name="price-auto-sweep").start()
@@ -898,6 +1015,39 @@ def create_app(
             return {"queued": 0, "already_running": True}
         background_tasks.add_task(_run_sweep, targets)
         return {"queued": len(targets)}
+
+    @app.post("/api/scans/{scan_id}/price-check")
+    async def price_check(scan_id: int, background_tasks: BackgroundTasks):
+        """
+        Price ONE scan now — the phone app's walk-around "what's it worth?"
+        (a handheld scan opens its card with prices filling in live). Prices
+        exactly what the sweep would for it: the selection, or every
+        same-artwork candidate print. Still ONE F2F consumer: a running sweep
+        takes these targets at the FRONT of its queue; otherwise a one-scan
+        sweep starts. It prices only this card: it neither lifts the breaker's
+        cooldown nor a manual-stop pause for everything else.
+        """
+        if not store.get_scan(scan_id):
+            return JSONResponse({"error": "not found"}, status_code=404)
+        targets = _collect_price_targets(only=scan_id)
+        if not targets:
+            return {"queued": 0}
+        for _ in range(3):      # a sweep may finish between our two checks
+            if _claim_sweep(targets):
+                background_tasks.add_task(_run_sweep, targets)
+                return {"queued": len(targets)}
+            with sweep_lock:
+                if sweep["active"]:
+                    if sweep.get("cancel"):
+                        return {"queued": 0, "busy": True}      # a stop is under way
+                    # The page re-requests while prints are unsearched — don't
+                    # stack duplicates of what is already queued.
+                    queued = {(k, s_, c.get("id")) for k, s_, c, _, _ in sweep["priority"]}
+                    fresh = [t for t in targets if (t[0], t[1], t[2].get("id")) not in queued]
+                    sweep["priority"].extend(fresh)
+                    sweep["total"] += len(fresh)
+                    return {"queued": len(fresh), "sweeping": True}
+        return {"queued": 0, "busy": True}
 
     @app.get("/api/scans/{scan_id}/image")
     def scan_image(scan_id: int):
@@ -926,13 +1076,18 @@ def create_app(
                               auto: bool = False) -> dict:
         """
         Select *printing* on scan *scan_id* — the one path for user picks,
-        scan-time auto-picks, AND the retro repair thread.  Auto-merge: bulk
-        lots contain several copies of the same card (measured: 17% of a real
-        session), so selecting the EXACT printing+condition+finish an existing
-        selected row already holds folds this scan into it as added quantity
-        instead of a duplicate row.  Synchronous and price-free so it is
-        callable from plain threads; _apply_selection adds pricing for user
-        picks.  Auto picks carry auto_picked so the UIs can flag them.
+        scan-time auto-picks, AND the retro repair thread.  Synchronous and
+        price-free so it is callable from plain threads; _apply_selection adds
+        pricing for user picks.  Auto picks carry auto_picked so the UIs can
+        flag them.
+
+        Every scan keeps its OWN row, even a repeat copy of a printing already
+        picked. Repeat copies used to fold into the older row's quantity
+        (bulk lots run ~17% duplicates), but that pulled the newer scan out
+        of scan order, and the owner finds cards by scan order when searching
+        the list (2026-09-27). The Mana Exchange export sums identical
+        printing+condition+finish lines instead (server/export.py), so the
+        import file is unchanged.
         """
         foil = _foil_from_finish(finish)
         selection = {
@@ -954,26 +1109,8 @@ def create_app(
         }
         if auto:
             selection["auto_picked"] = True
-        # The merge decision and the claim must be one atomic step: with the
-        # price fetch inside this window (as before), two concurrent selects
-        # of the same printing both missed each other (duplicate rows) or both
-        # read the same base quantity (lost copies). Claim under the lock,
-        # price AFTER.
+        # Claim under the lock, price AFTER (no network while locked).
         with select_lock:
-            if selection["scryfall_id"]:
-                for other in store.list_scans():
-                    if other["id"] == scan_id or other.get("status") != "selected":
-                        continue
-                    o = dict(other.get("selection") or {})
-                    if (o.get("scryfall_id") == selection["scryfall_id"]
-                            and o.get("condition") == condition
-                            and o.get("finish") == finish):
-                        o["quantity"] = int(o.get("quantity") or 1) + quantity
-                        merged = store.update_scan(other["id"], selection=o)
-                        (scan_images_dir / f"{scan_id}.jpg").unlink(missing_ok=True)
-                        store.delete_scan(scan_id)
-                        merged["merged_into"] = other["id"]
-                        return merged
             # error=None: a best-guess scan the user then picks must stop
             # showing "No confident art match" and leave the Problems view.
             return store.update_scan(
@@ -1027,7 +1164,7 @@ def create_app(
         # ONE F2F consumer at a time: while a sweep runs, no other pricing
         # fires (rate-limit safety). f2f was cleared by the claim, so the
         # sweep collects and prices this selection on its next pass.
-        if auto or result.get("merged_into") or sweep["active"]:
+        if auto or sweep["active"]:
             return result
         sel = result["selection"]
         price = await run_in_threadpool(
@@ -1059,7 +1196,7 @@ def create_app(
     @app.patch("/api/scans/{scan_id}")
     async def patch_scan(scan_id: int, body: dict = Body(...)):
         # Selection read-modify-write happens under select_lock (a concurrent
-        # merge bumping quantity could otherwise be overwritten); the reprice
+        # pick or retro auto-pick could otherwise be overwritten); the reprice
         # network call stays OUTSIDE the lock.
         with select_lock:
             scan = store.get_scan(scan_id)
@@ -1148,6 +1285,7 @@ def create_app(
         )
 
     app.state.store = store
+    app.state.sweep = sweep          # tests drive the price-check/sweep interplay
     return app
 
 

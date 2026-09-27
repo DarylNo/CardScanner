@@ -98,6 +98,14 @@
                background:var(--line); display:block; }
   .pcard .pt { font-size:11px; margin-top:4px; line-height:1.25; color:#cbd2dc; }
   .pprice { font-size:18px; font-weight:700; color:var(--good); margin:6px 0; }
+  .pcard .pp { font-size:12px; font-weight:700; color:var(--good); margin-top:2px; }
+  .pcard .pp.none { color:var(--muted); font-weight:400; }
+  .pfold { grid-column:1/-1; font-size:12px; color:var(--muted); text-align:center;
+           padding:8px; border:1px dashed var(--line); border-radius:8px; }
+  #pcBar { position:sticky; bottom:0; display:flex; gap:10px; padding:10px 0 4px;
+           background:linear-gradient(transparent, var(--bg) 30%); }
+  #pcBar button { flex:1; font-size:16px; padding:12px; border-radius:10px; }
+  #pcDiscard { background:#3a1c1c; color:#fca5a5; border-color:#5b2a2a; }
   .msrow { display:flex; gap:8px; margin-top:8px; }
   .msrow input { flex:1; padding:8px 10px; border-radius:8px; border:1px solid #2a2f3a;
                  background:var(--bg); color:var(--text); font:inherit; }
@@ -188,7 +196,8 @@
 /* ═══ REBUILT FOR SPEED (v9+) ═══
    - Scan-only camera flow: the phone scans and reports; printings are picked
      on the DESKTOP (the on-phone picker was removed by request in v13).
-     Single-printing cards auto-file server-side; duplicates auto-merge.
+     Single-printing cards auto-file server-side; every scan keeps its own
+     row (repeat copies are not merged — scan order; the export sums them).
    - Signature-diffed rendering: the old page rebuilt the whole list DOM on
      every 3s poll (flicker, scroll loss, battery). Every render target now
      computes a cheap signature first and touches the DOM only on change —
@@ -223,6 +232,17 @@ const STABLE_FRAMES = 2;      // steady samples (~0.4s) before scanning
 // cards three separate times; the SERVER judges card content.
 const OCCUPIED_FRAC = 0.02;
 const DEBUG = new URLSearchParams(location.search).has('debug');
+// ?panel=1 — scans list / printing picker ONLY, no camera: the Android app
+// owns the camera natively and opens this page in a WebView for the review
+// UI (&detail=<id> jumps straight to that card's picker). Nothing below the
+// camera section runs differently; the detection loop simply never starts.
+const PANEL = new URLSearchParams(location.search).has('panel');
+const PANEL_DETAIL = Number(new URLSearchParams(location.search).get('detail')) || 0;
+// &pricecheck=1 — the app's walk-around "what's it worth?": price this card
+// NOW (jumps the sweep queue server-side), show prices as they land, then
+// Keep (it stays filed) or Discard (deleted). Backing out keeps it — a scan
+// is never deleted without the explicit tap.
+const PRICE_CHECK = PANEL && new URLSearchParams(location.search).has('pricecheck');
 
 let autoEnabled = true;
 let mode = 'watching';        // watching | scanning | awaitNext
@@ -287,7 +307,7 @@ function formatChipsHtml(scan){
 }
 
 /* ── version banner — proves which page+server combo is running ────────────── */
-const UI_VERSION = 'v30';
+const UI_VERSION = 'v35';
 fetch('/api/version').then(r => r.json())
   .then(d => { $('#ver').textContent = `${UI_VERSION} · ${d.version}`; })
   .catch(() => { $('#ver').textContent = UI_VERSION; });
@@ -409,32 +429,43 @@ async function acquireWakeLock() {
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') acquireWakeLock();
 });
-acquireWakeLock();
+if (!PANEL) acquireWakeLock();
 
 /* ── capture + submit (state machine releases after the burst) ─────────────── */
+// toBlob copies the canvas bitmap AT CALL TIME (HTML spec; Chromium snapshots
+// in CanvasAsyncBlobCreator) and only the JPEG encode is deferred — so the
+// burst no longer waits for each encode before the next frame. Awaiting every
+// encode stretched the hold-still window from 2×100 ms to 2×100 ms + three
+// encodes on a Snapdragon 480; now the tray is released once the PIXELS are in
+// hand and the encodes finish behind the operator's hand.
 function grabFrame() {
   const r = roiRect();
   const scale = Math.min(1, MAX_UPLOAD_DIM / Math.max(r.w, r.h));
   const w = Math.round(r.w * scale), h = Math.round(r.h * scale);
-  canvas.width = w; canvas.height = h;
+  // Setting width/height clears and reallocates even when unchanged.
+  if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
   canvas.getContext('2d').drawImage(video, r.x, r.y, r.w, r.h, 0, 0, w, h);
-  return new Promise(res => canvas.toBlob(b => res(b), 'image/jpeg', JPEG_QUALITY));
+  return new Promise((res, rej) => canvas.toBlob(
+    b => b ? res(b) : rej(new Error('JPEG encode failed')), 'image/jpeg', JPEG_QUALITY));
 }
+// Resolves as soon as the last frame's pixels are captured; `encoded` settles
+// when the JPEGs are ready (wrapped so awaiting the burst never waits on them).
 async function captureBurst() {
-  const frames = [];
+  const shots = [];
   for (let i = 0; i < BURST; i++) {
-    frames.push(await grabFrame());
-    if (i < BURST - 1) await new Promise(r => setTimeout(r, BURST_GAP_MS));
+    if (i > 0) await new Promise(r => setTimeout(r, BURST_GAP_MS));
+    shots.push(grabFrame());
   }
-  return frames;
+  shots.forEach(p => p.catch(() => {}));   // failures surface via `encoded`
+  return { encoded: Promise.all(shots) };
 }
 // scanOnce resolves at end-of-capture; identification continues in background.
 async function scanOnce(manual = false) {
   setStatus('Capturing…');
-  let frames;
-  try { frames = await captureBurst(); }
+  let shot;
+  try { shot = await captureBurst(); }
   catch (e) { setStatus('Capture failed: ' + e.message, 'err'); return; }
-  submitScan(frames, manual);    // deliberately NOT awaited
+  submitScan(shot.encoded, manual);    // deliberately NOT awaited
 }
 // No-match retry: the card is still in the tray (the trigger waits for a tray
 // CHANGE, so a failed card would otherwise just sit there unscannable). Offer
@@ -449,17 +480,18 @@ function hideRetry() { retryBtn.style.display = 'none'; }
 retryBtn.addEventListener('click', async () => {
   hideRetry();
   setStatus('Retrying — capturing…');
-  let frames;
-  try { frames = await captureBurst(); }
+  let shot;
+  try { shot = await captureBurst(); }
   catch (e) { setStatus('Capture failed: ' + e.message, 'err'); return; }
-  submitScan(frames, false, retryReplaceId);
+  submitScan(shot.encoded, false, retryReplaceId);
 });
 
-async function submitScan(frames, manual = false, replaceId = 0) {
-  const capturedScene = scannedFrame;
+async function submitScan(framesP, manual = false, replaceId = 0) {
+  const capturedScene = scannedFrame;      // FIRST, before any await (no_card guard)
   hideRetry();
   setStatus('Scanning…');
   try {
+    const frames = await framesP;          // encodes finish while the tray is released
     const fd = new FormData();
     frames.forEach((b, i) => fd.append('files', b, `frame${i}.jpg`));
     if (replaceId) fd.append('replace_scan_id', String(replaceId));
@@ -476,10 +508,6 @@ async function submitScan(frames, manual = false, replaceId = 0) {
       }
       // The failed row (if this was a retry) is still there — keep offering.
       if (replaceId) offerRetry(replaceId);
-    } else if (data.merged_into) {
-      // Single-printing card, repeat copy — auto-filed as +1 on the row.
-      setStatus(`✓ ${data.selection?.name} — duplicate, merged (now ×${data.selection?.quantity})`
-        + (data.included === false ? ' ⚠ row excluded from export' : ''), 'ok');
     } else if (data.identified) {
       setStatus((data.selection?.auto_picked
         ? `✓ ${data.card_read.name}${popTag(data)} — exact printing confident, auto-filed ⚠`
@@ -726,9 +754,11 @@ function tick() {
   } else if (mode === 'awaitNext') {
     drawOverlay(box, '#8b93a1');
     const removed = !box || box.maskFrac < EMPTY_FRAC;
+    // prevFrame guarded like the watching branch: after a reset raced a
+    // no_card re-seed it is null, and changedFrac(cur, null) threw every tick.
     const swapped = scannedFrame && occupied
                  && changedFrac(cur, scannedFrame) > SWAP_FRAC
-                 && changedFrac(cur, prevFrame) < STABLE_FRAC;
+                 && prevFrame && changedFrac(cur, prevFrame) < STABLE_FRAC;
     if (removed || swapped) {
       mode = 'watching'; stableCount = 0;
       hideRetry();   // the failed card left the tray — a retry now would
@@ -740,7 +770,7 @@ function tick() {
   }
   prevFrame = cur;
 }
-setInterval(tick, SAMPLE_MS);
+if (!PANEL) setInterval(tick, SAMPLE_MS);
 
 /* ── controls ──────────────────────────────────────────────────────────────── */
 autoBtn.addEventListener('click', () => {
@@ -803,18 +833,14 @@ function printInfo(s) {
   return { searched, vals };
 }
 function priceRange(s) {
+  const fmt = (lo, hi) => lo === hi ? `$${lo.toFixed(2)}` : `$${lo.toFixed(2)}–$${hi.toFixed(2)}`;
   if (s.status !== 'selected') {
     const { vals } = printInfo(s);
-    if (vals.length) {
-      const lo = Math.min(...vals), hi = Math.max(...vals);
-      return lo === hi ? `$${lo}` : `$${lo}–$${hi}`;
-    }
+    if (vals.length) return fmt(Math.min(...vals), Math.max(...vals));
   }
-  const c = s.f2f?.conditions || {};
-  const vals = Object.values(c);
+  const vals = Object.values(s.f2f?.conditions || {}).map(Number);
   if (!vals.length) return null;
-  const lo = Math.min(...vals), hi = Math.max(...vals);
-  return lo === hi ? `$${lo}` : `$${lo}–$${hi}`;
+  return fmt(Math.min(...vals), Math.max(...vals));
 }
 const isProblem = s => !!s.error || !(s.candidates || []).length;
 function priceOf(s) { const p = f2fBest(s); return p == null ? null : Number(p); }
@@ -1060,6 +1086,8 @@ scansBtn.addEventListener('click', () => {
   scansTimer = setInterval(refreshScans, 3000);
 });
 $('#scansClose').addEventListener('click', () => {
+  // Panel mode has no camera view behind the list — hand back to the app.
+  if (PANEL) { if (window.CardScannerApp) window.CardScannerApp.close(); else history.back(); return; }
   scansPanel.classList.remove('open');
   clearInterval(scansTimer); scansTimer = null;
 });
@@ -1071,13 +1099,34 @@ refreshScans();
 const detailPanel = $('#detailPanel'), detailBody = $('#detailBody'), detailTitle = $('#detailTitle');
 let detailScanId = null;
 
-function pcandCard(c, chosenId) {
+// One printing's F2F price for the grid: NM first, else the best condition
+// listed. null conditions = not searched yet; {} = searched, no listing.
+const COND_LABEL = { NM:'NM', PL:'LP', MP:'MP', HP:'HP', DMG:'DMG' };
+function printPrice(c) {
+  const conds = c.f2f_conditions;
+  if (conds == null) return { text: '…', none: true };
+  for (const k of ['NM','PL','MP','HP','DMG']) {
+    if (conds[k] != null) return { text: `$${Number(conds[k]).toFixed(2)} ${COND_LABEL[k]}`, none: false };
+  }
+  return { text: 'no listing', none: true };
+}
+// priceMode: 'pending' — unpicked scan, the sweep prices every same-art print
+// ("…" until it lands); 'selected' — only the pick is priced, so other prints
+// show a price only if one exists (never a "…" that can't resolve); 'none' —
+// search results, which are never priced.
+function pcandCard(c, chosenId, priceMode = 'pending') {
+  const pp = printPrice(c);
+  const showPrice = priceMode === 'pending' || (priceMode === 'selected' && !pp.none);
   return `<div class="pcard ${c.id===chosenId?'chosen':''}" data-pick="${escHtml(c.id)}">
     <img src="${escHtml(c.image_normal||c.image_small)}" loading="lazy" onerror="this.style.visibility='hidden'">
     <div class="pt"><b>${escHtml((c.set||'').toUpperCase())}</b> #${escHtml(c.collector_number)}
       ${c.multi_distance!=null?`· Δ${c.multi_distance}`:''}</div>
+    ${showPrice ? `<div class="pp${pp.none?' none':''}" data-price-for="${escHtml(c.id)}">${escHtml(pp.text)}</div>` : ''}
   </div>`;
 }
+// Different artworks (server-set other_art — artwork.py) fold behind a tile,
+// as on the desktop; the picked printing always shows.
+let detailShowAllArt = false;
 function detailControls(scan) {
   const cr = scan.card_read || {};
   const condDefault = scan.selection?.condition || (cr.condition_estimate||'NM').toUpperCase();
@@ -1099,39 +1148,90 @@ function detailCtl() {
 }
 async function openDetail(id) {
   detailScanId = id;
+  detailShowAllArt = false;
   detailPanel.classList.add('open');
   await renderScanDetail();
+}
+// Live prices while a card is open: prices land seconds after a scan (or a
+// price check) — update ONLY the price text in place, so a search being typed
+// or the scroll position is never disturbed by a re-render.
+let detailPollSig = '', detailPollN = 0;
+setInterval(async () => {
+  if (!detailScanId || !detailPanel.classList.contains('open')) return;
+  let scan;
+  try { scan = await (await fetch(`/api/scans/${detailScanId}`)).json(); } catch (e) { return; }
+  if (!scan || !scan.id || scan.id !== detailScanId) return;
+  // Price check: re-request every ~10 s while prints are unsearched — the
+  // first request can be refused (a Stop under way) or dropped by a Stop; the
+  // server de-duplicates, so repeats are cheap.
+  if (PRICE_CHECK && !scan.selection && !printInfo(scan).searched && ++detailPollN % 4 === 0) {
+    jsend(`/api/scans/${scan.id}/price-check`, 'POST', {}).catch(() => {});
+  }
+  const sig = JSON.stringify([scan.f2f?.conditions, (scan.candidates||[]).map(c => c.f2f_conditions)]);
+  if (sig === detailPollSig) return;
+  detailPollSig = sig;
+  for (const c of scan.candidates || []) {
+    const el = detailBody.querySelector(`.pp[data-price-for="${CSS.escape(c.id)}"]`);
+    if (!el) continue;
+    const pp = printPrice(c);
+    el.textContent = pp.text; el.classList.toggle('none', pp.none);
+  }
+  const hp = $('#p-headprice');
+  if (hp) hp.innerHTML = headPriceHtml(scan);
+}, 2500);
+function headPriceHtml(scan) {
+  if (scan.selection) {
+    const p = f2fBest(scan);
+    return `F2F: ${p == null ? '—' : '$' + Number(p).toFixed(2)}`;
+  }
+  const r = priceRange(scan);
+  const muted = t => `<span style="font-size:13px;color:var(--muted);font-weight:400">${t}</span>`;
+  if (r) return `~${escHtml(r)} <span style="font-size:12px;color:var(--muted);font-weight:400">(same-art printings)</span>`;
+  return printInfo(scan).searched ? muted('no F2F listing') : muted('pricing…');
 }
 async function renderScanDetail() {
   const scan = await (await fetch(`/api/scans/${detailScanId}`)).json();
   if (scan.error && !scan.id) { detailBody.innerHTML = `<p>${escHtml(scan.error)}</p>`; return; }
   const sel = scan.selection || null;
   const cr = scan.card_read || {};
-  detailTitle.textContent = sel?.name || cr.name || '(unread)';
+  detailTitle.textContent = (PRICE_CHECK ? 'Price check · ' : '') + (sel?.name || cr.name || '(unread)');
+  detailPollSig = '';
 
   let html = `<div class="prow">
     <img src="/api/scans/${scan.id}/image" onerror="this.style.display='none'">
     <div>
       ${sel ? `<div><b>${escHtml(sel.name)}</b></div>
         <div style="font-size:13px;color:var(--muted)">${escHtml(sel.set_name)} · ${escHtml((sel.set||'').toUpperCase())} #${escHtml(sel.collector_number)} · ×${sel.quantity}</div>
-        <div class="pprice">F2F: $${f2fBest(scan) ?? '—'}</div>`
+        <div class="pprice" id="p-headprice">${headPriceHtml(scan)}</div>`
       : `<div><b>${escHtml(cr.name||'(unread)')}</b></div>
         <div style="font-size:13px;color:var(--muted)">tap a printing below to select it</div>
-        ${priceRange(scan) ? `<div class="pprice">~${priceRange(scan)} <span style="font-size:12px;color:var(--muted);font-weight:400">(top match)</span></div>` : ''}`}
+        <div class="pprice" id="p-headprice">${headPriceHtml(scan)}</div>`}
       ${scan.error ? `<div style="font-size:12px;color:var(--bad);margin-top:6px">${escHtml(scan.error)}</div>` : ''}
       ${formatChipsHtml(scan)}
     </div>
   </div>`;
   html += detailControls(scan);
   html += `<div class="subhead">${sel ? 'Re-pick printing' : 'Pick the printing'} — closest first</div>`;
-  html += (scan.candidates||[]).length
-    ? `<div class="pgrid" id="pcands">${scan.candidates.map(c=>pcandCard(c, sel?.scryfall_id)).join('')}</div>`
+  const cands = scan.candidates || [];
+  const folded = cands.filter(c => c.other_art && c.id !== sel?.scryfall_id);
+  const shown = detailShowAllArt ? cands : cands.filter(c => !folded.includes(c));
+  const foldTile = folded.length
+    ? `<div class="pfold" id="pfold">${detailShowAllArt ? 'Hide' : 'Show'} ${folded.length} other artwork${folded.length===1?'':'s'}</div>` : '';
+  html += cands.length
+    ? `<div class="pgrid" id="pcands">${shown.map(c=>pcandCard(c, sel?.scryfall_id, sel ? 'selected' : 'pending')).join('')}${foldTile}</div>`
     : `<p style="color:var(--muted);font-size:13px">No candidates — search below.</p>`;
   html += `<div class="subhead">Wrong card? Search</div>
     <div class="msrow"><input id="p-search" placeholder="Card name…"><button id="p-searchBtn">Search</button></div>
     <div class="pgrid" id="psearchResults" style="margin-top:8px"></div>`;
   html += `<button class="dangerbtn" id="p-delete">Delete this scan</button>`;
+  if (PRICE_CHECK) html += `<div id="pcBar"><button id="pcDiscard">Discard</button><button id="pcKeep">Keep</button></div>`;
   detailBody.innerHTML = html;
+  $('#pfold')?.addEventListener('click', () => { detailShowAllArt = !detailShowAllArt; renderScanDetail(); });
+  $('#pcKeep')?.addEventListener('click', closePanelApp);
+  $('#pcDiscard')?.addEventListener('click', async () => {
+    await fetch(`/api/scans/${scan.id}`, { method: 'DELETE' });
+    closePanelApp();
+  });
 
   const scanImg = detailBody.querySelector('.prow img');
   scanImg?.addEventListener('click', () => openLightbox(scanImg.src));
@@ -1140,13 +1240,8 @@ async function renderScanDetail() {
     const printing = (pool || []).find(c => c.id === el.dataset.pick);
     if (!printing) return;
     el.style.opacity = '0.5';
-    const res = await jsend(`/api/scans/${scan.id}/select`, 'POST', { printing, ...detailCtl() });
-    if (res.merged_into) {
-      // Duplicate copy — folded into the existing row; show that row instead.
-      detailScanId = res.merged_into;
-      setStatus(`Duplicate — merged (now ×${res.selection?.quantity})`
-        + (res.included === false ? ' — row is EXCLUDED from export' : ''), 'ok');
-    }
+    // Every scan keeps its own row (no merging of repeat copies — scan order).
+    await jsend(`/api/scans/${scan.id}/select`, 'POST', { printing, ...detailCtl() });
     await renderScanDetail(); refreshScans();
   };
   const candPick = pickFrom(scan.candidates);
@@ -1167,7 +1262,7 @@ async function renderScanDetail() {
     const res = $('#psearchResults');
     res.innerHTML = `<p style="color:var(--muted)">Searching…</p>`;
     const { candidates } = await (await fetch(`/api/search?q=${encodeURIComponent(q)}`)).json();
-    res.innerHTML = candidates.map(c=>pcandCard(c, sel?.scryfall_id)).join('')
+    res.innerHTML = candidates.map(c=>pcandCard(c, sel?.scryfall_id, 'none')).join('')
       || `<p style="color:var(--muted)">No results.</p>`;
     const searchPick = pickFrom(candidates);
     res.querySelectorAll('.pcard[data-pick]').forEach(el =>
@@ -1182,7 +1277,11 @@ async function renderScanDetail() {
     refreshScans();
   });
 }
+function closePanelApp() {
+  if (window.CardScannerApp) window.CardScannerApp.close(); else history.back();
+}
 $('#detailBack').addEventListener('click', () => {
+  if (PRICE_CHECK) { closePanelApp(); return; }      // back = Keep
   detailPanel.classList.remove('open');
   detailScanId = null;
   refreshScans();
@@ -1193,7 +1292,21 @@ const lightbox = $('#lightbox'), lightboxImg = $('#lightboxImg');
 function openLightbox(src) { lightboxImg.src = src; lightbox.classList.add('open'); }
 lightbox.addEventListener('click', () => lightbox.classList.remove('open'));
 
-startCamera();
+if (PANEL) {
+  // No camera view: the list IS the page. Hide the camera chrome so a slow
+  // WebView never flashes it, then open straight into the list (or a card).
+  $('#stage').style.display = 'none';
+  document.querySelector('body > footer').style.display = 'none';
+  $('#areaBtn').style.display = 'none';
+  scansBtn.click();
+  if (PANEL_DETAIL) {
+    // Price check: start pricing THIS card right away (it jumps the sweep).
+    if (PRICE_CHECK) jsend(`/api/scans/${PANEL_DETAIL}/price-check`, 'POST', {}).catch(() => {});
+    openDetail(PANEL_DETAIL);
+  }
+} else {
+  startCamera();
+}
 </script>
 </body>
 </html>
