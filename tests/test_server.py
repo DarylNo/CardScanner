@@ -861,3 +861,28 @@ def test_concurrent_twins_of_one_upload_file_one_row(tmp_path):
             t.join(10)
     assert len(out) == 3 and len(set(out)) == 1
     assert len(store.list_scans()) == 1
+
+
+def test_phone_qr_is_dark_on_light_and_decodes(client, monkeypatch):
+    # The app's reader (ZXing QRCodeReader) only finds DARK-on-light finder
+    # patterns; the old light-on-dark QR never paired. Re-render with the
+    # server's exact save options as PNG and decode with a standard reader.
+    import io
+    import segno
+    opts = {}
+    real_save = segno.QRCode.save
+
+    def spy_save(self, out, **kw):
+        opts.update(kw, data=self.matrix)
+        return real_save(self, out, **kw)
+
+    monkeypatch.setattr(segno.QRCode, "save", spy_save)
+    assert client.get("/api/phone-qr?ip=192.168.1.9").status_code == 200
+    assert opts["dark"].lower() in ("#000", "#000000") and opts["light"].lower() in ("#fff", "#ffffff")
+    buf = io.BytesIO()
+    png_opts = {k: v for k, v in opts.items() if k not in ("kind", "data")}
+    monkeypatch.undo()
+    segno.make("https://192.168.1.9:8443/phone").save(buf, kind="png", **png_opts)
+    img = cv2.imdecode(np.frombuffer(buf.getvalue(), np.uint8), cv2.IMREAD_GRAYSCALE)
+    text, _, _ = cv2.QRCodeDetector().detectAndDecode(img)
+    assert text == "https://192.168.1.9:8443/phone"

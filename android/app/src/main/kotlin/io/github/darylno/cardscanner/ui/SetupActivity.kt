@@ -24,11 +24,6 @@ import androidx.camera.core.UseCase
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
-import com.google.zxing.BinaryBitmap
-import com.google.zxing.DecodeHintType
-import com.google.zxing.PlanarYUVLuminanceSource
-import com.google.zxing.ReaderException
-import com.google.zxing.common.HybridBinarizer
 import com.google.zxing.qrcode.QRCodeReader
 import io.github.darylno.cardscanner.App
 import io.github.darylno.cardscanner.net.Pin
@@ -157,8 +152,7 @@ class SetupActivity : AppCompatActivity() {
                 .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                 .build()
             val reader = QRCodeReader()
-            val hints = mapOf(DecodeHintType.TRY_HARDER to true)
-            analysis.setAnalyzer(analysisExec) { image -> decode(image, reader, hints) }
+            analysis.setAnalyzer(analysisExec) { image -> decode(image, reader) }
             try {
                 unbindQr()   // a previous QR binding of ours (failed() restarts) — not MainActivity's
                 provider.bindToLifecycle(this, CameraSelector.DEFAULT_BACK_CAMERA, pv, analysis)
@@ -169,23 +163,14 @@ class SetupActivity : AppCompatActivity() {
         }, ContextCompat.getMainExecutor(this))
     }
 
-    private fun decode(image: ImageProxy, reader: QRCodeReader, hints: Map<DecodeHintType, Any>) {
+    private fun decode(image: ImageProxy, reader: QRCodeReader) {
         try {
             if (handled.get()) return
             val plane = image.planes[0]
             val buf = plane.buffer
             val bytes = ByteArray(buf.remaining())
             buf.get(bytes)
-            val src = PlanarYUVLuminanceSource(
-                bytes, plane.rowStride, image.height, 0, 0, image.width, image.height, false,
-            )
-            val text = try {
-                reader.decode(BinaryBitmap(HybridBinarizer(src)), hints).text
-            } catch (_: ReaderException) {
-                null
-            } finally {
-                reader.reset()
-            }
+            val text = QrDecode.decode(bytes, plane.rowStride, image.width, image.height, reader)
             if (text != null && app.server.normalize(text) != null && handled.compareAndSet(false, true)) {
                 runOnUiThread { onScanned(text) }
             }
