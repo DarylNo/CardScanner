@@ -258,6 +258,15 @@ from `android/` (Node on PATH, JDK 17); CI job `android` runs it per push.
   installed one. `auto-tag.yml` must keep `secrets: inherit` or the auto path
   silently signs with the debug key.
 
+## Phone-only direction (in progress)
+
+The project is moving to **the phone as the server** — see
+`docs/PHONE_ONLY_PLAN.md` (stages, roles, what is dropped). Until Stage 4
+ships, the Python server remains the live path AND the reference every
+Kotlin port is differentially tested against: port, never re-tune. When
+Stage 3 lands, guests lose delete/clear/export (they can flag for
+deletion) and the "Guests have FULL access" rule above is superseded.
+
 ## Release / distribution
 
 - `git tag vX.Y.Z && git push --tags` → 4 binaries +
