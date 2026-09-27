@@ -3,19 +3,21 @@ package io.github.darylno.cardscanner.ui
 import android.Manifest
 import android.content.pm.PackageManager
 import android.graphics.Color
+import android.graphics.Typeface
 import android.os.Build
 import android.os.Bundle
 import android.view.Gravity
+import android.view.View
 import android.view.ViewGroup
-import android.widget.Button
+import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
-import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import io.github.darylno.cardscanner.App
+import io.github.darylno.cardscanner.R
 
 /**
  * Guest gateway: people without Tailscale join the phone's local network
@@ -26,21 +28,31 @@ import io.github.darylno.cardscanner.App
 class ShareActivity : AppCompatActivity() {
     private lateinit var app: App
     private lateinit var body: LinearLayout
+    private lateinit var chrome: ScanChrome
     private val notifPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { render() }
 
-    private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
+    private fun dp(v: Int) = chrome.dp(v)
+    private fun wrap() = ViewGroup.LayoutParams.WRAP_CONTENT
+    private fun match() = ViewGroup.LayoutParams.MATCH_PARENT
+    private fun lp(top: Int = 0) = LinearLayout.LayoutParams(match(), wrap()).apply { topMargin = dp(top) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         app = App.of(this)
+        chrome = ScanChrome(this)
         body = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(16), dp(16), dp(16), dp(16))
+            setPadding(dp(16), dp(4), dp(16), dp(32))
         }
-        setContentView(ScrollView(this).apply {
-            setBackgroundColor(Color.parseColor("#0f1115"))
-            addView(body)
-        })
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(ScanChrome.Palette.BG)
+            addView(chrome.topBar(getString(R.string.share_title), getString(R.string.back)) { finish() },
+                LinearLayout.LayoutParams(match(), wrap()))
+            addView(ScrollView(this@ShareActivity).apply { addView(body) }, LinearLayout.LayoutParams(match(), 0, 1f))
+        }
+        chrome.applyInsets(root)
+        setContentView(root)
         render()
     }
 
@@ -49,63 +61,94 @@ class ShareActivity : AppCompatActivity() {
         render()
     }
 
-    private fun text(t: String, size: Float = 15f, color: Int = Color.parseColor("#e5e7eb")) = TextView(this).apply {
-        text = t; textSize = size; setTextColor(color); setPadding(0, dp(6), 0, dp(6))
+    /** Amber card: guests get FULL access. Shown in every state — never hide it. */
+    private fun warningCard() = chrome.card(ScanChrome.Palette.WARN_BG, ScanChrome.Palette.WARN_STROKE).apply {
+        orientation = LinearLayout.HORIZONTAL
+        isBaselineAligned = false   // else the multi-line text is shifted down and its last line clipped
+        addView(chrome.text("⚠", 18f, ScanChrome.Palette.WARN), LinearLayout.LayoutParams(wrap(), wrap()).apply { marginEnd = dp(12) })
+        addView(chrome.text(getString(R.string.share_warning), 14f, ScanChrome.Palette.WARN), LinearLayout.LayoutParams(0, wrap(), 1f))
+    }
+
+    private fun errorCard(msg: String) = chrome.card(ScanChrome.Palette.ERR_BG, ScanChrome.Palette.ERR_STROKE).apply {
+        addView(chrome.text(msg, 14f, ScanChrome.Palette.ERR))
     }
 
     private fun render() {
         body.removeAllViews()
         val gw = app.gateway
-        body.addView(text("Share the review pages", 20f, Color.WHITE))
-        body.addView(text(
-            "Guests have full access: they can pick, edit, delete, clear, export and update — " +
-                "only share the code with people you trust.", 15f, Color.parseColor("#fbbf24"),
-        ))
-        gw.error?.let { body.addView(text("Couldn't start sharing: $it", 15f, Color.parseColor("#f87171"))) }
+        gw.error?.let { body.addView(errorCard(getString(R.string.share_start_failed, it)), lp(8)) }
         if (!gw.running) {
-            body.addView(text("Guests on the same Wi-Fi (or on this phone's hotspot) open a link and enter a 6-digit code. No Tailscale needed."))
-            body.addView(Button(this).apply {
-                text = "Start sharing"
-                isAllCaps = false
-                setOnClickListener { start() }
-            })
+            val hero = chrome.card().apply { setPadding(dp(20), dp(20), dp(20), dp(20)) }
+            hero.addView(chrome.text(getString(R.string.share_hero_title), 22f, ScanChrome.Palette.TEXT, bold = true))
+            hero.addView(chrome.text(getString(R.string.share_hero_body), 15f, ScanChrome.Palette.TEXT_DIM), lp(8))
+            hero.addView(chrome.primaryButton(getString(R.string.share_start)) { start() },
+                LinearLayout.LayoutParams(match(), dp(52)).apply { topMargin = dp(20) })
+            body.addView(hero, lp(8))
+            body.addView(warningCard(), lp(12))
         } else {
             val addrs = gw.localAddresses()
             val code = gw.code()
+            body.addView(warningCard(), lp(8))
+            // "Sharing is on" status line.
+            body.addView(LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER
+                addView(View(this@ShareActivity).apply { background = chrome.dot(ScanChrome.Palette.OK) },
+                    LinearLayout.LayoutParams(dp(8), dp(8)).apply { marginEnd = dp(8) })
+                addView(chrome.text(getString(R.string.share_on), 14f, ScanChrome.Palette.OK, bold = true))
+            }, lp(16))
             if (addrs.isEmpty()) {
-                body.addView(text(
-                    "No Wi-Fi address — turn on this phone's hotspot (Settings → Hotspot) and have guests join it, then come back here.",
-                    15f, Color.parseColor("#f87171"),
-                ))
+                body.addView(errorCard(getString(R.string.share_no_wifi)), lp(12))
             } else {
                 val url = gw.joinUrl(addrs.first())
-                val size = dp(260)
-                body.addView(ImageView(this).apply {
-                    setImageBitmap(gw.qr(url, size))
-                    contentDescription = url
-                }, LinearLayout.LayoutParams(size, size).apply { gravity = Gravity.CENTER_HORIZONTAL })
-                body.addView(text("Scan the QR, or open one of these and enter the code:"))
-                for (a in addrs) body.addView(text("http://$a:${gw.port}", 16f, Color.WHITE))
+                // QR on WHITE (black-on-white, own quiet zone + card padding): must stay scannable.
+                val size = dp(232)
+                val qrCard = FrameLayout(this).apply {
+                    background = chrome.rounded(Color.WHITE, 20f)
+                    setPadding(dp(14), dp(14), dp(14), dp(14))
+                    addView(ImageView(this@ShareActivity).apply {
+                        setImageBitmap(gw.qr(url, size))
+                        contentDescription = url
+                    }, FrameLayout.LayoutParams(size, size))
+                }
+                body.addView(qrCard, LinearLayout.LayoutParams(wrap(), wrap()).apply {
+                    gravity = Gravity.CENTER_HORIZONTAL; topMargin = dp(16)
+                })
+                body.addView(chrome.text(getString(R.string.share_scan_qr), 14f, ScanChrome.Palette.TEXT_DIM).apply {
+                    gravity = Gravity.CENTER_HORIZONTAL
+                }, lp(10))
             }
-            body.addView(text("Join code", 14f))
-            body.addView(TextView(this).apply {
-                text = code.chunked(3).joinToString(" ")
-                textSize = 48f
-                setTextColor(Color.WHITE)
+            // Join code, huge and spaced.
+            val codeCard = chrome.card().apply { gravity = Gravity.CENTER_HORIZONTAL }
+            codeCard.addView(chrome.text(getString(R.string.share_join_code).uppercase(), 12f, ScanChrome.Palette.TEXT_FAINT, bold = true).apply {
+                letterSpacing = 0.08f
                 gravity = Gravity.CENTER_HORIZONTAL
-                letterSpacing = 0.1f
-            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
-            body.addView(Button(this).apply {
-                text = "Stop sharing (new code next time)"
-                isAllCaps = false
-                setOnClickListener { gw.stop(); render() }
-            })
+            }, lp())
+            codeCard.addView(chrome.text(code.chunked(3).joinToString(" "), 46f, ScanChrome.Palette.TEXT, bold = true).apply {
+                typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
+                letterSpacing = 0.12f
+                gravity = Gravity.CENTER_HORIZONTAL
+                setLineSpacing(0f, 1f)
+            }, lp(4))
+            if (addrs.isNotEmpty()) {
+                codeCard.addView(chrome.divider(), chrome.dividerParams().apply { topMargin = dp(12); bottomMargin = dp(12) })
+                codeCard.addView(chrome.text(getString(R.string.share_or_open), 13f, ScanChrome.Palette.TEXT_DIM).apply {
+                    gravity = Gravity.CENTER_HORIZONTAL
+                }, lp())
+                for (a in addrs) {
+                    codeCard.addView(chrome.text("http://$a:${gw.port}", 16f, ScanChrome.Palette.TEXT).apply {
+                        gravity = Gravity.CENTER_HORIZONTAL
+                        setTextIsSelectable(true)
+                    }, lp(6))
+                }
+            }
+            body.addView(codeCard, lp(16))
+            body.addView(chrome.destructiveButton(getString(R.string.share_stop)) { gw.stop(); render() },
+                LinearLayout.LayoutParams(match(), dp(52)).apply { topMargin = dp(20) })
+            body.addView(chrome.text(getString(R.string.share_stop_note), 13f, ScanChrome.Palette.TEXT_FAINT).apply {
+                gravity = Gravity.CENTER_HORIZONTAL
+            }, lp(8))
         }
-        body.addView(Button(this).apply {
-            text = "Back"
-            isAllCaps = false
-            setOnClickListener { finish() }
-        })
     }
 
     private fun start() {
@@ -118,7 +161,7 @@ class ShareActivity : AppCompatActivity() {
         try {
             app.gateway.start()
         } catch (e: Exception) {
-            body.addView(text("Couldn't start sharing: ${e.message}", 15f, Color.parseColor("#f87171")), 1)
+            body.addView(errorCard(getString(R.string.share_start_failed, e.message)), 0, lp(8))
             return
         }
         body.postDelayed({ render() }, 500)

@@ -5,11 +5,16 @@ import android.content.pm.PackageManager
 import android.graphics.Color
 import android.os.Bundle
 import android.text.InputType
+import android.text.TextUtils
+import android.util.Log
+import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.view.inputmethod.EditorInfo
 import android.webkit.WebView
 import android.widget.Button
 import android.widget.EditText
+import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
@@ -26,10 +31,13 @@ import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
 import com.google.zxing.qrcode.QRCodeReader
 import io.github.darylno.cardscanner.App
+import io.github.darylno.cardscanner.R
 import io.github.darylno.cardscanner.net.Pin
+import java.security.cert.CertificateException
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
+import javax.net.ssl.SSLException
 
 /**
  * Pairing. (1) Scan the desktop's phone QR (`https://<ip>:8443/phone#pin=…`):
@@ -43,6 +51,7 @@ class SetupActivity : AppCompatActivity() {
     private lateinit var preview: PreviewView
     private lateinit var input: EditText
     private lateinit var status: TextView
+    private lateinit var statusDetail: TextView
     private lateinit var addresses: TextView
     private lateinit var doneBtn: Button
     private val io: ExecutorService = Executors.newSingleThreadExecutor()
@@ -64,53 +73,138 @@ class SetupActivity : AppCompatActivity() {
     }
 
     private val permission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
-        if (ok) startQrCamera() else status.text = "No camera permission — type the server address instead."
+        if (ok) startQrCamera() else cameraUnusable(getString(R.string.setup_no_permission))
     }
 
-    private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
+    private lateinit var chrome: ScanChrome
+    private lateinit var manualCard: LinearLayout
+    private lateinit var manualToggle: Button
+    private lateinit var pairedCard: LinearLayout
+
+    private fun dp(v: Int) = chrome.dp(v)
+    private fun wrap() = ViewGroup.LayoutParams.WRAP_CONTENT
+    private fun match() = ViewGroup.LayoutParams.MATCH_PARENT
+
+    private enum class Tone { NORMAL, OK, ERR }
+
+    /** The one status line under the camera: friendly words only (details go to logcat). */
+    private fun setStatus(msg: String, tone: Tone = Tone.NORMAL, detail: String? = null) {
+        statusDetail.text = detail ?: ""
+        statusDetail.visibility = if (detail.isNullOrBlank()) View.GONE else View.VISIBLE
+        status.text = msg
+        status.setTextColor(
+            when (tone) {
+                Tone.OK -> ScanChrome.Palette.OK
+                Tone.ERR -> ScanChrome.Palette.ERR
+                Tone.NORMAL -> ScanChrome.Palette.TEXT_DIM
+            }
+        )
+    }
+
+    /** No QR camera (denied / missing): say so plainly and open the typed-address section. */
+    private fun cameraUnusable(msg: String, detail: String? = null) {
+        setStatus(msg, Tone.ERR, detail)
+        showManual(true)
+    }
+
+    private fun showManual(show: Boolean) {
+        manualCard.visibility = if (show) View.VISIBLE else View.GONE
+        manualToggle.text = getString(R.string.setup_manual_show) + if (show) "  ▴" else "  ▾"
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         app = App.of(this)
+        chrome = ScanChrome(this)
         val col = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(16), dp(16), dp(16), dp(16))
+            setPadding(dp(20), dp(28), dp(20), dp(24))
         }
-        fun text(t: String, size: Float = 15f, color: Int = Color.parseColor("#e5e7eb")) = TextView(this).apply {
-            text = t; textSize = size; setTextColor(color); setPadding(0, dp(6), 0, dp(6))
+        col.addView(chrome.text(getString(R.string.setup_title), 28f, ScanChrome.Palette.TEXT, bold = true))
+
+        // ── steps ──
+        fun step(n: Int, t: String) = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            isBaselineAligned = false
+            addView(chrome.text(n.toString(), 13f, ScanChrome.Palette.TEXT_ON_ACTIVE, bold = true).apply {
+                gravity = Gravity.CENTER
+                background = chrome.pill(ScanChrome.Palette.CHIP_ACTIVE)
+            }, LinearLayout.LayoutParams(dp(24), dp(24)).apply { marginEnd = dp(12) })
+            addView(chrome.text(t, 15f, ScanChrome.Palette.TEXT_DIM), LinearLayout.LayoutParams(0, wrap(), 1f))
         }
-        col.addView(text("Pair with your scanner server", 20f, Color.WHITE))
-        col.addView(text("On the desktop, open the scanner page and show the phone QR code, then point this camera at it."))
-        preview = PreviewView(this).apply { scaleType = PreviewView.ScaleType.FIT_CENTER }
-        col.addView(preview, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(280)))
-        col.addView(text("…or type the server address (e.g. 192.168.1.42 or rig.tailnet.ts.net):"))
+        col.addView(step(1, getString(R.string.setup_step1)), LinearLayout.LayoutParams(match(), wrap()).apply { topMargin = dp(16) })
+        col.addView(step(2, getString(R.string.setup_step2)), LinearLayout.LayoutParams(match(), wrap()).apply { topMargin = dp(12) })
+
+        // ── camera in a rounded frame with viewfinder corners ──
+        val frame = FrameLayout(this)
+        chrome.clipRounded(frame, Color.BLACK, 20f)
+        preview = PreviewView(this).apply {
+            scaleType = PreviewView.ScaleType.FILL_CENTER
+            // TextureView-backed so the rounded clip applies (a SurfaceView ignores it).
+            implementationMode = PreviewView.ImplementationMode.COMPATIBLE
+        }
+        frame.addView(preview, FrameLayout.LayoutParams(match(), match()))
+        frame.addView(ViewfinderView(this, ScanChrome.Palette.BG, 20f), FrameLayout.LayoutParams(match(), match()))
+        col.addView(frame, LinearLayout.LayoutParams(match(), dp(300)).apply { topMargin = dp(24) })
+
+        status = chrome.text("", 15f, ScanChrome.Palette.TEXT_DIM).apply {
+            gravity = Gravity.CENTER_HORIZONTAL
+            setPadding(dp(8), dp(14), dp(8), dp(6))
+        }
+        col.addView(status, LinearLayout.LayoutParams(match(), wrap()))
+        // The technical reason under a failure, so it can be diagnosed from the phone.
+        statusDetail = chrome.text("", 12f, ScanChrome.Palette.TEXT_DIM).apply {
+            gravity = Gravity.CENTER_HORIZONTAL
+            maxLines = 3
+            ellipsize = TextUtils.TruncateAt.END
+            setTextIsSelectable(true)
+            setPadding(dp(8), 0, dp(8), dp(6))
+            visibility = View.GONE
+        }
+        col.addView(statusDetail, LinearLayout.LayoutParams(match(), wrap()))
+        setStatus(getString(R.string.setup_looking))
+
+        // ── paired: addresses + Start scanning (hidden until pairing succeeds) ──
+        pairedCard = chrome.card().apply { visibility = View.GONE }
+        pairedCard.addView(chrome.text(getString(R.string.setup_paired_to).uppercase(), 12f, ScanChrome.Palette.TEXT_FAINT, bold = true).apply {
+            letterSpacing = 0.08f
+        })
+        addresses = chrome.text("", 14f, ScanChrome.Palette.TEXT).apply { setPadding(0, dp(8), 0, dp(4)) }
+        pairedCard.addView(addresses)
+        col.addView(pairedCard, LinearLayout.LayoutParams(match(), wrap()).apply { topMargin = dp(8) })
+        doneBtn = chrome.primaryButton(getString(R.string.setup_done)) { finish() }.apply { visibility = View.GONE }
+        col.addView(doneBtn, LinearLayout.LayoutParams(match(), dp(52)).apply { topMargin = dp(16) })
+
+        // ── typed address (secondary, collapsed) ──
+        manualToggle = chrome.secondaryButton("") { showManual(manualCard.visibility != View.VISIBLE) }
+        col.addView(manualToggle, LinearLayout.LayoutParams(match(), wrap()).apply { topMargin = dp(12) })
+        manualCard = chrome.card()
+        manualCard.addView(chrome.text(getString(R.string.setup_manual_hint), 14f, ScanChrome.Palette.TEXT_DIM))
         input = EditText(this).apply {
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
-            setTextColor(Color.WHITE)
-            setHintTextColor(Color.parseColor("#8b93a1"))
-            hint = "192.168.1.42:8443"
+            setTextColor(ScanChrome.Palette.TEXT)
+            setHintTextColor(ScanChrome.Palette.TEXT_FAINT)
+            hint = getString(R.string.setup_input_hint)
+            textSize = 16f
+            isSingleLine = true
+            imeOptions = EditorInfo.IME_ACTION_GO
+            setOnEditorActionListener { _, _, _ -> onTyped(); true }
+            background = chrome.rounded(ScanChrome.Palette.SURFACE_HI, 12f, ScanChrome.Palette.OUTLINE)
+            setPadding(dp(14), 0, dp(14), 0)
         }
-        col.addView(input)
-        col.addView(Button(this).apply {
-            text = "Connect"
-            isAllCaps = false
-            setOnClickListener { onTyped() }
-        })
-        status = text("", 15f, Color.parseColor("#fbbf24"))
-        addresses = text("", 14f)
-        col.addView(status)
-        col.addView(addresses)
-        doneBtn = Button(this).apply {
-            text = "Done — start scanning"
-            isAllCaps = false
-            visibility = View.GONE
-            setOnClickListener { finish() }
-        }
-        col.addView(doneBtn)
-        setContentView(ScrollView(this).apply {
-            setBackgroundColor(Color.parseColor("#0f1115"))
+        manualCard.addView(input, LinearLayout.LayoutParams(match(), dp(52)).apply { topMargin = dp(12) })
+        manualCard.addView(chrome.primaryButton(getString(R.string.setup_connect)) { onTyped() },
+            LinearLayout.LayoutParams(match(), wrap()).apply { topMargin = dp(12) })
+        col.addView(manualCard, LinearLayout.LayoutParams(match(), wrap()).apply { topMargin = dp(12) })
+        showManual(false)
+
+        val root = ScrollView(this).apply {
+            setBackgroundColor(ScanChrome.Palette.BG)
+            isFillViewport = true
             addView(col)
-        })
+        }
+        chrome.applyInsets(root)
+        setContentView(root)
 
         // Backing out unpaired leaves the app (the camera screen would only send us back here).
         onBackPressedDispatcher.addCallback(this, object : androidx.activity.OnBackPressedCallback(true) {
@@ -143,7 +237,8 @@ class SetupActivity : AppCompatActivity() {
             val provider = try {
                 future.get()
             } catch (e: Exception) {
-                status.text = "Camera unavailable: ${e.message}"
+                Log.w(TAG, "QR camera: provider unavailable", e)
+                cameraUnusable(getString(R.string.setup_camera_unavailable), technical(e))
                 return@addListener
             }
             cameraProvider = provider
@@ -158,7 +253,8 @@ class SetupActivity : AppCompatActivity() {
                 provider.bindToLifecycle(this, CameraSelector.DEFAULT_BACK_CAMERA, pv, analysis)
                 qrUseCases = arrayOf(pv, analysis)
             } catch (e: Exception) {
-                status.text = "Camera unavailable: ${e.message}"
+                Log.w(TAG, "QR camera: bind failed", e)
+                cameraUnusable(getString(R.string.setup_camera_unavailable), technical(e))
             }
         }, ContextCompat.getMainExecutor(this))
     }
@@ -194,7 +290,7 @@ class SetupActivity : AppCompatActivity() {
         val raw = input.text.toString()
         val base = app.server.normalize(raw)
         if (base == null) {
-            status.text = "That doesn't look like a server address."
+            setStatus(getString(R.string.setup_bad_address), Tone.ERR)
             return
         }
         val pin = Pin.parsePinFromQrUrl(raw)
@@ -204,25 +300,21 @@ class SetupActivity : AppCompatActivity() {
     }
 
     private fun probeAndConfirm(base: String) {
-        status.text = "Contacting $base…"
+        setStatus(getString(R.string.setup_contacting, base))
         io.execute {
             val fp = try {
                 app.server.probe(base)
             } catch (e: Exception) {
-                runOnUiThread { failed("Couldn't reach $base: ${e.message}") }
+                Log.w(TAG, "probe $base failed", e)
+                runOnUiThread { failed(getString(R.string.setup_unreachable, base), technical(e)) }
                 return@execute
             }
             runOnUiThread {
                 AlertDialog.Builder(this)
-                    .setTitle("Trust this server?")
-                    .setMessage(
-                        "$base presents certificate\n\nSHA-256 ${Pin.formatFingerprint(fp)}\n\n" +
-                            "Compare it with the #pin= value in the desktop's phone QR link " +
-                            "(desktop scanner page → phone QR). If they differ, do NOT trust it — " +
-                            "scan the desktop QR instead."
-                    )
-                    .setPositiveButton("Trust") { _, _ -> pair(base, fp) }
-                    .setNegativeButton("Cancel") { _, _ -> failed("Not paired.") }
+                    .setTitle(R.string.setup_trust_title)
+                    .setMessage(getString(R.string.setup_trust_msg, base, Pin.formatFingerprint(fp)))
+                    .setPositiveButton(R.string.setup_trust) { _, _ -> pair(base, fp) }
+                    .setNegativeButton(R.string.cancel) { _, _ -> failed(getString(R.string.setup_not_paired)) }
                     .setCancelable(false)
                     .show()
             }
@@ -230,31 +322,40 @@ class SetupActivity : AppCompatActivity() {
     }
 
     private fun pair(base: String, pin: String) {
-        status.text = "Pairing with $base…"
+        setStatus(getString(R.string.setup_pairing, base))
         io.execute {
             try {
                 val urls = app.server.pair(base, pin)
                 app.uploads.retryNow()
                 runOnUiThread {
-                    status.text = "✓ Paired. Fingerprint ${Pin.formatFingerprint(pin).take(23)}…"
-                    status.setTextColor(Color.parseColor("#6ee7a0"))
+                    setStatus(getString(R.string.setup_paired, Pin.formatFingerprint(pin).take(23)), Tone.OK)
                     addresses.text = describe(urls)
+                    pairedCard.visibility = View.VISIBLE
                     doneBtn.visibility = View.VISIBLE
                 }
             } catch (e: Exception) {
-                runOnUiThread { failed("Pairing failed: ${e.message}") }
+                Log.w(TAG, "pairing with $base failed", e)
+                val msg = if (e is SSLException || e is CertificateException) R.string.setup_cert_mismatch
+                    else R.string.setup_pair_failed
+                runOnUiThread { failed(getString(msg), technical(e)) }
             }
         }
     }
 
-    private fun failed(msg: String) {
-        status.text = msg
-        status.setTextColor(Color.parseColor("#f87171"))
+    private fun failed(msg: String, detail: String? = null) {
+        setStatus(msg, Tone.ERR, detail)
         handled.set(false)
         startQrCamera()
     }
 
     companion object {
+        private const val TAG = "CardScanner.Setup"
+
+        /** "SSLPeerUnverifiedException: … ← CertificateException: …" — the reason shown under a failure. */
+        fun technical(e: Throwable): String = generateSequence(e) { it.cause.takeIf { c -> c !== it } }
+            .take(3)
+            .joinToString(" ← ") { t -> t.javaClass.simpleName + (t.message?.let { ": $it" } ?: "") }
+
         /** "Home: https://192.168.1.42:8443" / "Tailscale: https://rig.tail…:8443". */
         fun describe(urls: List<String>): String = urls.joinToString("\n") { "${label(it)}: $it" }
 
