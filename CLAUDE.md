@@ -229,6 +229,13 @@ from `android/` (Node on PATH, JDK 17); CI job `android` runs it per push.
   `android/core/src/test/resources/detect/` come from the SERVER's own code via
   `scripts/export_detect_fixtures.py`, and `--check` fails CI on any drift.
   Regenerate them, never hand-edit.
+- **Art fingerprint is a bit-exact PORT** (`PHash`/`ArtHasher`/`ArtMatcher`
+  in `:core`): Pillow's fixed-point L + LANCZOS and pocketfft's DCT-II are
+  transliterated, not re-derived — a textbook DCT or fdlibm twiddles moved
+  values by ~1e-11 and flipped `> median`. `HashParityTest` checks every
+  stage against `resources/arthash/expected.json`, made by the SERVER's code
+  via `scripts/export_hash_fixtures.py` (`--check` in CI). Never loosen it
+  to "close enough": the 110/140+20/210 thresholds only transfer on equal bits.
 - **The server stays the judge.** The phone flattens WITH A MARGIN so the
   server can re-detect; no_card / not identified → the 3 raw frames go up with
   `replace_scan_id` (the server's multi-frame retry). No phone-side card gates.
@@ -257,6 +264,15 @@ from `android/` (Node on PATH, JDK 17); CI job `android` runs it per push.
   debug key and says so in the job summary; such an APK can't update an
   installed one. `auto-tag.yml` must keep `secrets: inherit` or the auto path
   silently signs with the debug key.
+
+## Phone-only direction (in progress)
+
+The project is moving to **the phone as the server** — see
+`docs/PHONE_ONLY_PLAN.md` (stages, roles, what is dropped). Until Stage 4
+ships, the Python server remains the live path AND the reference every
+Kotlin port is differentially tested against: port, never re-tune. When
+Stage 3 lands, guests lose delete/clear/export (they can flag for
+deletion) and the "Guests have FULL access" rule above is superseded.
 
 ## Release / distribution
 

@@ -45,6 +45,12 @@
         <activity
             android:name=".ui.SettingsActivity"
             android:exported="false" />
+        <!-- Stage 1c F2F network test; hidden (long-press DIAGNOSTICS in Settings).
+             configChanges: a rotation must not kill a run mid-measurement. -->
+        <activity
+            android:name=".ui.DiagnosticsActivity"
+            android:exported="false"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden" />
         <service
             android:name=".gateway.GatewayService"
             android:exported="false"

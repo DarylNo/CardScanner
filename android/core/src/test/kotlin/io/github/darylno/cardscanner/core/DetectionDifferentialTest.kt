@@ -153,6 +153,48 @@ class DetectionDifferentialTest {
         assertSame("exposure drift", steps)
     }
 
+    /**
+     * The owner's bug: with the scanned card left on the tray, the camera's own
+     * slow auto-exposure / white-balance drift piled up against the scan-time
+     * snapshot until > SWAP_FRAC of pixels differed (the mean-shift cancel does
+     * not cancel a GAIN change: bright print moves more than dark print), and it
+     * re-scanned the same card every ~20 s. Drift is smooth, a swap is motion.
+     */
+    private fun gained(g: Gray, gain: Double) =
+        Gray(g.w, g.h, IntArray(g.size) { (g.px[it] * gain).toInt().coerceIn(0, 255) })
+
+    @Test fun slowCameraDriftNeverFakesASwap() {
+        val s = Scene(h = 132, seed = 11)
+        val steps = mutableListOf<Step>()
+        repeat(5) { steps += Step("tick", empty(s)) }
+        repeat(4) { steps += Step("tick", card(s, 50, 20, 60, 84, face = 7)) }   // settles → trigger
+        steps += Step("captureDone")
+        // 40 s at 5 ticks/s: gain wanders 1.00 → 1.18 → 0.92 (AE/AWB hunting under room light).
+        for (i in 0 until 200) {
+            val gain = if (i < 100) 1.0 + 0.18 * i / 100 else 1.18 - 0.26 * (i - 100) / 100
+            steps += Step("tick", gained(card(s, 50, 20, 60, 84, 7), gain))
+        }
+        assertSame("slow drift", steps)
+        val kt = runKotlin(steps)
+        assertEquals("a still card must never read as a new card", 0, kt.count { it.getBoolean("next") })
+        assertEquals("and must never be scanned twice", 1, kt.count { it.getBoolean("trigger") })
+    }
+
+    @Test fun realSwapIsStillCaughtAfterLongDrift() {
+        val s = Scene(h = 132, seed = 12)
+        val steps = mutableListOf<Step>()
+        repeat(5) { steps += Step("tick", empty(s)) }
+        repeat(4) { steps += Step("tick", card(s, 50, 20, 60, 84, face = 7)) }
+        steps += Step("captureDone")
+        for (i in 0 until 100) steps += Step("tick", gained(card(s, 50, 20, 60, 84, 7), 1.0 + 0.1 * i / 100))
+        repeat(2) { steps += Step("tick", hand(gained(card(s, 50, 20, 60, 84, 7), 1.1), s)) }   // hand swaps it
+        repeat(4) { steps += Step("tick", gained(card(s, 52, 21, 60, 84, face = 99), 1.1)) }    // new card settles
+        assertSame("drift then swap", steps)
+        val kt = runKotlin(steps)
+        assertEquals(1, kt.count { it.getBoolean("next") })
+        assertEquals("the new card is scanned", 2, kt.count { it.getBoolean("trigger") })
+    }
+
     @Test fun noCardReseedResetManualAutoAndAspectChange() {
         val s = Scene(h = 120, seed = 3)
         val holder = { card(s, 60, 15, 55, 80, face = 0) }   // face 0 still textured — fine

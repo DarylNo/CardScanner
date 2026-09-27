@@ -70,6 +70,7 @@ dependencies {
     implementation(libs.camerax.lifecycle)
     implementation(libs.camerax.view)
     implementation(libs.okhttp)
+    implementation(libs.cronet.embedded)   // Diagnostics → Network test only (f2f/F2fProbe)
     implementation(libs.zxing.core)
     implementation(libs.nanohttpd)
     implementation(libs.androidx.core)

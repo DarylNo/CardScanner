@@ -40,7 +40,9 @@ jobs:
   #    Kotlin port (DetectionDifferentialTest) — Node ships on ubuntu-latest;
   #  - the detect fixtures it compares against are regenerated here from the
   #    SERVER's own card_detect + tests/phone_flatten_ref.py, and any diff
-  #    fails the build, so fixtures can't drift from the server silently.
+  #    fails the build, so fixtures can't drift from the server silently;
+  #  - ArtPackTest reads a pack exported by the server's art_pack writer
+  #    (scripts/export_pack_fixture.py --check, same drift rule).
   android:
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -52,6 +54,18 @@ jobs:
       - run: pip install -e ".[test]"
       - name: Detect fixtures match the server
         run: python scripts/export_detect_fixtures.py --check
+      # Same rule for the art-pack reader (ArtPackTest): its fixture pack is
+      # written by the server's own mtg_card_scanner.art_pack.
+      - name: Art-pack fixture matches the writer
+        run: python scripts/export_pack_fixture.py --check
+      - name: F2F pacing table matches facetoface.py
+        run: python scripts/export_f2f_pacing_fixture.py --check
+      # Art-fingerprint parity (HashParityTest): expected.json is recomputed
+      # from the committed input images with the SERVER's art_index/imagehash
+      # code on the freshly installed Pillow/scipy/numpy — a library release
+      # that moves one hash bit fails here, before the phone's thresholds drift.
+      - name: Art-hash fixtures match the server
+        run: python scripts/export_hash_fixtures.py --check
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
