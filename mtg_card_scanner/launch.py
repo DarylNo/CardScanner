@@ -38,7 +38,13 @@ def _run_update() -> None:
     repo_root = Path(__file__).resolve().parents[1]
     if (repo_root / ".git").exists():                     # dev checkout
         print("  [launch] updating via git pull …")
-        subprocess.call(["git", "-C", str(repo_root), "pull", "--ff-only"])
+        if subprocess.call(["git", "-C", str(repo_root), "pull", "--ff-only"]) == 0:
+            # A pull brings new CODE but never new DEPENDENCIES: the rig ran
+            # for weeks without rapidocr-onnxruntime after it joined
+            # pyproject, and OCR failed silently. Re-sync the editable install.
+            print("  [launch] syncing dependencies (pip install -e .) …")
+            subprocess.call([sys.executable, "-m", "pip", "install", "--quiet",
+                             "-e", str(repo_root)])
     elif shutil.which("uv"):                              # install.sh path
         print("  [launch] updating via uv tool install …")
         subprocess.call(["uv", "tool", "install", "--force", _TARBALL_SPEC])

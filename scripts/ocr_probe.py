@@ -258,6 +258,23 @@ def main():
     ap.add_argument("--save", help="directory for strip/variant PNGs")
     a = ap.parse_args()
 
+    # Production swallows EVERY OCR exception (ImportError included) and
+    # returns "" — a venv missing rapidocr looks exactly like "nothing read".
+    # A git-checkout rig updates by `git pull` only (launch._run_update), so
+    # a dependency added after the venv was built is never installed.
+    print(f"python: {sys.executable}")
+    try:
+        import onnxruntime
+        import rapidocr_onnxruntime
+        from rapidocr_onnxruntime import RapidOCR  # noqa: F401
+        print(f"rapidocr_onnxruntime OK ({getattr(rapidocr_onnxruntime, '__version__', '?')}), "
+              f"onnxruntime {onnxruntime.__version__}")
+    except Exception as exc:
+        print(f"!! OCR DEPENDENCY BROKEN: {exc!r}\n"
+              f"!! read_bottom_strip returns '' on EVERY scan in this venv. Fix:\n"
+              f"!!   {sys.executable} -m pip install -e .   (then restart the server)")
+        sys.exit(2)
+
     cands = []
     if a.scan_id is not None:
         cands, card_read, sel = load_scan(a.scan_id, a.db)

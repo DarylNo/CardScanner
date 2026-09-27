@@ -803,3 +803,9 @@ def test_price_check_during_a_stop_queues_nothing(tmp_path):
     app.state.sweep.update(active=True, cancel=True)
     assert c.post(f"/api/scans/{first}/price-check").json() == {"queued": 0, "busy": True}
     assert not app.state.sweep["priority"]
+
+
+def test_health_reports_whether_ocr_is_available(client, monkeypatch):
+    from mtg_card_scanner import ocr_id
+    monkeypatch.setattr(ocr_id, "_ocr_status", {"available": False, "error": "ImportError: x"})
+    assert client.get("/api/health").json()["ocr"] == {"available": False, "error": "ImportError: x"}

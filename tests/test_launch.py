@@ -112,3 +112,19 @@ def test_cert_sha256_matches_der_digest(tmp_path):
     assert cert_sha256(crt) == hashlib.sha256(der).hexdigest()
     assert len(cert_sha256(crt)) == 64
     assert cert_sha256(tmp_path / "missing.pem") is None
+
+
+def test_git_update_resyncs_dependencies_after_a_good_pull(monkeypatch):
+    # `git pull` brings code, never dependencies — the rig ran without the
+    # OCR engine for weeks. A successful pull must be followed by pip -e.
+    from mtg_card_scanner import launch
+    calls = []
+    monkeypatch.setattr(launch.subprocess, "call", lambda cmd: calls.append(cmd) or 0)
+    launch._run_update()
+    assert calls[0][:2] == ["git", "-C"] and calls[0][-2:] == ["pull", "--ff-only"]
+    assert calls[1][1:4] == ["-m", "pip", "install"] and "-e" in calls[1]
+
+    calls.clear()
+    monkeypatch.setattr(launch.subprocess, "call", lambda cmd: calls.append(cmd) or 1)
+    launch._run_update()                                  # pull failed → no pip
+    assert len(calls) == 1

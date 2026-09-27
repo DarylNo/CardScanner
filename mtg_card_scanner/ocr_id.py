@@ -45,6 +45,31 @@ _STRIP_Y = (0.88, 0.99)     # bottom strip of the 630x880 warp
 _STRIP_X = (0.02, 0.60)     # collector + set-code lines live bottom-left
 
 _ocr_engine = None
+_ocr_status: Optional[dict] = None
+
+
+def ocr_status() -> dict:
+    """
+    {"available": bool, "error": str | None} — whether the OCR engine imports.
+
+    read_bottom_strip swallows every failure (a missing optional engine must
+    never break a scan), which also made a MISSING engine indistinguishable
+    from "read nothing": a git-checkout rig updated by `git pull` never got
+    rapidocr-onnxruntime installed when it became a dependency, and every
+    printing silently went unconfirmed (the 2026-09 Fling / AKH #132 miss).
+    /api/health surfaces this and the desktop warns; the retro-OCR pass waits
+    for it instead of marking scans done. Cached — the import is expensive.
+    """
+    global _ocr_status
+    if _ocr_status is None:
+        try:
+            import rapidocr_onnxruntime  # noqa: F401
+            _ocr_status = {"available": True, "error": None}
+        except Exception as exc:          # ImportError, or an onnxruntime DLL failure
+            _ocr_status = {"available": False, "error": f"{type(exc).__name__}: {exc}"}
+            print(f"  [ocr] collector-line OCR unavailable — {_ocr_status['error']} "
+                  f"(fix: pip install -e .)")
+    return _ocr_status
 
 
 def read_bottom_strip(card_bgr) -> str:

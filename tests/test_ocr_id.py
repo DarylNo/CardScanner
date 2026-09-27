@@ -58,3 +58,22 @@ def test_art_double_check_blocks_disagreeing_promotions():
     assert _art_agrees(cands[1], cands) is True    # same-art band (+32)
     assert _art_agrees(cands[2], cands) is False   # alt-art (+84) — blocked
     assert _art_agrees({"id": "d"}, cands) is True # no art data — don't block
+
+
+def test_ocr_status_reports_a_missing_engine(monkeypatch):
+    # A missing engine used to look exactly like "read nothing" — every
+    # printing silently unconfirmed. ocr_status() makes it visible.
+    import builtins
+    from mtg_card_scanner import ocr_id
+    real_import = builtins.__import__
+
+    def fake_import(name, *a, **k):
+        if name == "rapidocr_onnxruntime":
+            raise ImportError("No module named 'rapidocr_onnxruntime'")
+        return real_import(name, *a, **k)
+
+    monkeypatch.setattr(ocr_id, "_ocr_status", None)
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+    st = ocr_id.ocr_status()
+    assert st["available"] is False and "rapidocr_onnxruntime" in st["error"]
+    assert ocr_id.ocr_status() is st                     # cached

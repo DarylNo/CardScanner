@@ -150,7 +150,8 @@ def create_app(
 
     @app.get("/api/health")
     def health():
-        return {"ok": True, "version": APP_VERSION}
+        from mtg_card_scanner.ocr_id import ocr_status
+        return {"ok": True, "version": APP_VERSION, "ocr": ocr_status()}
 
     @app.get("/api/version")
     def version():
@@ -850,9 +851,11 @@ def create_app(
         """
         try:
             import cv2
-            from mtg_card_scanner.ocr_id import match_printing, read_bottom_strip
+            from mtg_card_scanner.ocr_id import match_printing, ocr_status, read_bottom_strip
         except Exception:
             return
+        if not ocr_status()["available"]:
+            return      # don't mark scans done — read them once OCR is installed
         done = 0
         for s in store.list_scans():
             if done >= budget:
