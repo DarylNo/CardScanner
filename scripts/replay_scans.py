@@ -45,6 +45,7 @@ import argparse
 import hashlib
 import json
 import sqlite3
+from contextlib import closing
 import sys
 import time
 from pathlib import Path
@@ -69,7 +70,7 @@ def _index_header(idx: ArtIndex) -> dict:
         d.update(f"{sid}:{h64:016x}:{''.join(f'{w:016x}' for w in h256)}\n".encode())
     bulk = None
     try:
-        with sqlite3.connect(idx.db_path) as conn:
+        with closing(sqlite3.connect(idx.db_path)) as conn:
             row = conn.execute("SELECT value FROM meta WHERE key='bulk_updated_at'").fetchone()
             bulk = row[0] if row else None
     except sqlite3.Error:

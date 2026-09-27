@@ -4,6 +4,7 @@ import gzip
 import hashlib
 import json
 import sqlite3
+from contextlib import closing
 import struct
 
 import numpy as np
@@ -24,7 +25,7 @@ def index(tmp_path):
 
 
 def _sqlite_rows(db):
-    with sqlite3.connect(db) as conn:
+    with closing(sqlite3.connect(db)) as conn:
         return sorted(conn.execute(
             "SELECT scryfall_id, name, set_code, collector_number, artist, hash_hex,"
             " hash256_hex FROM art_hashes WHERE hash256_hex IS NOT NULL").fetchall())
@@ -80,10 +81,11 @@ def test_deterministic_bytes(index, tmp_path):
     a, b = tmp_path / "a.bin.gz", tmp_path / "b.bin.gz"
     art_pack.export_pack(db, a, bulk_path=bulk, build_time=5)
     # Same rows inserted in a different order must not change a byte.
-    with sqlite3.connect(db) as conn:
+    with closing(sqlite3.connect(db)) as conn:
         rows = conn.execute("SELECT * FROM art_hashes").fetchall()
         conn.execute("DELETE FROM art_hashes")
         conn.executemany("INSERT INTO art_hashes VALUES (?,?,?,?,?,?,?)", rows[::-1])
+        conn.commit()
     art_pack.export_pack(db, b, bulk_path=bulk, build_time=5)
     assert a.read_bytes() == b.read_bytes()
 

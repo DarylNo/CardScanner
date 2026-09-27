@@ -69,6 +69,7 @@ import io
 import json
 import os
 import sqlite3
+from contextlib import closing
 import struct
 import sys
 import time
@@ -140,7 +141,7 @@ def read_sqlite_rows(db_path: Path) -> tuple[list[PackRow], str]:
     """Every row ArtIndex would load (fine hash present) + the bulk revision."""
     if not Path(db_path).exists():
         raise ArtPackError(f"no art index at {db_path} — run art_index build first")
-    with sqlite3.connect(db_path) as conn:
+    with closing(sqlite3.connect(db_path)) as conn:
         rows = conn.execute(
             "SELECT scryfall_id, name, set_code, collector_number, artist,"
             " hash_hex, hash256_hex FROM art_hashes"
