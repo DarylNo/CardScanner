@@ -16,6 +16,10 @@ nanohttpd = "2.3.1"
 # Robolectric 4.14 is the first line with SDK 35 (compileSdk/targetSdk here).
 robolectric = "4.14.1"
 androidxTestCore = "1.6.1"
+# Stage 1c F2F probe (Settings → Diagnostics → Network test): Chrome's own
+# network stack = a real Chrome TLS handshake. cronet-embedded is
+# self-contained (no Play Services); the arm64 ABI filter keeps one .so.
+cronet = "143.7445.0"
 
 [libraries]
 camerax-core = { module = "androidx.camera:camera-core", version.ref = "camerax" }
@@ -34,7 +38,8 @@ json = { module = "org.json:json", version = "20240303" }
 nanohttpd = { module = "org.nanohttpd:nanohttpd", version.ref = "nanohttpd" }
 robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }
 androidx-test-core = { module = "androidx.test:core-ktx", version.ref = "androidxTestCore" }
-androidx-core = { module = "androidx.core:core-ktx", version = "1.15.0" }
+cronet-embedded = { module = "org.chromium.net:cronet-embedded", version.ref = "cronet" }
+androidx-core ={ module = "androidx.core:core-ktx", version = "1.15.0" }
 androidx-activity = { module = "androidx.activity:activity-ktx", version = "1.9.3" }
 androidx-appcompat = { module = "androidx.appcompat:appcompat", version = "1.7.0" }
 androidx-lifecycle = { module = "androidx.lifecycle:lifecycle-runtime-ktx", version = "2.8.7" }

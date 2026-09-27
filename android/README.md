@@ -46,6 +46,7 @@ Modules and packages (`io.github.darylno.cardscanner`):
 | `app/capture` | `CapturePipeline` (sharpest frame → quad → flatten → JPEG). |
 | `app/net` | `Pin`, `PinnedTls`, `ServerConfig`/`PrefsConfigStore`, `ServerClient` (failover), `Pairing`, `UploadQueue`. |
 | `app/gateway` | `GatewayServer` (NanoHTTPD reverse proxy), `JoinCode`, `LocalAddresses`, `GatewayService` (foreground service), `QrBitmap`. |
+| `app/f2f` | Stage 1c measurement only: `F2fFetcher` (port of `facetoface._default_get_json` pacing/retry, parity-tested against `app/src/test/resources/f2f/pacing.json` from `scripts/export_f2f_pacing_fixture.py`), `F2fPricer` (query ladder + SKU confirmation), `OkHttpTransport` / `CronetTransport`, `F2fProbe`. |
 | `app/ui` | `MainActivity`, `OverlayView`, `SetupActivity` (pairing), `PanelActivity` (review WebView), `ShareActivity`, `SettingsActivity`, `AppSettings`. |
 
 Rules the app keeps (see also CLAUDE.md → "Android app"):
@@ -240,6 +241,17 @@ The switch from a debug-signed install to the release key needs one last
 uninstall; from then on updates install in place. Secrets reach both release
 paths — a hand-pushed tag, and `auto-tag.yml` (it calls `release.yml` with
 `secrets: inherit`).
+
+## F2F network test (Stage 1c)
+
+A hidden screen that answers "does Face to Face Games throttle the phone?"
+(docs/PHONE_ONLY_PLAN.md). **Settings → long-press the DIAGNOSTICS header →
+Network test.** It prices ~30 real cards on facetofacegames.com at the rig's
+exact pacing over **Cronet** (cronet-embedded: Chromium's stack, a real Chrome
+TLS handshake) and over **plain OkHttp**, and counts 429s. *Run both* goes
+Cronet first (the per-IP bucket is cold for the stack we'd ship), then waits
+out a cooldown (default 5 min) before OkHttp. **Copy results** puts a JSON
+report on the clipboard. Nothing else in the app uses Cronet or this code.
 
 ## Battery settings (OnePlus)
 

@@ -5,6 +5,9 @@ import android.app.Activity
 import android.content.ComponentName
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.view.View
+import android.view.ViewGroup
+import android.widget.TextView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.test.core.app.ApplicationProvider
@@ -12,6 +15,7 @@ import io.github.darylno.cardscanner.gateway.GatewayService
 import io.github.darylno.cardscanner.net.PrefsConfigStore
 import io.github.darylno.cardscanner.net.ServerConfig
 import io.github.darylno.cardscanner.ui.Adapters
+import io.github.darylno.cardscanner.ui.DiagnosticsActivity
 import io.github.darylno.cardscanner.ui.PanelActivity
 import io.github.darylno.cardscanner.ui.SettingsActivity
 import io.github.darylno.cardscanner.ui.SetupActivity
@@ -196,6 +200,29 @@ class ScreensSmokeTest {
         assertResumed(a)
     }
 
+    @Test
+    fun diagnosticsActivity_resumes_withoutStartingAnything() {
+        val a = launch(DiagnosticsActivity::class.java)
+        assertResumed(a)
+    }
+
+    @Test
+    fun settings_longPressDiagnosticsHeader_opensNetworkTest() {
+        pair()
+        val a = launch(SettingsActivity::class.java)
+        val label = a.getString(R.string.settings_diagnostics).uppercase()
+        val header = findText(a.window.decorView, label)
+        assertNotNull("DIAGNOSTICS header not found", header)
+        assertTrue(header!!.performLongClick())
+        assertEquals(DiagnosticsActivity::class.java.name, nextStarted()?.component?.className)
+    }
+
+    private fun findText(v: View, text: String): TextView? {
+        if (v is TextView && v.text.toString() == text) return v
+        if (v is ViewGroup) for (i in 0 until v.childCount) findText(v.getChildAt(i), text)?.let { return it }
+        return null
+    }
+
     // ── manifest ────────────────────────────────────────────────────────────
 
     @Test
@@ -210,7 +237,7 @@ class ScreensSmokeTest {
         val pi = app.packageManager.getPackageInfo(app.packageName, PackageManager.GET_ACTIVITIES)
         val byName = pi.activities!!.associateBy { it.name }
         listOf(MainActivity::class.java, SetupActivity::class.java, PanelActivity::class.java,
-            ShareActivity::class.java, SettingsActivity::class.java).forEach { cls ->
+            ShareActivity::class.java, SettingsActivity::class.java, DiagnosticsActivity::class.java).forEach { cls ->
             val ai = byName[cls.name]
             assertNotNull("${cls.simpleName} missing from the manifest", ai)
             assertEquals("${cls.simpleName} exported", cls == MainActivity::class.java, ai!!.exported)

@@ -149,7 +149,12 @@ class SettingsActivity : AppCompatActivity() {
         col.addView(note(getString(R.string.settings_camera_note)))
 
         // ── Diagnostics ──
-        col.addView(chrome.sectionHeader(getString(R.string.settings_diagnostics)))
+        // Long-press the header → the hidden Stage 1c F2F network test.
+        col.addView(chrome.sectionHeader(getString(R.string.settings_diagnostics)).apply {
+            setOnLongClickListener {
+                startActivity(Intent(this@SettingsActivity, DiagnosticsActivity::class.java)); true
+            }
+        })
         val diag = diagnostics()
         val diagCard = chrome.card()
         diagCard.addView(chrome.text(diag, 12f, ScanChrome.Palette.TEXT_DIM).apply {
