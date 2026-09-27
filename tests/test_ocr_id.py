@@ -62,18 +62,33 @@ def test_art_double_check_blocks_disagreeing_promotions():
 
 def test_ocr_status_reports_a_missing_engine(monkeypatch):
     # A missing engine used to look exactly like "read nothing" — every
-    # printing silently unconfirmed. ocr_status() makes it visible.
+    # printing silently unconfirmed. ocr_status() makes it visible WITHOUT
+    # importing the engine (the ONNX runtime aborts the process at exit).
+    import importlib.util
+    from mtg_card_scanner import ocr_id
+    monkeypatch.setattr(ocr_id, "_ocr_status", None)
+    monkeypatch.setattr(importlib.util, "find_spec", lambda name: None)
+    st = ocr_id.ocr_status()
+    assert st["available"] is False and "rapidocr_onnxruntime" in st["error"]
+    assert ocr_id.ocr_status() is st                     # cached
+
+
+def test_an_engine_that_fails_to_load_is_reported(monkeypatch):
+    # Installed but broken (e.g. an onnxruntime DLL failure on Windows): the
+    # first read records it, so /api/health stops claiming OCR works.
     import builtins
+    import numpy as np
     from mtg_card_scanner import ocr_id
     real_import = builtins.__import__
 
     def fake_import(name, *a, **k):
         if name == "rapidocr_onnxruntime":
-            raise ImportError("No module named 'rapidocr_onnxruntime'")
+            raise OSError("DLL load failed while importing onnxruntime_pybind11_state")
         return real_import(name, *a, **k)
 
-    monkeypatch.setattr(ocr_id, "_ocr_status", None)
+    monkeypatch.setattr(ocr_id, "_ocr_status", {"available": True, "error": None})
+    monkeypatch.setattr(ocr_id, "_ocr_engine", None)
     monkeypatch.setattr(builtins, "__import__", fake_import)
-    st = ocr_id.ocr_status()
-    assert st["available"] is False and "rapidocr_onnxruntime" in st["error"]
-    assert ocr_id.ocr_status() is st                     # cached
+    assert ocr_id.read_bottom_strip(np.zeros((880, 630, 3), np.uint8)) == ""
+    assert ocr_id.ocr_status()["available"] is False
+    assert "DLL load failed" in ocr_id.ocr_status()["error"]
