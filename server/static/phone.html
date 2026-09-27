@@ -293,7 +293,7 @@ function formatChipsHtml(scan){
 }
 
 /* ── version banner — proves which page+server combo is running ────────────── */
-const UI_VERSION = 'v31';
+const UI_VERSION = 'v32';
 fetch('/api/version').then(r => r.json())
   .then(d => { $('#ver').textContent = `${UI_VERSION} · ${d.version}`; })
   .catch(() => { $('#ver').textContent = UI_VERSION; });
@@ -418,29 +418,40 @@ document.addEventListener('visibilitychange', () => {
 if (!PANEL) acquireWakeLock();
 
 /* ── capture + submit (state machine releases after the burst) ─────────────── */
+// toBlob copies the canvas bitmap AT CALL TIME (HTML spec; Chromium snapshots
+// in CanvasAsyncBlobCreator) and only the JPEG encode is deferred — so the
+// burst no longer waits for each encode before the next frame. Awaiting every
+// encode stretched the hold-still window from 2×100 ms to 2×100 ms + three
+// encodes on a Snapdragon 480; now the tray is released once the PIXELS are in
+// hand and the encodes finish behind the operator's hand.
 function grabFrame() {
   const r = roiRect();
   const scale = Math.min(1, MAX_UPLOAD_DIM / Math.max(r.w, r.h));
   const w = Math.round(r.w * scale), h = Math.round(r.h * scale);
-  canvas.width = w; canvas.height = h;
+  // Setting width/height clears and reallocates even when unchanged.
+  if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
   canvas.getContext('2d').drawImage(video, r.x, r.y, r.w, r.h, 0, 0, w, h);
-  return new Promise(res => canvas.toBlob(b => res(b), 'image/jpeg', JPEG_QUALITY));
+  return new Promise((res, rej) => canvas.toBlob(
+    b => b ? res(b) : rej(new Error('JPEG encode failed')), 'image/jpeg', JPEG_QUALITY));
 }
+// Resolves as soon as the last frame's pixels are captured; `encoded` settles
+// when the JPEGs are ready (wrapped so awaiting the burst never waits on them).
 async function captureBurst() {
-  const frames = [];
+  const shots = [];
   for (let i = 0; i < BURST; i++) {
-    frames.push(await grabFrame());
-    if (i < BURST - 1) await new Promise(r => setTimeout(r, BURST_GAP_MS));
+    if (i > 0) await new Promise(r => setTimeout(r, BURST_GAP_MS));
+    shots.push(grabFrame());
   }
-  return frames;
+  shots.forEach(p => p.catch(() => {}));   // failures surface via `encoded`
+  return { encoded: Promise.all(shots) };
 }
 // scanOnce resolves at end-of-capture; identification continues in background.
 async function scanOnce(manual = false) {
   setStatus('Capturing…');
-  let frames;
-  try { frames = await captureBurst(); }
+  let shot;
+  try { shot = await captureBurst(); }
   catch (e) { setStatus('Capture failed: ' + e.message, 'err'); return; }
-  submitScan(frames, manual);    // deliberately NOT awaited
+  submitScan(shot.encoded, manual);    // deliberately NOT awaited
 }
 // No-match retry: the card is still in the tray (the trigger waits for a tray
 // CHANGE, so a failed card would otherwise just sit there unscannable). Offer
@@ -455,17 +466,18 @@ function hideRetry() { retryBtn.style.display = 'none'; }
 retryBtn.addEventListener('click', async () => {
   hideRetry();
   setStatus('Retrying — capturing…');
-  let frames;
-  try { frames = await captureBurst(); }
+  let shot;
+  try { shot = await captureBurst(); }
   catch (e) { setStatus('Capture failed: ' + e.message, 'err'); return; }
-  submitScan(frames, false, retryReplaceId);
+  submitScan(shot.encoded, false, retryReplaceId);
 });
 
-async function submitScan(frames, manual = false, replaceId = 0) {
-  const capturedScene = scannedFrame;
+async function submitScan(framesP, manual = false, replaceId = 0) {
+  const capturedScene = scannedFrame;      // FIRST, before any await (no_card guard)
   hideRetry();
   setStatus('Scanning…');
   try {
+    const frames = await framesP;          // encodes finish while the tray is released
     const fd = new FormData();
     frames.forEach((b, i) => fd.append('files', b, `frame${i}.jpg`));
     if (replaceId) fd.append('replace_scan_id', String(replaceId));
