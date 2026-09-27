@@ -13,6 +13,9 @@ zxing = "3.5.3"
 junit = "4.13.2"
 coroutines = "1.9.0"
 nanohttpd = "2.3.1"
+# Robolectric 4.14 is the first line with SDK 35 (compileSdk/targetSdk here).
+robolectric = "4.14.1"
+androidxTestCore = "1.6.1"
 
 [libraries]
 camerax-core = { module = "androidx.camera:camera-core", version.ref = "camerax" }
@@ -29,6 +32,8 @@ junit = { module = "junit:junit", version.ref = "junit" }
 coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "coroutines" }
 json = { module = "org.json:json", version = "20240303" }
 nanohttpd = { module = "org.nanohttpd:nanohttpd", version.ref = "nanohttpd" }
+robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }
+androidx-test-core = { module = "androidx.test:core-ktx", version.ref = "androidxTestCore" }
 androidx-core = { module = "androidx.core:core-ktx", version = "1.15.0" }
 androidx-activity = { module = "androidx.activity:activity-ktx", version = "1.9.3" }
 androidx-appcompat = { module = "androidx.appcompat:appcompat", version = "1.7.0" }

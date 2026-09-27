@@ -15,6 +15,8 @@ import androidx.core.content.ContextCompat
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import android.os.PowerManager
+import android.net.wifi.WifiManager
 
 /**
  * Foreground service (type specialUse) that owns the [GatewayServer] while the owner is
@@ -40,6 +42,11 @@ class GatewayService : Service() {
     }
 
     private var server: GatewayServer? = null
+    // Guests keep browsing while the phone's screen is off (it may sit in a
+    // pocket while sharing): without these the CPU and Wi-Fi radio doze and
+    // every guest request stalls. Held only while the gateway is serving.
+    private var wakeLock: PowerManager.WakeLock? = null
+    private var wifiLock: WifiManager.WifiLock? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -76,8 +83,29 @@ class GatewayService : Service() {
             return START_NOT_STICKY
         }
         server = s
+        acquireLocks()
         publish(s)
         return START_NOT_STICKY
+    }
+
+    private fun acquireLocks() {
+        if (wakeLock == null) {
+            wakeLock = getSystemService(PowerManager::class.java)
+                ?.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "cardscanner:gateway")
+                ?.apply { setReferenceCounted(false); acquire() }
+        }
+        if (wifiLock == null) {
+            wifiLock = applicationContext.getSystemService(WifiManager::class.java)
+                ?.createWifiLock(WifiManager.WIFI_MODE_FULL_LOW_LATENCY, "cardscanner:gateway")
+                ?.apply { setReferenceCounted(false); acquire() }
+        }
+    }
+
+    private fun releaseLocks() {
+        wakeLock?.takeIf { it.isHeld }?.release()
+        wifiLock?.takeIf { it.isHeld }?.release()
+        wakeLock = null
+        wifiLock = null
     }
 
     override fun onDestroy() {
@@ -91,6 +119,7 @@ class GatewayService : Service() {
             it.stop()
         }
         server = null
+        releaseLocks()
         _status.value = Status(running = false)
     }
 

@@ -113,7 +113,9 @@ class SettingsActivity : AppCompatActivity() {
 
         col.addView(text("Camera", 16f, Color.WHITE))
         col.addView(toggle("High analysis resolution (2048×1536; Standard is 1600×1200)", s.highRes) { s.highRes = it })
-        col.addView(toggle("Mount: lock focus once a card is on the tray", s.focusLock) { s.focusLock = it })
+        // No focus-lock switch: Mount always locks focus on the first card after
+        // each bind (CameraController) — a switch that couldn't turn it off
+        // was removed rather than shipped. Tap the preview to refocus.
         col.addView(toggle("Lock exposure + white balance", s.aeLock) { s.aeLock = it })
         col.addView(toggle("Torch", s.torch) { s.torch = it })
         col.addView(toggle("Debug overlay (mask %, steady count, timings)", s.debugOverlay) { s.debugOverlay = it })

@@ -106,7 +106,6 @@ class MainActivity : AppCompatActivity() {
             // Settings may have changed torch / AE / focus lock while we were away.
             camera?.setTorch(settings.torch)
             camera?.setAeLock(settings.aeLock)
-            camera?.setFocusLock(settings.focusLock)
             camera?.setHighRes(settings.highRes)
         }
         uploadListener.onState(app.uploads.pending, null, null)
