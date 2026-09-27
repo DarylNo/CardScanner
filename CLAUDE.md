@@ -81,7 +81,11 @@ that doesn't look like the scan.
 
 **Auto-pick grounds** (server, scan time): exactly one printing exists, OR
 the top candidate is OCR-confirmed — both file NM/Non-Foil/×1 with the
-`auto_picked` flag (⚠ in the UIs) and auto-merge duplicates into quantity.
+`auto_picked` flag (⚠ in the UIs). **Every scan keeps its OWN row** — a
+repeat copy is never merged into another row's quantity (user picks, scan-time
+and retro auto-picks alike), because the owner finds cards by scan order; the
+Mana Exchange export (`server/export.py`) sums identical
+printing+condition+finish rows into one line, in first-seen order.
 Unconfirmed multi-candidate scans always wait for a human. The auto-sweep
 tick also runs retro passes: strip stale art-series candidates, retro-OCR
 pending scans from their stored photos (once each, budgeted), auto-pick
@@ -170,8 +174,10 @@ of the range, the filter and "searched", and the picker folds it; targets are re
 mid-sweep); circuit breaker after 5 consecutive unavailable → 10-min
 cooldown; manual start overrides.
 
-**Concurrency:** `select_lock` serializes every selection read-modify-write
-(merge quantity bumps were losing physical cards); sweep start is an atomic
+**Concurrency:** `select_lock` serializes every selection read-modify-write —
+picks vs PATCH edits vs retro auto-picks (born when repeat copies merged into
+a quantity and concurrent bumps lost physical cards; merging is gone, those
+races are not); sweep start is an atomic
 claim under `sweep_lock`; ALL f2f writes go through `_write_price_if_current`
 (stale printing/foil results must never overwrite fresher ones). No awaits
 while holding a lock.
@@ -205,9 +211,51 @@ Verified by driving the real page in headless Chromium against stubbed
 `/api/scans` fixtures — not by reasoning about the predicates, which is how the
 ALL bug survived review in the first place.
 
+## Android app (`android/`)
+
+A native capture app replacing the Chrome `/phone` page as the camera — not
+the server, and not the review UI (that is `/phone?panel=1` in a WebView).
+Details, build, sideload and the device checklist: `android/README.md`.
+`./gradlew :core:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug`
+from `android/` (Node on PATH, JDK 17); CI job `android` runs it per push.
+
+- **Detection is a PORT, proven — never re-tuned in Kotlin.**
+  `DetectionDifferentialTest` runs phone.html's REAL detection code under Node
+  (`core/src/test/resources/phone_harness.js`) against the Kotlin
+  `Detection`/`AutoScanner`. Change detection in phone.html first, then port;
+  the occupancy + stillness rule above binds the app too.
+- **Flatten contract:** `tests/phone_flatten_ref.py` is the executable spec
+  (margins 0.08/0.06/0.04, Python banker's rounding); the parity fixtures in
+  `android/core/src/test/resources/detect/` come from the SERVER's own code via
+  `scripts/export_detect_fixtures.py`, and `--check` fails CI on any drift.
+  Regenerate them, never hand-edit.
+- **The server stays the judge.** The phone flattens WITH A MARGIN so the
+  server can re-detect; no_card / not identified → the 3 raw frames go up with
+  `replace_scan_id` (the server's multi-frame retry). No phone-side card gates.
+- **Pairing pins the cert from the desktop "Phone" QR** (`#pin=<sha256 DER>` —
+  browsers never send the fragment). Pin mismatch is never failed over: re-pair.
+  Address failover (`/api/addresses`: LAN → Tailscale) moves on connect-phase
+  failures ONLY, never after a request may have been sent (double filing).
+- **Handheld = walk-around PRICE CHECK** (the owner's words: scan a card, find
+  out what it's worth): the outcome opens `detail=<id>&pricecheck=1`; the PAGE
+  posts `/price-check` and offers Keep/Discard. Mount auto stays hands-free.
+- **Guests have FULL access** (delete/clear/export/update included) through the
+  Share gateway — the owner's decision; don't add endpoint filtering without
+  asking, and keep the "only share with people you trust" warning.
+- **versionName/versionCode come from pyproject.toml** (1.2.3 → 10203): the
+  version bump that releases the server releases the APK too.
+- **The release key lives ONLY in repo secrets** (`ANDROID_KEYSTORE_B64`,
+  `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`; made once by
+  `scripts/make_android_keystore.py`) — never committed (`*.p12`/`*.jks`/
+  `*.keystore` are gitignored). Without them `release.yml` falls back to a
+  debug key and says so in the job summary; such an APK can't update an
+  installed one. `auto-tag.yml` must keep `secrets: inherit` or the auto path
+  silently signs with the debug key.
+
 ## Release / distribution
 
-- `git tag vX.Y.Z && git push --tags` → 4 binaries (workflow needs
+- `git tag vX.Y.Z && git push --tags` → 4 binaries +
+  `mtg-card-scanner-android.apk` (workflow needs
   `permissions: contents: write`; `macos-13` label is DEAD, use
   `macos-15-intel`; publish runs `if: always()`; PyInstaller needs
   `--paths . --copy-metadata mtg-card-scanner`).
