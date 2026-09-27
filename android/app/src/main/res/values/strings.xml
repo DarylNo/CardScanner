@@ -100,4 +100,25 @@
     <string name="share_no_wifi">No Wi-Fi address — turn on this phone\'s hotspot (Settings → Hotspot) and have guests join it, then come back here.</string>
     <string name="share_stop">Stop sharing</string>
     <string name="share_stop_note">A new code is made the next time you share.</string>
+
+    <!-- Network test (hidden: long-press DIAGNOSTICS in Settings). Stage 1c measurement. -->
+    <string name="nettest_title">Network test</string>
+    <string name="nettest_intro">Measures whether Face to Face Games slows this phone down. Prices a fixed list of real cards (%1$d) on facetofacegames.com at the scanner\'s own pacing — once over Cronet (Chrome\'s network stack) and once over plain OkHttp — and counts 429 “too many requests” answers. About 1–3 minutes per run. The store limits per internet address, so run it on the network the phone will price from, and don\'t price on the computer at the same time. Nothing is saved or sent anywhere; tap Copy results and paste them back.</string>
+    <string name="nettest_run">Run</string>
+    <string name="nettest_run_both">Run both (Cronet, then OkHttp)</string>
+    <string name="nettest_run_cronet">Cronet only</string>
+    <string name="nettest_run_okhttp">OkHttp only</string>
+    <string name="nettest_cooldown">Cooldown between runs: %1$d min</string>
+    <string name="nettest_stop">Stop</string>
+    <string name="nettest_results">Results</string>
+    <string name="nettest_copy">Copy results</string>
+    <string name="nettest_idle">Idle.</string>
+    <string name="nettest_done">Done.</string>
+    <string name="nettest_stopped">Stopped.</string>
+    <string name="nettest_starting">%1$s: starting…</string>
+    <string name="nettest_progress">%1$s · card %2$d/%3$d · %4$s</string>
+    <string name="nettest_cooling">Cooldown before %3$s — %1$d:%2$02d (the store\'s limit is per address)</string>
+    <string name="nettest_no_results">No runs yet.</string>
+    <string name="nettest_running_verdict">So far: %1$s</string>
+    <string name="nettest_error">Couldn\'t run: %1$s</string>
 </resources>

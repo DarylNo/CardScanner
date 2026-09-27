@@ -58,6 +58,8 @@ jobs:
       # written by the server's own mtg_card_scanner.art_pack.
       - name: Art-pack fixture matches the writer
         run: python scripts/export_pack_fixture.py --check
+      - name: F2F pacing table matches facetoface.py
+        run: python scripts/export_f2f_pacing_fixture.py --check
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
