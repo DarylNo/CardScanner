@@ -52,6 +52,12 @@ jobs:
       - run: pip install -e ".[test]"
       - name: Detect fixtures match the server
         run: python scripts/export_detect_fixtures.py --check
+      # Art-fingerprint parity (HashParityTest): expected.json is recomputed
+      # from the committed input images with the SERVER's art_index/imagehash
+      # code on the freshly installed Pillow/scipy/numpy — a library release
+      # that moves one hash bit fails here, before the phone's thresholds drift.
+      - name: Art-hash fixtures match the server
+        run: python scripts/export_hash_fixtures.py --check
       - uses: actions/setup-java@v4
         with:
           distribution: temurin

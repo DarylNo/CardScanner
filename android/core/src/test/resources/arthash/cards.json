@@ -1,0 +1,122 @@
+[
+ {
+  "key": "m10_146",
+  "scryfall_id": "435589bb-27c6-4a6d-9d63-394d5092b9d8",
+  "name": "Lightning Bolt",
+  "set": "m10",
+  "collector_number": "146",
+  "artist": "Christopher Moeller"
+ },
+ {
+  "key": "lea_161",
+  "scryfall_id": "d573ef03-4730-45aa-93dd-e45ac1dbaf4a",
+  "name": "Lightning Bolt",
+  "set": "lea",
+  "collector_number": "161",
+  "artist": "Christopher Rush"
+ },
+ {
+  "key": "akh_132",
+  "scryfall_id": "f02363a7-4455-4571-bfff-4ce94c7c1e3b",
+  "name": "Fling",
+  "set": "akh",
+  "collector_number": "132",
+  "artist": "Lucas Graciano"
+ },
+ {
+  "key": "10e_200",
+  "scryfall_id": "7c623048-8c87-46d8-bf77-9fe1b38f494f",
+  "name": "Firebreathing",
+  "set": "10e",
+  "collector_number": "200",
+  "artist": "Aleksi Briclot"
+ },
+ {
+  "key": "mh2_186",
+  "scryfall_id": "d99a9a7d-d9ca-4c11-80ab-e39d5943a315",
+  "name": "Asmoranomardicadaistinaculdacar",
+  "set": "mh2",
+  "collector_number": "186",
+  "artist": "Ryan Pancoast"
+ },
+ {
+  "key": "m21_1",
+  "scryfall_id": "9c017fa9-7021-417a-9c2e-3df409644fcf",
+  "name": "Ugin, the Spirit Dragon",
+  "set": "m21",
+  "collector_number": "1",
+  "artist": "Raymond Swanland"
+ },
+ {
+  "key": "eld_1",
+  "scryfall_id": "fb6b12e7-bb93-4eb6-bad1-b256a6ccff4e",
+  "name": "Acclaimed Contender",
+  "set": "eld",
+  "collector_number": "1",
+  "artist": "David Gaillet"
+ },
+ {
+  "key": "dom_1",
+  "scryfall_id": "07a3d9e8-8597-498b-869c-cff79e0df516",
+  "name": "Karn, Scion of Urza",
+  "set": "dom",
+  "collector_number": "1",
+  "artist": "Chase Stone"
+ },
+ {
+  "key": "war_1",
+  "scryfall_id": "3ec0c0fb-1a4f-45f4-85b7-346a6d3ce2c5",
+  "name": "Karn, the Great Creator",
+  "set": "war",
+  "collector_number": "1",
+  "artist": "Wisnu Tan"
+ },
+ {
+  "key": "neo_1",
+  "scryfall_id": "d9b1ed43-ee6c-43a2-ba94-5bf71c63e070",
+  "name": "Ancestral Katana",
+  "set": "neo",
+  "collector_number": "1",
+  "artist": "Daniel Ljunggren"
+ },
+ {
+  "key": "10e_380",
+  "scryfall_id": "d99d5685-538d-4e6a-809b-3ebeab634363",
+  "name": "Forest",
+  "set": "10e",
+  "collector_number": "380",
+  "artist": "Anthony S. Waters"
+ },
+ {
+  "key": "znr_278",
+  "scryfall_id": "d949485e-5188-49f4-9d30-5e135532d445",
+  "name": "Forest",
+  "set": "znr",
+  "collector_number": "278",
+  "artist": "Sam Burley"
+ },
+ {
+  "key": "neo_406",
+  "scryfall_id": "5d7d1c2d-d3be-4647-a260-15ce85e69eea",
+  "name": "Ao, the Dawn Sky",
+  "set": "neo",
+  "collector_number": "406",
+  "artist": "Ishikawa Kenta"
+ },
+ {
+  "key": "2xm_353",
+  "scryfall_id": "dac080ef-8f40-43a2-8440-b457b6074b69",
+  "name": "Atraxa, Praetors' Voice",
+  "set": "2xm",
+  "collector_number": "353",
+  "artist": "Kev Walker"
+ },
+ {
+  "key": "leg_1",
+  "scryfall_id": "5d074af2-8dbd-42d3-87eb-30f6e7d171ff",
+  "name": "Akron Legionnaire",
+  "set": "leg",
+  "collector_number": "1",
+  "artist": "Mark Poole"
+ }
+]
