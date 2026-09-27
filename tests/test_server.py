@@ -809,3 +809,29 @@ def test_health_reports_whether_ocr_is_available(client, monkeypatch):
     from mtg_card_scanner import ocr_id
     monkeypatch.setattr(ocr_id, "_ocr_status", {"available": False, "error": "ImportError: x"})
     assert client.get("/api/health").json()["ocr"] == {"available": False, "error": "ImportError: x"}
+
+
+def _post_upload(client, uid):
+    files = [("files", ("f.jpg", _jpeg_bytes(), "image/jpeg"))]
+    return client.post("/api/scan", files=files, data={"client_upload_id": uid})
+
+
+def test_a_resent_upload_files_one_row(tmp_path):
+    # The app re-sends after a lost response; the server must answer with the
+    # row the first copy filed, not stack a duplicate for one physical card.
+    client, store = _retry_rig(tmp_path)
+    a = _post_upload(client, "job7-p").json()
+    b = _post_upload(client, "job7-p").json()
+    assert a["id"] == b["id"]
+    assert len(store.list_scans()) == 1
+    c = _post_upload(client, "job8-p").json()          # a new id is a new card
+    assert c["id"] != a["id"] and len(store.list_scans()) == 2
+
+
+def test_a_resent_upload_after_discard_stays_discarded(tmp_path):
+    client, store = _retry_rig(tmp_path)
+    a = _post_upload(client, "job9-p").json()
+    client.delete(f"/api/scans/{a['id']}")
+    b = _post_upload(client, "job9-p").json()
+    assert b["id"] == a["id"]
+    assert store.list_scans() == []

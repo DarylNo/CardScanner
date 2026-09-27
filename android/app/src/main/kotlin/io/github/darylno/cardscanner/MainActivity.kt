@@ -3,12 +3,14 @@ package io.github.darylno.cardscanner
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
+import android.provider.Settings
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -35,7 +37,9 @@ import io.github.darylno.cardscanner.ui.SetupActivity
 import io.github.darylno.cardscanner.ui.ShareActivity
 import io.github.darylno.cardscanner.ui.StatusText
 import io.github.darylno.cardscanner.ui.UploadPort
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
+import java.util.concurrent.RejectedExecutionException
 
 /**
  * The camera screen: Mount (hands-free auto capture over a tray — the tuned
@@ -69,11 +73,38 @@ class MainActivity : AppCompatActivity() {
     private var pendingReplace: Long? = null
     /** Handheld price checks captured but not yet answered (queued offline). */
     private var awaitingPriceCheck = 0
-    /** Upload job id → detector scene at capture (for the no_card re-seed guard). In-memory only. */
-    private val sceneByJob = HashMap<String, io.github.darylno.cardscanner.core.Gray>()
+    /**
+     * Upload job id → detector scene at capture (for the no_card re-seed guard). In-memory only.
+     * Concurrent: filled on [io] right after enqueue returns, read on the UI thread when the
+     * outcome lands. The outcome needs a network round trip, so it can't beat the put in practice.
+     */
+    private val sceneByJob = ConcurrentHashMap<String, io.github.darylno.cardscanner.core.Gray>()
+
+    /**
+     * Job id of the most recent capture — the card under the camera NOW. The upload queue is
+     * persistent, so an OLD job's outcome can land while a different card is in view; Retry
+     * would then capture the current card with replace_scan_id = the old row (wrong card
+     * overwrites the failed row). Only this job may offer Retry. Cleared on Trigger / NextCard /
+     * a new manual capture / mode change; [captureGen] stops a slow enqueue from re-setting it
+     * after such a clear.
+     */
+    private var lastCaptureJobId: String? = null
+    private var captureGen = 0
+
+    private fun forgetLastCapture() {
+        lastCaptureJobId = null
+        captureGen++
+    }
+
+    /**
+     * onResume requests the permission at most ONCE per Activity instance: the system
+     * dialog pauses/resumes us, so re-asking from onResume looped forever after a
+     * permanent denial and showed the rationale twice (callback + onResume).
+     */
+    private var permissionAsked = false
 
     private val permission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
-        if (ok) startCamera() else showCameraRationale()
+        if (ok) startCamera() else showCameraRationale(askedNow = true)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -97,16 +128,23 @@ class MainActivity : AppCompatActivity() {
         if (camera == null) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
                 startCamera()
-            } else if (shouldShowRequestPermissionRationale(Manifest.permission.CAMERA)) {
-                showCameraRationale()
+            } else if (!permissionAsked) {
+                permissionAsked = true
+                // Pre-ask rationale only when the system says so; the denial path is the callback's.
+                if (shouldShowRequestPermissionRationale(Manifest.permission.CAMERA)) showCameraRationale(askedNow = false)
+                else permission.launch(Manifest.permission.CAMERA)
             } else {
-                permission.launch(Manifest.permission.CAMERA)
+                // Already asked this instance (or back from app settings still denied): no re-ask loop.
+                setStatus(getString(R.string.camera_needed), Tone.ERR)
             }
         } else {
             // Settings may have changed torch / AE / focus lock while we were away.
             camera?.setTorch(settings.torch)
             camera?.setAeLock(settings.aeLock)
             camera?.setHighRes(settings.highRes)
+            // Belt-and-braces: another screen (Setup's QR camera) may have unbound the shared
+            // CameraProvider while we were stopped; re-bind so the preview/scanning isn't dead.
+            camera?.rebind()
         }
         uploadListener.onState(app.uploads.pending, null, null)
     }
@@ -275,6 +313,7 @@ class MainActivity : AppCompatActivity() {
         if (overlay.settingArea) cancelArea()
         settings.mode = if (handheld) AppSettings.Mode.MOUNT else AppSettings.Mode.HANDHELD
         hideRetry()
+        forgetLastCapture()   // a late outcome from the other mode's capture must not offer Retry
         applyMode()
     }
 
@@ -342,6 +381,7 @@ class MainActivity : AppCompatActivity() {
     private fun onScanTap() {
         if (camera == null) return
         hideRetry()
+        forgetLastCapture()   // a new capture supersedes the previous card
         pendingReplace = null
         setStatus(StatusText.CAPTURING)
         camera?.manualScan()
@@ -351,6 +391,7 @@ class MainActivity : AppCompatActivity() {
         val id = retryScanId ?: return
         pendingReplace = id
         hideRetry()
+        forgetLastCapture()   // the retry capture's own job becomes the current one
         setStatus(getString(R.string.retry_capturing))
         camera?.manualScan()
     }
@@ -369,14 +410,31 @@ class MainActivity : AppCompatActivity() {
         startActivity(PanelActivity.intent(this, app.server.bestBase(), app.server.pin(), detail, priceCheck))
     }
 
-    private fun showCameraRationale() {
+    /**
+     * The ONE place the rationale is shown. [askedNow] = called from the request callback:
+     * a denial with no rationale flag right after asking is PERMANENT ("don't ask again"),
+     * where launch() returns instantly denied — so offer this app's system settings page.
+     */
+    private fun showCameraRationale(askedNow: Boolean) {
         setStatus(getString(R.string.camera_needed), Tone.ERR)
-        AlertDialog.Builder(this)
+        val permanent = askedNow && !shouldShowRequestPermissionRationale(Manifest.permission.CAMERA)
+        val b = AlertDialog.Builder(this)
             .setTitle(R.string.camera_perm_title)
             .setMessage(R.string.camera_perm_msg)
-            .setPositiveButton(R.string.allow) { _, _ -> permission.launch(Manifest.permission.CAMERA) }
             .setNegativeButton(R.string.not_now, null)
-            .show()
+        if (permanent) {
+            // Literal: res/ is outside this change's scope (no new string resource).
+            b.setPositiveButton("Open settings") { _, _ ->
+                try {
+                    startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", packageName, null)))
+                } catch (_: android.content.ActivityNotFoundException) {
+                    // No settings app (some kiosk ROMs): the status line already explains.
+                }
+            }
+        } else {
+            b.setPositiveButton(R.string.allow) { _, _ -> permission.launch(Manifest.permission.CAMERA) }
+        }
+        b.show()
     }
 
     // ── camera ──────────────────────────────────────────────────────────────
@@ -447,6 +505,7 @@ class MainActivity : AppCompatActivity() {
             is AutoScanner.Event.Trigger -> {
                 overlay.setBox(event.box, sw, sh, OverlayView.BoxState.CAPTURED)
                 hideRetry()
+                forgetLastCapture()
                 setStatus(StatusText.CAPTURING)
             }
             is AutoScanner.Event.AwaitingNext ->
@@ -455,6 +514,7 @@ class MainActivity : AppCompatActivity() {
                 overlay.setBox(event.box, sw, sh, OverlayView.BoxState.SETTLING)
                 // The failed card left the tray — a retry now would replace the old row with the WRONG card.
                 hideRetry()
+                forgetLastCapture()
                 setStatus(if (event.removed) StatusText.WATCHING else StatusText.NEW_CARD)
             }
         }
@@ -466,21 +526,37 @@ class MainActivity : AppCompatActivity() {
         pendingReplace = null
         val priceCheck = manual && handheld
         if (priceCheck) awaitingPriceCheck++
-        val jobId = try {
-            app.uploads.enqueue(capture, manual, priceCheck, replace)
-        } catch (e: java.io.IOException) {
-            if (priceCheck) awaitingPriceCheck--
-            setStatus(getString(R.string.capture_failed, e.message ?: "storage error"), Tone.ERR)
-            return
-        }
-        capture.scene?.let { sceneByJob[jobId] = it }
         setStatus(StatusText.SCANNING)
+        val gen = captureGen
+        // enqueue persists ≈1 MB with fsyncs — off the main thread. [io] is single-threaded,
+        // so jobs still enter the FIFO queue in capture order.
+        val work = Runnable {
+            val jobId = try {
+                app.uploads.enqueue(capture, manual, priceCheck, replace)
+            } catch (e: java.io.IOException) {
+                runOnUiThread {
+                    if (priceCheck && awaitingPriceCheck > 0) awaitingPriceCheck--
+                    setStatus(getString(R.string.capture_failed, e.message ?: "storage error"), Tone.ERR)
+                }
+                return@Runnable
+            }
+            // Filled right after enqueue returns; the outcome needs a network round trip first.
+            capture.scene?.let { sceneByJob[jobId] = it }
+            // Posted before any outcome can be (same reason); skipped if a Trigger/NextCard/
+            // mode change superseded this capture while it was being written.
+            runOnUiThread { if (gen == captureGen) lastCaptureJobId = jobId }
+        }
+        try {
+            io.execute(work)
+        } catch (_: RejectedExecutionException) {
+            work.run()   // Activity tearing down (io shut): persist inline rather than lose the card
+        }
     }
 
     // ── upload outcomes ─────────────────────────────────────────────────────
     private val uploadListener = object : UploadPort.Listener {
-        override fun onOutcome(jobId: String, manual: Boolean, priceCheck: Boolean, outcome: Outcome) {
-            runOnUiThread { handleOutcome(jobId, manual, priceCheck, outcome) }
+        override fun onOutcome(jobId: String, manual: Boolean, priceCheck: Boolean, replaceScanId: Long?, outcome: Outcome) {
+            runOnUiThread { handleOutcome(jobId, manual, priceCheck, replaceScanId, outcome) }
         }
 
         override fun onState(pending: Int, lastError: String?, nextRetryInMs: Long?) {
@@ -497,14 +573,19 @@ class MainActivity : AppCompatActivity() {
 
     private val resumed get() = lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
 
-    private fun handleOutcome(jobId: String, manual: Boolean, priceCheck: Boolean, outcome: Outcome) {
+    private fun handleOutcome(jobId: String, manual: Boolean, priceCheck: Boolean, replaceScanId: Long?, outcome: Outcome) {
         val scene = sceneByJob.remove(jobId)
+        // Only the most recent capture's job may offer Retry (see lastCaptureJobId).
+        val current = jobId == lastCaptureJobId
         // priceCheck = a manual scan taken in Handheld mode (walk-around price check).
         if (priceCheck && awaitingPriceCheck > 0) awaitingPriceCheck--
         when (outcome) {
             is Outcome.NoCard -> {
                 setStatus(StatusText.NO_CARD, Tone.ERR)
                 if (!priceCheck) camera?.noCard(scene)
+                // A Retry that came back no_card left the failed row in place — keep offering
+                // Retry for it (phone.html does), but only while that card is still the current one.
+                if (current && replaceScanId != null && replaceScanId > 0) offerRetry(replaceScanId)
             }
             is Outcome.AutoFiled -> {
                 setStatus(StatusText.identified(outcome.json, manual), Tone.OK)
@@ -520,7 +601,8 @@ class MainActivity : AppCompatActivity() {
             }
             is Outcome.NoMatch -> {
                 setStatus(if (priceCheck) getString(R.string.no_match_retry) else StatusText.noMatch(outcome.json), Tone.ERR)
-                if (outcome.scanId > 0) offerRetry(outcome.scanId)
+                // A stale job's NoMatch only sets the status line: another card is in view now.
+                if (current && outcome.scanId > 0) offerRetry(outcome.scanId)
             }
             is Outcome.Rejected -> setStatus(getString(R.string.upload_rejected, outcome.code), Tone.ERR)
         }

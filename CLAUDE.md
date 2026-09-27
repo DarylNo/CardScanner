@@ -236,12 +236,18 @@ from `android/` (Node on PATH, JDK 17); CI job `android` runs it per push.
   browsers never send the fragment). Pin mismatch is never failed over: re-pair.
   Address failover (`/api/addresses`: LAN → Tailscale) moves on connect-phase
   failures ONLY, never after a request may have been sent (double filing).
+  OkHttp's silent retry is OFF for the same reason; a lost reply is re-sent
+  with the same `client_upload_id` and `/api/scan` answers with the row the
+  first copy filed (a Discarded row stays discarded).
 - **Handheld = walk-around PRICE CHECK** (the owner's words: scan a card, find
   out what it's worth): the outcome opens `detail=<id>&pricecheck=1`; the PAGE
   posts `/price-check` and offers Keep/Discard. Mount auto stays hands-free.
 - **Guests have FULL access** (delete/clear/export/update included) through the
   Share gateway — the owner's decision; don't add endpoint filtering without
-  asking, and keep the "only share with people you trust" warning.
+  asking, and keep the "only share with people you trust" warning. The
+  gateway answers LAN/hotspot peers only (socket address, not headers), locks
+  an IP after 7 bad codes, and rotates the code after 20 bad codes from
+  anywhere in 5 min.
 - **versionName/versionCode come from pyproject.toml** (1.2.3 → 10203): the
   version bump that releases the server releases the APK too.
 - **The release key lives ONLY in repo secrets** (`ANDROID_KEYSTORE_B64`,

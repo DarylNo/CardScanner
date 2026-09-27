@@ -23,7 +23,16 @@ import java.util.logging.Logger
  *  - `GET /join?code=NNNNNN` with the right code sets `cs_guest=<128-bit random hex>`
  *    (HttpOnly, SameSite=Lax, Path=/) and 302s to `/phone?panel=1` (mobile UA) or `/`.
  *  - every other request without a live session cookie gets a small "enter the code" page.
- *  - 8 wrong codes from one IP within 5 minutes lock that IP out (429) for 5 minutes.
+ *  - 8 wrong codes from one IP within 5 minutes lock that IP out (429) for 5 minutes. The
+ *    lockout check, the comparison and the failure record happen in ONE critical section,
+ *    so parallel connections from one IP can never get more than 8 guesses evaluated.
+ *  - 20 wrong codes within 5 minutes from ALL addresses combined rotate the code (existing
+ *    sessions stay valid; [onCodeRotated] fires so the phone can show the new one) and
+ *    reset the failure counters: a search spread over many source addresses (IPv6 privacy
+ *    addresses, spare IPv4s) restarts against a new unknown code. Active lockouts stay.
+ *  - LAN only: clients whose address is not private/link-local ([isLocalClient]) get a 403
+ *    before anything else — the listener binds every interface, so without this the join
+ *    page would be reachable over Tailscale (100.64/10) and over cellular public IPv6.
  *  - [stopSharing] rotates the code and forgets every session.
  * Risks the owner accepted: anyone who reads the code (shoulder-surfing, a photo of the
  * QR) gets full control until sharing stops; the LAN leg is plain HTTP, so on an open
@@ -50,6 +59,21 @@ class GatewayServer(
 
     private val sessions: MutableSet<String> = ConcurrentHashMap.newKeySet()
     private val failures = HashMap<String, Attempts>()   // guarded by itself
+    private val globalFailures = ArrayDeque<Long>()      // guarded by [failures]
+
+    /**
+     * Called (off the lock, on the request thread) with the new code when the global
+     * brute-force budget rotates it. Not called by [stopSharing], whose caller has the code.
+     */
+    @Volatile
+    var onCodeRotated: ((String) -> Unit)? = null
+
+    /** Outcome of one join attempt; see [attemptJoin]. */
+    internal sealed class JoinResult {
+        object Joined : JoinResult()
+        object Wrong : JoinResult()
+        class Locked(val remainingMs: Long) : JoinResult()
+    }
 
     private class Attempts {
         val times = ArrayDeque<Long>()
@@ -72,8 +96,11 @@ class GatewayServer(
      */
     fun stopSharing(): String {
         sessions.clear()
-        synchronized(failures) { failures.clear() }
-        return joinCode.rotate()
+        return synchronized(failures) {
+            failures.clear()
+            globalFailures.clear()
+            joinCode.rotate()
+        }
     }
 
     override fun stop() {
@@ -85,6 +112,14 @@ class GatewayServer(
     override fun useGzipWhenAccepted(r: Response): Boolean = false
 
     override fun serve(session: IHTTPSession): Response {
+        // getRemoteIpAddress() is the socket's peer (NanoHTTPD's "remote-addr" HEADER can be
+        // overwritten by the client; this field cannot).
+        if (!isLocalClient(session.remoteIpAddress.orEmpty())) {
+            val r = html(403, "Not on this network",
+                "<h1>Card scanner</h1><p>Only devices on this phone's Wi-Fi or hotspot can join.</p>")
+            r.closeConnection(true)   // never read a body from an off-LAN client
+            return r
+        }
         val response = try {
             route(session)
         } catch (e: Exception) {
@@ -107,14 +142,17 @@ class GatewayServer(
     private fun join(session: IHTTPSession): Response {
         val ip = session.remoteIpAddress ?: "?"
         val now = clock()
-        lockedFor(ip, now)?.let { return tooMany(it) }
         val given = session.parameters["code"]?.firstOrNull()
-        if (given.isNullOrBlank()) return codePage(session, null)
-        if (!joinCode.matches(given)) {
-            recordFailure(ip, now)?.let { return tooMany(it) }
-            return codePage(session, "That code is not right — check the scanner phone and try again.", status = 403)
+        if (given.isNullOrBlank()) {
+            val locked = synchronized(failures) { failures[ip]?.lockedUntil?.takeIf { it > now }?.minus(now) }
+            return if (locked != null) tooMany(locked) else codePage(session, null)
         }
-        synchronized(failures) { failures.remove(ip) }
+        when (val result = attemptJoin(ip, given, now)) {
+            is JoinResult.Locked -> return tooMany(result.remainingMs)
+            JoinResult.Wrong ->
+                return codePage(session, "That code is not right — check the scanner phone and try again.", status = 403)
+            JoinResult.Joined -> Unit
+        }
         val token = newToken()
         sessions += token
         val ua = session.headers["user-agent"].orEmpty()
@@ -127,24 +165,50 @@ class GatewayServer(
         return r
     }
 
-    /** Remaining lockout in ms, or null when [ip] may try. */
-    private fun lockedFor(ip: String, now: Long): Long? = synchronized(failures) {
-        val a = failures[ip] ?: return null
-        if (a.lockedUntil > now) a.lockedUntil - now else null
-    }
-
-    /** Counts a wrong code; returns the lockout in ms when this failure triggers one. */
-    private fun recordFailure(ip: String, now: Long): Long? = synchronized(failures) {
-        // Forget IPs whose last failure is out of the window and who are not locked.
-        failures.entries.removeAll { (_, a) -> a.lockedUntil <= now && (a.times.lastOrNull() ?: 0L) <= now - FAIL_WINDOW_MS }
-        val a = failures.getOrPut(ip) { Attempts() }
-        while (a.times.isNotEmpty() && a.times.first() <= now - FAIL_WINDOW_MS) a.times.removeFirst()
-        a.times.addLast(now)
-        if (a.times.size >= MAX_FAILURES) {
-            a.times.clear()
-            a.lockedUntil = now + LOCKOUT_MS
-            LOCKOUT_MS
-        } else null
+    /**
+     * One join attempt from [ip] with code [given]: lockout check → attempt reserved in the
+     * per-IP and global windows → constant-time compare → reservation kept (wrong) or
+     * released (right), all inside ONE critical section. Separate check/record blocks let N
+     * parallel connections from one IP all pass the check before any failure landed.
+     * The compare is a few nanoseconds, so holding the lock across it costs nothing.
+     */
+    internal fun attemptJoin(ip: String, given: String, now: Long): JoinResult {
+        var rotatedTo: String? = null
+        val result = synchronized(failures) {
+            // Forget IPs whose last failure is out of the window and who are not locked.
+            failures.entries.removeAll { (_, a) -> a.lockedUntil <= now && (a.times.lastOrNull() ?: 0L) <= now - FAIL_WINDOW_MS }
+            while (globalFailures.isNotEmpty() && globalFailures.first() <= now - FAIL_WINDOW_MS) globalFailures.removeFirst()
+            val a = failures.getOrPut(ip) { Attempts() }
+            if (a.lockedUntil > now) return@synchronized JoinResult.Locked(a.lockedUntil - now)
+            while (a.times.isNotEmpty() && a.times.first() <= now - FAIL_WINDOW_MS) a.times.removeFirst()
+            // Reserve before comparing.
+            a.times.addLast(now)
+            globalFailures.addLast(now)
+            if (joinCode.matches(given)) {
+                failures.remove(ip)
+                globalFailures.removeLast()
+                return@synchronized JoinResult.Joined
+            }
+            val out: JoinResult = if (a.times.size >= MAX_FAILURES) {
+                a.times.clear()
+                a.lockedUntil = now + LOCKOUT_MS
+                JoinResult.Locked(LOCKOUT_MS)
+            } else JoinResult.Wrong
+            if (globalFailures.size >= GLOBAL_MAX_FAILURES) {
+                // A distributed search restarts against a new unknown code. Counters reset;
+                // lockouts in force stay (they are penalties, not counts); sessions stay.
+                rotatedTo = joinCode.rotate()
+                globalFailures.clear()
+                failures.values.forEach { it.times.clear() }
+                failures.entries.removeAll { (_, x) -> x.lockedUntil <= now }
+            }
+            out
+        }
+        rotatedTo?.let { code ->
+            LOG.log(Level.WARNING, "gateway: $GLOBAL_MAX_FAILURES wrong join codes within the window — code rotated")
+            try { onCodeRotated?.invoke(code) } catch (e: Exception) { LOG.log(Level.WARNING, "onCodeRotated failed", e) }
+        }
+        return result
     }
 
     private fun tooMany(remainingMs: Long): Response {
@@ -327,6 +391,7 @@ button{font-size:1.1rem;padding:.55em 1.2em;margin-left:.4em;border-radius:6px;b
         const val MOBILE_TARGET = "/phone?panel=1"
         const val DESKTOP_TARGET = "/"
         const val MAX_FAILURES = 8
+        const val GLOBAL_MAX_FAILURES = 20
         const val FAIL_WINDOW_MS = 5 * 60_000L
         const val LOCKOUT_MS = 5 * 60_000L
         const val MAX_BODY_BYTES = 64L * 1024 * 1024
@@ -335,6 +400,79 @@ button{font-size:1.1rem;padding:.55em 1.2em;margin-left:.4em;border-radius:6px;b
         private val HOP_BY_HOP = setOf("connection", "keep-alive", "te", "trailer", "trailers", "transfer-encoding", "upgrade")
         private val DROP_UPSTREAM = setOf("host", "content-length", "expect", "remote-addr", "http-client-ip")
         private val BODY_METHODS = setOf("POST", "PUT", "PATCH", "PROPPATCH")
+
+        /**
+         * True when [ip] (the socket peer, as NanoHTTPD reports it) is on the phone's own
+         * network: IPv4 10/8, 172.16/12, 192.168/16, loopback; IPv6 link-local fe80::/10,
+         * ULA fc00::/7, ::1; IPv4-mapped IPv6 (::ffff:a.b.c.d) judged by its IPv4.
+         * Everything else is refused — notably Tailscale/CGNAT 100.64/10, public IPv4 and
+         * global IPv6 (cellular). Pure: no DNS, unparseable input is refused.
+         */
+        fun isLocalClient(ip: String): Boolean {
+            var s = ip.trim()
+            if (s.startsWith("[") && s.endsWith("]")) s = s.substring(1, s.length - 1)
+            s = s.substringBefore('%')   // zone id: fe80::1%wlan0
+            if (s.isEmpty()) return false
+            parseIpv4(s)?.let { return isLocalV4(it) }
+            val b = parseIpv6(s) ?: return false
+            val u = IntArray(16) { b[it].toInt() and 0xff }
+            if ((0 until 10).all { u[it] == 0 } && u[10] == 0xff && u[11] == 0xff) {
+                return isLocalV4(intArrayOf(u[12], u[13], u[14], u[15]))
+            }
+            if ((0 until 15).all { u[it] == 0 } && u[15] == 1) return true            // ::1
+            if (u[0] == 0xfe && (u[1] and 0xc0) == 0x80) return true                    // fe80::/10
+            if ((u[0] and 0xfe) == 0xfc) return true                                     // fc00::/7
+            return false
+        }
+
+        private fun isLocalV4(a: IntArray): Boolean =
+            a[0] == 10 || a[0] == 127 ||
+                (a[0] == 172 && a[1] in 16..31) ||
+                (a[0] == 192 && a[1] == 168)
+
+        private fun parseIpv4(s: String): IntArray? {
+            val parts = s.split('.')
+            if (parts.size != 4) return null
+            val out = IntArray(4)
+            for ((i, p) in parts.withIndex()) {
+                if (p.isEmpty() || p.length > 3 || !p.all { it in '0'..'9' }) return null
+                out[i] = p.toInt().takeIf { it <= 255 } ?: return null
+            }
+            return out
+        }
+
+        private fun parseIpv6(s: String): ByteArray? {
+            if (!s.contains(':')) return null
+            val dbl = s.indexOf("::")
+            if (dbl >= 0 && s.indexOf("::", dbl + 1) >= 0) return null
+            fun groups(part: String, allowV4Tail: Boolean): List<Int>? {
+                if (part.isEmpty()) return emptyList()
+                val out = ArrayList<Int>()
+                val pieces = part.split(':')
+                for ((i, g) in pieces.withIndex()) {
+                    if (allowV4Tail && i == pieces.lastIndex && g.contains('.')) {
+                        val v4 = parseIpv4(g) ?: return null
+                        out += (v4[0] shl 8) or v4[1]; out += (v4[2] shl 8) or v4[3]
+                    } else {
+                        if (g.isEmpty() || g.length > 4) return null
+                        if (!g.all { it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F' }) return null
+                        out += g.toInt(16)
+                    }
+                }
+                return out
+            }
+            val words: List<Int> = if (dbl >= 0) {
+                val head = groups(s.substring(0, dbl), allowV4Tail = false) ?: return null
+                val tail = groups(s.substring(dbl + 2), allowV4Tail = true) ?: return null
+                if (head.size + tail.size > 7) return null
+                head + List(8 - head.size - tail.size) { 0 } + tail
+            } else {
+                groups(s, allowV4Tail = true)?.takeIf { it.size == 8 } ?: return null
+            }
+            val bytes = ByteArray(16)
+            for ((i, w) in words.withIndex()) { bytes[2 * i] = (w shr 8).toByte(); bytes[2 * i + 1] = w.toByte() }
+            return bytes
+        }
 
         internal fun isHopByHop(lowerName: String) = lowerName in HOP_BY_HOP || lowerName.startsWith("proxy-")
 

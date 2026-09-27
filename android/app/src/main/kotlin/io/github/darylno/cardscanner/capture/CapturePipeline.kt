@@ -131,7 +131,10 @@ class CapturePipeline(
                 flattened = true
             } else {
                 primary = raw[best]
-                fallbacks = raw.filterIndexed { i, _ -> i != best }
+                // ALL 3 raw frames, sharpest included: the fallback is the
+                // server's multi-frame retry ("re-send all 3"), which sorts by
+                // sharpness itself — dropping the best frame weakened it.
+                fallbacks = raw
                 flattened = false
             }
             t = System.nanoTime(); timings["encode"] = ms(te, t)

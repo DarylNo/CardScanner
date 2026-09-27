@@ -23,6 +23,7 @@ class CameraAdapter(private val context: Context, private val settings: AppSetti
     private var handheld = false
     private var auto = true
     private var roi: RoiFrac? = null
+    private var preview: PreviewView? = null
 
     override fun bind(owner: LifecycleOwner, preview: PreviewView, listener: CameraPort.Listener) {
         val c = CameraController(context, owner, object : CameraController.Listener {
@@ -54,7 +55,10 @@ class CameraAdapter(private val context: Context, private val settings: AppSetti
             }
 
             override fun onCameraError(message: String, fatal: Boolean) {
-                if (fatal) listener.onCameraError(message)
+                // Forward non-fatal errors too: "capture with no frames in the ring" and
+                // analyzer exceptions mid-burst END a capture without any onCapture, so
+                // dropping them left the status stuck on "Capturing…"/"Retrying — capturing…".
+                listener.onCameraError(message)
             }
 
             override fun onCameraReady(summary: String) {
@@ -62,6 +66,7 @@ class CameraAdapter(private val context: Context, private val settings: AppSetti
             }
         })
         controller = c
+        this.preview = preview
         c.setScanMode(if (handheld) ScanMode.HANDHELD else ScanMode.MOUNT)
         c.setRoi(roi)
         c.setAuto(auto)
@@ -70,9 +75,16 @@ class CameraAdapter(private val context: Context, private val settings: AppSetti
         c.start(preview, if (settings.highRes) CameraController.Resolution.HIGH else CameraController.Resolution.STANDARD)
     }
 
+    /** CameraController.start is idempotent: rebinds into the same view with the current resolution. */
+    override fun rebind() {
+        val v = preview ?: return
+        controller?.start(v)
+    }
+
     override fun unbind() {
         controller?.release()
         controller = null
+        preview = null
     }
 
     override fun setHandheld(handheld: Boolean) {

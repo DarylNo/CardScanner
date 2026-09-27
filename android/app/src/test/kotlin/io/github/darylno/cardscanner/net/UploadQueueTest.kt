@@ -37,7 +37,7 @@ class UploadQueueTest {
         private val script = LinkedBlockingQueue(script.toList())
         var default: Any? = null
 
-        override fun scan(files: List<ByteArray>, replaceScanId: Long?): JSONObject {
+        override fun scan(files: List<ByteArray>, replaceScanId: Long?, uploadId: String?): JSONObject {
             calls += files.map { String(it) } to replaceScanId
             when (val next = script.poll() ?: default ?: error("script exhausted")) {
                 is Throwable -> throw next

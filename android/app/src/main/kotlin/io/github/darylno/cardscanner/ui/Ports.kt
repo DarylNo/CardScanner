@@ -35,10 +35,17 @@ interface CameraPort {
         /** Frames captured and processed (auto trigger or manual). Any thread. */
         fun onCaptured(capture: Captured, manual: Boolean)
         fun onCaptureFailed(message: String)
+        /** Fatal AND non-fatal camera/analyzer errors (a non-fatal one can still end a capture). */
         fun onCameraError(message: String)
     }
 
     fun bind(owner: LifecycleOwner, preview: PreviewView, listener: Listener)
+    /**
+     * Re-bind the already-bound camera with its current settings (idempotent).
+     * Belt-and-braces: anything that unbinds the process-wide CameraProvider
+     * behind our back (another screen's QR camera) must not leave a dead preview.
+     */
+    fun rebind()
     fun unbind()
     fun setHandheld(handheld: Boolean)
     fun setAuto(on: Boolean)
@@ -74,9 +81,11 @@ interface UploadPort {
         /**
          * Worker thread. [manual] = the job was a manual (tap) scan; [priceCheck] =
          * it was taken in Handheld mode (persisted with the job, so it survives a
-         * process death while queued offline).
+         * process death while queued offline). [replaceScanId] = the row a Retry
+         * job was replacing (null for a fresh scan) — a Retry that comes back
+         * no_card leaves that failed row in place, so Retry is offered again.
          */
-        fun onOutcome(jobId: String, manual: Boolean, priceCheck: Boolean, outcome: Outcome)
+        fun onOutcome(jobId: String, manual: Boolean, priceCheck: Boolean, replaceScanId: Long?, outcome: Outcome)
         fun onState(pending: Int, lastError: String?, nextRetryInMs: Long?)
     }
 

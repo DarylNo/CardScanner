@@ -20,6 +20,7 @@ import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
 import androidx.camera.core.Preview
+import androidx.camera.core.UseCase
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
@@ -53,6 +54,19 @@ class SetupActivity : AppCompatActivity() {
     private val analysisExec: ExecutorService = Executors.newSingleThreadExecutor()
     private val handled = AtomicBoolean(false)
     private var cameraProvider: ProcessCameraProvider? = null
+    /**
+     * THIS screen's own QR use cases. Never unbind-all on the provider: it is
+     * process-wide, so that also tears down MainActivity's Preview+Analysis
+     * (Setup is destroyed AFTER MainActivity has re-bound on pairing / Re-pair),
+     * leaving a black preview and dead scanning. Unbind only what we bound.
+     */
+    private var qrUseCases: Array<UseCase> = emptyArray()
+
+    private fun unbindQr() {
+        val uc = qrUseCases
+        qrUseCases = emptyArray()
+        if (uc.isNotEmpty()) runCatching { cameraProvider?.unbind(*uc) }
+    }
 
     private val permission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
         if (ok) startQrCamera() else status.text = "No camera permission — type the server address instead."
@@ -121,7 +135,7 @@ class SetupActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
-        cameraProvider?.unbindAll()
+        unbindQr()   // own use cases only — see qrUseCases
         analysisExec.shutdown()
         io.shutdown()
         super.onDestroy()
@@ -146,8 +160,9 @@ class SetupActivity : AppCompatActivity() {
             val hints = mapOf(DecodeHintType.TRY_HARDER to true)
             analysis.setAnalyzer(analysisExec) { image -> decode(image, reader, hints) }
             try {
-                provider.unbindAll()
+                unbindQr()   // a previous QR binding of ours (failed() restarts) — not MainActivity's
                 provider.bindToLifecycle(this, CameraSelector.DEFAULT_BACK_CAMERA, pv, analysis)
+                qrUseCases = arrayOf(pv, analysis)
             } catch (e: Exception) {
                 status.text = "Camera unavailable: ${e.message}"
             }
@@ -180,7 +195,7 @@ class SetupActivity : AppCompatActivity() {
     }
 
     private fun onScanned(text: String) {
-        cameraProvider?.unbindAll()
+        unbindQr()
         val base = app.server.normalize(text)
         val pin = Pin.parsePinFromQrUrl(text)
         if (base == null) {
@@ -199,7 +214,7 @@ class SetupActivity : AppCompatActivity() {
         }
         val pin = Pin.parsePinFromQrUrl(raw)
         handled.set(true)
-        cameraProvider?.unbindAll()
+        unbindQr()
         if (pin != null) pair(base, pin) else probeAndConfirm(base)
     }
 

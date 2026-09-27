@@ -268,7 +268,10 @@ class UploadQueue(
         val fallbacks = (0 until 8).map { File(jobDir, "fallback$it.jpg") }.takeWhile { it.isFile }
         try {
             if (meta.stage == STAGE_PRIMARY) {
-                val json = uploader.scan(listOf(File(jobDir, PRIMARY).readBytes()), meta.job.replaceScanId)
+                // Stage-specific ids: a re-send after a lost reply gets the
+                // row the server already filed instead of filing it twice.
+                val json = uploader.scan(listOf(File(jobDir, PRIMARY).readBytes()), meta.job.replaceScanId,
+                                         "${meta.job.id}-p")
                 val out = ScanOutcome.classify(json)
                 val weak = out is ScanOutcome.NoCard || !json.optBoolean("identified")
                 if (!weak || fallbacks.isEmpty()) return Step.Done(out)
@@ -279,7 +282,7 @@ class UploadQueue(
             val primaryOut = readPrimaryOutcome(jobDir)
             val replace = meta.primaryScanId ?: meta.job.replaceScanId
             if (fallbacks.isEmpty()) return Step.Done(primaryOut ?: ScanOutcome.NoCard("No card detected."))
-            val json = uploader.scan(fallbacks.map { it.readBytes() }, replace)
+            val json = uploader.scan(fallbacks.map { it.readBytes() }, replace, "${meta.job.id}-f")
             val out = ScanOutcome.classify(json).withFallback()
             // no_card on the raw frames leaves the primary's row untouched on
             // the server (its no_card path returns before replacing) — report

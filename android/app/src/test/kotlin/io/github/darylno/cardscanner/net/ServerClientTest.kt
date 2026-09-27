@@ -101,22 +101,35 @@ class ServerClientTest {
     }
 
     @Test
-    fun wrongPinThrowsPinMismatchAndDoesNotFailOver() {
-        val evilHeld = cert("evil")
-        val evil = tlsServer(evilHeld)
+    fun aForeignCertOnOneAddressFailsOverToThePinnedServer() {
+        // A stale home IP answered by another TLS device (router on :8443) must
+        // not strand uploads: nothing was sent to it, and the next address is
+        // pinned too.
+        val evil = tlsServer(cert("evil"))
         val good = cert()
         val right = tlsServer(good)
         right.enqueue(MockResponse().setBody("""{"version":"x"}"""))
         val (c, store) = client(listOf(base(evil), base(right)), pinOf(good))
+        assertEquals("x", c.version())
+        assertEquals(0, evil.requestCount)
+        assertEquals(1, right.requestCount)
+        assertEquals(base(right), store.lastGood())
+    }
+
+    @Test
+    fun onlyMismatchesAnywhereIsReportedAsPinMismatch() {
+        val evilHeld = cert("evil")
+        val a = tlsServer(evilHeld)
+        val b = tlsServer(cert("evil2"))
+        val (c, store) = client(listOf(base(a), base(b)), pinOf(cert()))
         try {
             c.version()
             fail("expected PinMismatchException")
         } catch (e: PinMismatchException) {
+            assertEquals(base(a), e.url)
             assertEquals(pinOf(evilHeld), e.seenFingerprintHex)
-            assertEquals(base(evil), e.url)
         }
-        assertEquals(0, evil.requestCount)
-        assertEquals(0, right.requestCount)   // never failed over past a mismatch
+        assertEquals(0, a.requestCount + b.requestCount)
         assertNull(store.lastGood())
     }
 
@@ -174,7 +187,7 @@ class ServerClientTest {
         b.enqueue(MockResponse().setBody("""{"no_card":true}"""))
         val (c, _) = client(listOf(base(a), base(b)), pinOf(held))
         try {
-            c.scan(listOf(byteArrayOf(1, 2, 3)), null)
+            c.scan(listOf(byteArrayOf(1, 2, 3)), null, null)
             fail("expected HttpException")
         } catch (e: HttpException) {
             assertEquals(500, e.code)
@@ -202,7 +215,7 @@ class ServerClientTest {
         val s = tlsServer(held)
         s.enqueue(MockResponse().setBody("""{"id":5,"identified":true}"""))
         val (c, _) = client(listOf(base(s)), pinOf(held))
-        val json = c.scan(listOf("AAA".toByteArray(), "BBB".toByteArray()), 42L)
+        val json = c.scan(listOf("AAA".toByteArray(), "BBB".toByteArray()), 42L, "job1-p")
         assertEquals(5L, json.getLong("id"))
         val req = s.takeRequest()
         assertEquals("/api/scan", req.path)

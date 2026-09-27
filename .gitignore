@@ -52,3 +52,4 @@ scan_images/
 tsc.out
 pkgtest.log
 .certs/
+android/.kotlin/

@@ -13,6 +13,7 @@ a built art index (inject a fake pipeline).
 
 from __future__ import annotations
 
+import asyncio
 import collections
 import os
 import subprocess
@@ -418,10 +419,52 @@ def create_app(
                      **_NO_STORE})
 
     # ── scan (phone → server) ──────────────────────────────────────────────────
+    # Idempotent uploads: the Android app tags every upload with a
+    # client_upload_id and re-sends it after a lost response (timeout, Wi-Fi
+    # drop mid-reply). A repeat id answers with what the first one filed —
+    # never a second row for one physical card. Bounded; newest kept.
+    upload_seen: "collections.OrderedDict[str, dict]" = collections.OrderedDict()
+    upload_inflight: dict = {}
+
     @app.post("/api/scan")
     async def scan(background_tasks: BackgroundTasks,
                    files: list[UploadFile] = File(...),
-                   replace_scan_id: int = Form(0)):
+                   replace_scan_id: int = Form(0),
+                   client_upload_id: str = Form("")):
+        uid = client_upload_id.strip()[:128]
+        if uid:
+            # Everything between these checks and the claim runs on the event
+            # loop without an await, so two copies can't both claim the id.
+            waiter = upload_inflight.get(uid)
+            if waiter is not None:
+                await waiter.wait()
+            if uid in upload_seen:
+                return _replay_upload(upload_seen[uid])
+            upload_inflight[uid] = asyncio.Event()
+        try:
+            resp = await _scan_once(background_tasks, files, replace_scan_id)
+            if uid and not (isinstance(resp, JSONResponse)):
+                upload_seen[uid] = resp
+                while len(upload_seen) > 500:
+                    upload_seen.popitem(last=False)
+            return resp
+        finally:
+            if uid:
+                ev = upload_inflight.pop(uid, None)
+                if ev is not None:
+                    ev.set()
+
+    def _replay_upload(first: dict) -> dict:
+        # The row as it is NOW (a pick may have landed since); a row deleted
+        # since (Discard) stays deleted — answer with the original reply.
+        if first.get("id") is not None:
+            cur = store.get_scan(first["id"])
+            if cur is not None:
+                return cur
+        return first
+
+    async def _scan_once(background_tasks: BackgroundTasks,
+                         files: list[UploadFile], replace_scan_id: int):
         frames = []
         for f in files:
             img = _decode_image(await f.read())

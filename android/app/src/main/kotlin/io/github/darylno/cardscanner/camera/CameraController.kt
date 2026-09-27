@@ -199,7 +199,9 @@ class CameraController(
         released = true
         analysis?.clearAnalyzer()
         camera?.cameraInfo?.cameraState?.removeObservers(owner)
-        runCatching { provider?.unbindAll() }
+        // Only OUR use cases: the provider is a process singleton, and a
+        // Setup screen scanning a QR above us owns its own.
+        runCatching { provider?.unbind(*listOfNotNull(preview, analysis).toTypedArray()) }
         camera = null; analysis = null; preview = null
         analysisExecutor.shutdown()
         pipeline.shutdown()
@@ -382,7 +384,12 @@ class CameraController(
         val pt = view.meteringPointFactory.createPoint(x, y)
         val b = FocusMeteringAction.Builder(pt, FocusMeteringAction.FLAG_AF or FocusMeteringAction.FLAG_AE)
         val lock = scanMode == ScanMode.MOUNT
-        if (lock) b.disableAutoCancel()
+        if (lock) {
+            b.disableAutoCancel()
+            // The user chose this point: the next auto trigger must not re-lock
+            // on the box centre and throw the tap away.
+            focusLocked = true
+        }
         runFocus(cam, b.build(), if (lock) "locked at tap" else "tap AF")
     }
 

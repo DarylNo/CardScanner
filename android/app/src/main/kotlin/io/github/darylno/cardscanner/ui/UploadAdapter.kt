@@ -19,7 +19,7 @@ class UploadAdapter(private val queue: UploadQueue) : UploadPort {
             override fun onOutcome(job: UploadJob, outcome: ScanOutcome) {
                 val o = map(outcome)
                 val pc = job.tag == TAG_PRICE_CHECK
-                listeners.forEach { it.onOutcome(job.id, job.manual, pc, o) }
+                listeners.forEach { it.onOutcome(job.id, job.manual, pc, job.replaceScanId, o) }
             }
 
             override fun onState(pending: Int, lastError: String?, nextRetryInMs: Long?) {

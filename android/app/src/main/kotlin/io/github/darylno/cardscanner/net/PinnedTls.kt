@@ -127,6 +127,11 @@ fun pinnedClient(pin: String?, timeouts: Timeouts = Timeouts()): PinnedClient {
         .connectTimeout(timeouts.connectMs, TimeUnit.MILLISECONDS)
         .readTimeout(timeouts.readMs, TimeUnit.MILLISECONDS)
         .writeTimeout(timeouts.writeMs, TimeUnit.MILLISECONDS)
+        // OkHttp's default silently RE-SENDS a request (multipart scans
+        // included) when a pooled connection dies after it was written —
+        // measured: 2 POSTs for one scan(), a card filed twice. Address
+        // failover already covers the connect phase; nothing may retry past it.
+        .retryOnConnectionFailure(false)
         .build()
     return PinnedClient(client, tm)
 }

@@ -9,6 +9,7 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
+import fi.iki.elonen.NanoHTTPD
 import okio.Buffer
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -20,6 +21,8 @@ import org.junit.Before
 import org.junit.Test
 import java.io.IOException
 import java.security.MessageDigest
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
 class GatewayServerTest {
@@ -156,6 +159,167 @@ class GatewayServerTest {
         now += GatewayServer.FAIL_WINDOW_MS + 1
         repeat(7) { get("/join?code=$wrong").use { r -> assertEquals(403, r.code) } }
         get("/join?code=${gateway.code}").use { r -> assertEquals(302, r.code) }
+    }
+
+    // ---- global budget / atomic attempts / LAN-only -----------------------------------
+
+    @Test
+    fun globalBudgetRotatesCodeAfterTwentyDistributedFailures() {
+        val cookie = join()
+        val oldCode = gateway.code
+        val wrong = if (oldCode == "000000") "111111" else "000000"
+        val rotated = mutableListOf<String>()
+        gateway.onCodeRotated = { synchronized(rotated) { rotated += it } }
+        // 7 over HTTP from 127.0.0.1 (one short of its per-IP lock) …
+        repeat(7) { get("/join?code=$wrong").use { r -> assertEquals(403, r.code) } }
+        // … and 12 more spread over addresses no per-IP lock ever sees twice.
+        for (i in 0 until 12) {
+            val ip = if (i % 2 == 0) "fe80::1234:${i}" else "192.168.43.${10 + i}"
+            assertTrue(gateway.attemptJoin(ip, wrong, now) is GatewayServer.JoinResult.Wrong)
+        }
+        assertEquals(oldCode, gateway.code)
+        assertTrue(rotated.isEmpty())
+        // the 20th failure in the window rotates the code
+        assertTrue(gateway.attemptJoin("fe80::beef", wrong, now) is GatewayServer.JoinResult.Wrong)
+        val newCode = gateway.code
+        assertNotEquals(oldCode, newCode)   // 1-in-a-million flake would need a retry here
+        assertEquals(listOf(newCode), rotated)
+
+        // the old code no longer joins; 127.0.0.1's 7 failures were reset (this would be its 8th → 429)
+        get("/join?code=$oldCode").use { r -> assertEquals(403, r.code); assertNull(r.header("Set-Cookie")) }
+        // the existing session still works
+        upstreamServer.enqueue(MockResponse().setBody("still in"))
+        get("/api/version", cookie = cookie).use { r -> assertEquals("still in", r.body!!.string()) }
+        assertEquals(1, gateway.sessionCount)
+        // and the new code joins
+        get("/join?code=$newCode").use { r -> assertEquals(302, r.code) }
+    }
+
+    @Test
+    fun globalBudgetIsAWindowNotALifetimeCount() {
+        val oldCode = gateway.code
+        val wrong = if (oldCode == "000000") "111111" else "000000"
+        for (i in 0 until 19) gateway.attemptJoin("10.0.0.${i + 2}", wrong, now)
+        now += GatewayServer.FAIL_WINDOW_MS + 1
+        gateway.attemptJoin("10.0.1.1", wrong, now)
+        assertEquals(oldCode, gateway.code)
+        // right codes do not count toward the budget
+        repeat(30) { gateway.attemptJoin("10.0.2.${it + 2}", oldCode, now) }
+        assertEquals(oldCode, gateway.code)
+    }
+
+    @Test
+    fun parallelBadAttemptsFromOneIpNeverEvaluateMoreThanEight() {
+        val oldCode = gateway.code
+        val wrong = if (oldCode == "000000") "111111" else "000000"
+        val threads = 64
+        val pool = Executors.newFixedThreadPool(threads)
+        val start = CountDownLatch(1)
+        try {
+            val futures = (0 until threads).map {
+                pool.submit<GatewayServer.JoinResult> { start.await(); gateway.attemptJoin("10.1.2.3", wrong, now) }
+            }
+            start.countDown()
+            val results = futures.map { it.get(10, TimeUnit.SECONDS) }
+            // 7 plain rejections + the 8th that lands the lock; everything else refused unevaluated
+            assertEquals(7, results.count { it is GatewayServer.JoinResult.Wrong })
+            assertEquals(threads - 7, results.count { it is GatewayServer.JoinResult.Locked })
+        } finally {
+            pool.shutdownNow()
+        }
+        // if more than 8 had been evaluated as failures, 20 would have rotated the code
+        assertEquals(oldCode, gateway.code)
+        // locked even for the right code
+        assertTrue(gateway.attemptJoin("10.1.2.3", oldCode, now) is GatewayServer.JoinResult.Locked)
+    }
+
+    @Test
+    fun parallelBadHttpJoinsFromOneIpGetSevenRejectionsThenLockout() {
+        val wrong = if (gateway.code == "000000") "111111" else "000000"
+        val n = 24
+        val pool = Executors.newFixedThreadPool(n)
+        val start = CountDownLatch(1)
+        try {
+            val futures = (0 until n).map {
+                pool.submit<Int> {
+                    start.await()
+                    // a fresh client per call: separate connections, separate server threads
+                    OkHttpClient.Builder().followRedirects(false).build()
+                        .newCall(Request.Builder().url(url("/join?code=$wrong")).build()).execute().use { it.code }
+                }
+            }
+            start.countDown()
+            val codes = futures.map { it.get(20, TimeUnit.SECONDS) }
+            assertEquals(codes.toString(), 7, codes.count { it == 403 })
+            assertEquals(codes.toString(), n - 7, codes.count { it == 429 })
+        } finally {
+            pool.shutdownNow()
+        }
+    }
+
+    @Test
+    fun isLocalClientRanges() {
+        val allowed = listOf(
+            "10.0.0.1", "10.255.255.255", "172.16.0.1", "172.31.255.254", "192.168.0.1", "192.168.43.7",
+            "127.0.0.1", "127.8.9.10",
+            "fe80::1", "fe80::a1b2:c3ff:fed4:e5f6%wlan0", "FE80::1", "febf:ffff::1", "[fe80::1]",
+            "fc00::1", "fd7a:115c:a1e0::1", "fdff:ffff:ffff:ffff:ffff:ffff:ffff:ffff", "::1", "0:0:0:0:0:0:0:1",
+            "::ffff:192.168.1.5", "::ffff:10.0.0.2", "::FFFF:172.20.1.1", "::ffff:c0a8:0105", "0:0:0:0:0:ffff:127.0.0.1",
+        )
+        val refused = listOf(
+            "100.64.0.1", "100.100.100.100", "100.127.255.255",          // Tailscale / CGNAT
+            "8.8.8.8", "172.15.255.255", "172.32.0.1", "192.169.0.1", "11.0.0.1", "169.254.1.1", "0.0.0.0",
+            "255.255.255.255", "1.2.3.4",
+            "2001:db8::1", "2607:fb90:1234::5", "fec0::1", "fe7f::1", "ff02::1", "::", "fb00::1",
+            "::ffff:100.64.0.1", "::ffff:8.8.8.8", "::192.168.1.1", "64:ff9b::192.168.1.1",
+            "", "?", "localhost", "10.0.0", "10.0.0.256", "10.0.0.1.2", "1::2::3", "fe80::1::", "fe80:::1",
+            "fe80::12345", "gggg::1", "fe80::+1", "fe80::１", "1:2:3:4:5:6:7:8:9", "1:2:3:4:5:6:7", "10.0.0.1 ",
+        )
+        for (ip in allowed) assertTrue("should allow '$ip'", GatewayServer.isLocalClient(ip))
+        for (ip in refused) {
+            if (ip == "10.0.0.1 ") continue   // trimmed → allowed; listed only to document trimming
+            assertFalse("should refuse '$ip'", GatewayServer.isLocalClient(ip))
+        }
+        assertTrue(GatewayServer.isLocalClient("10.0.0.1 "))
+    }
+
+    @Test
+    fun offLanClientIsRefusedBeforeAnythingElse() {
+        // NanoHTTPD reports every loopback peer as 127.0.0.1, so drive serve() with a session
+        // whose peer is a Tailscale / public address; the real socket path is covered below.
+        for (ip in listOf("100.101.102.103", "2607:fb90::5", "::ffff:100.64.1.1")) {
+            for (path in listOf("/join", "/", "/api/scans")) {
+                val r = gateway.serve(FakeSession(ip, path, mapOf("code" to listOf(gateway.code))))
+                assertEquals(403, r.status.requestStatus)
+                val body = r.data.readBytes().toString(Charsets.UTF_8)
+                assertTrue(body, body.contains("Only devices on this phone's Wi-Fi or hotspot can join"))
+            }
+        }
+        assertEquals(0, gateway.sessionCount)
+        assertEquals(0, upstreamServer.requestCount)
+        // a LAN peer through the same entry point gets the normal code page
+        assertEquals(200, gateway.serve(FakeSession("192.168.43.20", "/", emptyMap())).status.requestStatus)
+        // end to end over a real socket: loopback is local
+        get("/").use { r -> assertEquals(200, r.code); assertTrue(r.body!!.string().contains("Enter the 6-digit code")) }
+    }
+
+    private class FakeSession(
+        private val ip: String,
+        private val path: String,
+        private val params: Map<String, List<String>>,
+    ) : NanoHTTPD.IHTTPSession {
+        override fun execute() {}
+        override fun getCookies(): NanoHTTPD.CookieHandler? = null
+        override fun getHeaders(): Map<String, String> = mapOf("remote-addr" to "127.0.0.1")
+        override fun getInputStream() = java.io.ByteArrayInputStream(ByteArray(0))
+        override fun getMethod() = NanoHTTPD.Method.GET
+        @Deprecated("NanoHTTPD API") override fun getParms(): Map<String, String> = params.mapValues { it.value.first() }
+        override fun getParameters(): Map<String, List<String>> = params
+        override fun getQueryParameterString(): String? = null
+        override fun getUri() = path
+        override fun parseBody(files: MutableMap<String, String>?) {}
+        override fun getRemoteIpAddress() = ip
+        override fun getRemoteHostName() = ip
     }
 
     // ---- proxy -----------------------------------------------------------------------

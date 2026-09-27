@@ -96,7 +96,7 @@ class CapturePipelineTest {
             val r = pipeline.process(frames(bgr), null)
             assertFalse("$name must not flatten", r.flattened)
             assertNull(r.margin)
-            assertEquals(2, r.fallbacks.size)
+            assertEquals(3, r.fallbacks.size)     // all 3 raw frames — the server's retry
             val p = decode(r.primary)
             assertEquals(bgr.cols(), p.cols()); assertEquals(bgr.rows(), p.rows())
             assertTrue(meanAbsDiff(p, bgr) < 6.0)
@@ -145,16 +145,17 @@ class CapturePipelineTest {
         assertTrue(r.sharpness[1] > r.sharpness[0] && r.sharpness[1] > r.sharpness[2])
         assertFalse(r.flattened)
         assertTrue(meanAbsDiff(decode(r.primary), card) < 6.0)
-        assertEquals(2, r.fallbacks.size)
+        assertEquals(3, r.fallbacks.size)         // all frames in capture order, sharpest included
         assertTrue(meanAbsDiff(decode(r.fallbacks[0]), blur) < 6.0)
-        assertTrue(meanAbsDiff(decode(r.fallbacks[1]), bgr) < 6.0)
+        assertTrue(meanAbsDiff(decode(r.fallbacks[1]), card) < 6.0)
+        assertTrue(meanAbsDiff(decode(r.fallbacks[2]), bgr) < 6.0)
     }
 
     @Test fun rotationZeroAndSingleFrameWork() {
         val bgr = scene("portrait_frame")
         val r = pipeline.process(frames(bgr, n = 1, rotation = 0), null)
         assertEquals(expectedMargin("portrait_frame") != null, r.flattened)
-        assertEquals(if (r.flattened) 1 else 0, r.fallbacks.size)
+        assertEquals(1, r.fallbacks.size)
     }
 
     @Test fun rawCropsAreCappedAt1600() {

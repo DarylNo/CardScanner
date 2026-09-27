@@ -21,8 +21,12 @@ class NotPairedException : IOException("No server paired")
 
 /** What [UploadQueue] needs from the network — [ServerClient] in the app, a fake in tests. */
 fun interface ScanUploader {
-    /** POST /api/scan. Non-2xx → [HttpException]; transport failure → [IOException]. */
-    fun scan(files: List<ByteArray>, replaceScanId: Long?): JSONObject
+    /**
+     * POST /api/scan. Non-2xx → [HttpException]; transport failure → [IOException].
+     * [uploadId] makes a re-send idempotent: the server answers a repeat with
+     * the scan it already filed (a lost reply is re-sent by the queue).
+     */
+    fun scan(files: List<ByteArray>, replaceScanId: Long?, uploadId: String?): JSONObject
 }
 
 /**
@@ -33,7 +37,8 @@ fun interface ScanUploader {
  * (connect-phase: DNS, refused, no route, connect timeout, handshake). Once a
  * request may have reached the server, its failure is the caller's (a retried
  * POST /api/scan on another address would file the card twice). A pin
- * mismatch is never failed over: [PinMismatchException], the UI re-pairs.
+ * mismatch at one address moves on to the next (nothing was sent to it);
+ * only when NO address verifies is [PinMismatchException] thrown — re-pair.
  */
 class ServerClient(
     private val store: ConfigStore,
@@ -102,7 +107,8 @@ class ServerClient(
         val c = store.load() ?: throw NotPairedException()
         val b = clientFor(c.pin)
         val bases = orderedBases()
-        val errors = ArrayList<IOException>()
+        val errors = ArrayList<Pair<String, IOException>>()
+        var mismatch: PinMismatchException? = null
         for (base in bases) {
             requestStarted.set(false)
             b.pinned.trustManager.mismatchOnThread.set(null)
@@ -112,18 +118,27 @@ class ServerClient(
                 return result
             } catch (e: IOException) {
                 val seen = pinMismatchIn(e, b.pinned.trustManager)
-                if (seen != null) throw PinMismatchException(base, seen.ifEmpty { null })
+                if (seen != null) {
+                    // A foreign cert at a stale address (e.g. a shop router on
+                    // :8443 where the home LAN IP used to be) must not strand
+                    // the upload: the handshake aborted before any request byte
+                    // was sent, and the next address is pinned too. Only when NO
+                    // address verifies is it reported — then the UI re-pairs.
+                    if (mismatch == null) mismatch = PinMismatchException(base, seen.ifEmpty { null })
+                    continue
+                }
                 if (requestStarted.get() == true) throw e   // may have reached the server
-                errors += e
+                errors += base to e
             } finally {
                 requestStarted.set(false)
                 b.pinned.trustManager.mismatchOnThread.set(null)
             }
         }
-        val last = errors.lastOrNull()
-        val summary = bases.zip(errors).joinToString("; ") { (u, e) -> "$u: ${e.message ?: e.javaClass.simpleName}" }
+        mismatch?.let { throw it }
+        val last = errors.lastOrNull()?.second
+        val summary = errors.joinToString("; ") { (u, e) -> "$u: ${e.message ?: e.javaClass.simpleName}" }
         throw IOException("No server address reachable ($summary)", last).apply {
-            errors.dropLast(1).forEach { addSuppressed(it) }
+            errors.dropLast(1).forEach { addSuppressed(it.second) }
         }
     }
 
@@ -150,12 +165,13 @@ class ServerClient(
      * POST /api/scan: multipart `files` (frame0.jpg…, image/jpeg) + optional
      * `replace_scan_id`. Returns the server's JSON (see phone.html submitScan).
      */
-    override fun scan(files: List<ByteArray>, replaceScanId: Long?): JSONObject {
+    override fun scan(files: List<ByteArray>, replaceScanId: Long?, uploadId: String?): JSONObject {
         require(files.isNotEmpty()) { "no frames" }
         val jpeg = "image/jpeg".toMediaType()
         val body = MultipartBody.Builder().setType(MultipartBody.FORM).apply {
             files.forEachIndexed { i, bytes -> addFormDataPart("files", "frame$i.jpg", bytes.toRequestBody(jpeg)) }
             if (replaceScanId != null && replaceScanId > 0) addFormDataPart("replace_scan_id", replaceScanId.toString())
+            if (!uploadId.isNullOrBlank()) addFormDataPart("client_upload_id", uploadId)
         }.build()
         return withFailover { base ->
             execute(Request.Builder().url("$base/api/scan").post(body).build()).use { r ->
