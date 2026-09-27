@@ -12,6 +12,7 @@ opencvJvm = "4.9.0-0"
 zxing = "3.5.3"
 junit = "4.13.2"
 coroutines = "1.9.0"
+nanohttpd = "2.3.1"
 
 [libraries]
 camerax-core = { module = "androidx.camera:camera-core", version.ref = "camerax" }
@@ -27,6 +28,7 @@ zxing-core = { module = "com.google.zxing:core", version.ref = "zxing" }
 junit = { module = "junit:junit", version.ref = "junit" }
 coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "coroutines" }
 json = { module = "org.json:json", version = "20240303" }
+nanohttpd = { module = "org.nanohttpd:nanohttpd", version.ref = "nanohttpd" }
 androidx-core = { module = "androidx.core:core-ktx", version = "1.15.0" }
 androidx-activity = { module = "androidx.activity:activity-ktx", version = "1.9.3" }
 androidx-appcompat = { module = "androidx.appcompat:appcompat", version = "1.7.0" }

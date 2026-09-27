@@ -383,7 +383,12 @@ def create_app(
         host = ip.strip() if re.fullmatch(r"[0-9.]{7,15}", ip.strip()) else lan_ip()
         port = request.url.port or 8443
         buf = io.BytesIO()
-        segno.make(f"https://{host}:{port}/phone").save(
+        # #pin=<sha256>: the phone APP pins the server cert straight from this
+        # QR (the desktop screen vouches for it). A browser never sends the
+        # fragment, so the web /phone flow is untouched.
+        from mtg_card_scanner.launch import cert_sha256
+        pin = cert_sha256(os.getenv("SCAN_TLS_CERT", "")) if os.getenv("SCAN_TLS_CERT") else None
+        segno.make(f"https://{host}:{port}/phone" + (f"#pin={pin}" if pin else "")).save(
             buf, kind="svg", scale=6, dark="#e8eaed", light="#171a21")
         return Response(buf.getvalue(), media_type="image/svg+xml", headers=_NO_STORE)
 

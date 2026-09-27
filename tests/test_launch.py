@@ -101,3 +101,14 @@ def test_no_tailscale_falls_back_to_interfaces(monkeypatch):
     monkeypatch.setattr(launch.os.path, "exists", lambda p: False)
     _fake_interfaces(monkeypatch, ["192.168.1.42", "100.115.92.2", "100.90.1.2"])
     assert tailscale_addresses() == {"dns": None, "ips": ["100.90.1.2"]}
+
+
+def test_cert_sha256_matches_der_digest(tmp_path):
+    import hashlib
+    import ssl
+    from mtg_card_scanner.launch import cert_sha256, ensure_certs
+    _, crt = ensure_certs(tmp_path / "certs")
+    der = ssl.PEM_cert_to_DER_cert(crt.read_text())
+    assert cert_sha256(crt) == hashlib.sha256(der).hexdigest()
+    assert len(cert_sha256(crt)) == 64
+    assert cert_sha256(tmp_path / "missing.pem") is None

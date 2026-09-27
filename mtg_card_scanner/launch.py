@@ -88,6 +88,22 @@ def ensure_certs(cert_dir: Path) -> tuple[Path, Path]:
     return key_path, crt_path
 
 
+def cert_sha256(crt_path) -> str | None:
+    """SHA-256 of the server cert (DER), lowercase hex — what the phone app pins.
+
+    The desktop's phone QR carries it (as #pin=…) so pairing the app is
+    "scan the QR on your own screen" with no fingerprint to compare by eye:
+    the trusted desktop display vouches for the cert. None if unreadable.
+    """
+    import hashlib
+    import ssl
+    try:
+        der = ssl.PEM_cert_to_DER_cert(Path(crt_path).read_text())
+    except (OSError, ValueError):
+        return None
+    return hashlib.sha256(der).hexdigest()
+
+
 def _is_private_lan(ip: str) -> bool:
     """True for a real home-LAN address (192.168/16, 10/8, 172.16-31)."""
     if ip.startswith("192.168.") or ip.startswith("10."):
@@ -308,6 +324,8 @@ def main(argv: list[str] | None = None) -> None:
     os.environ.setdefault("SCAN_IMAGES_DIR", str(data_dir / "scan_images"))
 
     key_path, crt_path = ensure_certs(data_dir / "certs")
+    # The app process reads this to put the cert's pin in the phone QR.
+    os.environ.setdefault("SCAN_TLS_CERT", str(crt_path))
 
     ip = lan_ip()
     desktop_url = f"https://{ip}:{args.port}/"

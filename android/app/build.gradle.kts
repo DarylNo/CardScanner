@@ -67,6 +67,7 @@ dependencies {
     implementation(libs.camerax.view)
     implementation(libs.okhttp)
     implementation(libs.zxing.core)
+    implementation(libs.nanohttpd)
     implementation(libs.androidx.core)
     implementation(libs.androidx.activity)
     implementation(libs.androidx.appcompat)

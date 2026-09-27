@@ -732,9 +732,11 @@ function tick() {
   } else if (mode === 'awaitNext') {
     drawOverlay(box, '#8b93a1');
     const removed = !box || box.maskFrac < EMPTY_FRAC;
+    // prevFrame guarded like the watching branch: after a reset raced a
+    // no_card re-seed it is null, and changedFrac(cur, null) threw every tick.
     const swapped = scannedFrame && occupied
                  && changedFrac(cur, scannedFrame) > SWAP_FRAC
-                 && changedFrac(cur, prevFrame) < STABLE_FRAC;
+                 && prevFrame && changedFrac(cur, prevFrame) < STABLE_FRAC;
     if (removed || swapped) {
       mode = 'watching'; stableCount = 0;
       hideRetry();   // the failed card left the tray — a retry now would

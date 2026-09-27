@@ -716,3 +716,19 @@ def test_addresses_without_lan_or_tailscale(client, monkeypatch):
     monkeypatch.setattr(launch, "tailscale_addresses", lambda: {"dns": None, "ips": []})
     body = client.get("/api/addresses").json()
     assert body["lan_ip"] is None and body["urls"] == []
+
+
+def test_phone_qr_carries_the_cert_pin(client, monkeypatch, tmp_path):
+    from mtg_card_scanner.launch import cert_sha256, ensure_certs
+    _, crt = ensure_certs(tmp_path / "certs")
+    monkeypatch.setenv("SCAN_TLS_CERT", str(crt))
+    seen = {}
+    import segno
+    real_make = segno.make
+    monkeypatch.setattr(segno, "make", lambda data, **k: seen.setdefault("url", data) and real_make(data, **k))
+    assert client.get("/api/phone-qr?ip=192.168.1.9").status_code == 200
+    assert seen["url"].endswith(f"/phone#pin={cert_sha256(crt)}")
+    monkeypatch.delenv("SCAN_TLS_CERT")
+    seen.clear()
+    client.get("/api/phone-qr?ip=192.168.1.9")
+    assert seen["url"].endswith("/phone")              # no cert known → plain URL
