@@ -162,6 +162,23 @@ def create_app(
         ip = lan_ip()
         return {"version": APP_VERSION, "lan_ip": ip, "is_lan": _is_private_lan(ip)}
 
+    @app.get("/api/addresses")
+    def addresses(request: Request):
+        """
+        Every base URL this server answers on, best first: the home LAN, then
+        the Tailscale MagicDNS name, then tailnet IPs. The phone app fetches
+        this once at home and falls back down the list when away, so scanning
+        over Tailscale needs no typing. One self-signed cert serves them all.
+        """
+        from mtg_card_scanner.launch import _is_private_lan, lan_ip, tailscale_addresses
+        port = request.url.port or 8443
+        ip = lan_ip()
+        ts = tailscale_addresses()
+        hosts = ([ip] if _is_private_lan(ip) else []) + ([ts["dns"]] if ts["dns"] else []) + ts["ips"]
+        return {"port": port, "lan_ip": ip if _is_private_lan(ip) else None,
+                "tailscale": ts,
+                "urls": [f"https://{h}:{port}" for h in dict.fromkeys(hosts)]}
+
     # ── in-app updates ─────────────────────────────────────────────────────────
     # Detect: compare our version against GitHub (latest release tag for
     # packaged versions, master HEAD for git-hash versions), cached hourly.

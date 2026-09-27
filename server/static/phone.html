@@ -223,6 +223,12 @@ const STABLE_FRAMES = 2;      // steady samples (~0.4s) before scanning
 // cards three separate times; the SERVER judges card content.
 const OCCUPIED_FRAC = 0.02;
 const DEBUG = new URLSearchParams(location.search).has('debug');
+// ?panel=1 — scans list / printing picker ONLY, no camera: the Android app
+// owns the camera natively and opens this page in a WebView for the review
+// UI (&detail=<id> jumps straight to that card's picker). Nothing below the
+// camera section runs differently; the detection loop simply never starts.
+const PANEL = new URLSearchParams(location.search).has('panel');
+const PANEL_DETAIL = Number(new URLSearchParams(location.search).get('detail')) || 0;
 
 let autoEnabled = true;
 let mode = 'watching';        // watching | scanning | awaitNext
@@ -287,7 +293,7 @@ function formatChipsHtml(scan){
 }
 
 /* ── version banner — proves which page+server combo is running ────────────── */
-const UI_VERSION = 'v30';
+const UI_VERSION = 'v31';
 fetch('/api/version').then(r => r.json())
   .then(d => { $('#ver').textContent = `${UI_VERSION} · ${d.version}`; })
   .catch(() => { $('#ver').textContent = UI_VERSION; });
@@ -409,7 +415,7 @@ async function acquireWakeLock() {
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') acquireWakeLock();
 });
-acquireWakeLock();
+if (!PANEL) acquireWakeLock();
 
 /* ── capture + submit (state machine releases after the burst) ─────────────── */
 function grabFrame() {
@@ -740,7 +746,7 @@ function tick() {
   }
   prevFrame = cur;
 }
-setInterval(tick, SAMPLE_MS);
+if (!PANEL) setInterval(tick, SAMPLE_MS);
 
 /* ── controls ──────────────────────────────────────────────────────────────── */
 autoBtn.addEventListener('click', () => {
@@ -1060,6 +1066,8 @@ scansBtn.addEventListener('click', () => {
   scansTimer = setInterval(refreshScans, 3000);
 });
 $('#scansClose').addEventListener('click', () => {
+  // Panel mode has no camera view behind the list — hand back to the app.
+  if (PANEL) { if (window.CardScannerApp) window.CardScannerApp.close(); else history.back(); return; }
   scansPanel.classList.remove('open');
   clearInterval(scansTimer); scansTimer = null;
 });
@@ -1193,7 +1201,17 @@ const lightbox = $('#lightbox'), lightboxImg = $('#lightboxImg');
 function openLightbox(src) { lightboxImg.src = src; lightbox.classList.add('open'); }
 lightbox.addEventListener('click', () => lightbox.classList.remove('open'));
 
-startCamera();
+if (PANEL) {
+  // No camera view: the list IS the page. Hide the camera chrome so a slow
+  // WebView never flashes it, then open straight into the list (or a card).
+  $('#stage').style.display = 'none';
+  document.querySelector('body > footer').style.display = 'none';
+  $('#areaBtn').style.display = 'none';
+  scansBtn.click();
+  if (PANEL_DETAIL) openDetail(PANEL_DETAIL);
+} else {
+  startCamera();
+}
 </script>
 </body>
 </html>

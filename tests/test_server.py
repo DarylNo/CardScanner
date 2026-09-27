@@ -696,3 +696,23 @@ def test_selection_without_popularity_is_not_a_crash(client):
     r = client.post(f"/api/scans/{scan['id']}/select", json={"printing": bare})
     assert r.status_code == 200
     assert r.json()["selection"]["popularity"] is None
+
+
+def test_addresses_lists_lan_then_tailscale(client, monkeypatch):
+    from mtg_card_scanner import launch
+    monkeypatch.setattr(launch, "lan_ip", lambda: "192.168.1.42")
+    monkeypatch.setattr(launch, "tailscale_addresses",
+                        lambda: {"dns": "rig.tail1234.ts.net", "ips": ["100.90.1.2"]})
+    body = client.get("/api/addresses").json()
+    assert body["lan_ip"] == "192.168.1.42"
+    assert body["urls"][0].startswith("https://192.168.1.42:")
+    assert [u.split("//")[1].rsplit(":", 1)[0] for u in body["urls"]] == \
+        ["192.168.1.42", "rig.tail1234.ts.net", "100.90.1.2"]
+
+
+def test_addresses_without_lan_or_tailscale(client, monkeypatch):
+    from mtg_card_scanner import launch
+    monkeypatch.setattr(launch, "lan_ip", lambda: "100.115.92.2")     # Crostini only
+    monkeypatch.setattr(launch, "tailscale_addresses", lambda: {"dns": None, "ips": []})
+    body = client.get("/api/addresses").json()
+    assert body["lan_ip"] is None and body["urls"] == []
