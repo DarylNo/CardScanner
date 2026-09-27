@@ -37,8 +37,11 @@ class UploadQueueTest {
         private val script = LinkedBlockingQueue(script.toList())
         var default: Any? = null
 
+        val uploadIds: MutableList<String?> = Collections.synchronizedList(mutableListOf())
+
         override fun scan(files: List<ByteArray>, replaceScanId: Long?, uploadId: String?): JSONObject {
             calls += files.map { String(it) } to replaceScanId
+            uploadIds += uploadId
             when (val next = script.poll() ?: default ?: error("script exhausted")) {
                 is Throwable -> throw next
                 is String -> return JSONObject(next)
@@ -99,6 +102,44 @@ class UploadQueueTest {
         assertEquals(listOf(listOf("p1"), listOf("p2"), listOf("p3")), up.calls.map { it.first })
         assertTrue(got.all { it.second is ScanOutcome.NeedsPick && !it.second.usedFallback })
         waitUntil { q.pendingCount() == 0 }
+    }
+
+    /**
+     * The owner's field bug: the job counter restarts at 1 when the app starts
+     * with an empty queue, and 1.0.6–1.0.8 keyed the upload id on it — so the
+     * first scan after a restart reused an old id and got the OLD card back.
+     */
+    @Test
+    fun uploadIdsNeverRepeatAcrossAppRestarts() {
+        val dir = tmp.newFolder("restart")
+        val seen = mutableListOf<String?>()
+        repeat(3) {                                          // three app launches
+            val up = FakeUploader().apply { default = identified }
+            val rec = Recorder()
+            val q = queue(up, rec, dir)
+            val job = q.enqueue("scan$it".toByteArray(), emptyList(), manual = false)
+            assertEquals("the counter restarts — that alone must not matter", "000000000001", job.id)
+            q.start(); rec.next()
+            waitUntil { q.pendingCount() == 0 }
+            q.stop()
+            seen += up.uploadIds
+        }
+        assertEquals(3, seen.size)
+        assertEquals("every launch's first upload has its own id", 3, seen.toSet().size)
+    }
+
+    @Test
+    fun aResentJobKeepsItsUploadId() {
+        val dir = tmp.newFolder("resend")
+        val first = queue(FakeUploader(), null, dir)         // process dies before sending
+        first.enqueue("A".toByteArray(), emptyList(), manual = false)
+        val up = FakeUploader(java.io.IOException("reply lost"), identified)
+        val rec = Recorder()
+        val second = queue(up, rec, dir)                     // restart: resumes the job
+        second.start(); rec.next()
+        assertEquals(2, up.uploadIds.size)
+        assertEquals("a re-send must carry the SAME id (the server's dedupe key)",
+            up.uploadIds[0], up.uploadIds[1])
     }
 
     @Test

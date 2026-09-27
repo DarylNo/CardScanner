@@ -14,6 +14,7 @@ a built art index (inject a fake pipeline).
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import collections
 import os
 import subprocess
@@ -440,7 +441,18 @@ def create_app(
                    files: list[UploadFile] = File(...),
                    replace_scan_id: int = Form(0),
                    client_upload_id: str = Form("")):
+        blobs = [await f.read() for f in files]
         uid = client_upload_id.strip()[:128]
+        if uid:
+            # Keyed on the id AND the bytes: a genuine re-send carries the very
+            # same photo, while a REUSED id (the 1.0.6–1.0.8 app restarted its
+            # job counter at 1 on every launch) carries a new one — replaying
+            # for that answered a fresh scan with an OLD card's reply and
+            # filed nothing. Only an identical upload is a duplicate.
+            h = hashlib.sha256()
+            for b in blobs:
+                h.update(len(b).to_bytes(8, "little")); h.update(b)
+            uid = f"{uid}:{h.hexdigest()}"
         if uid:
             # Everything between these checks and the claim runs on the event
             # loop without an await, so two copies can't both claim the id.
@@ -450,7 +462,7 @@ def create_app(
                 return _replay_upload(upload_seen[uid])
             upload_inflight[uid] = asyncio.Event()
         try:
-            resp = await _scan_once(background_tasks, files, replace_scan_id)
+            resp = await _scan_once(background_tasks, blobs, replace_scan_id)
             if uid and not (isinstance(resp, JSONResponse)):
                 upload_seen[uid] = resp
                 while len(upload_seen) > 500:
@@ -472,10 +484,10 @@ def create_app(
         return first
 
     async def _scan_once(background_tasks: BackgroundTasks,
-                         files: list[UploadFile], replace_scan_id: int):
+                         blobs: list[bytes], replace_scan_id: int):
         frames = []
-        for f in files:
-            img = _decode_image(await f.read())
+        for b in blobs:
+            img = _decode_image(b)
             if img is not None:
                 frames.append(img)
         if not frames:

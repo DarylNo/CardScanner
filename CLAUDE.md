@@ -245,7 +245,10 @@ from `android/` (Node on PATH, JDK 17); CI job `android` runs it per push.
   failures ONLY, never after a request may have been sent (double filing).
   OkHttp's silent retry is OFF for the same reason; a lost reply is re-sent
   with the same `client_upload_id` and `/api/scan` answers with the row the
-  first copy filed (a Discarded row stays discarded).
+  first copy filed (a Discarded row stays discarded). The dedupe key is the id
+  AND a hash of the uploaded bytes, and the id is a per-job random nonce —
+  1.0.6–1.0.8 keyed it on the job counter, which restarts at 1 each launch,
+  so a fresh scan got an OLD card's reply and filed nothing.
 - **Handheld = walk-around PRICE CHECK** (the owner's words: scan a card, find
   out what it's worth): the outcome opens `detail=<id>&pricecheck=1`; the PAGE
   posts `/price-check` and offers Keep/Discard. Mount auto stays hands-free.
