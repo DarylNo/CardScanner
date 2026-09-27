@@ -893,3 +893,26 @@ def test_phone_qr_is_dark_on_light_and_decodes(client, monkeypatch):
     img = cv2.imdecode(np.frombuffer(buf.getvalue(), np.uint8), cv2.IMREAD_GRAYSCALE)
     text, _, _ = cv2.QRCodeDetector().detectAndDecode(img)
     assert text == "https://192.168.1.9:8443/phone"
+
+
+def test_a_reused_upload_id_with_a_new_photo_is_a_new_scan(tmp_path):
+    # Owner's field bug (app 1.0.6–1.0.8): the job counter restarted at 1 on
+    # every app launch, so "000000000001-p" came back carrying a NEW card. The
+    # server replayed the OLD card's reply ("✓ Kitesail Skirmisher") and filed
+    # nothing — the desktop list stayed empty. Same id + different bytes must
+    # scan and file; same id + same bytes is still the idempotent re-send.
+    client, store = _retry_rig(tmp_path)
+
+    def post(img_value):
+        img = np.full((40, 30, 3), img_value, dtype=np.uint8)
+        ok, buf = cv2.imencode(".jpg", img)
+        return client.post("/api/scan", files=[("files", ("f.jpg", buf.tobytes(), "image/jpeg"))],
+                           data={"client_upload_id": "000000000001-p"}).json()
+
+    first = post(10)
+    again = post(10)                                   # lost reply → identical re-send
+    assert again["id"] == first["id"] and len(store.list_scans()) == 1
+    client.delete(f"/api/scans/{first['id']}")          # e.g. Clear all
+    fresh = post(200)                                  # app restarted: id reused, new card
+    assert fresh.get("id") and fresh["id"] != first["id"]
+    assert [s["id"] for s in store.list_scans()] == [fresh["id"]]

@@ -96,6 +96,13 @@ data class UploadJob(
     val manual: Boolean,
     val replaceScanId: Long?,
     val tag: String?,
+    /**
+     * Random per job, persisted with it: the server's re-send dedupe key. The
+     * [id] counter restarts at 1 whenever the app starts with an empty queue,
+     * so keying uploads on it (1.0.6–1.0.8) made a fresh scan reuse an old
+     * upload id and get the OLD card's reply back, filing nothing.
+     */
+    val nonce: String = java.util.UUID.randomUUID().toString(),
 )
 
 /**
@@ -271,7 +278,7 @@ class UploadQueue(
                 // Stage-specific ids: a re-send after a lost reply gets the
                 // row the server already filed instead of filing it twice.
                 val json = uploader.scan(listOf(File(jobDir, PRIMARY).readBytes()), meta.job.replaceScanId,
-                                         "${meta.job.id}-p")
+                                         "${meta.job.nonce}-p")
                 val out = ScanOutcome.classify(json)
                 val weak = out is ScanOutcome.NoCard || !json.optBoolean("identified")
                 if (!weak || fallbacks.isEmpty()) return Step.Done(out)
@@ -282,7 +289,7 @@ class UploadQueue(
             val primaryOut = readPrimaryOutcome(jobDir)
             val replace = meta.primaryScanId ?: meta.job.replaceScanId
             if (fallbacks.isEmpty()) return Step.Done(primaryOut ?: ScanOutcome.NoCard("No card detected."))
-            val json = uploader.scan(fallbacks.map { it.readBytes() }, replace, "${meta.job.id}-f")
+            val json = uploader.scan(fallbacks.map { it.readBytes() }, replace, "${meta.job.nonce}-f")
             val out = ScanOutcome.classify(json).withFallback()
             // no_card on the raw frames leaves the primary's row untouched on
             // the server (its no_card path returns before replacing) — report
@@ -346,6 +353,7 @@ class UploadQueue(
             put("manual", job.manual)
             job.replaceScanId?.let { put("replaceScanId", it) }
             job.tag?.let { put("tag", it) }
+            put("nonce", job.nonce)
             put("stage", stage)
             primaryScanId?.let { put("primaryScanId", it) }
         }
@@ -359,6 +367,9 @@ class UploadQueue(
             manual = o.optBoolean("manual"),
             replaceScanId = o.optLong("replaceScanId", 0L).takeIf { it > 0 },
             tag = if (o.has("tag")) o.optString("tag") else null,
+            // A job queued by 1.0.6–1.0.8 has no nonce: id + creation time is
+            // unique across restarts, and stable across this job's re-sends.
+            nonce = o.optString("nonce").ifEmpty { "${o.getString("id")}-${o.optLong("createdAt")}" },
         )
         if (!File(jobDir, PRIMARY).isFile) null
         else Meta(job, o.optString("stage", STAGE_PRIMARY), o.optLong("primaryScanId", 0L).takeIf { it > 0 })
