@@ -1,0 +1,69 @@
+{
+ "build_time": 1790000000,
+ "bulk_updated_at": "2026-09-27T09:02:28.829+00:00",
+ "format_version": 1,
+ "known_flags": 1,
+ "pack_sha256": "547276de13800c90226e4511cca6ea2c1d2e4da0e67f83a2a897a0417212ff32",
+ "rows": [
+  {
+   "artist": "Karl Kopinski",
+   "collector_number": "91",
+   "flags": 0,
+   "hash256_hex": "800000000000000000000000000000017fffffffffffffff0123456789abcdef",
+   "hash_hex": "8000000000000001",
+   "name": "Æther Vial",
+   "scryfall_id": "0a1b2c3d-0000-4000-8000-000000000001",
+   "set_code": "dst"
+  },
+  {
+   "artist": "Rob Alexander",
+   "collector_number": "184a",
+   "flags": 0,
+   "hash256_hex": "0000000000000000000000000000000000000000000000000000000000000000",
+   "hash_hex": "0000000000000000",
+   "name": "Lim-Dûl's Vault",
+   "scryfall_id": "3c4d5e6f-0000-4000-8000-000000000002",
+   "set_code": "all"
+  },
+  {
+   "artist": "Matt Stewart",
+   "collector_number": "51",
+   "flags": 0,
+   "hash256_hex": "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210",
+   "hash_hex": "0123456789abcdef",
+   "name": "Delver of Secrets // Insectile Aberration",
+   "scryfall_id": "5e6f7a8b-0000-4000-8000-000000000003",
+   "set_code": "isd"
+  },
+  {
+   "artist": "Christopher Rush",
+   "collector_number": "294",
+   "flags": 0,
+   "hash256_hex": "2222222222222222222222222222222222222222222222222222222222222222",
+   "hash_hex": "1111111111111111",
+   "name": "Forest",
+   "scryfall_id": "77777777-0000-4000-8000-000000000006",
+   "set_code": "lea"
+  },
+  {
+   "artist": "",
+   "collector_number": "A-1",
+   "flags": 1,
+   "hash256_hex": "deadbeefcafef00d0badc0de00000000ffffffff00000000123456789abcdef0",
+   "hash_hex": "deadbeefcafef00d",
+   "name": "A-Return Upon the Tide",
+   "scryfall_id": "9a8b7c6d-0000-4000-8000-000000000004",
+   "set_code": "ymid"
+  },
+  {
+   "artist": "Donato Giancola",
+   "collector_number": "281",
+   "flags": 1,
+   "hash256_hex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+   "hash_hex": "ffffffffffffffff",
+   "name": "Shivan Dragon",
+   "scryfall_id": "f0e1d2c3-0000-4000-8000-000000000005",
+   "set_code": "m15"
+  }
+ ]
+}

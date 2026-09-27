@@ -40,7 +40,9 @@ jobs:
   #    Kotlin port (DetectionDifferentialTest) — Node ships on ubuntu-latest;
   #  - the detect fixtures it compares against are regenerated here from the
   #    SERVER's own card_detect + tests/phone_flatten_ref.py, and any diff
-  #    fails the build, so fixtures can't drift from the server silently.
+  #    fails the build, so fixtures can't drift from the server silently;
+  #  - ArtPackTest reads a pack exported by the server's art_pack writer
+  #    (scripts/export_pack_fixture.py --check, same drift rule).
   android:
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -52,6 +54,10 @@ jobs:
       - run: pip install -e ".[test]"
       - name: Detect fixtures match the server
         run: python scripts/export_detect_fixtures.py --check
+      # Same rule for the art-pack reader (ArtPackTest): its fixture pack is
+      # written by the server's own mtg_card_scanner.art_pack.
+      - name: Art-pack fixture matches the writer
+        run: python scripts/export_pack_fixture.py --check
       - uses: actions/setup-java@v4
         with:
           distribution: temurin

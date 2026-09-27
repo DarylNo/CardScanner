@@ -1,0 +1,113 @@
+# Build the artwork fingerprint index and publish it as a compact pack the
+# phone downloads (docs/PHONE_ONLY_PLAN.md, Stage 1a).
+#
+# The builder (`art_index build`) is resumable and incremental: it skips the
+# bulk download when the Scryfall revision is unchanged, keeps every `small`
+# image it fetched, and only hashes artworks it doesn't have. The whole index
+# dir is cached between runs, so a weekly run fetches just the new artworks;
+# the first (cold) run is the ~90-110 min full build, throttled by the
+# builder itself (_REQUEST_DELAY) to stay polite to Scryfall's CDN.
+#
+# Published to the rolling `art-pack` release — a DATA release. It is created
+# as a prerelease and never marked latest: releases/latest is how the app's
+# update check (server/app.py _check_update) and the download links find APP
+# releases, and GitHub never returns a prerelease there. `_is_newer_release`
+# also refuses any non-version tag as defence in depth. The tag doesn't match
+# `v*`, so release.yml / auto-tag.yml never see it.
+name: art-pack
+on:
+  schedule:
+    - cron: "17 6 * * 1"     # weekly, Monday 06:17 UTC (off the hour on purpose)
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: "Only hash N new artworks this run (smoke test; empty = full build)"
+        required: false
+        default: ""
+permissions:
+  contents: write            # create/update the art-pack release + assets
+concurrency:
+  group: art-pack            # never two builds fighting over the cache/release
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install .
+
+      # Restore the newest previous index dir (sqlite + bulk + images). Keys
+      # are immutable, so each run saves under its own key and restores the
+      # latest by prefix.
+      - name: Restore art index cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/mtg-card-scanner/art_index
+          key: art-index-v1-${{ github.run_id }}
+          restore-keys: art-index-v1-
+
+      - name: Build / update the index
+        id: build
+        timeout-minutes: 300
+        env:
+          LIMIT: ${{ inputs.limit }}
+        run: |
+          if [ -n "$LIMIT" ]; then
+            python -m mtg_card_scanner.art_index build --limit "$LIMIT"
+          else
+            python -m mtg_card_scanner.art_index build
+          fi
+          python -m mtg_card_scanner.art_index status
+
+      # Save progress even when the build failed or timed out: the next run
+      # resumes from here instead of re-downloading everything.
+      - name: Save art index cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/mtg-card-scanner/art_index
+          key: art-index-v1-${{ github.run_id }}
+
+      - name: Export pack
+        run: |
+          mkdir -p out
+          python -m mtg_card_scanner.art_pack export \
+            --db ~/.cache/mtg-card-scanner/art_index/art_index.sqlite \
+            --out out/art-pack.bin.gz --manifest out/art-pack.json
+          python -m mtg_card_scanner.art_pack info out/art-pack.bin.gz
+          cat out/art-pack.json
+
+      - name: Publish to the art-pack release
+        # A smoke-test (--limit) run never replaces the real pack.
+        if: ${{ !inputs.limit }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if ! gh release view art-pack >/dev/null 2>&1; then
+            gh release create art-pack \
+              --title "Artwork fingerprint pack" \
+              --notes "Rolling data release (art-pack.yml): the art-hash identification index for the phone app. Not an app release." \
+              --prerelease --latest=false --target "$GITHUB_SHA"
+          fi
+          # Keep it out of releases/latest even if someone edited it by hand.
+          gh release edit art-pack --prerelease --latest=false
+          # Pack first, manifest second: a client that reads the manifest
+          # mid-upload verifies sha256 and retries later on a mismatch.
+          gh release upload art-pack out/art-pack.bin.gz --clobber
+          gh release upload art-pack out/art-pack.json --clobber
+          {
+            echo "### Art pack published"
+            echo '```json'
+            cat out/art-pack.json
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: art-pack
+          path: out/
+          if-no-files-found: error

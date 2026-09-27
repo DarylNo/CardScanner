@@ -643,6 +643,13 @@ class TestUpdateBannerVersioning:
         assert _is_newer_release("v2.0", "unknown") is True
         assert _is_newer_release("", "v1.0.1") is False
 
+    def test_data_release_tag_is_never_an_app_update(self):
+        """The rolling `art-pack` release (art-pack.yml) is a data release;
+        even if releases/latest ever returned it, no banner may appear."""
+        from server.app import _is_newer_release
+        assert _is_newer_release("art-pack", "v1.0.7") is False
+        assert _is_newer_release("art-pack", "1.0.7") is False
+
 
 def test_patch_never_invents_a_selection_on_a_pending_scan(client):
     """A pending scan has nothing to edit — a stray PATCH must not create a
