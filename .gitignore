@@ -31,9 +31,19 @@ scans.db
 *.db
 .certs/
 
+# Android release signing keys (scripts/make_android_keystore.py) — they live
+# ONLY in the ANDROID_KEYSTORE_* repo secrets and the owner's backup.
+*.p12
+*.jks
+*.keystore
+
 # Test fixtures are source — keep them despite the *.json / image ignores above.
 !tests/fixtures/
 !tests/fixtures/**
+# So is everything under the Android source sets — notably the parity fixtures
+# (scripts/export_detect_fixtures.py) that CI's --check and the Kotlin tests
+# read from the checkout. Keystores stay ignored by android/.gitignore.
+!android/*/src/**
 server.log
 scan_images/
 

@@ -1,0 +1,257 @@
+{
+ "card_h": 1100,
+ "card_w": 788,
+ "margins": [
+  0.08,
+  0.06,
+  0.04
+ ],
+ "scale": 1.25,
+ "scenes": {
+  "black_holder_only": {
+   "has_card": false,
+   "height": 720,
+   "margin": null,
+   "quad": null,
+   "sharpness": 216.547,
+   "width": 960
+  },
+  "card_near_frame_edge": {
+   "has_card": true,
+   "height": 720,
+   "margin": null,
+   "quad": [
+    [
+     24.101,
+     33.921
+    ],
+    [
+     434.538,
+     55.435
+    ],
+    [
+     404.695,
+     624.742
+    ],
+    [
+     -5.742,
+     603.227
+    ]
+   ],
+   "sharpness": 540.312,
+   "width": 960
+  },
+  "dark_tray_white_border": {
+   "flat_size": [
+    914,
+    1276
+   ],
+   "has_card": true,
+   "height": 720,
+   "margin": 0.08,
+   "quad": [
+    [
+     243.873,
+     116.946
+    ],
+    [
+     637.308,
+     75.598
+    ],
+    [
+     694.725,
+     621.933
+    ],
+    [
+     301.291,
+     663.281
+    ]
+   ],
+   "sharpness": 367.277,
+   "width": 960
+  },
+  "empty_tray": {
+   "has_card": false,
+   "height": 720,
+   "margin": null,
+   "quad": null,
+   "sharpness": 0.0,
+   "width": 960
+  },
+  "glare_gradient_tray": {
+   "flat_size": [
+    914,
+    1276
+   ],
+   "has_card": true,
+   "height": 720,
+   "margin": 0.08,
+   "quad": [
+    [
+     236.392,
+     122.955
+    ],
+    [
+     626.777,
+     54.141
+    ],
+    [
+     722.296,
+     596.023
+    ],
+    [
+     331.91,
+     664.836
+    ]
+   ],
+   "sharpness": 569.536,
+   "width": 960
+  },
+  "holder_decoy_beside_card": {
+   "flat_size": [
+    914,
+    1276
+   ],
+   "has_card": true,
+   "height": 720,
+   "margin": 0.08,
+   "quad": [
+    [
+     549.544,
+     134.122
+    ],
+    [
+     859.573,
+     155.802
+    ],
+    [
+     829.569,
+     584.858
+    ],
+    [
+     519.54,
+     563.178
+    ]
+   ],
+   "sharpness": 721.066,
+   "width": 960
+  },
+  "portrait_frame": {
+   "flat_size": [
+    914,
+    1276
+   ],
+   "has_card": true,
+   "height": 960,
+   "margin": 0.08,
+   "quad": [
+    [
+     116.254,
+     115.463
+    ],
+    [
+     626.91,
+     133.295
+    ],
+    [
+     602.131,
+     842.89
+    ],
+    [
+     91.474,
+     825.058
+    ]
+   ],
+   "sharpness": 551.825,
+   "width": 720
+  },
+  "sideways_card": {
+   "flat_size": [
+    914,
+    1276
+   ],
+   "has_card": true,
+   "height": 720,
+   "margin": 0.08,
+   "quad": [
+    [
+     738.768,
+     159.091
+    ],
+    [
+     752.111,
+     541.19
+    ],
+    [
+     222.373,
+     559.689
+    ],
+    [
+     209.03,
+     177.589
+    ]
+   ],
+   "sharpness": 515.54,
+   "width": 960
+  },
+  "small_card_full_frame": {
+   "flat_size": [
+    914,
+    1276
+   ],
+   "has_card": true,
+   "height": 720,
+   "margin": 0.08,
+   "quad": [
+    [
+     253.765,
+     147.438
+    ],
+    [
+     383.583,
+     175.037
+    ],
+    [
+     345.938,
+     352.105
+    ],
+    [
+     216.121,
+     324.506
+    ]
+   ],
+   "sharpness": 346.609,
+   "width": 960
+  },
+  "white_tray_black_border": {
+   "flat_size": [
+    882,
+    1232
+   ],
+   "has_card": true,
+   "height": 720,
+   "margin": 0.06,
+   "quad": [
+    [
+     315.817,
+     48.417
+    ],
+    [
+     722.482,
+     105.57
+    ],
+    [
+     643.138,
+     670.133
+    ],
+    [
+     236.473,
+     612.98
+    ]
+   ],
+   "sharpness": 612.535,
+   "width": 960
+  }
+ },
+ "thumb": 4
+}

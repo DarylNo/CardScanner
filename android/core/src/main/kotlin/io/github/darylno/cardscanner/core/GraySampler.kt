@@ -55,8 +55,10 @@ object GraySampler {
         roi: RoiFrac?, out: IntArray? = null,
     ): Gray {
         val plan = planFor(rowStride, sw, sh, rotation, roi)
-        require(y.capacity() >= (sh - 1).toLong() * rowStride + sw) {
-            "Y plane too small: ${y.capacity()} bytes for ${sw}x$sh stride $rowStride"
+        // limit(), not capacity(): absolute reads are bounded by the limit. The
+        // last row may be unpadded (Camera2 planes end at the last pixel).
+        require(y.limit() >= (sh - 1).toLong() * rowStride + sw) {
+            "Y plane too small: ${y.limit()} bytes for ${sw}x$sh stride $rowStride"
         }
         val n = DetectConst.MW * plan.mh
         val px = if (out != null && out.size == n) out else IntArray(n)

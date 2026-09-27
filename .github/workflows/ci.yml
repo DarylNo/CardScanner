@@ -33,3 +33,49 @@ jobs:
           print("launcher cold-start OK on this OS; lan_ip:", lan_ip())
           EOF
         shell: bash
+
+  # The Android capture app (android/). Its parity tests are the proof that
+  # the app still behaves like the web page and the server:
+  #  - :core runs phone.html's REAL detection code under Node against the
+  #    Kotlin port (DetectionDifferentialTest) — Node ships on ubuntu-latest;
+  #  - the detect fixtures it compares against are regenerated here from the
+  #    SERVER's own card_detect + tests/phone_flatten_ref.py, and any diff
+  #    fails the build, so fixtures can't drift from the server silently.
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e ".[test]"
+      - name: Detect fixtures match the server
+        run: python scripts/export_detect_fixtures.py --check
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      # Caches ~/.gradle between runs and validates the wrapper jar checksum.
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Node for the differential test
+        run: node --version
+      # The Android SDK comes preinstalled on ubuntu-latest ($ANDROID_HOME);
+      # local.properties is gitignored, so AGP finds it from the env.
+      - name: Test, lint, build
+        working-directory: android
+        run: ./gradlew --stacktrace :core:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mtg-card-scanner-android-debug
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+      - name: Upload test + lint reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-reports
+          path: |
+            android/core/build/reports/
+            android/app/build/reports/
+          if-no-files-found: ignore
