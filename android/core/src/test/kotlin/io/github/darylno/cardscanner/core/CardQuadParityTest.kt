@@ -299,6 +299,33 @@ class CardQuadParityTest {
         }
     }
 
+    @Test
+    fun aGreySubmatFindsWhatAStandaloneCopyFinds() {
+        // The capture path may hand find() a VIEW of the scan area. The server
+        // always gets a standalone image, so the blur must not see the parent's
+        // pixels around the view (find() copies a grey submat; a BGR one is
+        // converted into a fresh Mat anyway). Checked on every quad scene.
+        for (name in listOf("dark_tray_white_border", "white_tray_black_border", "card_near_frame_edge")) {
+            val img = OpenCvTest.readBgr("$name.png")
+            val gray = Mat(); Imgproc.cvtColor(img, gray, Imgproc.COLOR_BGR2GRAY)
+            val full = assertNotNullQuad(name, CardQuad.find(img))
+            // Crop hugging the card (8 px of tray) so the ROI edge is inside the blur's reach.
+            val xs = (0 until 4).map { full[2 * it] }; val ys = (0 until 4).map { full[2 * it + 1] }
+            val x0 = maxOf(0, xs.min().toInt() - 8); val y0 = maxOf(0, ys.min().toInt() - 8)
+            val x1 = minOf(img.cols(), xs.max().toInt() + 9); val y1 = minOf(img.rows(), ys.max().toInt() + 9)
+            for (src in listOf(gray, img)) {
+                val view = src.submat(y0, y1, x0, x1)
+                val copy = view.clone()
+                val a = CardQuad.find(copy)
+                val b = CardQuad.find(view)
+                assertEquals("$name ch=${src.channels()}: presence", a != null, b != null)
+                if (a != null) assertArrayEquals("$name ch=${src.channels()}", a, b, 0f)
+                view.release(); copy.release()
+            }
+            img.release(); gray.release()
+        }
+    }
+
     private fun assertNotNullQuad(name: String, q: FloatArray?): FloatArray {
         assertNotNull("$name: Kotlin port found no quad", q)
         return q!!

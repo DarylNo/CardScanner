@@ -50,6 +50,19 @@ class SharpnessTest {
     }
 
     @Test
+    fun aSubmatScoresLikeAStandaloneCopy() {
+        // The server scores a decoded standalone image; an OpenCV ROI view would
+        // let the Laplacian read the parent's pixels past its edge instead.
+        val img = OpenCvTest.readBgr("white_tray_black_border.png")
+        val gray = Mat(); Imgproc.cvtColor(img, gray, Imgproc.COLOR_BGR2GRAY)
+        val view = gray.submat(37, 401, 53, 377)
+        val copy = view.clone()
+        assertTrue(view.isSubmatrix)
+        assertEquals(Sharpness.laplacianVariance(copy), Sharpness.laplacianVariance(view), 0.0)
+        for (m in listOf(img, gray, view, copy)) m.release()
+    }
+
+    @Test
     fun rejectsColourForTheGreyEntryPoint() {
         val bgr = Mat(10, 10, CvType.CV_8UC3, Scalar(1.0, 2.0, 3.0))
         try { Sharpness.laplacianVariance(bgr); fail("3-channel accepted") } catch (_: IllegalArgumentException) {}

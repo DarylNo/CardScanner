@@ -23,13 +23,17 @@ object Sharpness {
         val lap = Mat()
         val mean = MatOfDouble()
         val std = MatOfDouble()
+        // A submat is scored as a standalone copy (what the server decodes):
+        // the Laplacian would otherwise read the parent's pixels past its edge.
+        val src = if (gray.isSubmatrix) gray.clone() else gray
         try {
-            Imgproc.Laplacian(gray, lap, CvType.CV_64F)
+            Imgproc.Laplacian(src, lap, CvType.CV_64F)
             org.opencv.core.Core.meanStdDev(lap, mean, std)
             val s = std.toArray()[0]
             return s * s
         } finally {
             lap.release(); mean.release(); std.release()
+            if (src !== gray) src.release()
         }
     }
 

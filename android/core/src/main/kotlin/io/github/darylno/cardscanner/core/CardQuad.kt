@@ -60,7 +60,9 @@ object CardQuad {
     /**
      * `find_card_quad`: the largest card-shaped, card-TEXTURED quadrilateral
      * in [frame] (8UC3 BGR; a 1-channel grey frame is accepted as-is), or
-     * null when nothing card-shaped is found.
+     * null when nothing card-shaped is found. [frame] may be a submat view
+     * (e.g. the scan-area crop); the result is the same as for a copy of it,
+     * in the crop's own pixels ([translate] to full-frame coordinates).
      *
      * Three edge maps (Canny 25/85, Canny 50/150, Otsu-inverse + close) cover
      * black-bordered cards on a white tray, white-bordered ones on a dark
@@ -75,7 +77,13 @@ object CardQuad {
         val tmp = ArrayList<Mat>()
         fun <M : Mat> keep(m: M): M { tmp += m; return m }
         try {
-            val gray = if (frame.channels() == 1) frame else keep(Mat()).also {
+            // A grey SUBMAT (scan-area view into a bigger frame) is copied: OpenCV
+            // filters read the parent's pixels around an ROI, while the server
+            // always gets a standalone image, so its blur sees a replicated edge.
+            // cvtColor of a BGR frame (submat or not) already yields a standalone Mat.
+            val gray = if (frame.channels() == 1) {
+                if (frame.isSubmatrix) keep(frame.clone()) else frame
+            } else keep(Mat()).also {
                 Imgproc.cvtColor(frame, it, Imgproc.COLOR_BGR2GRAY)
             }
             val blurred = keep(Mat())

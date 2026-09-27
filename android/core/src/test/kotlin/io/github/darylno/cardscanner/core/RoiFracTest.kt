@@ -27,9 +27,13 @@ class RoiFracTest {
     fun toPixelsRoundsAndClamps() {
         assertEquals(RoiPx(120, 320, 960, 1040), RoiFrac(0.1, 0.2, 0.9, 0.85).toPixels(1200, 1600))
         assertEquals(RoiPx(0, 0, 1200, 1600), RoiFrac(0.0, 0.0, 1.0, 1.0).toPixels(1200, 1600))
-        val p = RoiFrac(0.92, 0.92, 1.0, 1.0).toPixels(10, 10)       // tiny frame: never empty
-        assertEquals(RoiPx(9, 9, 1, 1), p)
-        assertEquals(10, p.right); assertEquals(10, p.bottom)
+        // Tiny frame: 0.9*4 rounds to 4 = the frame edge, so the left/top edge is
+        // clamped back inside and the rect is never empty. (Not 0.92..1.0: in doubles
+        // 1.0 - 0.92 = 0.0799999… < 0.08, which phone.html's own check rejects too.)
+        val p = RoiFrac(0.9, 0.9, 1.0, 1.0).toPixels(4, 4)
+        assertEquals(RoiPx(3, 3, 1, 1), p)
+        assertEquals(4, p.right); assertEquals(4, p.bottom)
+        assertNull(RoiFrac.orNull(0.92, 0.92, 1.0, 1.0))
         // Unrounded sizes drive MH, exactly like phone.html roiRect().
         assertEquals(0.8 * 1200, RoiFrac(0.1, 0.2, 0.9, 0.85).widthPx(1200), 0.0)
         assertEquals((0.85 - 0.2) * 1600, RoiFrac(0.1, 0.2, 0.9, 0.85).heightPx(1600), 0.0)
