@@ -97,7 +97,10 @@ def build() -> dict[str, bytes]:
 def _content(name: str, data: bytes) -> bytes:
     """What --check compares: a .gz by its decompressed pack — zlib builds may
     legitimately differ in compressed bytes; the pack itself may not."""
-    return gzip.decompress(data) if name.endswith(".gz") else data
+    if name.endswith(".gz"):
+        return gzip.decompress(data)
+    # A Windows checkout may have rewritten LF as CRLF; the content is the same.
+    return data.replace(b"\r\n", b"\n")
 
 
 def main() -> int:

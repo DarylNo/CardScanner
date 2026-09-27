@@ -1,0 +1,5 @@
+# Test fixtures are compared byte-for-byte against what the server's own code
+# writes (scripts/export_*_fixtures.py --check). Never let a Windows checkout
+# rewrite their line endings.
+android/core/src/test/resources/** -text
+android/app/src/test/resources/** -text
