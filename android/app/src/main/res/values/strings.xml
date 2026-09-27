@@ -1,6 +1,6 @@
 <resources>
     <string name="app_name">Card Scanner</string>
-    <string name="banner_fmt">app %1$s · server %2$s</string>
+    <string name="banner_fmt">%1$s · %2$s</string>
     <string name="server_offline">offline</string>
     <string name="area">Area</string>
     <string name="area_set">Area ✓</string>
@@ -10,10 +10,10 @@
     <string name="scan_card">Scan Card</string>
     <string name="retry">Retry</string>
     <string name="cancel">Cancel</string>
-    <string name="mode_mount">Mode: Mount</string>
-    <string name="mode_handheld">Mode: Handheld</string>
-    <string name="auto_on">Auto: ON</string>
-    <string name="auto_off">Auto: OFF</string>
+    <string name="mode_mount">Mount</string>
+    <string name="mode_handheld">Handheld</string>
+    <string name="auto_on">Auto on</string>
+    <string name="auto_off">Auto off</string>
     <string name="retry_capturing">Retrying — capturing…</string>
     <string name="camera_needed">The camera permission is needed to scan cards.</string>
     <string name="camera_perm_title">Camera access</string>
@@ -28,4 +28,76 @@
     <string name="close">Close</string>
     <string name="copy">Copy</string>
     <string name="copied">Copied</string>
+    <!-- form screens -->
+    <string name="back">Back</string>
+
+    <!-- Setup (pairing) -->
+    <string name="setup_title">Connect to your scanner</string>
+    <string name="setup_step1">On your computer, open the scanner page and click the “Phone” link at the top to show its QR code.</string>
+    <string name="setup_step2">Point this camera at the QR code.</string>
+    <string name="setup_looking">Looking for a QR code…</string>
+    <string name="setup_manual_show">Enter address instead</string>
+    <string name="setup_manual_hint">Type the server address shown on your computer, e.g. 192.168.1.42 or rig.tailnet.ts.net.</string>
+    <string name="setup_input_hint">192.168.1.42:8443</string>
+    <string name="setup_connect">Connect</string>
+    <string name="setup_done">Start scanning</string>
+    <string name="setup_paired_to">Connected addresses</string>
+    <string name="setup_no_permission">Camera permission is off — type the address instead.</string>
+    <string name="setup_camera_unavailable">Camera not available — type the address instead.</string>
+    <string name="setup_bad_address">That doesn\'t look like a server address.</string>
+    <string name="setup_contacting">Contacting %1$s…</string>
+    <string name="setup_unreachable">Couldn\'t reach %1$s. Is the scanner running, and is this phone on the same network (or Tailscale)?</string>
+    <string name="setup_pairing">Pairing with %1$s…</string>
+    <string name="setup_paired">✓ Paired. Fingerprint %1$s…</string>
+    <string name="setup_pair_failed">Pairing failed — scan the QR on your computer again.</string>
+    <string name="setup_cert_mismatch">Pairing failed: the server\'s certificate doesn\'t match the QR. Scan the QR on your computer again.</string>
+    <string name="setup_not_paired">Not paired.</string>
+    <string name="setup_trust_title">Trust this server?</string>
+    <string name="setup_trust_msg">%1$s presents certificate\n\nSHA-256 %2$s\n\nCompare it with the #pin= value in the desktop\'s phone QR link (desktop scanner page → phone QR). If they differ, do NOT trust it — scan the desktop QR instead.</string>
+    <string name="setup_trust">Trust</string>
+
+    <!-- Settings -->
+    <string name="settings_server">Server</string>
+    <string name="settings_server_note">Tried in order — if one can\'t be reached, the next is used automatically.</string>
+    <string name="settings_not_paired">Not paired.</string>
+    <string name="settings_remove">Remove</string>
+    <string name="settings_keep_one">Keep at least one address (or re-pair).</string>
+    <string name="settings_add">Add address</string>
+    <string name="settings_refresh">Refresh</string>
+    <string name="settings_refreshed">Addresses updated.</string>
+    <string name="settings_refresh_failed">Couldn\'t refresh: %1$s</string>
+    <string name="settings_repair">Re-pair with a new QR</string>
+    <string name="settings_repair_confirm">Forget this server and pair again?</string>
+    <string name="settings_repair_ok">Re-pair</string>
+    <string name="settings_camera">Camera</string>
+    <string name="settings_camera_note">Changes apply when you return to the camera.</string>
+    <string name="settings_highres">High resolution</string>
+    <string name="settings_highres_desc">2048×1536 (Standard is 1600×1200)</string>
+    <string name="settings_aelock">Lock exposure + white balance</string>
+    <string name="settings_aelock_desc">Steady brightness from card to card</string>
+    <string name="settings_torch">Torch</string>
+    <string name="settings_torch_desc">Keep the flashlight on while scanning</string>
+    <string name="settings_debug">Debug overlay</string>
+    <string name="settings_debug_desc">Mask coverage, steadiness, timings</string>
+    <string name="settings_diagnostics">Diagnostics</string>
+    <string name="settings_copy_diag">Copy diagnostics</string>
+    <string name="settings_add_title">Add server address</string>
+    <string name="settings_add_hint">https://host:8443</string>
+    <string name="settings_add_ok">Add</string>
+    <string name="settings_not_address">Not a server address.</string>
+
+    <!-- Share -->
+    <string name="share_title">Share</string>
+    <string name="share_hero_title">Let others review your scans</string>
+    <string name="share_hero_body">Guests on the same Wi-Fi (or on this phone\'s hotspot) open a link and enter a 6-digit code. No Tailscale needed.</string>
+    <string name="share_warning">Guests have full access: they can pick, edit, delete, clear, export and update — only share the code with people you trust.</string>
+    <string name="share_start">Start sharing</string>
+    <string name="share_start_failed">Couldn\'t start sharing: %1$s</string>
+    <string name="share_on">Sharing is on</string>
+    <string name="share_scan_qr">Scan to join</string>
+    <string name="share_join_code">Join code</string>
+    <string name="share_or_open">Or open one of these and enter the code</string>
+    <string name="share_no_wifi">No Wi-Fi address — turn on this phone\'s hotspot (Settings → Hotspot) and have guests join it, then come back here.</string>
+    <string name="share_stop">Stop sharing</string>
+    <string name="share_stop_note">A new code is made the next time you share.</string>
 </resources>

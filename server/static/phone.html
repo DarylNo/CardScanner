@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>Card Scanner — Camera</title>
 <style>
   :root { color-scheme: dark;
@@ -11,7 +11,10 @@
     --warn:#fbbf24; --bad:#ff8a8a; }
   * { box-sizing: border-box; }
   body { margin:0; font-family:system-ui,sans-serif; background:var(--bg); color:var(--text);
-         display:flex; flex-direction:column; height:100dvh; overflow:hidden; }
+         display:flex; flex-direction:column; height:100dvh; overflow:hidden;
+         /* viewport-fit=cover (for the panels' insets) — keep the camera chrome clear too */
+         padding:env(safe-area-inset-top) env(safe-area-inset-right)
+                 env(safe-area-inset-bottom) env(safe-area-inset-left); }
   header { padding:8px 12px; font-weight:600; border-bottom:1px solid var(--line);
            display:flex; align-items:center; justify-content:space-between; flex:0 0 auto; }
   #ver { font-size:11px; color:#7b8290; font-weight:400; margin-left:6px; }
@@ -36,37 +39,91 @@
   #autoBtn.off { background:var(--line); color:#7b8290; }
   .hint { font-size:11px; color:#7b8290; text-align:center; }
 
-  /* slide-over panels */
-  .panel { position:fixed; inset:0; background:var(--bg); z-index:20; display:none; flex-direction:column; }
+  /* ═══ review panels (scan list + printing picker) — v36 "camera app" skin ═══
+     Everything below is scoped to .panel / its children, so the camera page's
+     own chrome above is untouched; desktop.html is a separate file. The same
+     panels serve the browser /phone page and the Android app's WebView
+     (?panel=1), so safe-area insets are honoured (viewport-fit=cover). */
+  .panel { position:fixed; inset:0; background:var(--bg); z-index:20; display:none; flex-direction:column;
+           padding:env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left); }
   .panel.open { display:flex; }
-  .panel header { flex:0 0 auto; }
-  .pbody { flex:1; overflow-y:auto; min-height:0; }
-  #scansBar { display:flex; gap:6px; padding:8px 12px; border-bottom:1px solid var(--line);
-              overflow-x:auto; flex:0 0 auto; align-items:center; }
-  .vchip { font-size:13px; padding:6px 12px; border-radius:999px; background:var(--line);
-           color:#cbd2dc; white-space:nowrap; flex:0 0 auto; border:1px solid transparent; }
-  .vchip.on { background:#1c2740; border-color:var(--accent); color:#cfe1ff; }
-  .bar { display:flex; gap:8px; padding:8px 12px; border-bottom:1px solid var(--line);
-         flex:0 0 auto; align-items:center; }
-  .bar input { width:84px; padding:8px 10px; border-radius:8px; border:1px solid #2a2f3a;
-               background:var(--bg); color:var(--text); font:inherit; }
-  .bar button { flex:0 0 auto; font-size:13px; font-weight:600; padding:8px 12px;
-                border:0; border-radius:8px; background:var(--line); color:#cbd2dc; }
-  .bar button.danger { background:#3a1c1c; color:#fca5a5; }
-  .bar select { flex:1 1 auto; min-width:0; padding:8px 10px; border-radius:8px;
-                border:1px solid #2a2f3a; background:var(--bg); color:var(--text); font:inherit; }
-  .bar .mchip { flex:0 0 auto; font-size:13px; padding:8px 12px; border-radius:8px;
-                background:var(--line); color:#cbd2dc; white-space:nowrap; }
-  .bar .mchip b { color:var(--accent); }
-  #fhint { font-size:11px; color:var(--warn); padding:0 12px 8px; line-height:1.35; }
-  #scansStat { font-size:12px; color:var(--muted); padding:6px 12px; flex:0 0 auto; }
-  #scansStat b { color:var(--text); } #scansStat .money { color:var(--good); }
-  .srow { display:flex; gap:10px; padding:10px 14px; border-bottom:1px solid #1b1e26; align-items:center; }
-  .srow img { width:44px; height:62px; object-fit:cover; border-radius:4px; background:var(--line); }
-  .srow .meta { flex:1; min-width:0; }
-  .srow .nm { font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .srow .sub { font-size:12px; color:var(--muted); }
-  .spill { font-size:11px; padding:1px 7px; border-radius:999px; background:#3f2d10; color:var(--warn); }
+  .panel > header { flex:0 0 auto; min-height:56px; padding:8px 12px 8px 16px; gap:12px;
+                    border-bottom:0; font-size:18px; font-weight:700; }
+  .panel > header .ptitle { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .panel > header .hbtn { flex:0 0 auto; min-height:40px; padding:0 18px; border-radius:999px;
+                          background:#1d2129; color:#dfe3ea; font-size:15px; }
+  .pbody { flex:1; overflow-y:auto; min-height:0; overscroll-behavior:contain; }
+  .panel button, .panel select, .panel input { font-family:inherit; }
+  .panel button { cursor:pointer; -webkit-tap-highlight-color:transparent; }
+
+  /* view tabs — a horizontally scrollable segmented row + the Filters chip */
+  #scansTop { padding:2px 12px 8px; flex:0 0 auto; }
+  #scansBar { display:flex; gap:2px; padding:4px; border-radius:999px;
+              background:var(--card); overflow-x:auto; scrollbar-width:none; }
+  #scansBar::-webkit-scrollbar { display:none; }
+  .vchip { flex:1 0 auto; display:flex; align-items:center; justify-content:center; min-height:38px; padding:0 13px;
+           font-size:14px; font-weight:500; border-radius:999px; color:#aeb4bf; white-space:nowrap;
+           cursor:pointer; user-select:none; -webkit-tap-highlight-color:transparent; }
+  .vchip.on { background:#2b3342; color:#fff; font-weight:600; }
+  #scansMeta { display:flex; align-items:center; gap:10px; padding:0 12px 10px 16px; flex:0 0 auto; }
+  #fltBtn { flex:0 0 auto; display:flex; align-items:center; gap:6px; min-height:40px; padding:0 14px;
+            border-radius:999px; background:var(--card); border:1px solid var(--line); color:#cbd2dc;
+            font-size:14px; font-weight:600; }
+  #fltBtn svg { width:16px; height:16px; }
+  #fltBtn.active { border-color:#2c4a7a; }
+  #fltBtn.on { background:#1c2740; border-color:var(--accent); color:#cfe1ff; }
+  #fcount { display:none; min-width:18px; height:18px; padding:0 5px; border-radius:9px;
+            background:var(--accent); color:#fff; font-size:11px; font-weight:700;
+            align-items:center; justify-content:center; }
+  #fltBtn.active #fcount { display:inline-flex; }
+
+  /* collapsible filter + bulk-action sheet */
+  #fltPanel { display:none; flex-direction:column; gap:12px; margin:0 12px 10px; padding:14px;
+              border-radius:18px; background:var(--card); flex:0 0 auto; }
+  #fltPanel.open { display:flex; }
+  .fcap { font-size:12px; font-weight:600; color:var(--muted); text-transform:uppercase;
+          letter-spacing:.04em; margin-bottom:-4px; }
+  .bar { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .bar input, .bar select { flex:1 1 0; min-width:64px; min-height:44px; padding:0 12px; border-radius:12px;
+                            border:1px solid #2a2f3a; background:var(--bg); color:var(--text); font-size:16px; }
+  .bar select { flex:1 1 60%; }
+  .bar button, .bar .mchip { flex:1 0 auto; min-height:44px; padding:0 14px; border:0; border-radius:12px;
+                             background:#232834; color:#dfe3ea; font-size:14px; font-weight:600;
+                             white-space:nowrap; display:inline-flex; align-items:center; justify-content:center; }
+  #p-excl, .bar .mchip { flex:0 0 auto; }
+  .bar input { padding:0 10px; -moz-appearance:textfield; }
+  .bar input::-webkit-inner-spin-button, .bar input::-webkit-outer-spin-button { -webkit-appearance:none; margin:0; }
+  .bar .mchip { cursor:pointer; user-select:none; font-weight:500; }
+  .bar .mchip b { color:#93c5fd; margin-left:4px; }
+  .bar button.danger { background:transparent; border:1.5px solid #6b2b2b; color:#fca5a5; }
+  .bar button:disabled { opacity:.6; }
+  #fhint { font-size:12px; color:var(--warn); margin:0 12px 10px; padding:8px 12px; line-height:1.35;
+           border-radius:12px; background:#2a2010; flex:0 0 auto; }
+  #scansStat { flex:1 1 auto; min-width:0; font-size:13px; color:var(--muted); line-height:1.35; }
+  #scansStat b { color:var(--text); } #scansStat .money { color:var(--good); font-weight:600; }
+  #sweepInfo { font-size:12px; color:var(--muted); margin:0 12px 8px; padding:6px 12px; border-radius:999px;
+               background:var(--card); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex:0 0 auto; }
+
+  /* scan rows: thumb | name + one meta line | price over badges. Whole row taps. */
+  #scansList { padding-bottom:env(safe-area-inset-bottom); border-top:1px solid var(--line); }
+  .srow { display:flex; gap:12px; min-height:64px; padding:10px 16px; align-items:center;
+          border-bottom:1px solid #1b1e26; cursor:pointer; -webkit-tap-highlight-color:transparent; }
+  .srow:active { background:var(--card); }
+  .srow .sthumb { flex:0 0 48px; width:48px; height:67px; border-radius:5px; overflow:hidden;
+                  background:var(--line); }
+  .srow .sthumb img { width:100%; height:100%; object-fit:cover; display:block; }
+  .srow .meta { flex:1 1 auto; min-width:0; }
+  .srow .nm { font-size:16px; font-weight:600; line-height:1.25; overflow:hidden; overflow-wrap:anywhere;
+              display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; }
+  .srow .sub { font-size:13px; color:var(--muted); margin-top:3px; line-height:1.3; overflow:hidden;
+               display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; }
+  .srow .sright { flex:0 0 auto; max-width:44%; display:flex; flex-direction:column;
+                  align-items:flex-end; gap:6px; }
+  .srow .spills { display:flex; flex-direction:column; align-items:flex-end; gap:4px; }
+  .sprice { color:var(--good); font-weight:700; font-size:15px; white-space:nowrap; }
+  .sempty { padding:48px 24px; text-align:center; color:#6b7280; }
+  .spill { font-size:11px; font-weight:600; padding:3px 8px; border-radius:999px; background:#3f2d10;
+           color:var(--warn); white-space:nowrap; }
   .spill.sel { background:#14532d; color:#86efac; }
   .spill.chk { background:#3a1c1c; color:#fca5a5; }
   /* Popularity tiers (mtg_card_scanner/popularity.py) — only the top three
@@ -77,43 +134,68 @@
   .spill.pop.solid  { background:#0c2a4d; color:#93c5fd; }
   /* Format legality — where the card may be PLAYED. Detail panel only: the
      scan list is read at arm's length and has no room for seven more chips. */
-  .pfmt { display:flex; flex-wrap:wrap; gap:4px; margin-top:6px; align-items:center; }
-  .fmt { font-size:11px; padding:1px 6px; border-radius:4px; background:var(--line); color:#aeb4bf; }
+  .pfmt { display:flex; flex-wrap:wrap; gap:4px; margin-top:8px; align-items:center; }
+  .fmt { font-size:11px; padding:2px 8px; border-radius:999px; background:var(--line); color:#aeb4bf; }
   .fmt.banned { background:#3a1c1c; color:#fca5a5; text-decoration:line-through; }
   .fmt.restricted { background:#3f2d10; color:var(--warn); }
-  .sprice { color:var(--good); font-weight:700; }
 
-  /* detail */
-  #detailBody { padding:12px 14px 24px; }
-  .prow { display:flex; gap:12px; align-items:flex-start; margin-bottom:12px; }
-  .prow img { width:110px; border-radius:8px; background:var(--line); }
-  .pctl { display:flex; gap:8px; margin:10px 0 14px; flex-wrap:wrap; }
-  .pctl select, .pctl input { padding:8px 10px; border-radius:8px; border:1px solid #2a2f3a;
-                              background:var(--bg); color:var(--text); font:inherit; }
-  .pctl input { width:64px; }
-  .pgrid { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
-  .pcard { border:2px solid transparent; border-radius:8px; background:var(--card); padding:5px; }
-  .pcard.chosen { border-color:#22c55e; }
-  .pcard img { width:100%; border-radius:5px; aspect-ratio:5/7; object-fit:cover;
+  /* detail / printing picker */
+  #detailBody { padding:4px 16px 24px; }
+  .prow { display:flex; gap:14px; align-items:flex-start; padding:12px; border-radius:18px;
+          background:var(--card); }
+  .prow > img { flex:0 0 96px; width:96px; border-radius:8px; background:var(--line); cursor:zoom-in; }
+  .prow .pinfo { flex:1; min-width:0; }
+  .pname { font-size:19px; font-weight:700; line-height:1.25; overflow-wrap:anywhere; }
+  .psub { font-size:13px; color:var(--muted); margin-top:3px; line-height:1.35; }
+  .pprice { font-size:22px; font-weight:700; color:var(--good); margin:8px 0 2px; line-height:1.2; }
+  .perr { font-size:12px; color:var(--bad); margin-top:6px; }
+  .pctl { display:flex; gap:8px; margin:12px 0 4px; }
+  .pctl select, .pctl .qty { min-height:46px; border-radius:14px; border:1px solid #2a2f3a;
+                             background-color:var(--card); color:var(--text); font-size:16px; }
+  .pctl select { flex:1 1 0; min-width:0; padding:0 30px 0 14px; appearance:none; -webkit-appearance:none;
+                 background-image:linear-gradient(45deg,transparent 50%,#8b93a1 50%),
+                                  linear-gradient(135deg,#8b93a1 50%,transparent 50%);
+                 background-position:calc(100% - 17px) 50%, calc(100% - 12px) 50%;
+                 background-size:5px 5px; background-repeat:no-repeat; }
+  .pctl #p-fin { flex-grow:1.35; }
+  .pctl .qty { flex:0 0 88px; display:flex; align-items:center; gap:4px; padding:0 12px; }
+  .pctl .qty span { font-size:13px; color:var(--muted); }
+  .pctl .qty input { flex:1; min-width:0; width:100%; border:0; background:transparent; color:var(--text);
+                     font-size:16px; padding:0; outline:none; }
+  .subhead { font-size:13px; color:var(--muted); margin:18px 0 10px; font-weight:600; }
+  .pgrid { display:grid; grid-template-columns:repeat(auto-fill, minmax(104px, 1fr)); gap:10px; }
+  .pcard { border:2px solid transparent; border-radius:14px; background:var(--card); padding:6px;
+           cursor:pointer; -webkit-tap-highlight-color:transparent; }
+  .pcard:active { background:#1d2129; }
+  .pcard.chosen { border-color:#22c55e; background:#12241a; }
+  .pcard img { width:100%; border-radius:6px; aspect-ratio:5/7; object-fit:cover;
                background:var(--line); display:block; }
-  .pcard .pt { font-size:11px; margin-top:4px; line-height:1.25; color:#cbd2dc; }
-  .pprice { font-size:18px; font-weight:700; color:var(--good); margin:6px 0; }
-  .pcard .pp { font-size:12px; font-weight:700; color:var(--good); margin-top:2px; }
-  .pcard .pp.none { color:var(--muted); font-weight:400; }
-  .pfold { grid-column:1/-1; font-size:12px; color:var(--muted); text-align:center;
-           padding:8px; border:1px dashed var(--line); border-radius:8px; }
-  #pcBar { position:sticky; bottom:0; display:flex; gap:10px; padding:10px 0 4px;
-           background:linear-gradient(transparent, var(--bg) 30%); }
-  #pcBar button { flex:1; font-size:16px; padding:12px; border-radius:10px; }
-  #pcDiscard { background:#3a1c1c; color:#fca5a5; border-color:#5b2a2a; }
-  .msrow { display:flex; gap:8px; margin-top:8px; }
-  .msrow input { flex:1; padding:8px 10px; border-radius:8px; border:1px solid #2a2f3a;
-                 background:var(--bg); color:var(--text); font:inherit; }
-  .msrow button { flex:0 0 auto; font-size:14px; padding:8px 14px; border:0; border-radius:8px;
-                  background:var(--line); color:#cbd2dc; }
-  .subhead { font-size:13px; color:var(--muted); margin:14px 0 8px; font-weight:600; }
-  .dangerbtn { width:100%; background:#3a1c1c; color:#fca5a5; font-size:14px; padding:10px;
-               margin-top:18px; border:0; border-radius:8px; }
+  .pcard .pt { display:flex; justify-content:space-between; gap:4px; font-size:12px; margin:6px 2px 0;
+               line-height:1.3; color:#cbd2dc; white-space:nowrap; }
+  .pcard .pt > span:first-child { min-width:0; overflow:hidden; text-overflow:ellipsis; }
+  .pcard .pt .pd { color:var(--muted); flex:0 0 auto; }
+  .pnote { display:block; font-size:12px; color:var(--muted); font-weight:400; margin-top:2px; }
+  .pcard .pp { font-size:14px; font-weight:700; color:var(--good); margin:2px 2px 2px; }
+  .pcard .pp.none { color:var(--muted); font-weight:400; font-size:12px; }
+  .pfold { grid-column:1/-1; min-height:46px; display:flex; align-items:center; justify-content:center;
+           font-size:14px; color:#aeb4bf; border:1.5px dashed #2f3440; border-radius:14px; cursor:pointer; }
+  .msrow { display:flex; align-items:center; gap:6px; min-height:52px; padding:4px 4px 4px 16px;
+           border-radius:999px; border:1px solid #2a2f3a; background:var(--card); }
+  .msrow:focus-within { border-color:var(--accent); }
+  .msrow input { flex:1; min-width:0; border:0; background:transparent; color:var(--text);
+                 font-size:16px; padding:0; outline:none; }
+  .msrow button { flex:0 0 auto; min-height:44px; padding:0 18px; border:0; border-radius:999px;
+                  background:var(--accent); color:#fff; font-size:15px; font-weight:600; }
+  .dangerbtn { width:100%; min-height:48px; margin-top:24px; border-radius:14px; background:transparent;
+               border:1.5px solid #6b2b2b; color:#fca5a5; font-size:15px; font-weight:600; }
+  /* price check: Keep / Discard pinned below the scroller, clear of the nav bar */
+  #detailFoot { flex:0 0 auto; padding:10px 16px calc(10px + env(safe-area-inset-bottom));
+                background:var(--bg); border-top:1px solid var(--line); }
+  #detailFoot:empty { display:none; }
+  #pcBar { display:flex; gap:10px; }
+  #pcBar button { flex:1; min-height:54px; border-radius:16px; font-size:17px; font-weight:700; }
+  #pcDiscard { background:transparent; color:#fca5a5; border:1.5px solid #8a3434; }
+  #pcBar #pcKeep { flex-grow:1.4; background:var(--accent); color:#fff; border:0; }
   #lightbox { position:fixed; inset:0; background:rgba(0,0,0,.92); z-index:40;
               display:none; align-items:center; justify-content:center; }
   #lightbox.open { display:flex; }
@@ -145,47 +227,61 @@
   </footer>
 
   <div class="panel" id="scansPanel">
-    <header>🃏 Scanned cards
+    <header><span class="ptitle">Scanned cards</span>
       <button class="hbtn" id="scansClose">Close</button>
     </header>
-    <div id="scansBar">
-      <span class="vchip on" data-view="all">All</span>
-      <span class="vchip" data-view="pending">Needs pick</span>
-      <span class="vchip" data-view="selected">Selected</span>
-      <span class="vchip" data-view="problem">Problems</span>
+    <div id="scansTop">
+      <div id="scansBar" role="tablist">
+        <span class="vchip on" data-view="all" role="tab">All</span>
+        <span class="vchip" data-view="pending" role="tab">Needs pick</span>
+        <span class="vchip" data-view="selected" role="tab">Selected</span>
+        <span class="vchip" data-view="problem" role="tab">Problems</span>
+      </div>
     </div>
-    <div class="bar">
-      <input id="p-min" type="number" min="0" step="0.25" placeholder="Min $" inputmode="decimal">
-      <input id="p-max" type="number" min="0" step="0.25" placeholder="Max $" inputmode="decimal">
-      <button id="p-excl">Exclude filtered</button>
+    <div id="scansMeta">
+      <div id="scansStat"></div>
+      <button id="fltBtn" aria-expanded="false" aria-controls="fltPanel"><svg viewBox="0 0 16 16" fill="none"
+        stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M2 4h12M4.5 8h7M7 12h2"/></svg>Filters<span
+        id="fcount"></span></button>
     </div>
-    <div class="bar">
-      <select id="p-popmin">
-        <option value="">Popularity: any</option>
-        <option value="played">Played or better</option>
-        <option value="solid">Popular or better</option>
-        <option value="strong">Very popular or better</option>
-        <option value="staple">Staples only</option>
-      </select>
-      <span class="mchip" id="p-fmode">match <b>any</b></span>
+    <!-- Filters + bulk actions fold away; every control keeps its id/behaviour. -->
+    <div id="fltPanel">
+      <div class="fcap">Price (F2F)</div>
+      <div class="bar">
+        <input id="p-min" type="number" min="0" step="0.25" placeholder="Min $" inputmode="decimal">
+        <input id="p-max" type="number" min="0" step="0.25" placeholder="Max $" inputmode="decimal">
+        <button id="p-excl">Exclude filtered</button>
+      </div>
+      <div class="fcap">Popularity</div>
+      <div class="bar">
+        <select id="p-popmin">
+          <option value="">Popularity: any</option>
+          <option value="played">Played or better</option>
+          <option value="solid">Popular or better</option>
+          <option value="strong">Very popular or better</option>
+          <option value="staple">Staples only</option>
+        </select>
+        <span class="mchip" id="p-fmode" role="button">match <b>any</b></span>
+      </div>
+      <div class="fcap">Bulk actions</div>
+      <div class="bar">
+        <button id="p-fill">Price missing</button>
+        <button id="clr-junk">Clear unpicked</button>
+        <button id="clr-all" class="danger">Clear all</button>
+      </div>
     </div>
+    <!-- Outside the fold: the ⚠ hint must stay visible while filters are active. -->
     <div id="fhint" style="display:none"></div>
-    <div id="scansStat"></div>
-    <div class="bar" style="border-top:1px solid var(--line)">
-      <button id="p-fill">Price missing</button>
-      <button id="clr-junk">Clear unpicked</button>
-      <button id="clr-all" class="danger">Clear all</button>
-    </div>
-    <div id="sweepInfo" style="display:none;font-size:12px;color:var(--muted);padding:6px 12px;
-         border-bottom:1px solid var(--line);white-space:nowrap;overflow:hidden;text-overflow:ellipsis"></div>
+    <div id="sweepInfo" style="display:none"></div>
     <div class="pbody" id="scansList"></div>
   </div>
 
   <div class="panel" id="detailPanel">
-    <header><span id="detailTitle">Card</span>
+    <header><span class="ptitle" id="detailTitle">Card</span>
       <button class="hbtn" id="detailBack">Back</button>
     </header>
     <div class="pbody" id="detailBody"></div>
+    <div id="detailFoot"></div>
   </div>
 
   <div id="lightbox"><img id="lightboxImg" alt=""></div>
@@ -307,7 +403,7 @@ function formatChipsHtml(scan){
 }
 
 /* ── version banner — proves which page+server combo is running ────────────── */
-const UI_VERSION = 'v35';
+const UI_VERSION = 'v36';
 fetch('/api/version').then(r => r.json())
   .then(d => { $('#ver').textContent = `${UI_VERSION} · ${d.version}`; })
   .catch(() => { $('#ver').textContent = UI_VERSION; });
@@ -910,7 +1006,22 @@ function renderFilterHint() {
         + 'so valuable ones still show.';
   el.style.display = msg ? 'block' : 'none';
   el.textContent = msg;
+  renderFilterChip();
 }
+// The Filters chip folds the bars away, so it must say when one is ACTIVE:
+// a count of active bars (price band, popularity floor). Display only — the
+// tri-state logic above is the single source of truth for what is shown.
+function renderFilterChip() {
+  const on = activeFilters();
+  const n = (on.price ? 1 : 0) + (on.pop ? 1 : 0);
+  $('#fltBtn').classList.toggle('active', n > 0);
+  $('#fcount').textContent = n ? String(n) : '';
+}
+$('#fltBtn').addEventListener('click', () => {
+  const open = $('#fltPanel').classList.toggle('open');
+  $('#fltBtn').classList.toggle('on', open);
+  $('#fltBtn').setAttribute('aria-expanded', String(open));
+});
 
 
 function renderScansPanel() {
@@ -941,7 +1052,7 @@ function renderScansPanel() {
                    s.selection?.finish, s.selection?.quantity,
                    s.selection?.auto_picked ? 'a' : '',
                    s.card_read?.name, s.error ? 'e' : '',
-                   (s.candidates||[]).length,
+                   (s.candidates||[]).length, (s.candidates||[])[0]?.id,
                    JSON.stringify(s.f2f?.conditions||0),
                    printInfo(s).vals.join(';'), popSig(s)].join(',')).join('|');
   if (listSig === lastListSig) return;
@@ -960,16 +1071,18 @@ function renderScansPanel() {
       ? `<span class="spill sel">${s.selection?.auto_picked ? '⚠ auto' : 'selected'}</span>`
       : isProblem(s) ? `<span class="spill chk">check</span>`
       : `<span class="spill">pending</span>`) + popPill(s);
-    return `<div class="srow" data-sid="${s.id}">
-      <img src="${escHtml(thumb)}" loading="lazy" onerror="this.style.visibility='hidden'">
+    return `<div class="srow" data-sid="${s.id}" role="button">
+      <span class="sthumb"><img src="${escHtml(thumb)}" alt="" loading="lazy" onerror="this.style.visibility='hidden'"></span>
       <div class="meta">
         <div class="nm">${escHtml(name)}</div>
         <div class="sub">${escHtml(sub)}</div>
       </div>
-      ${pr ? `<div class="sprice">${pr}</div>` : ''}
-      ${pill}
+      <div class="sright">
+        ${pr ? `<div class="sprice">${escHtml(pr)}</div>` : ''}
+        <div class="spills">${pill}</div>
+      </div>
     </div>`;
-  }).join('') || `<div style="padding:40px;text-align:center;color:#6b7280">Nothing here.</div>`;
+  }).join('') || `<div class="sempty">Nothing here.</div>`;
   scansList.querySelectorAll('.srow[data-sid]').forEach(row =>
     row.addEventListener('click', () => openDetail(Number(row.dataset.sid))));
 }
@@ -1119,8 +1232,7 @@ function pcandCard(c, chosenId, priceMode = 'pending') {
   const showPrice = priceMode === 'pending' || (priceMode === 'selected' && !pp.none);
   return `<div class="pcard ${c.id===chosenId?'chosen':''}" data-pick="${escHtml(c.id)}">
     <img src="${escHtml(c.image_normal||c.image_small)}" loading="lazy" onerror="this.style.visibility='hidden'">
-    <div class="pt"><b>${escHtml((c.set||'').toUpperCase())}</b> #${escHtml(c.collector_number)}
-      ${c.multi_distance!=null?`· Δ${c.multi_distance}`:''}</div>
+    <div class="pt"><span><b>${escHtml((c.set||'').toUpperCase())}</b> #${escHtml(c.collector_number)}</span>${c.multi_distance!=null?`<span class="pd">Δ${c.multi_distance}</span>`:''}</div>
     ${showPrice ? `<div class="pp${pp.none?' none':''}" data-price-for="${escHtml(c.id)}">${escHtml(pp.text)}</div>` : ''}
   </div>`;
 }
@@ -1134,9 +1246,9 @@ function detailControls(scan) {
   const fin = scan.selection?.finish || (cr.foil ? 'Foil' : 'Non-Foil');
   const qty = scan.selection?.quantity || 1;
   return `<div class="pctl">
-    <select id="p-cond">${CONDITIONS.map(c=>`<option ${c===cond?'selected':''}>${c}</option>`).join('')}</select>
-    <select id="p-fin">${FINISHES.map(f=>`<option ${f===fin?'selected':''}>${f}</option>`).join('')}</select>
-    <input id="p-qty" type="number" min="1" value="${qty}">
+    <select id="p-cond" aria-label="Condition">${CONDITIONS.map(c=>`<option ${c===cond?'selected':''}>${c}</option>`).join('')}</select>
+    <select id="p-fin" aria-label="Finish">${FINISHES.map(f=>`<option ${f===fin?'selected':''}>${f}</option>`).join('')}</select>
+    <label class="qty"><span>Qty</span><input id="p-qty" type="number" min="1" value="${qty}" inputmode="numeric"></label>
   </div>`;
 }
 function detailCtl() {
@@ -1186,7 +1298,7 @@ function headPriceHtml(scan) {
   }
   const r = priceRange(scan);
   const muted = t => `<span style="font-size:13px;color:var(--muted);font-weight:400">${t}</span>`;
-  if (r) return `~${escHtml(r)} <span style="font-size:12px;color:var(--muted);font-weight:400">(same-art printings)</span>`;
+  if (r) return `~${escHtml(r)}<span class="pnote">across same-art printings</span>`;
   return printInfo(scan).searched ? muted('no F2F listing') : muted('pricing…');
 }
 async function renderScanDetail() {
@@ -1198,15 +1310,15 @@ async function renderScanDetail() {
   detailPollSig = '';
 
   let html = `<div class="prow">
-    <img src="/api/scans/${scan.id}/image" onerror="this.style.display='none'">
-    <div>
-      ${sel ? `<div><b>${escHtml(sel.name)}</b></div>
-        <div style="font-size:13px;color:var(--muted)">${escHtml(sel.set_name)} · ${escHtml((sel.set||'').toUpperCase())} #${escHtml(sel.collector_number)} · ×${sel.quantity}</div>
+    <img src="/api/scans/${scan.id}/image" alt="Scan photo" onerror="this.style.display='none'">
+    <div class="pinfo">
+      ${sel ? `<div class="pname">${escHtml(sel.name)}</div>
+        <div class="psub">${escHtml(sel.set_name)} · ${escHtml((sel.set||'').toUpperCase())} #${escHtml(sel.collector_number)} · ×${sel.quantity}</div>
         <div class="pprice" id="p-headprice">${headPriceHtml(scan)}</div>`
-      : `<div><b>${escHtml(cr.name||'(unread)')}</b></div>
-        <div style="font-size:13px;color:var(--muted)">tap a printing below to select it</div>
+      : `<div class="pname">${escHtml(cr.name||'(unread)')}</div>
+        <div class="psub">tap a printing below to select it</div>
         <div class="pprice" id="p-headprice">${headPriceHtml(scan)}</div>`}
-      ${scan.error ? `<div style="font-size:12px;color:var(--bad);margin-top:6px">${escHtml(scan.error)}</div>` : ''}
+      ${scan.error ? `<div class="perr">${escHtml(scan.error)}</div>` : ''}
       ${formatChipsHtml(scan)}
     </div>
   </div>`;
@@ -1221,11 +1333,14 @@ async function renderScanDetail() {
     ? `<div class="pgrid" id="pcands">${shown.map(c=>pcandCard(c, sel?.scryfall_id, sel ? 'selected' : 'pending')).join('')}${foldTile}</div>`
     : `<p style="color:var(--muted);font-size:13px">No candidates — search below.</p>`;
   html += `<div class="subhead">Wrong card? Search</div>
-    <div class="msrow"><input id="p-search" placeholder="Card name…"><button id="p-searchBtn">Search</button></div>
-    <div class="pgrid" id="psearchResults" style="margin-top:8px"></div>`;
-  html += `<button class="dangerbtn" id="p-delete">Delete this scan</button>`;
-  if (PRICE_CHECK) html += `<div id="pcBar"><button id="pcDiscard">Discard</button><button id="pcKeep">Keep</button></div>`;
+    <div class="msrow"><input id="p-search" type="search" placeholder="Card name…" enterkeyhint="search"><button id="p-searchBtn">Search</button></div>
+    <div class="pgrid" id="psearchResults" style="margin-top:10px"></div>`;
+  // Price check has Discard in its bottom bar — the same DELETE — so the
+  // second, differently-worded delete button is left out there only.
+  if (!PRICE_CHECK) html += `<button class="dangerbtn" id="p-delete">Delete this scan</button>`;
   detailBody.innerHTML = html;
+  $('#detailFoot').innerHTML = PRICE_CHECK
+    ? `<div id="pcBar"><button id="pcDiscard">Discard</button><button id="pcKeep">Keep</button></div>` : '';
   $('#pfold')?.addEventListener('click', () => { detailShowAllArt = !detailShowAllArt; renderScanDetail(); });
   $('#pcKeep')?.addEventListener('click', closePanelApp);
   $('#pcDiscard')?.addEventListener('click', async () => {
@@ -1233,7 +1348,7 @@ async function renderScanDetail() {
     closePanelApp();
   });
 
-  const scanImg = detailBody.querySelector('.prow img');
+  const scanImg = detailBody.querySelector('.prow > img');
   scanImg?.addEventListener('click', () => openLightbox(scanImg.src));
 
   const pickFrom = (pool) => async (el) => {
@@ -1271,7 +1386,7 @@ async function renderScanDetail() {
   $('#p-searchBtn').addEventListener('click', doSearch);
   $('#p-search').addEventListener('keydown', e => { if (e.key==='Enter') doSearch(); });
 
-  $('#p-delete').addEventListener('click', async () => {
+  $('#p-delete')?.addEventListener('click', async () => {
     await fetch(`/api/scans/${scan.id}`, { method: 'DELETE' });
     detailPanel.classList.remove('open');
     refreshScans();

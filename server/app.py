@@ -392,7 +392,10 @@ def create_app(
         from mtg_card_scanner.launch import cert_sha256
         pin = cert_sha256(os.getenv("SCAN_TLS_CERT", "")) if os.getenv("SCAN_TLS_CERT") else None
         segno.make(f"https://{host}:{port}/phone" + (f"#pin={pin}" if pin else "")).save(
-            buf, kind="svg", scale=6, dark="#e8eaed", light="#171a21")
+            # Dark-on-light with the 4-module quiet zone: an inverted code
+            # (light-on-dark, until 1.0.7) is invisible to ZXing's QR reader,
+            # so the app's setup screen never paired from it.
+            buf, kind="svg", scale=6, border=4, dark="#000000", light="#ffffff")
         return Response(buf.getvalue(), media_type="image/svg+xml", headers=_NO_STORE)
 
     # ── live debug peek ────────────────────────────────────────────────────────
