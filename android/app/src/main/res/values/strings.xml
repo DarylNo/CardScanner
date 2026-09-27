@@ -1,6 +1,6 @@
 <resources>
     <string name="app_name">Card Scanner</string>
-    <string name="banner_fmt">app %1$s · server %2$s</string>
+    <string name="banner_fmt">%1$s · %2$s</string>
     <string name="server_offline">offline</string>
     <string name="area">Area</string>
     <string name="area_set">Area ✓</string>
@@ -10,10 +10,10 @@
     <string name="scan_card">Scan Card</string>
     <string name="retry">Retry</string>
     <string name="cancel">Cancel</string>
-    <string name="mode_mount">Mode: Mount</string>
-    <string name="mode_handheld">Mode: Handheld</string>
-    <string name="auto_on">Auto: ON</string>
-    <string name="auto_off">Auto: OFF</string>
+    <string name="mode_mount">Mount</string>
+    <string name="mode_handheld">Handheld</string>
+    <string name="auto_on">Auto on</string>
+    <string name="auto_off">Auto off</string>
     <string name="retry_capturing">Retrying — capturing…</string>
     <string name="camera_needed">The camera permission is needed to scan cards.</string>
     <string name="camera_perm_title">Camera access</string>

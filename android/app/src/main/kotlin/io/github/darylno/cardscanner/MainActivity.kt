@@ -15,7 +15,6 @@ import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
-import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -32,6 +31,7 @@ import io.github.darylno.cardscanner.ui.Captured
 import io.github.darylno.cardscanner.ui.OverlayView
 import io.github.darylno.cardscanner.ui.Outcome
 import io.github.darylno.cardscanner.ui.PanelActivity
+import io.github.darylno.cardscanner.ui.ScanChrome
 import io.github.darylno.cardscanner.ui.SettingsActivity
 import io.github.darylno.cardscanner.ui.SetupActivity
 import io.github.darylno.cardscanner.ui.ShareActivity
@@ -56,16 +56,19 @@ class MainActivity : AppCompatActivity() {
     private var camera: CameraPort? = null
     private val io = Executors.newSingleThreadExecutor()
 
-    private lateinit var banner: TextView
-    private lateinit var modeBtn: Button
-    private lateinit var areaBtn: Button
+    private lateinit var chrome: ScanChrome
+    private lateinit var serverText: TextView
+    private lateinit var connDot: View
+    private lateinit var mountSeg: TextView
+    private lateinit var handSeg: TextView
+    private lateinit var areaBtn: TextView
     private lateinit var preview: PreviewView
     private lateinit var overlay: OverlayView
     private lateinit var statusView: TextView
     private lateinit var queueView: TextView
-    private lateinit var autoBtn: Button
-    private lateinit var scanBtn: Button
-    private lateinit var retryBtn: Button
+    private lateinit var autoBtn: TextView
+    private lateinit var shutter: View
+    private lateinit var retryBtn: TextView
 
     /** Scan id a Retry would replace (phone.html offerRetry). */
     private var retryScanId: Long? = null
@@ -158,96 +161,131 @@ class MainActivity : AppCompatActivity() {
     }
 
     // ── layout ──────────────────────────────────────────────────────────────
-    private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
+    // A camera app: the preview fills the screen; controls float over it on
+    // scrims. Top: server status + Scans/Share/Settings. Middle: nothing but
+    // the card. Bottom: status pill, Mount|Handheld switch, and the shutter
+    // with Auto (left) and Area (right) in Mount mode.
+    private fun dp(v: Int) = chrome.dp(v)
 
-    private fun button(label: String, onClick: (View) -> Unit) = Button(this).apply {
-        text = label
-        isAllCaps = false
-        minWidth = 0
-        minimumWidth = 0
-        setPadding(dp(10), 0, dp(10), 0)
-        setOnClickListener(onClick)
-    }
+    private fun wrap() = ViewGroup.LayoutParams.WRAP_CONTENT
+    private fun match() = ViewGroup.LayoutParams.MATCH_PARENT
 
     private fun buildUi() {
-        val root = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Color.parseColor("#0f1115"))
-        }
-        val titleRow = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(12), dp(8), dp(12), 0)
-        }
-        titleRow.addView(TextView(this).apply {
-            text = getString(R.string.app_name)
-            setTextColor(Color.WHITE)
-            textSize = 18f
-        })
-        banner = TextView(this).apply {
-            setTextColor(Color.parseColor("#8b93a1"))
-            textSize = 12f
-            setPadding(dp(10), 0, 0, 0)
-            text = getString(R.string.banner_fmt, BuildConfig.VERSION_NAME, "…")
-        }
-        titleRow.addView(banner)
-        root.addView(titleRow)
+        chrome = ScanChrome(this)
+        val root = FrameLayout(this).apply { setBackgroundColor(Color.BLACK) }
 
-        val bar = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            setPadding(dp(6), 0, dp(6), 0)
-        }
-        modeBtn = button("") { toggleMode() }
-        areaBtn = button(getString(R.string.area)) { onAreaButton() }
-        bar.addView(modeBtn, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.4f))
-        bar.addView(areaBtn, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        bar.addView(button(getString(R.string.scans)) { openPanel(0L, false) },
-            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        bar.addView(button(getString(R.string.share)) { startActivity(Intent(this, ShareActivity::class.java)) },
-            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        bar.addView(button("⚙") { startActivity(Intent(this, SettingsActivity::class.java)) }.apply {
-            contentDescription = getString(R.string.settings)
-        }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 0.6f))
-        root.addView(bar)
-
-        val stage = FrameLayout(this)
         preview = PreviewView(this).apply {
             scaleType = PreviewView.ScaleType.FIT_CENTER
             implementationMode = PreviewView.ImplementationMode.PERFORMANCE
         }
         overlay = OverlayView(this)
-        stage.addView(preview, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
-        stage.addView(overlay, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
-        root.addView(stage, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+        root.addView(preview, FrameLayout.LayoutParams(match(), match()))
+        root.addView(overlay, FrameLayout.LayoutParams(match(), match()))
 
-        statusView = TextView(this).apply {
-            setTextColor(Color.WHITE)
-            textSize = 16f
-            setPadding(dp(12), dp(8), dp(12), 0)
-            minLines = 2
+        // ── top bar ──
+        val top = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = chrome.scrim(top = true)
+            setPadding(dp(12), dp(10), dp(12), dp(28))
         }
-        queueView = TextView(this).apply {
-            setTextColor(Color.parseColor("#fbbf24"))
-            textSize = 13f
-            setPadding(dp(12), 0, dp(12), 0)
-            visibility = View.GONE
-            // Tapping the offline indicator retries now (resets the backoff).
-            setOnClickListener { app.uploads.retryNow() }
-        }
-        root.addView(statusView)
-        root.addView(queueView)
-
-        val bottom = LinearLayout(this).apply {
+        val topRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            setPadding(dp(6), dp(4), dp(6), dp(8))
+            gravity = Gravity.CENTER_VERTICAL
         }
-        autoBtn = button("") { toggleAuto() }
-        scanBtn = button(getString(R.string.scan_card)) { onScanTap() }
-        retryBtn = button(getString(R.string.retry)) { onRetryTap() }.apply { visibility = View.GONE }
-        bottom.addView(autoBtn, LinearLayout.LayoutParams(0, dp(56), 1f))
-        bottom.addView(scanBtn, LinearLayout.LayoutParams(0, dp(56), 1.6f))
-        bottom.addView(retryBtn, LinearLayout.LayoutParams(0, dp(56), 1f))
-        root.addView(bottom)
+        connDot = View(this).apply { background = chrome.dot(ScanChrome.Palette.TEXT_DIM) }
+        topRow.addView(connDot, LinearLayout.LayoutParams(dp(8), dp(8)).apply { marginEnd = dp(8) })
+        serverText = TextView(this).apply {
+            setTextColor(ScanChrome.Palette.TEXT_DIM)
+            textSize = 12f
+            maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.END
+            text = getString(R.string.banner_fmt, BuildConfig.VERSION_NAME, "…")
+        }
+        topRow.addView(serverText, LinearLayout.LayoutParams(0, wrap(), 1f))
+        topRow.addView(chrome.chip(getString(R.string.scans)) { openPanel(0L, false) },
+            LinearLayout.LayoutParams(wrap(), wrap()).apply { marginStart = dp(6) })
+        topRow.addView(chrome.chip(getString(R.string.share)) { startActivity(Intent(this, ShareActivity::class.java)) },
+            LinearLayout.LayoutParams(wrap(), wrap()).apply { marginStart = dp(6) })
+        topRow.addView(chrome.chip("⚙") { startActivity(Intent(this, SettingsActivity::class.java)) }.apply {
+            contentDescription = getString(R.string.settings)
+            textSize = 18f
+        }, LinearLayout.LayoutParams(wrap(), wrap()).apply { marginStart = dp(6) })
+        top.addView(topRow)
+        queueView = chrome.chip("") { app.uploads.retryNow() }.apply {
+            // Tapping the upload indicator retries now (resets the backoff).
+            setTextColor(ScanChrome.Palette.WARN)
+            textSize = 13f
+            minHeight = dp(36)
+            visibility = View.GONE
+        }
+        top.addView(queueView, LinearLayout.LayoutParams(wrap(), wrap()).apply {
+            gravity = Gravity.END; topMargin = dp(8)
+        })
+        root.addView(top, FrameLayout.LayoutParams(match(), wrap(), Gravity.TOP))
+
+        // ── bottom controls ──
+        val bottom = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            background = chrome.scrim(top = false)
+            setPadding(dp(16), dp(40), dp(16), dp(20))
+        }
+        statusView = chrome.statusPill()
+        bottom.addView(statusView, LinearLayout.LayoutParams(wrap(), wrap()).apply { bottomMargin = dp(10) })
+        retryBtn = chrome.chip(getString(R.string.retry)) { onRetryTap() }.apply {
+            setTextColor(ScanChrome.Palette.TEXT_ON_ACTIVE)
+            background = chrome.pill(ScanChrome.Palette.WARN)
+            visibility = View.GONE
+        }
+        bottom.addView(retryBtn, LinearLayout.LayoutParams(wrap(), wrap()).apply { bottomMargin = dp(10) })
+
+        val seg = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            background = chrome.pill(ScanChrome.Palette.CHIP)
+            setPadding(dp(3), dp(3), dp(3), dp(3))
+        }
+        fun segItem(label: String, mode: AppSettings.Mode) = TextView(this).apply {
+            text = label
+            textSize = 14f
+            gravity = Gravity.CENTER
+            minHeight = dp(36)
+            setPadding(dp(18), 0, dp(18), 0)
+            setOnClickListener { if (settings.mode != mode) toggleMode() }
+        }
+        mountSeg = segItem(getString(R.string.mode_mount), AppSettings.Mode.MOUNT)
+        handSeg = segItem(getString(R.string.mode_handheld), AppSettings.Mode.HANDHELD)
+        seg.addView(mountSeg); seg.addView(handSeg)
+        bottom.addView(seg, LinearLayout.LayoutParams(wrap(), wrap()).apply { bottomMargin = dp(16) })
+
+        val controls = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        autoBtn = chrome.chip("") { toggleAuto() }
+        areaBtn = chrome.chip(getString(R.string.area)) { onAreaButton() }
+        shutter = View(this).apply {
+            background = chrome.shutter()
+            contentDescription = getString(R.string.scan_card)
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { onScanTap() }
+        }
+        val side = { v: View, g: Int -> FrameLayout(this).apply {
+            addView(v, FrameLayout.LayoutParams(wrap(), wrap(), g or Gravity.CENTER_VERTICAL))
+        } }
+        controls.addView(side(autoBtn, Gravity.START), LinearLayout.LayoutParams(0, wrap(), 1f))
+        controls.addView(shutter, LinearLayout.LayoutParams(dp(76), dp(76)).apply { marginStart = dp(12); marginEnd = dp(12) })
+        controls.addView(side(areaBtn, Gravity.END), LinearLayout.LayoutParams(0, wrap(), 1f))
+        bottom.addView(controls, LinearLayout.LayoutParams(match(), wrap()))
+        root.addView(bottom, FrameLayout.LayoutParams(match(), wrap(), Gravity.BOTTOM))
+
+        // Edge-to-edge (enforced on Android 15): keep the controls clear of the system bars.
+        androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
+            val bars = insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+            top.setPadding(dp(12) + bars.left, dp(10) + bars.top, dp(12) + bars.right, dp(28))
+            bottom.setPadding(dp(16) + bars.left, dp(40), dp(16) + bars.right, dp(20) + bars.bottom)
+            insets
+        }
         setContentView(root)
 
         overlay.setRoi(settings.roi)
@@ -268,9 +306,9 @@ class MainActivity : AppCompatActivity() {
         statusView.text = msg
         statusView.setTextColor(
             when (tone) {
-                Tone.OK -> Color.parseColor("#6ee7a0")
-                Tone.ERR -> Color.parseColor("#f87171")
-                Tone.NORMAL -> Color.WHITE
+                Tone.OK -> ScanChrome.Palette.OK
+                Tone.ERR -> ScanChrome.Palette.ERR
+                Tone.NORMAL -> ScanChrome.Palette.TEXT
             }
         )
     }
@@ -280,9 +318,12 @@ class MainActivity : AppCompatActivity() {
             val v = try {
                 app.server.version()
             } catch (e: Exception) {
-                getString(R.string.server_offline)
+                null
             }
-            runOnUiThread { banner.text = getString(R.string.banner_fmt, BuildConfig.VERSION_NAME, v) }
+            runOnUiThread {
+                serverText.text = getString(R.string.banner_fmt, BuildConfig.VERSION_NAME, v ?: getString(R.string.server_offline))
+                connDot.background = chrome.dot(if (v != null) ScanChrome.Palette.OK else ScanChrome.Palette.ERR)
+            }
         }
     }
 
@@ -290,10 +331,12 @@ class MainActivity : AppCompatActivity() {
     private val handheld get() = settings.mode == AppSettings.Mode.HANDHELD
 
     private fun applyMode() {
-        modeBtn.text = getString(if (handheld) R.string.mode_handheld else R.string.mode_mount)
-        autoBtn.visibility = if (handheld) View.GONE else View.VISIBLE
+        styleSegment(mountSeg, !handheld)
+        styleSegment(handSeg, handheld)
+        // INVISIBLE, not GONE: the shutter stays centred in both modes.
+        autoBtn.visibility = if (handheld) View.INVISIBLE else View.VISIBLE
         areaBtn.visibility = if (handheld) View.INVISIBLE else View.VISIBLE
-        autoBtn.text = getString(if (settings.auto) R.string.auto_on else R.string.auto_off)
+        styleAuto()
         overlay.setHandheldGuide(handheld)
         overlay.setRoi(if (handheld) null else settings.roi)
         overlay.setBox(null, 176, 132, OverlayView.BoxState.SETTLING)
@@ -317,9 +360,21 @@ class MainActivity : AppCompatActivity() {
         applyMode()
     }
 
+    private fun styleSegment(v: TextView, on: Boolean) {
+        v.background = if (on) chrome.pill(ScanChrome.Palette.CHIP_ACTIVE) else null
+        v.setTextColor(if (on) ScanChrome.Palette.TEXT_ON_ACTIVE else ScanChrome.Palette.TEXT)
+    }
+
+    /** Auto reads as a toggle: filled when on. */
+    private fun styleAuto() {
+        autoBtn.text = getString(if (settings.auto) R.string.auto_on else R.string.auto_off)
+        autoBtn.background = chrome.pill(if (settings.auto) ScanChrome.Palette.CHIP_ACTIVE else ScanChrome.Palette.CHIP)
+        autoBtn.setTextColor(if (settings.auto) ScanChrome.Palette.TEXT_ON_ACTIVE else ScanChrome.Palette.TEXT)
+    }
+
     private fun toggleAuto() {
         settings.auto = !settings.auto
-        autoBtn.text = getString(if (settings.auto) R.string.auto_on else R.string.auto_off)
+        styleAuto()
         camera?.setAuto(settings.auto)
         if (settings.auto) setStatus(StatusText.WATCHING)
         else {
