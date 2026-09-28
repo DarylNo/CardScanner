@@ -88,10 +88,19 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           if ! gh release view art-pack >/dev/null 2>&1; then
-            gh release create art-pack \
+            # Push the tag with git FIRST, then release on it: the first run's
+            # `gh release create --target` (the API creating the tag) was
+            # refused 403 "Resource not accessible by integration", while
+            # auto-tag.yml's git-pushed tags + release.yml's release on an
+            # existing tag work with the same token.
+            if ! git ls-remote --exit-code --tags origin refs/tags/art-pack >/dev/null; then
+              git tag art-pack "$GITHUB_SHA"
+              git push origin refs/tags/art-pack
+            fi
+            gh release create art-pack --verify-tag \
               --title "Artwork fingerprint pack" \
               --notes "Rolling data release (art-pack.yml): the art-hash identification index for the phone app. Not an app release." \
-              --prerelease --latest=false --target "$GITHUB_SHA"
+              --prerelease --latest=false
           fi
           # Keep it out of releases/latest even if someone edited it by hand.
           gh release edit art-pack --prerelease --latest=false
