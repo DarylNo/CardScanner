@@ -126,7 +126,10 @@ class CameraController(
             main.post { listener.onCaptureStarted(request) }
             val ok = pipeline.submit(request.frames, request.cropRoi) { r ->
                 r.getOrNull()?.let { res ->
-                    if (request.trigger == CaptureTrigger.AUTO && request.mode == ScanMode.MOUNT) {
+                    // Only captures where a card was found count: an empty-tray
+                    // (phantom) capture is always "soft", and letting it re-arm the
+                    // refocus fed a loop — refocus → stale scene → phantom → refocus.
+                    if (request.trigger == CaptureTrigger.AUTO && request.mode == ScanMode.MOUNT && res.flattened) {
                         res.sharpness.getOrNull(res.sharpestIndex)?.let(::noteSharpness)
                     }
                 }

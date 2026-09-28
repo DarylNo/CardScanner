@@ -218,10 +218,15 @@ class ScanAnalyzer(
         } else if (deferring) {
             val sinceFocus = if (focusReadyTs == NONE || timestampNs <= focusReadyTs) -1L
                 else timestampNs - focusReadyTs - 1
-            if (sinceFocus >= 0 && ring.countFresh(sinceFocus) >= BURST) {
-                fire(CaptureTrigger.AUTO, deferredBox, uw, uh, sinceFocus)
-            } else if (timestampNs - deferStartTs >= FOCUS_WAIT_NS || timestampNs < deferStartTs) {
-                fire(CaptureTrigger.AUTO, deferredBox, uw, uh, AUTO_FRESH_NS)   // focus never answered: shoot anyway
+            val focused = sinceFocus >= 0 && ring.countFresh(sinceFocus) >= BURST
+            if (focused || timestampNs - deferStartTs >= FOCUS_WAIT_NS || timestampNs < deferStartTs) {
+                // The lens moved since the trigger: "what was scanned" becomes
+                // THIS frame (the burst's newest), not the pre-focus trigger scene.
+                runCatching {
+                    scanner.rebaseScene(GraySampler.sampleY(p.yBuffer, p.yRowStride, sw, sh, rotation, roi))
+                }
+                // focus never answered → shoot anyway, from the usual fresh window
+                fire(CaptureTrigger.AUTO, deferredBox, uw, uh, if (focused) sinceFocus else AUTO_FRESH_NS)
             }
         } else if (manualPending) {
             if (manualStartTs == NONE || timestampNs < manualStartTs) manualStartTs = timestampNs

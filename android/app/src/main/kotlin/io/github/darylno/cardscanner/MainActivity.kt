@@ -625,10 +625,13 @@ class MainActivity : AppCompatActivity() {
         ackView.text = message
         ackView.setTextColor(ScanChrome.Palette.TEXT_ON_ACTIVE)
         ackView.background = chrome.pill(colour)
+        // Long enough to catch while reaching for the next card; a newer
+        // scan cancels and replaces it at once, so holding never hides one.
+        val hold = if (kind == Ack.NEXT_CARD) ACK_HOLD_MS else ACK_WARN_HOLD_MS
         for (v in listOf(flashView, ackView)) {
             v.animate().cancel()
             v.alpha = 1f
-            v.animate().alpha(0f).setStartDelay(if (v === ackView) 900L else 350L).setDuration(500L).start()
+            v.animate().alpha(0f).setStartDelay(hold).setDuration(ACK_FADE_MS).start()
         }
         if (kind == Ack.NEXT_CARD) vibratePattern(40, 70, 40) else vibratePattern(450)
     }
@@ -823,3 +826,12 @@ class MainActivity : AppCompatActivity() {
         }
     }
 }
+
+/**
+ * How long BOTH signals — the coloured screen edge and the message pill —
+ * stay fully on before fading. The same-card warning holds longer (it asks
+ * for action). Was 0.35 s / 0.9 s: gone before the owner looked up.
+ */
+private const val ACK_HOLD_MS = 2_500L
+private const val ACK_WARN_HOLD_MS = 4_000L
+private const val ACK_FADE_MS = 600L
