@@ -2,6 +2,7 @@ package io.github.darylno.cardscanner.ui
 
 import android.content.Context
 import android.content.SharedPreferences
+import androidx.core.content.edit
 import io.github.darylno.cardscanner.core.RoiFrac
 
 /**
@@ -11,7 +12,7 @@ import io.github.darylno.cardscanner.core.RoiFrac
  * diverging copies; writes use apply() (these are conveniences, not state that
  * must survive a crash mid-write).
  */
-class AppSettings(context: Context) {
+class AppSettings(context: Context) : io.github.darylno.cardscanner.ident.CompareMode.Flag {
     private val prefs: SharedPreferences =
         context.getSharedPreferences("ui_settings", Context.MODE_PRIVATE)
 
@@ -62,6 +63,14 @@ class AppSettings(context: Context) {
         get() = prefs.getBoolean(K_DEBUG, false)
         set(v) = prefs.edit().putBoolean(K_DEBUG, v).apply()
 
+    /**
+     * Stage 2 Compare mode (Diagnostics): identify each capture on the phone too,
+     * AFTER the server answered, and log the comparison. Default OFF.
+     */
+    override var compareMode: Boolean
+        get() = prefs.getBoolean(K_COMPARE, false)
+        set(v) = prefs.edit { putBoolean(K_COMPARE, v) }
+
     /** Last few capture timing lines, newest first (Diagnostics). */
     var recentTimings: String
         get() = prefs.getString(K_TIMINGS, "") ?: ""
@@ -83,5 +92,6 @@ class AppSettings(context: Context) {
         const val K_VIBRATION = "vibration"
         const val K_DEBUG = "debug_overlay"
         const val K_TIMINGS = "recent_timings"
+        const val K_COMPARE = "compare_mode"
     }
 }

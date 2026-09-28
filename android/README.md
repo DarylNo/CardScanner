@@ -80,7 +80,7 @@ pytest tests/ -q                                   # server + flatten spec
 
 # from android/
 ./gradlew :core:test                  # detection/flatten parity (needs Node)
-./gradlew :app:testDebugUnitTest      # net / gateway / queue / pipeline (JVM)
+./gradlew :app:testDebugUnitTest      # net / gateway / queue / pipeline / ident (JVM)
 ./gradlew :app:lintDebug
 ./gradlew :app:assembleDebug          # → app/build/outputs/apk/debug/app-debug.apk
 ```
@@ -245,16 +245,61 @@ uninstall; from then on updates install in place. Secrets reach both release
 paths — a hand-pushed tag, and `auto-tag.yml` (it calls `release.yml` with
 `secrets: inherit`).
 
+## Compare mode (Stage 2)
+
+The phone can now identify cards itself — the server's pipeline ported to
+`:core` (`IdentifyPipeline`: blank guard → art index → Scryfall printings →
+printing ranking → collector-line OCR → the same decisions), end-to-end
+parity-tested against the real Python pipeline (`IdentifyParityTest`,
+fixtures from `scripts/export_identify_fixtures.py`). Until Stage 4 it runs in
+**shadow**: the server stays the judge, and nothing the phone concludes is
+filed, picked or uploaded.
+
+**Turn it on:** Settings → long-press **DIAGNOSTICS** → *On-phone identify
+(Stage 2)* → **Compare mode** (default OFF). The phone needs the art pack
+(the `art-pack` release CI publishes weekly; a few MB): it downloads on
+Wi-Fi when Compare mode is switched on or the app starts, re-checks at most
+weekly, or now with **Check for pack**. "No art pack published yet" just
+means the first CI build hasn't finished. Scryfall lookups (Cronet) and
+printing images (OkHttp, small LRU cache) use whatever network is up.
+
+With it on, after the server's final answer to each capture arrives, the
+phone identifies the **same primary photo** in the background (one at a
+time, low priority) and logs a row. **Test on last capture** does one run on
+demand (and logs it too when the server's answer for that capture is known).
+
+**The report** (summary card; **Copy report** = compact JSON of the last 200):
+- *compared* — rows logged (jobs captured while Compare mode was on);
+- *name agree* — same top card name (both "no card" counts as agreeing);
+- *printing agree* — same top printing: the server's auto-picked selection,
+  else its `candidates[0]`, vs the phone's `candidates[0]`;
+- *auto-pick agree* — the server auto-filed the scan ⇔ the phone's result
+  meets the same grounds (one printing / OCR-confirmed / art-decisive);
+- *phone total ms* — median / p95 of decode + identify + printings + ranking
+  + OCR on this phone (the per-stage split is on every row);
+- *OCR-confirmed* — share of rows whose #1 was OCR-confirmed, phone (ML Kit)
+  vs server (RapidOCR);
+- *server used raw-frame retry* — rows where the server needed the 3 raw
+  frames; the phone only ever sees the primary, so those compare different
+  inputs.
+
+The list shows each disagreement (what differs, both answers with
+confidence / auto / ocr flags, timings). Small distance differences are
+expected even on identical input: the server re-warps the card with cv2 and
+the phone with OpenCV 4.10, whose `warpPerspective` pixels differ slightly
+(measured in `IdentifyParityTest`) — name/printing disagreements are what
+matter.
+
 ## F2F network test (Stage 1c)
 
 A hidden screen that answers "does Face to Face Games throttle the phone?"
 (docs/PHONE_ONLY_PLAN.md). **Settings → long-press the DIAGNOSTICS header →
-Network test.** It prices ~30 real cards on facetofacegames.com at the rig's
+Network test** (below the Stage 2 section). It prices ~30 real cards on facetofacegames.com at the rig's
 exact pacing over **Cronet** (cronet-embedded: Chromium's stack, a real Chrome
 TLS handshake) and over **plain OkHttp**, and counts 429s. *Run both* goes
 Cronet first (the per-IP bucket is cold for the stack we'd ship), then waits
 out a cooldown (default 5 min) before OkHttp. **Copy results** puts a JSON
-report on the clipboard. Nothing else in the app uses Cronet or this code.
+report on the clipboard. Only this test and Compare mode's Scryfall lookups use Cronet.
 
 ## Battery settings (OnePlus)
 
