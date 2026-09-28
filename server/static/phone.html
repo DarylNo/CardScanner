@@ -109,6 +109,22 @@
   .srow { display:flex; gap:12px; min-height:64px; padding:10px 16px; align-items:center;
           border-bottom:1px solid #1b1e26; cursor:pointer; -webkit-tap-highlight-color:transparent; }
   .srow:active { background:var(--card); }
+  /* Swipe-to-delete: the row slides over a red "Delete" layer. pan-y leaves
+     vertical scrolling to the browser; horizontal drags come to us. */
+  .sitem { position:relative; overflow:hidden; background:#b91c1c; }
+  .sitem .sdel { position:absolute; inset:0; display:flex; align-items:center; justify-content:space-between;
+                 padding:0 24px; color:#fff; font-weight:700; font-size:15px; }
+  .sitem > .srow { position:relative; background:var(--bg); touch-action:pan-y; }
+  .sitem > .srow.drag { transition:none; }
+  .sitem > .srow.snap { transition:transform .18s ease-out; }
+  .sitem.gone { transition:max-height .2s ease-in .12s; max-height:0 !important; }
+  #undoBar { position:absolute; left:12px; right:12px; bottom:calc(12px + env(safe-area-inset-bottom)); z-index:5;
+             display:none; align-items:center; gap:12px; padding:10px 10px 10px 16px; border-radius:14px;
+             background:#262a35; color:var(--text); box-shadow:0 6px 24px #0008; font-size:14px; }
+  #undoBar.show { display:flex; }
+  #undoBar span { flex:1 1 auto; }
+  #undoBar button { min-height:40px; padding:0 18px; border-radius:999px; border:0; font-weight:700;
+                    background:transparent; color:var(--accent); font-size:15px; }
   .srow .sthumb { flex:0 0 48px; width:48px; height:67px; border-radius:5px; overflow:hidden;
                   background:var(--line); }
   .srow .sthumb img { width:100%; height:100%; object-fit:cover; display:block; }
@@ -274,6 +290,7 @@
     <div id="fhint" style="display:none"></div>
     <div id="sweepInfo" style="display:none"></div>
     <div class="pbody" id="scansList"></div>
+    <div id="undoBar" role="status"><span id="undoMsg"></span><button id="undoBtn">Undo</button></div>
   </div>
 
   <div class="panel" id="detailPanel">
@@ -403,7 +420,7 @@ function formatChipsHtml(scan){
 }
 
 /* ── version banner — proves which page+server combo is running ────────────── */
-const UI_VERSION = 'v36';
+const UI_VERSION = 'v37';
 fetch('/api/version').then(r => r.json())
   .then(d => { $('#ver').textContent = `${UI_VERSION} · ${d.version}`; })
   .catch(() => { $('#ver').textContent = UI_VERSION; });
@@ -1026,6 +1043,8 @@ $('#fltBtn').addEventListener('click', () => {
 
 function renderScansPanel() {
   if (!scansPanel.classList.contains('open')) return;
+  // Rows swiped away but still inside their Undo window are already gone here.
+  const scans = liveScans();
   const sel = scans.filter(s => s.status === 'selected');
   const total = sel.filter(s => s.included)
     .reduce((t, s) => t + (f2fBest(s) ?? 0) * (s.selection?.quantity || 1), 0);
@@ -1071,7 +1090,7 @@ function renderScansPanel() {
       ? `<span class="spill sel">${s.selection?.auto_picked ? '⚠ auto' : 'selected'}</span>`
       : isProblem(s) ? `<span class="spill chk">check</span>`
       : `<span class="spill">pending</span>`) + popPill(s);
-    return `<div class="srow" data-sid="${s.id}" role="button">
+    return `<div class="sitem"><div class="sdel" aria-hidden="true"><span>Delete</span><span>Delete</span></div><div class="srow" data-sid="${s.id}" role="button">
       <span class="sthumb"><img src="${escHtml(thumb)}" alt="" loading="lazy" onerror="this.style.visibility='hidden'"></span>
       <div class="meta">
         <div class="nm">${escHtml(name)}</div>
@@ -1081,10 +1100,90 @@ function renderScansPanel() {
         ${pr ? `<div class="sprice">${escHtml(pr)}</div>` : ''}
         <div class="spills">${pill}</div>
       </div>
-    </div>`;
+    </div></div>`;
   }).join('') || `<div class="sempty">Nothing here.</div>`;
-  scansList.querySelectorAll('.srow[data-sid]').forEach(row =>
-    row.addEventListener('click', () => openDetail(Number(row.dataset.sid))));
+  scansList.querySelectorAll('.srow[data-sid]').forEach(row => {
+    row.addEventListener('click', () => { if (!swipeEatClick) openDetail(Number(row.dataset.sid)); });
+    attachSwipe(row);
+  });
+}
+
+// ── Swipe left/right to delete ──
+// The DELETE is held back for UNDO_MS so a mis-swipe costs nothing; the row
+// leaves the list at once. Undo restores every scan still waiting.
+const UNDO_MS = 5000;
+const pendingDel = new Set();
+let undoTimer = null, swipeEatClick = false;
+function liveScans() { return pendingDel.size ? scans.filter(s => !pendingDel.has(s.id)) : scans; }
+function commitDeletes(keepalive) {
+  clearTimeout(undoTimer); undoTimer = null;
+  const ids = [...pendingDel];
+  $('#undoBar').classList.remove('show');
+  if (!ids.length) return;
+  Promise.all(ids.map(id => fetch(`/api/scans/${id}`, { method: 'DELETE', keepalive })
+      .catch(() => {})))
+    .finally(() => { ids.forEach(id => pendingDel.delete(id)); if (!keepalive) refreshScans(); });
+}
+function queueDelete(id) {
+  pendingDel.add(id);
+  scansBtn.textContent = `Scans (${liveScans().length})`;
+  $('#undoMsg').textContent = pendingDel.size > 1 ? `${pendingDel.size} scans deleted` : 'Scan deleted';
+  $('#undoBar').classList.add('show');
+  clearTimeout(undoTimer);
+  undoTimer = setTimeout(() => commitDeletes(false), UNDO_MS);
+}
+$('#undoBtn').addEventListener('click', () => {
+  clearTimeout(undoTimer); undoTimer = null;
+  pendingDel.clear();
+  $('#undoBar').classList.remove('show');
+  scansBtn.textContent = `Scans (${scans.length})`;
+  lastListSig = ''; lastStatSig = ''; renderScansPanel();
+});
+// Leaving the page (WebView closed, tab hidden for good) keeps the delete.
+addEventListener('pagehide', () => commitDeletes(true));
+document.addEventListener('visibilitychange', () => { if (document.hidden) commitDeletes(true); });
+
+function attachSwipe(row) {
+  let x0 = 0, y0 = 0, t0 = 0, dx = 0, mode = null, pid = null;
+  const item = row.parentElement;
+  row.addEventListener('pointerdown', e => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    x0 = e.clientX; y0 = e.clientY; t0 = e.timeStamp; dx = 0; mode = null; pid = e.pointerId;
+    row.classList.remove('snap');
+  });
+  row.addEventListener('pointermove', e => {
+    if (e.pointerId !== pid) return;
+    const mx = e.clientX - x0, my = e.clientY - y0;
+    if (!mode) {
+      if (Math.abs(mx) < 10 && Math.abs(my) < 10) return;
+      mode = Math.abs(mx) > Math.abs(my) * 1.5 ? 'x' : 'y';
+      if (mode === 'x') { row.setPointerCapture(pid); row.classList.add('drag'); }
+    }
+    if (mode !== 'x') return;
+    dx = mx;
+    row.style.transform = `translateX(${dx}px)`;
+  });
+  const end = e => {
+    if (e.pointerId !== pid) return;
+    pid = null;
+    if (mode !== 'x') return;
+    row.classList.remove('drag'); row.classList.add('snap');
+    // A horizontal drag is never also a tap on the row.
+    swipeEatClick = true; setTimeout(() => { swipeEatClick = false; }, 350);
+    const w = row.offsetWidth || 1;
+    const fast = Math.abs(dx) > 40 && Math.abs(dx) / Math.max(1, e.timeStamp - t0) > 0.6;
+    if (e.type === 'pointerup' && (Math.abs(dx) > w * 0.35 || fast)) {
+      row.style.transform = `translateX(${dx > 0 ? w : -w}px)`;
+      item.style.maxHeight = item.offsetHeight + 'px';
+      requestAnimationFrame(() => item.classList.add('gone'));
+      const id = Number(row.dataset.sid);
+      setTimeout(() => { queueDelete(id); renderScansPanel(); }, 330);
+    } else {
+      row.style.transform = '';
+    }
+  };
+  row.addEventListener('pointerup', end);
+  row.addEventListener('pointercancel', end);
 }
 
 let sweepWasActive = false, sweepActive = false, sweepStopRequested = false;
