@@ -121,4 +121,5 @@
     <string name="nettest_no_results">No runs yet.</string>
     <string name="nettest_running_verdict">So far: %1$s</string>
     <string name="nettest_error">Couldn\'t run: %1$s</string>
+    <string name="scan_rate_desc">Cards scanned per minute, and cards this session</string>
 </resources>

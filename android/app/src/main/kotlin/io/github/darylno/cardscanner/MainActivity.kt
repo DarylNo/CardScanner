@@ -32,6 +32,7 @@ import io.github.darylno.cardscanner.ui.OverlayView
 import io.github.darylno.cardscanner.ui.Outcome
 import io.github.darylno.cardscanner.ui.PanelActivity
 import io.github.darylno.cardscanner.ui.ScanChrome
+import io.github.darylno.cardscanner.ui.ScanRate
 import io.github.darylno.cardscanner.ui.SettingsActivity
 import io.github.darylno.cardscanner.ui.SetupActivity
 import io.github.darylno.cardscanner.ui.ShareActivity
@@ -66,6 +67,15 @@ class MainActivity : AppCompatActivity() {
     private lateinit var overlay: OverlayView
     private lateinit var statusView: TextView
     private lateinit var queueView: TextView
+    private lateinit var rateView: TextView
+    /** Cards filed per minute this session (see [ScanRate]); refreshed every few seconds. */
+    private val scanRate = ScanRate()
+    private val rateTick = object : Runnable {
+        override fun run() {
+            refreshRate()
+            rateView.postDelayed(this, 5_000)
+        }
+    }
     private lateinit var autoBtn: TextView
     private lateinit var shutter: View
     private lateinit var retryBtn: TextView
@@ -152,6 +162,29 @@ class MainActivity : AppCompatActivity() {
         uploadListener.onState(app.uploads.pending, null, null)
     }
 
+    override fun onStart() {
+        super.onStart()
+        rateView.post(rateTick)
+    }
+
+    override fun onStop() {
+        rateView.removeCallbacks(rateTick)
+        super.onStop()
+    }
+
+    private fun refreshRate() {
+        val t = scanRate.label(android.os.SystemClock.elapsedRealtime())
+        rateView.text = t
+        rateView.visibility = if (t.isEmpty()) View.GONE else View.VISIBLE
+    }
+
+    /** A scan that FILED a card (the server made a row) counts toward the rate. */
+    private fun countFiled(scanId: Long?) {
+        if (scanId == null || scanId <= 0) return
+        scanRate.record(android.os.SystemClock.elapsedRealtime())
+        refreshRate()
+    }
+
     override fun onDestroy() {
         app.uploads.removeListener(uploadListener)
         camera?.unbind()
@@ -211,6 +244,14 @@ class MainActivity : AppCompatActivity() {
             textSize = 18f
         }, LinearLayout.LayoutParams(wrap(), wrap()).apply { marginStart = dp(6) })
         top.addView(topRow)
+        // Cards per minute (rolling 5 min) · cards this session — small and dim.
+        rateView = TextView(this).apply {
+            setTextColor(ScanChrome.Palette.TEXT_DIM)
+            textSize = 12f
+            visibility = View.GONE
+            contentDescription = getString(R.string.scan_rate_desc)
+        }
+        top.addView(rateView, LinearLayout.LayoutParams(wrap(), wrap()).apply { topMargin = dp(4); marginStart = dp(16) })
         queueView = chrome.chip("") { app.uploads.retryNow() }.apply {
             // Tapping the upload indicator retries now (resets the backoff).
             setTextColor(ScanChrome.Palette.WARN)
@@ -634,6 +675,13 @@ class MainActivity : AppCompatActivity() {
         val current = jobId == lastCaptureJobId
         // priceCheck = a manual scan taken in Handheld mode (walk-around price check).
         if (priceCheck && awaitingPriceCheck > 0) awaitingPriceCheck--
+        countFiled(when (outcome) {   // no_card / rejected carry no row → not counted
+            is Outcome.AutoFiled -> outcome.scanId
+            is Outcome.NeedsPick -> outcome.scanId
+            is Outcome.BestGuess -> outcome.scanId
+            is Outcome.NoMatch -> outcome.scanId
+            else -> null
+        })
         when (outcome) {
             is Outcome.NoCard -> {
                 setStatus(StatusText.NO_CARD, Tone.ERR)
