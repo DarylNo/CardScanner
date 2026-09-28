@@ -70,6 +70,8 @@ jobs:
         run: python scripts/export_printings_fixtures.py --check
       - name: Printing-ranker fixtures match visual_match
         run: python scripts/export_ranker_fixtures.py --check
+      - name: OCR match + identify-decision fixtures match the server
+        run: python scripts/export_ocr_fixtures.py --check
       - uses: actions/setup-java@v4
         with:
           distribution: temurin

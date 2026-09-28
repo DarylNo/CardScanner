@@ -20,6 +20,10 @@ androidxTestCore = "1.6.1"
 # network stack = a real Chrome TLS handshake. cronet-embedded is
 # self-contained (no Play Services); the arm64 ABI filter keeps one .so.
 cronet = "143.7445.0"
+# Stage 2C collector-line OCR: the BUNDLED Latin model (com.google.mlkit:
+# text-recognition — model inside the APK, works offline), not the
+# play-services-mlkit-text-recognition flavour that downloads it via Play.
+mlkitTextRecognition = "16.0.1"
 
 [libraries]
 camerax-core = { module = "androidx.camera:camera-core", version.ref = "camerax" }
@@ -39,6 +43,7 @@ nanohttpd = { module = "org.nanohttpd:nanohttpd", version.ref = "nanohttpd" }
 robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }
 androidx-test-core = { module = "androidx.test:core-ktx", version.ref = "androidxTestCore" }
 cronet-embedded = { module = "org.chromium.net:cronet-embedded", version.ref = "cronet" }
+mlkit-text-recognition = { module = "com.google.mlkit:text-recognition", version.ref = "mlkitTextRecognition" }
 androidx-core ={ module = "androidx.core:core-ktx", version = "1.15.0" }
 androidx-activity = { module = "androidx.activity:activity-ktx", version = "1.9.3" }
 androidx-appcompat = { module = "androidx.appcompat:appcompat", version = "1.7.0" }
