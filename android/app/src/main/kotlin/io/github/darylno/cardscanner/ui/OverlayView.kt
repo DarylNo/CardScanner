@@ -12,6 +12,7 @@ import android.view.GestureDetector
 import android.view.MotionEvent
 import android.view.View
 import io.github.darylno.cardscanner.core.Box
+import io.github.darylno.cardscanner.camera.HandheldGuide
 import io.github.darylno.cardscanner.core.RoiFrac
 import kotlin.math.abs
 import kotlin.math.max
@@ -150,14 +151,9 @@ class OverlayView @JvmOverloads constructor(
         } else roi?.let { canvas.drawRect(fracRect(it.x0, it.y0, it.x1, it.y1), roiPaint) }
 
         if (handheldGuide) {
-            // 63:88 card guide, centred, 80% of the limiting side.
-            val c = contain()
-            val cw = frameW * c[0]; val ch = frameH * c[0]
-            var gw = cw * 0.8f; var gh = gw * 88f / 63f
-            if (gh > ch * 0.8f) { gh = ch * 0.8f; gw = gh * 63f / 88f }
-            val cx = width / 2f; val cy = height / 2f
-            canvas.drawRoundRect(cx - gw / 2, cy - gh / 2, cx + gw / 2, cy + gh / 2,
-                8 * density, 8 * density, guidePaint)
+            // The same guide the Handheld capture crops to (plus its pad).
+            val g = HandheldGuide.frac(frameW, frameH, pad = 0.0)
+            canvas.drawRoundRect(fracRect(g.x0, g.y0, g.x1, g.y1), 8 * density, 8 * density, guidePaint)
         }
 
         box?.let { bx ->

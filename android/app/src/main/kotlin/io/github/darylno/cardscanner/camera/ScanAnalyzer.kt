@@ -39,7 +39,7 @@ class DetectionUpdate(
 
 /**
  * A burst handed to the capture pipeline. [frames] are private copies (time
- * order); [cropRoi] = the scan area (Mount) or null = whole frame (Handheld);
+ * order); [cropRoi] = the scan area (Mount) or the padded card guide (Handheld);
  * [scene] = the scanner's scannedFrame at capture time — hand it back to
  * [ScanAnalyzer.onNoCard] if the server answers no_card.
  */
@@ -246,7 +246,7 @@ class ScanAnalyzer(
         sink.onCaptureRequest(
             CaptureBurst(
                 id = nextId++, trigger = trigger, mode = mode, frames = burst,
-                cropRoi = if (mode == ScanMode.MOUNT) roi else null,
+                cropRoi = if (mode == ScanMode.MOUNT) roi else HandheldGuide.frac(uw, uh),
                 scene = scanner.scannedFrame, box = box, uprightW = uw, uprightH = uh,
             ),
         )

@@ -130,7 +130,7 @@ class ScanAnalyzerTest {
         assertEquals(w, u.uprightW); assertEquals(h, u.uprightH)
     }
 
-    @Test fun handheldManualScanUsesFreshFramesAndTheWholeFrame() {
+    @Test fun handheldManualScanUsesFreshFramesCroppedToTheGuide() {
         analyzer.setMode(ScanMode.HANDHELD)
         feed(tray, 5)
         assertTrue("handheld never runs the tray detector", rec.updates.isEmpty())
@@ -140,7 +140,7 @@ class ScanAnalyzerTest {
         val b = rec.bursts[0]
         assertEquals(CaptureTrigger.MANUAL, b.trigger)
         assertEquals(ScanMode.HANDHELD, b.mode)
-        assertNull(b.cropRoi)
+        assertEquals(HandheldGuide.frac(b.uprightW, b.uprightH), b.cropRoi)
         assertEquals(3, b.frames.size)     // the ring was already running
         assertArrayEquals(card, b.frames.last().data)
         // A second tap is a new capture, not swallowed.
