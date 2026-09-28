@@ -341,6 +341,36 @@ def build_strip() -> tuple[dict, dict]:
     return out, files
 
 
+def _v0_close(a: bytes, b: bytes) -> bool:
+    """The ×2.5 cubic variant (v0) differs by ±1 LSB on a handful of pixels
+    across OpenCV builds AND across CPUs (SIMD dispatch: CI runners flip it
+    run to run). The same tolerance OcrMatchParityTest applies: max |Δ| ≤ 1
+    on ≤ 0.5% of bytes. v1 (grey + Otsu + ×4) stays byte-exact."""
+    x = cv2.imdecode(np.frombuffer(a, np.uint8), cv2.IMREAD_UNCHANGED)
+    y = cv2.imdecode(np.frombuffer(b, np.uint8), cv2.IMREAD_UNCHANGED)
+    if x is None or y is None or x.shape != y.shape:
+        return False
+    d = np.abs(x.astype(np.int16) - y.astype(np.int16))
+    return int(d.max(initial=0)) <= 1 and np.count_nonzero(d) * 200 <= d.size
+
+
+def _drop_v0_sha(blob: bytes) -> dict:
+    j = json.loads(blob)
+    for c in j.get("strip", {}).get("cards", {}).values():
+        c["variants"][0].pop("sha256", None)
+    return j
+
+
+def _same(name: str, have: bytes, want: bytes) -> bool:
+    if have == want:
+        return True
+    if name.endswith(".v0.png"):
+        return _v0_close(have, want)
+    if name == "expected.json":
+        return _drop_v0_sha(have) == _drop_v0_sha(want)
+    return False
+
+
 # ── pipeline decisions ──────────────────────────────────────────────────────
 
 EDGES = sorted({0, 1, 50, 89, 90, 91, 109, 110, 111, 119, 120, 121, 129, 130, 131,
@@ -671,7 +701,7 @@ def main() -> int:
     files = build()
     if "--check" in sys.argv:
         stale = [n for n, b in files.items()
-                 if not (OUT / n).exists() or (OUT / n).read_bytes() != b]
+                 if not (OUT / n).exists() or not _same(n, (OUT / n).read_bytes(), b)]
         if stale:
             print("ocr fixtures are stale — run: python scripts/export_ocr_fixtures.py")
             for n in stale:
