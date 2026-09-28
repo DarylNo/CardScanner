@@ -763,7 +763,8 @@ class MainActivity : AppCompatActivity() {
         val current = jobId == lastCaptureJobId
         // priceCheck = a manual scan taken in Handheld mode (walk-around price check).
         if (priceCheck && awaitingPriceCheck > 0) awaitingPriceCheck--
-        countFiled(when (outcome) {   // no_card / rejected carry no row → not counted
+        // A Retry REPLACES its row (already counted); a price check isn't tray throughput.
+        if (replaceScanId == null && !priceCheck) countFiled(when (outcome) {   // no_card / rejected carry no row → not counted
             is Outcome.AutoFiled -> outcome.scanId
             is Outcome.NeedsPick -> outcome.scanId
             is Outcome.BestGuess -> outcome.scanId

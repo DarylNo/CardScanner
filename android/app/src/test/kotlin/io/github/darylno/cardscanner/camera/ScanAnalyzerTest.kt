@@ -130,6 +130,18 @@ class ScanAnalyzerTest {
         assertTrue(rec.updates.none { (it.event as? AutoScanner.Event.NextCard)?.removed == false })
     }
 
+    @Test fun aCameraRebindDuringTheFocusHoldDoesNotKillAuto() {
+        analyzer.focusFirst = { true }
+        feed(tray, 12)
+        feed(card, 12)
+        assertEquals(1, rec.focusRequests)
+        analyzer.cameraRestarted()                       // e.g. resolution change mid-hold
+        analyzer.focusFirst = { false }
+        feed(tray, 12)                                   // re-learn the tray
+        feed(card, 12)
+        assertEquals("auto still scans after the rebind", 1, rec.bursts.size)
+    }
+
     @Test fun aFocusThatNeverAnswersStillShootsAfterTheWait() {
         analyzer.focusFirst = { true }
         feed(tray, 12)
@@ -159,17 +171,21 @@ class ScanAnalyzerTest {
         feed(tray, 5)
         assertTrue("handheld never runs the tray detector", rec.updates.isEmpty())
         analyzer.manualScan()
+        val tap = ts
+        feed(card, 4)
+        assertTrue("waits for 3 frames after the tap's jolt settles", rec.bursts.isEmpty())
         feed(card, 1)
         assertEquals(1, rec.bursts.size)
         val b = rec.bursts[0]
         assertEquals(CaptureTrigger.MANUAL, b.trigger)
         assertEquals(ScanMode.HANDHELD, b.mode)
         assertEquals(HandheldGuide.frac(b.uprightW, b.uprightH), b.cropRoi)
-        assertEquals(3, b.frames.size)     // the ring was already running
-        assertArrayEquals(card, b.frames.last().data)
+        assertEquals(3, b.frames.size)
+        assertTrue("no frame from the press itself",
+            b.frames.all { it.timestampNs > tap + ScanAnalyzer.MANUAL_SETTLE_NS })
         // A second tap is a new capture, not swallowed.
         analyzer.manualScan()
-        feed(card, 1)
+        feed(card, 5)
         assertEquals(2, rec.bursts.size)
     }
 
@@ -180,7 +196,9 @@ class ScanAnalyzerTest {
         analyzer.manualScan()
         feed(card, 1)
         assertTrue("stale frames must not be used", rec.bursts.isEmpty())
-        feed(card, 2)
+        feed(card, 3)
+        assertTrue("and not the tap's own frames", rec.bursts.isEmpty())
+        feed(card, 1)
         assertEquals(1, rec.bursts.size)
         val b = rec.bursts[0]
         assertEquals(CaptureTrigger.MANUAL, b.trigger)

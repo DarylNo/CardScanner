@@ -75,10 +75,16 @@ class CameraAdapter(private val context: Context, private val settings: AppSetti
         c.start(preview, if (settings.highRes) CameraController.Resolution.HIGH else CameraController.Resolution.STANDARD)
     }
 
-    /** CameraController.start is idempotent: rebinds into the same view with the current resolution. */
+    /**
+     * Re-bind ONLY if another screen (Setup's QR camera) unbound us. Rebinding
+     * unconditionally on every resume re-learned the empty tray with the last
+     * card still on it — lifting that card then read as a new one, a phantom
+     * scan of the bare tray.
+     */
     override fun rebind() {
         val v = preview ?: return
-        controller?.start(v)
+        val c = controller ?: return
+        if (!c.isBound()) c.start(v)
     }
 
     override fun unbind() {
