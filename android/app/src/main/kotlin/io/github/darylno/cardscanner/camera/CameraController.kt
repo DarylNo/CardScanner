@@ -40,6 +40,9 @@ import io.github.darylno.cardscanner.core.Rotation
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
+
+/** A Mount capture this much softer than the session's median re-arms the card-focus pass. */
+private const val SOFT_CAPTURE_RATIO = 0.5
 /** A finished capture: [result] on success, else [error]. [scene] is for [CameraController.onNoCard]. */
 class CaptureOutcome(
     val id: Long,
@@ -64,12 +67,15 @@ class CaptureOutcome(
  *
  * Focus: Mount locks AF (FLAG_AF + disableAutoCancel — CameraX then holds
  * CONTROL_AF_MODE_AUTO, the lens stays put) at the CENTRE OF THE SCAN AREA, or
- * the frame centre when no area is set (owner's call) — as soon as the first
- * frame arrives after a bind, a mode switch or an area change. A continuously
- * hunting lens softened a still card enough to read as a "new card" and
- * re-scan it (~20 s). If the empty tray is too plain to focus on, the lock is
- * retried at the same point on the first Trigger (the card is there then).
- * A tap still overrides. Handheld = continuous AF with tap-to-focus. Torch / AE+AWB lock / focus
+ * the frame centre when no area is set (owner's call). As soon as a frame
+ * arrives after a bind / mode switch / area change it locks there so the lens
+ * stops hunting (a hunting lens softened a still card enough to read as a
+ * "new card" and re-scan it every ~20 s). An empty tray is a poor AF target,
+ * so the FIRST card is focused on properly: [ScanAnalyzer] holds that card's
+ * capture (≤ FOCUS_WAIT_NS) while AF runs at the area centre with the card
+ * under it, then shoots from post-focus frames. Later cards shoot instantly.
+ * A sharpness watchdog (a capture far softer than the session median) re-arms
+ * that one-card focus pass. A tap still overrides. Handheld = continuous AF with tap-to-focus. Torch / AE+AWB lock / focus
  * are re-applied after every bind AND every camera re-open (CameraControl
  * state dies with the session).
  *
@@ -112,14 +118,18 @@ class CameraController(
             }
         }
 
+        override fun onFocusRequest() {
+            main.post { focusOnCard() }
+        }
+
         override fun onCaptureRequest(request: CaptureBurst) {
-            main.post {
-                listener.onCaptureStarted(request)
-                if (request.trigger == CaptureTrigger.AUTO && scanMode == ScanMode.MOUNT && !focusLocked) {
-                    lockAtAreaCentre()   // the tray-centre lock failed on a blank tray: retry with the card there
-                }
-            }
+            main.post { listener.onCaptureStarted(request) }
             val ok = pipeline.submit(request.frames, request.cropRoi) { r ->
+                r.getOrNull()?.let { res ->
+                    if (request.trigger == CaptureTrigger.AUTO && request.mode == ScanMode.MOUNT) {
+                        res.sharpness.getOrNull(res.sharpestIndex)?.let(::noteSharpness)
+                    }
+                }
                 val outcome = CaptureOutcome(
                     request.id, request.trigger, request.mode, request.scene, r.getOrNull(), r.exceptionOrNull(),
                 )
@@ -157,6 +167,18 @@ class CameraController(
         private set
     private var roi: RoiFrac? = null
     var focusLocked = false
+    /**
+     * Mount: focus on the NEXT card before shooting it. Set after a bind, a
+     * switch to Mount, an area change, or a sharpness drop; cleared once that
+     * card has been focused on (or by a tap). Read by the analysis thread
+     * through [ScanAnalyzer.focusFirst].
+     */
+    @Volatile private var cardFocusDue = false
+    private val recentSharpness = ArrayDeque<Double>()
+
+    init {
+        analyzer.focusFirst = { cardFocusDue && scanMode == ScanMode.MOUNT }
+    }
     /** Mount: lock at the area centre as soon as a frame gives us the geometry. */
     private var pendingAreaLock = false
         private set
@@ -324,6 +346,7 @@ class CameraController(
         } else {
             focusNote = "locking on the scan-area centre…"
             pendingAreaLock = true
+            cardFocusDue = true
         }
     }
 
@@ -350,6 +373,7 @@ class CameraController(
         cam.cameraControl.cancelFocusAndMetering()   // both: back to continuous AF
         focusNote = if (m == ScanMode.HANDHELD) "continuous (handheld)" else "locking on the scan-area centre…"
         pendingAreaLock = m == ScanMode.MOUNT
+        cardFocusDue = m == ScanMode.MOUNT
     }
 
     fun setAuto(enabled: Boolean) = analyzer.setAuto(enabled)
@@ -362,6 +386,8 @@ class CameraController(
         analyzer.setRoi(r)
         focusLocked = false   // new area: re-lock on ITS centre
         pendingAreaLock = scanMode == ScanMode.MOUNT
+        cardFocusDue = scanMode == ScanMode.MOUNT
+        synchronized(recentSharpness) { recentSharpness.clear() }
     }
 
     /** Server answered no_card for the capture whose [CaptureOutcome.scene] is [capturedScene]. */
@@ -402,6 +428,7 @@ class CameraController(
             // on the area centre and throw the tap away.
             focusLocked = true
             pendingAreaLock = false
+            cardFocusDue = false   // the user chose the focus point
         }
         runFocus(cam, b.build(), if (lock) "locked at tap" else "tap AF")
     }
@@ -435,9 +462,47 @@ class CameraController(
         )
     }
 
-    private fun focusAtSensor(c: FloatArray, lock: Boolean) {
-        val cam = camera ?: return
-        val an = analysis ?: return
+    /**
+     * The analyzer is holding the first card's capture: focus at the area centre
+     * WITH the card under it (a plain empty tray gives AF nothing to grip), then
+     * release the capture. Any outcome releases it; the analyzer also gives up
+     * after FOCUS_WAIT_NS.
+     */
+    private fun focusOnCard() {
+        val c = areaCentreSensor(null)
+        if (c == null || scanMode != ScanMode.MOUNT) { analyzer.focusDone(); return }
+        pendingAreaLock = false
+        focusAtSensor(c, lock = true, what = "focused on card at area centre") { ok ->
+            cardFocusDue = false   // one pass per session/area; the watchdog re-arms it
+            if (ok != true) focusNote += " — will retry if captures come out soft"
+            analyzer.focusDone()
+        }
+    }
+
+    /**
+     * Sharpness watchdog (Laplacian variance of each Mount capture's best frame):
+     * a capture far softer than this session's usual means the lens moved (bumped
+     * mount, heat) — focus again on the next card. Pipeline thread.
+     */
+    private fun noteSharpness(v: Double) {
+        synchronized(recentSharpness) {
+            if (recentSharpness.size >= 5) {
+                val median = recentSharpness.sorted()[recentSharpness.size / 2]
+                if (v < median * SOFT_CAPTURE_RATIO) {
+                    cardFocusDue = true
+                    recentSharpness.clear()
+                    main.post { focusNote = "capture came out soft — refocusing on the next card" }
+                    return
+                }
+            }
+            recentSharpness.addLast(v)
+            while (recentSharpness.size > 10) recentSharpness.removeFirst()
+        }
+    }
+
+    private fun focusAtSensor(c: FloatArray, lock: Boolean, what: String? = null, onDone: ((Boolean?) -> Unit)? = null) {
+        val cam = camera ?: run { onDone?.invoke(null); return }
+        val an = analysis ?: run { onDone?.invoke(null); return }
         // Analysis-buffer (sensor-oriented, unrotated) coordinates.
         val factory = runCatching { SurfaceOrientedMeteringPointFactory(c[2], c[3], an) }
             .getOrElse { SurfaceOrientedMeteringPointFactory(c[2], c[3]) }
@@ -445,21 +510,25 @@ class CameraController(
         val b = FocusMeteringAction.Builder(pt, FocusMeteringAction.FLAG_AF)
         if (lock) b.disableAutoCancel()
         if (lock) focusLocked = true
-        runFocus(cam, b.build(), if (lock) "locked on area centre" else "one-shot AF", relockable = lock)
+        runFocus(cam, b.build(), what ?: if (lock) "locked on area centre" else "one-shot AF", relockable = lock, onDone = onDone)
     }
 
     /** Bumped per focus action: only the LATEST one's result may change state. */
     private var focusGen = 0
 
-    private fun runFocus(cam: Camera, action: FocusMeteringAction, what: String, relockable: Boolean = false) {
+    private fun runFocus(
+        cam: Camera, action: FocusMeteringAction, what: String,
+        relockable: Boolean = false, onDone: ((Boolean?) -> Unit)? = null,
+    ) {
         focusNote = "$what (running)"
         val gen = ++focusGen
         val f = cam.cameraControl.startFocusAndMetering(action)
         f.addListener({
-            // A newer action (e.g. the user's tap) cancels this one: its result
-            // must neither overwrite the note nor undo the tap's lock.
-            if (gen != focusGen) return@addListener
             val ok = try { f.get().isFocusSuccessful } catch (e: Exception) { null }
+            // A newer action (e.g. the user's tap) cancels this one: its result
+            // must neither overwrite the note nor undo the tap's lock — but a
+            // held capture waiting on it is still released.
+            if (gen != focusGen) { onDone?.invoke(null); return@addListener }
             focusNote = when (ok) {
                 true -> "$what: focused"
                 false -> "$what: NOT focused"
@@ -468,6 +537,7 @@ class CameraController(
             // An empty, plain tray gives AF nothing to grip: let the first auto
             // Trigger lock again at the same point, with the card under it.
             if (relockable && ok != true && scanMode == ScanMode.MOUNT) focusLocked = false
+            onDone?.invoke(ok)
         }, ContextCompat.getMainExecutor(context))
     }
 

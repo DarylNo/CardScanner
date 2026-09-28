@@ -156,10 +156,14 @@ impersonating it. Re-pair from the desktop QR.
 phone.html behaviour — learn the empty tray, wait for a card, wait for it to be
 still, capture, file, wait for the next card. Draw the scan **Area** to crop
 sampling and capture to the tray; double-tap the preview to re-learn the empty
-tray. Focus locks on the centre of the scan Area (the screen centre when no
-Area is set) as soon as the camera starts, and again when the Area changes;
-if the empty tray is too plain to focus on, it re-locks there when the first
-card arrives. Tap the preview to lock somewhere else. Auto-mode
+tray. Focus: when the camera starts it locks on the centre of the scan Area
+(the screen centre with no Area) so the lens stops hunting; then the FIRST
+card is focused on properly — its capture waits (≤1.5 s, once) until the
+lens has focused at the Area centre with the card under it — and every card
+after shoots instantly with focus held. It focuses again only when the Area
+changes, the camera reopens, you tap the preview (locks where you tapped), or
+a capture comes out far softer than the session's usual (bumped mount).
+Auto-mode
 scans are hands-free; a manual Scan (Auto off) that needs a pick opens the
 review panel on that scan, as phone.html does.
 
