@@ -26,6 +26,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import io.github.darylno.cardscanner.core.AutoScanner
 import io.github.darylno.cardscanner.ui.AppSettings
+import io.github.darylno.cardscanner.ui.BatteryEstimate
 import io.github.darylno.cardscanner.ui.CameraPort
 import io.github.darylno.cardscanner.ui.Captured
 import io.github.darylno.cardscanner.ui.OverlayView
@@ -75,6 +76,7 @@ class MainActivity : AppCompatActivity() {
     private var lastFiledKey: String? = null
     /** Cards filed per minute this session (see [ScanRate]); refreshed every few seconds. */
     private val scanRate = ScanRate()
+    private val battery = BatteryEstimate()
     private val rateTick = object : Runnable {
         override fun run() {
             refreshRate()
@@ -177,8 +179,20 @@ class MainActivity : AppCompatActivity() {
         super.onStop()
     }
 
+    /** Battery % and charging state from the sticky ACTION_BATTERY_CHANGED broadcast (no receiver kept). */
+    private fun readBattery(now: Long) {
+        val i = registerReceiver(null, android.content.IntentFilter(Intent.ACTION_BATTERY_CHANGED)) ?: return
+        val level = i.getIntExtra(android.os.BatteryManager.EXTRA_LEVEL, -1)
+        val scale = i.getIntExtra(android.os.BatteryManager.EXTRA_SCALE, -1)
+        if (level < 0 || scale <= 0) return
+        val plugged = i.getIntExtra(android.os.BatteryManager.EXTRA_PLUGGED, 0) != 0
+        battery.record(now, level * 100.0 / scale, plugged)
+    }
+
     private fun refreshRate() {
-        val t = scanRate.label(android.os.SystemClock.elapsedRealtime())
+        val now = android.os.SystemClock.elapsedRealtime()
+        readBattery(now)
+        val t = listOf(scanRate.label(now), battery.label(now)).filter { it.isNotEmpty() }.joinToString("   ")
         rateView.text = t
         rateView.visibility = if (t.isEmpty()) View.GONE else View.VISIBLE
     }
