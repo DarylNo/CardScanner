@@ -118,3 +118,15 @@ def test_endpoints_save_preview_and_download(tmp_path):
     assert r.headers["content-type"].startswith("text/csv")
     assert "cards.csv" in r.headers["content-disposition"]
     assert r.content == "\ufeffCard\r\nOpt\r\nLórien Revealed\r\n".encode("utf-8")
+
+
+def test_combined_row_takes_a_price_from_an_older_priced_copy():
+    new = _scan(2)                                   # newest copy, price not landed yet
+    old = _scan(1, conditions={"NM": 3.0})
+    out = _rows(build_csv([new, old], _layout(["quantity", "scan_id", "price", "total"])))
+    assert out[1:] == [["2", "2", "3.00", "6.00"]]
+
+
+def test_unhashable_field_is_a_clean_rejection():
+    with pytest.raises(ValueError):
+        normalize_layout({"columns": [{"field": ["x"]}]})

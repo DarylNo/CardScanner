@@ -161,7 +161,8 @@ def normalize_layout(raw: Any) -> dict[str, Any]:
         raise ValueError("too many columns (40 max)")
     out_cols = []
     for c in cols:
-        if not isinstance(c, dict) or c.get("field") not in CSV_FIELDS:
+        if not isinstance(c, dict) or not isinstance(c.get("field"), str) \
+                or c["field"] not in CSV_FIELDS:
             raise ValueError(f"unknown column: {c.get('field') if isinstance(c, dict) else c!r}")
         header = str(c.get("header") if c.get("header") is not None else "").strip()[:80]
         out_cols.append({"field": c["field"], "header": header or CSV_FIELDS[c["field"]][0]})
@@ -202,6 +203,11 @@ def build_csv(selected_scans: list[dict[str, Any]], layout: dict[str, Any],
                    str(sel.get("condition") or "NM").upper(), _finish(sel))
             if key in index:
                 s0, sel0, q0 = rows[index[key]]
+                # Newest copy stays the row, but its price may not have landed
+                # yet: take the first copy that HAS one (same printing, same
+                # condition+finish, so the same price).
+                if f2f_price(s0) is None and f2f_price(scan) is not None:
+                    s0 = {**s0, "f2f": scan.get("f2f")}
                 rows[index[key]] = (s0, sel0, q0 + q)
                 continue
             index[key] = len(rows)

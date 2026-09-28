@@ -952,7 +952,7 @@ $("#lightbox").addEventListener("click", () => $("#lightbox").classList.remove("
 // ←/→ drive the inline comparer (set per-render; null when no candidates).
 let cmpKeyNav = null;
 document.addEventListener("keydown", e => {
-  if (!cmpKeyNav || $("#lightbox").classList.contains("open")) return;
+  if (!cmpKeyNav || $("#lightbox").classList.contains("open") || $("#csvModal").classList.contains("open")) return;
   if (/^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement?.tagName || "")) return;
   if (e.key === "ArrowLeft"){ e.preventDefault(); cmpKeyNav(-1); }
   if (e.key === "ArrowRight"){ e.preventDefault(); cmpKeyNav(1); }
@@ -973,7 +973,7 @@ function sigOf(scan){
 
 // Version banner — page version · server git hash. Same rationale as the
 // phone: without it, "is this the old page?" is undebuggable.
-const UI_VERSION = "d29";
+const UI_VERSION = "d30";
 $("#sweepStopBtn").addEventListener("click", async () => {
   await jsend("/api/price-sweep/stop", "POST", {});
   toast("Sweep stopping — auto-sweep paused 10 min");
@@ -1115,7 +1115,7 @@ $("#exportBtn").addEventListener("click", openCsvBuilder);
    The layout lives on the server (one per scanner, export_layout.json), is
    saved on every edit, and the preview comes from the SAME code the download
    runs (/api/export/preview), so what you see is what the file holds. */
-let csvFields = [], csvDefault = null, csvLayout = null, csvSaveT = null, csvPrevT = null;
+let csvFields = [], csvDefault = null, csvLayout = null, csvSaveT = null, csvPrevT = null, csvPrevSeq = 0;
 const csvHeaderOf = f => (csvFields.find(x => x.field === f) || {}).header || f;
 const CSV_PRESETS = {
   minimal: ["quantity", "name", "set_code", "collector_number"],
@@ -1220,11 +1220,15 @@ function parseCsv(text, d){
 function csvPreview(){
   clearTimeout(csvPrevT);
   csvPrevT = setTimeout(async () => {
-    const r = await jsend("/api/export/preview", "POST", { layout: csvLayout });
+    // Sequenced, and parsed with the layout it was ASKED for: a slow older
+    // reply must neither land last nor be read with newer settings.
+    const seq = ++csvPrevSeq, lay = JSON.parse(JSON.stringify(csvLayout));
+    const r = await jsend("/api/export/preview", "POST", { layout: lay });
+    if (seq !== csvPrevSeq) return;
     if (r.error){ $("#csvPrev").innerHTML = ""; $("#csvRaw").textContent = r.error; return; }
-    const d = { comma: ",", semicolon: ";", tab: "\t" }[csvLayout.delimiter];
+    const d = { comma: ",", semicolon: ";", tab: "\t" }[lay.delimiter];
     const rows = parseCsv(r.csv, d);
-    const head = csvLayout.header ? rows.shift() : null;
+    const head = lay.header ? rows.shift() : null;
     const shown = rows.length;
     $("#csvPrevH").textContent = r.rows
       ? `Preview — ${shown} of ${r.rows} row${r.rows === 1 ? "" : "s"}` : "Preview — nothing selected to export yet";
