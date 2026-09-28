@@ -33,7 +33,8 @@ from fastapi.staticfiles import StaticFiles
 
 from mtg_card_scanner.artwork import flag_other_art
 from mtg_card_scanner.facetoface import F2FUnavailableError
-from server.export import build_mx_export
+from server.export import (CSV_FIELDS, DEFAULT_LAYOUT, LayoutStore, build_csv,
+                           build_mx_export, normalize_layout)
 from server.store import ScanStore
 
 _STATIC = Path(__file__).parent / "static"
@@ -1296,13 +1297,51 @@ def create_app(
         cands = await run_in_threadpool(get_pipeline().search_candidates, q)
         return {"candidates": cands}
 
-    # ── export (Mana Exchange mass-entry text) ─────────────────────────────────
+    # ── export TXT: one card per line, "Qty SET Number Condition Finish" ────────
     @app.get("/api/export")
     def export():
         text = build_mx_export(store.included_selected())
         return PlainTextResponse(
             text,
-            headers={"Content-Disposition": "attachment; filename=mana-exchange-import.txt"},
+            headers={"Content-Disposition": "attachment; filename=cards.txt"},
+        )
+
+    # ── export to CSV: the owner's column layout (desktop builder) ────────────
+    layouts = LayoutStore(None if store.db_path in ("", ":memory:")
+                          else Path(store.db_path).resolve().parent / "export_layout.json")
+
+    @app.get("/api/export/layout")
+    def get_export_layout():
+        return {"layout": layouts.load(), "default": DEFAULT_LAYOUT,
+                "fields": [{"field": k, "header": v[0]} for k, v in CSV_FIELDS.items()]}
+
+    @app.put("/api/export/layout")
+    def put_export_layout(body: dict = Body(...)):
+        try:
+            layout = normalize_layout(body.get("layout"))
+        except ValueError as e:
+            return JSONResponse({"error": str(e)}, status_code=400)
+        layouts.save(layout)
+        return {"layout": layout}
+
+    @app.post("/api/export/preview")
+    def preview_export(body: dict = Body(...)):
+        """The first rows exactly as the download will write them."""
+        try:
+            layout = normalize_layout(body.get("layout"))
+        except ValueError as e:
+            return JSONResponse({"error": str(e)}, status_code=400)
+        scans = store.included_selected()
+        return {"csv": build_csv(scans, layout, limit=8),
+                "rows": build_csv(scans, {**layout, "header": False}).count("\r\n")}
+
+    @app.get("/api/export.csv")
+    def export_csv():
+        text = build_csv(store.included_selected(), layouts.load())
+        # BOM: Excel otherwise reads UTF-8 accents (Lórien, Æther) as mojibake.
+        return Response(
+            ("\ufeff" + text).encode("utf-8"), media_type="text/csv; charset=utf-8",
+            headers={"Content-Disposition": "attachment; filename=cards.csv"},
         )
 
     app.state.store = store

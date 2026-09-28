@@ -158,6 +158,44 @@
            background: var(--card); border: 1px solid var(--line); padding: 10px 18px;
            border-radius: 10px; z-index: 50; display: none; }
   .toast.show { display: block; }
+  /* ── Export to CSV builder ── */
+  #csvModal { position: fixed; inset: 0; background: #000a; z-index: 70; display: none;
+              align-items: center; justify-content: center; padding: 24px; }
+  #csvModal.open { display: flex; }
+  #csvBox { background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+            width: min(1100px, 100%); max-height: 100%; display: flex; flex-direction: column; overflow: hidden; }
+  #csvBox > header { position: static; display: flex; align-items: center; gap: 10px; padding: 12px 16px;
+                     border-bottom: 1px solid var(--line); }
+  #csvBox h2 { margin: 0; font-size: 16px; flex: 1; }
+  #csvPreset { width: auto; font-size: 13px; padding: 5px 8px; }
+  #csvBox > footer .btn { font-size: 14px; }
+  #csvBody { display: grid; grid-template-columns: 420px 1fr; min-height: 0; flex: 1; overflow: hidden; }
+  #csvCols { padding: 12px 16px; overflow-y: auto; border-right: 1px solid var(--line); }
+  #csvRight { padding: 12px 16px; overflow: auto; display: flex; flex-direction: column; gap: 12px; }
+  .ccol { display: grid; grid-template-columns: 22px 1fr 1fr auto; gap: 6px; align-items: center;
+          padding: 6px; border-radius: 8px; background: var(--card); margin-bottom: 6px; }
+  .ccol .n { color: var(--dim); font-size: 12px; text-align: right; }
+  .ccol select, .ccol input, #csvOpts select, #csvAdd {
+    background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 6px;
+    padding: 5px 7px; font: inherit; font-size: 13px; min-width: 0; }
+  .ccol .acts { display: flex; gap: 2px; }
+  .ccol .acts button { background: none; border: 0; color: var(--muted); cursor: pointer; padding: 4px 6px;
+                       border-radius: 5px; font-size: 13px; }
+  .ccol .acts button:hover:not(:disabled) { background: var(--line); color: var(--text); }
+  .ccol .acts button:disabled { opacity: .25; cursor: default; }
+  #csvOpts { display: flex; flex-wrap: wrap; gap: 10px 18px; font-size: 13px; color: var(--muted); align-items: center; }
+  #csvOpts label { display: flex; gap: 6px; align-items: center; }
+  .csvh { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--dim); margin: 0 0 8px; }
+  #csvPrev { overflow: auto; border: 1px solid var(--line); border-radius: 8px; }
+  #csvPrev table { border-collapse: collapse; font-size: 12px; width: max-content; min-width: 100%; }
+  #csvPrev th, #csvPrev td { padding: 5px 9px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
+  #csvPrev th { background: var(--card); color: var(--muted); font-weight: 600; }
+  #csvRaw { font: 11px/1.5 ui-monospace, Consolas, monospace; color: var(--muted); white-space: pre; overflow: auto;
+            background: var(--bg); border-radius: 8px; padding: 8px 10px; margin: 0; max-height: 140px; }
+  #csvBox > footer { display: flex; gap: 10px; align-items: center; padding: 12px 16px; border-top: 1px solid var(--line); }
+  #csvBox > footer .sp { flex: 1; }
+  #csvMsg { font-size: 12px; color: var(--muted); }
+  #csvMsg.err { color: var(--bad); }
 </style>
 </head>
 <body>
@@ -180,8 +218,51 @@
   <button class="btn ghost" id="refreshBtn" title="Reload now">↻</button>
   <button class="btn ghost" id="clearJunkBtn" title="Delete every scan that has no chosen printing">Clear unpicked</button>
   <button class="btn danger" id="clearAllBtn" title="Delete every scan">Clear all</button>
-  <button class="btn" id="exportBtn">Export to Mana Exchange</button>
+  <button class="btn" id="exportBtn">Export to CSV</button>
 </header>
+<div id="csvModal" role="dialog" aria-modal="true" aria-labelledby="csvTitle">
+  <div id="csvBox">
+    <header>
+      <h2 id="csvTitle">Export to CSV</h2>
+      <select id="csvPreset" title="Start from a preset layout">
+        <option value="">Presets…</option>
+        <option value="default">Standard</option>
+        <option value="minimal">Minimal: qty, name, set, number</option>
+        <option value="priced">Priced: + price and total</option>
+        <option value="everything">Everything</option>
+      </select>
+      <button class="btn ghost sm" id="csvClose">Close</button>
+    </header>
+    <div id="csvBody">
+      <div id="csvCols">
+        <p class="csvh">Columns, left to right</p>
+        <div id="csvList"></div>
+        <select id="csvAdd"><option value="">+ Add column…</option></select>
+      </div>
+      <div id="csvRight">
+        <div id="csvOpts">
+          <label><input type="checkbox" id="csvHeader"> Header row</label>
+          <label>Separator <select id="csvDelim">
+            <option value="comma">Comma ,</option><option value="semicolon">Semicolon ;</option>
+            <option value="tab">Tab</option></select></label>
+          <label>Rows <select id="csvCombine">
+            <option value="1">One per printing (copies summed)</option>
+            <option value="0">One per scan (scan order)</option></select></label>
+        </div>
+        <div>
+          <p class="csvh" id="csvPrevH">Preview</p>
+          <div id="csvPrev"></div>
+        </div>
+        <pre id="csvRaw"></pre>
+      </div>
+    </div>
+    <footer>
+      <span id="csvMsg"></span><span class="sp"></span>
+      <button class="btn ghost" id="csvTxt" title="One card per line: Qty SET Number Condition Finish (copies summed)">Download TXT</button>
+      <button class="btn" id="csvDl">Download CSV</button>
+    </footer>
+  </div>
+</div>
 <div id="f2fLog" style="display:none;position:fixed;right:14px;bottom:14px;width:560px;
      max-height:55vh;overflow:auto;background:var(--panel);border:1px solid var(--line);
      border-radius:10px;padding:10px 12px;z-index:60;font:12px/1.6 ui-monospace,Consolas,monospace"></div>
@@ -892,7 +973,7 @@ function sigOf(scan){
 
 // Version banner — page version · server git hash. Same rationale as the
 // phone: without it, "is this the old page?" is undebuggable.
-const UI_VERSION = "d28";
+const UI_VERSION = "d29";
 $("#sweepStopBtn").addEventListener("click", async () => {
   await jsend("/api/price-sweep/stop", "POST", {});
   toast("Sweep stopping — auto-sweep paused 10 min");
@@ -1028,7 +1109,130 @@ async function clearScans(only){
 }
 $("#clearJunkBtn").addEventListener("click", () => clearScans("unselected"));
 $("#clearAllBtn").addEventListener("click", () => clearScans(null));
-$("#exportBtn").addEventListener("click", () => { window.location = "/api/export"; });
+$("#exportBtn").addEventListener("click", openCsvBuilder);
+
+/* ── Export to CSV builder ──────────────────────────────────────────────────
+   The layout lives on the server (one per scanner, export_layout.json), is
+   saved on every edit, and the preview comes from the SAME code the download
+   runs (/api/export/preview), so what you see is what the file holds. */
+let csvFields = [], csvDefault = null, csvLayout = null, csvSaveT = null, csvPrevT = null;
+const csvHeaderOf = f => (csvFields.find(x => x.field === f) || {}).header || f;
+const CSV_PRESETS = {
+  minimal: ["quantity", "name", "set_code", "collector_number"],
+  priced: ["quantity", "name", "set_code", "set_name", "collector_number", "condition", "finish", "price", "total"],
+};
+async function openCsvBuilder(){
+  const r = await jget("/api/export/layout");
+  csvFields = r.fields; csvDefault = r.default; csvLayout = r.layout;
+  $("#csvAdd").innerHTML = `<option value="">+ Add column…</option>` +
+    csvFields.map(f => `<option value="${esc(f.field)}">${esc(f.header)}</option>`).join("");
+  $("#csvMsg").textContent = ""; $("#csvMsg").classList.remove("err");
+  renderCsvBuilder();
+  $("#csvModal").classList.add("open");
+}
+function closeCsvBuilder(){ $("#csvModal").classList.remove("open"); }
+function renderCsvBuilder(){
+  const cols = csvLayout.columns;
+  $("#csvList").innerHTML = cols.map((c, i) => `
+    <div class="ccol" data-i="${i}">
+      <span class="n">${i + 1}</span>
+      <select data-k="field" title="What this column holds">${csvFields.map(f =>
+        `<option value="${esc(f.field)}"${f.field === c.field ? " selected" : ""}>${esc(f.header)}</option>`).join("")}</select>
+      <input data-k="header" value="${esc(c.header)}" placeholder="${esc(csvHeaderOf(c.field))}" title="Header text in the file">
+      <span class="acts">
+        <button data-a="up" title="Move left"${i === 0 ? " disabled" : ""}>▲</button>
+        <button data-a="down" title="Move right"${i === cols.length - 1 ? " disabled" : ""}>▼</button>
+        <button data-a="del" title="Remove column"${cols.length === 1 ? " disabled" : ""}>✕</button>
+      </span>
+    </div>`).join("");
+  $("#csvHeader").checked = csvLayout.header;
+  $("#csvDelim").value = csvLayout.delimiter;
+  $("#csvCombine").value = csvLayout.combine ? "1" : "0";
+  csvPreview();
+}
+function csvChanged(rerender){
+  if (rerender) renderCsvBuilder(); else csvPreview();
+  clearTimeout(csvSaveT);
+  csvSaveT = setTimeout(async () => {
+    const r = await jsend("/api/export/layout", "PUT", { layout: csvLayout });
+    const m = $("#csvMsg");
+    m.classList.toggle("err", !!r.error);
+    m.textContent = r.error ? r.error : "Layout saved";
+  }, 300);
+}
+$("#csvList").addEventListener("input", e => {
+  const row = e.target.closest(".ccol"); if (!row) return;
+  const c = csvLayout.columns[+row.dataset.i];
+  if (e.target.dataset.k === "header") { c.header = e.target.value; csvChanged(false); }
+});
+$("#csvList").addEventListener("change", e => {
+  const row = e.target.closest(".ccol"); if (!row || e.target.dataset.k !== "field") return;
+  const c = csvLayout.columns[+row.dataset.i];
+  // a header still reading the old field's default follows the new field
+  if (!c.header.trim() || c.header === csvHeaderOf(c.field)) c.header = csvHeaderOf(e.target.value);
+  c.field = e.target.value; csvChanged(true);
+});
+$("#csvList").addEventListener("click", e => {
+  const b = e.target.closest("button[data-a]"); if (!b) return;
+  const cols = csvLayout.columns, i = +b.closest(".ccol").dataset.i;
+  if (b.dataset.a === "del") cols.splice(i, 1);
+  else { const j = b.dataset.a === "up" ? i - 1 : i + 1; [cols[i], cols[j]] = [cols[j], cols[i]]; }
+  csvChanged(true);
+});
+$("#csvAdd").addEventListener("change", e => {
+  const f = e.target.value; e.target.value = ""; if (!f) return;
+  csvLayout.columns.push({ field: f, header: csvHeaderOf(f) }); csvChanged(true);
+  $("#csvCols").scrollTop = 1e6;
+});
+$("#csvPreset").addEventListener("change", e => {
+  const p = e.target.value; e.target.value = ""; if (!p) return;
+  const fields = p === "default" ? csvDefault.columns.map(c => c.field)
+               : p === "everything" ? csvFields.map(f => f.field) : CSV_PRESETS[p];
+  csvLayout.columns = fields.map(f => ({ field: f, header: csvHeaderOf(f) }));
+  csvChanged(true);
+});
+$("#csvHeader").addEventListener("change", e => { csvLayout.header = e.target.checked; csvChanged(false); });
+$("#csvDelim").addEventListener("change", e => { csvLayout.delimiter = e.target.value; csvChanged(false); });
+$("#csvCombine").addEventListener("change", e => { csvLayout.combine = e.target.value === "1"; csvChanged(false); });
+$("#csvClose").addEventListener("click", closeCsvBuilder);
+$("#csvModal").addEventListener("click", e => { if (e.target.id === "csvModal") closeCsvBuilder(); });
+document.addEventListener("keydown", e => { if (e.key === "Escape" && $("#csvModal").classList.contains("open")) closeCsvBuilder(); });
+$("#csvTxt").addEventListener("click", () => { window.location = "/api/export"; });
+$("#csvDl").addEventListener("click", async () => {
+  clearTimeout(csvSaveT);                 // the download reads the SAVED layout
+  const r = await jsend("/api/export/layout", "PUT", { layout: csvLayout });
+  if (r.error) { $("#csvMsg").textContent = r.error; $("#csvMsg").classList.add("err"); return; }
+  window.location = "/api/export.csv";
+});
+function parseCsv(text, d){
+  const rows = []; let row = [], cell = "", q = false;
+  for (let i = 0; i < text.length; i++){
+    const ch = text[i];
+    if (q){ if (ch === '"'){ if (text[i+1] === '"'){ cell += '"'; i++; } else q = false; } else cell += ch; }
+    else if (ch === '"') q = true;
+    else if (ch === d){ row.push(cell); cell = ""; }
+    else if (ch === "\n"){ row.push(cell); rows.push(row); row = []; cell = ""; }
+    else if (ch !== "\r") cell += ch;
+  }
+  if (cell || row.length) { row.push(cell); rows.push(row); }
+  return rows;
+}
+function csvPreview(){
+  clearTimeout(csvPrevT);
+  csvPrevT = setTimeout(async () => {
+    const r = await jsend("/api/export/preview", "POST", { layout: csvLayout });
+    if (r.error){ $("#csvPrev").innerHTML = ""; $("#csvRaw").textContent = r.error; return; }
+    const d = { comma: ",", semicolon: ";", tab: "\t" }[csvLayout.delimiter];
+    const rows = parseCsv(r.csv, d);
+    const head = csvLayout.header ? rows.shift() : null;
+    const shown = rows.length;
+    $("#csvPrevH").textContent = r.rows
+      ? `Preview — ${shown} of ${r.rows} row${r.rows === 1 ? "" : "s"}` : "Preview — nothing selected to export yet";
+    $("#csvPrev").innerHTML = `<table>${head ? `<tr>${head.map(h => `<th>${esc(h)}</th>`).join("")}</tr>` : ""}${
+      rows.map(rw => `<tr>${rw.map(c => `<td>${esc(c)}</td>`).join("")}</tr>`).join("")}</table>`;
+    $("#csvRaw").textContent = r.csv.replace(/\r/g, "") || "(empty)";
+  }, 120);
+}
 // Advertise the PHONE-reachable address from the server's detected LAN IP,
 // not location.origin — which is "localhost" whenever the operator opens the
 // UI on the server machine (e.g. a Chromebook running the scanner locally).
