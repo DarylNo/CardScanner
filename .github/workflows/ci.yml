@@ -66,6 +66,8 @@ jobs:
       # that moves one hash bit fails here, before the phone's thresholds drift.
       - name: Art-hash fixtures match the server
         run: python scripts/export_hash_fixtures.py --check
+      - name: OCR match + identify-decision fixtures match the server
+        run: python scripts/export_ocr_fixtures.py --check
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
