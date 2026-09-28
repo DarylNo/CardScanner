@@ -63,9 +63,13 @@ class CaptureOutcome(
  * fixed mount in Chrome).
  *
  * Focus: Mount locks AF (FLAG_AF + disableAutoCancel — CameraX then holds
- * CONTROL_AF_MODE_AUTO, the lens stays put) once a card is present — the first
- * Trigger after each bind, or [refocus]; a blank tray has no contrast to focus
- * on. Handheld = continuous AF with tap-to-focus. Torch / AE+AWB lock / focus
+ * CONTROL_AF_MODE_AUTO, the lens stays put) at the CENTRE OF THE SCAN AREA, or
+ * the frame centre when no area is set (owner's call) — as soon as the first
+ * frame arrives after a bind, a mode switch or an area change. A continuously
+ * hunting lens softened a still card enough to read as a "new card" and
+ * re-scan it (~20 s). If the empty tray is too plain to focus on, the lock is
+ * retried at the same point on the first Trigger (the card is there then).
+ * A tap still overrides. Handheld = continuous AF with tap-to-focus. Torch / AE+AWB lock / focus
  * are re-applied after every bind AND every camera re-open (CameraControl
  * state dies with the session).
  *
@@ -102,14 +106,17 @@ class CameraController(
 
     val analyzer = ScanAnalyzer(analysisExecutor, object : ScanAnalyzer.Sink {
         override fun onDetection(update: DetectionUpdate) {
-            main.post { listener.onDetection(update) }
+            main.post {
+                listener.onDetection(update)
+                if (pendingAreaLock) lockAtAreaCentre()   // first frame geometry is known now
+            }
         }
 
         override fun onCaptureRequest(request: CaptureBurst) {
             main.post {
                 listener.onCaptureStarted(request)
                 if (request.trigger == CaptureTrigger.AUTO && scanMode == ScanMode.MOUNT && !focusLocked) {
-                    lockFocus(request.box?.let { it to request.cropRoi })
+                    lockAtAreaCentre()   // the tray-centre lock failed on a blank tray: retry with the card there
                 }
             }
             val ok = pipeline.submit(request.frames, request.cropRoi) { r ->
@@ -150,6 +157,8 @@ class CameraController(
         private set
     private var roi: RoiFrac? = null
     var focusLocked = false
+    /** Mount: lock at the area centre as soon as a frame gives us the geometry. */
+    private var pendingAreaLock = false
         private set
     private var focusNote = "continuous (default)"
 
@@ -313,7 +322,8 @@ class CameraController(
             cam.cameraControl.cancelFocusAndMetering()
             focusNote = "continuous (handheld)"
         } else {
-            focusNote = "continuous until a card is present"
+            focusNote = "locking on the scan-area centre…"
+            pendingAreaLock = true
         }
     }
 
@@ -338,7 +348,8 @@ class CameraController(
         focusLocked = false
         val cam = camera ?: return
         cam.cameraControl.cancelFocusAndMetering()   // both: back to continuous AF
-        focusNote = if (m == ScanMode.HANDHELD) "continuous (handheld)" else "continuous until a card is present"
+        focusNote = if (m == ScanMode.HANDHELD) "continuous (handheld)" else "locking on the scan-area centre…"
+        pendingAreaLock = m == ScanMode.MOUNT
     }
 
     fun setAuto(enabled: Boolean) = analyzer.setAuto(enabled)
@@ -349,7 +360,8 @@ class CameraController(
     fun setRoi(r: RoiFrac?) {
         roi = r
         analyzer.setRoi(r)
-        focusLocked = false   // new area: lock again on the next card
+        focusLocked = false   // new area: re-lock on ITS centre
+        pendingAreaLock = scanMode == ScanMode.MOUNT
     }
 
     /** Server answered no_card for the capture whose [CaptureOutcome.scene] is [capturedScene]. */
@@ -373,7 +385,7 @@ class CameraController(
      * Handheld: one-shot AF at the area centre, then back to continuous.
      */
     fun refocus() {
-        if (scanMode == ScanMode.MOUNT) lockFocus(analyzer.lastBoxInfo)
+        if (scanMode == ScanMode.MOUNT) lockAtAreaCentre()
         else focusAtSensor(areaCentreSensor(null) ?: return, lock = false)
     }
 
@@ -387,14 +399,18 @@ class CameraController(
         if (lock) {
             b.disableAutoCancel()
             // The user chose this point: the next auto trigger must not re-lock
-            // on the box centre and throw the tap away.
+            // on the area centre and throw the tap away.
             focusLocked = true
+            pendingAreaLock = false
         }
         runFocus(cam, b.build(), if (lock) "locked at tap" else "tap AF")
     }
 
-    private fun lockFocus(boxInfo: Pair<io.github.darylno.cardscanner.core.Box, RoiFrac?>?) {
-        val c = areaCentreSensor(boxInfo) ?: return
+    /** Mount: lock AF at the scan-area centre (frame centre without an area). */
+    private fun lockAtAreaCentre() {
+        if (scanMode != ScanMode.MOUNT) { pendingAreaLock = false; return }
+        val c = areaCentreSensor(null) ?: return          // no frame yet: stay pending
+        pendingAreaLock = false
         focusAtSensor(c, lock = true)
     }
 
@@ -429,18 +445,29 @@ class CameraController(
         val b = FocusMeteringAction.Builder(pt, FocusMeteringAction.FLAG_AF)
         if (lock) b.disableAutoCancel()
         if (lock) focusLocked = true
-        runFocus(cam, b.build(), if (lock) "locked on card" else "one-shot AF")
+        runFocus(cam, b.build(), if (lock) "locked on area centre" else "one-shot AF", relockable = lock)
     }
 
-    private fun runFocus(cam: Camera, action: FocusMeteringAction, what: String) {
+    /** Bumped per focus action: only the LATEST one's result may change state. */
+    private var focusGen = 0
+
+    private fun runFocus(cam: Camera, action: FocusMeteringAction, what: String, relockable: Boolean = false) {
         focusNote = "$what (running)"
+        val gen = ++focusGen
         val f = cam.cameraControl.startFocusAndMetering(action)
         f.addListener({
-            focusNote = try {
-                "$what: " + if (f.get().isFocusSuccessful) "focused" else "NOT focused"
-            } catch (e: Exception) {
-                "$what: cancelled (${e.javaClass.simpleName})"
+            // A newer action (e.g. the user's tap) cancels this one: its result
+            // must neither overwrite the note nor undo the tap's lock.
+            if (gen != focusGen) return@addListener
+            val ok = try { f.get().isFocusSuccessful } catch (e: Exception) { null }
+            focusNote = when (ok) {
+                true -> "$what: focused"
+                false -> "$what: NOT focused"
+                null -> "$what: cancelled"
             }
+            // An empty, plain tray gives AF nothing to grip: let the first auto
+            // Trigger lock again at the same point, with the card under it.
+            if (relockable && ok != true && scanMode == ScanMode.MOUNT) focusLocked = false
         }, ContextCompat.getMainExecutor(context))
     }
 
