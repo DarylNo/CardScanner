@@ -1,0 +1,2378 @@
+{
+ "Lightning Bolt": [
+  {
+   "id": "d573ef03-4730-45aa-93dd-e45ac1dbaf4a",
+   "name": "Lightning Bolt",
+   "set": "lea",
+   "collector_number": "161",
+   "released_at": "1993-08-05",
+   "type_line": "Instant",
+   "border_color": "black",
+   "promo": false,
+   "set_type": "core",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/d/5/d573ef03-4730-45aa-93dd-e45ac1dbaf4a.jpg?1783948684",
+    "normal": "https://cards.scryfall.io/normal/front/d/5/d573ef03-4730-45aa-93dd-e45ac1dbaf4a.jpg?1783948684",
+    "large": "https://cards.scryfall.io/large/front/d/5/d573ef03-4730-45aa-93dd-e45ac1dbaf4a.jpg?1783948684"
+   }
+  },
+  {
+   "id": "b5d3dcab-2260-479d-9ef6-dfb92d4f6061",
+   "name": "Lightning Bolt",
+   "set": "leb",
+   "collector_number": "162",
+   "released_at": "1993-10-04",
+   "type_line": "Instant",
+   "border_color": "black",
+   "promo": false,
+   "set_type": "core",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/b/5/b5d3dcab-2260-479d-9ef6-dfb92d4f6061.jpg?1783948623",
+    "normal": "https://cards.scryfall.io/normal/front/b/5/b5d3dcab-2260-479d-9ef6-dfb92d4f6061.jpg?1783948623",
+    "large": "https://cards.scryfall.io/large/front/b/5/b5d3dcab-2260-479d-9ef6-dfb92d4f6061.jpg?1783948623"
+   }
+  },
+  {
+   "id": "ff1b8fc5-604a-4449-a73d-861e53642a70",
+   "name": "Lightning Bolt",
+   "set": "2ed",
+   "collector_number": "162",
+   "released_at": "1993-12-01",
+   "type_line": "Instant",
+   "border_color": "white",
+   "promo": false,
+   "set_type": "core",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/f/f/ff1b8fc5-604a-4449-a73d-861e53642a70.jpg?1783948555",
+    "normal": "https://cards.scryfall.io/normal/front/f/f/ff1b8fc5-604a-4449-a73d-861e53642a70.jpg?1783948555",
+    "large": "https://cards.scryfall.io/large/front/f/f/ff1b8fc5-604a-4449-a73d-861e53642a70.jpg?1783948555"
+   }
+  },
+  {
+   "id": "1ddc5922-f62a-4f91-809e-f959edfcfc6a",
+   "name": "Lightning Bolt",
+   "set": "ced",
+   "collector_number": "162",
+   "released_at": "1993-12-10",
+   "type_line": "Instant",
+   "border_color": "black",
+   "promo": false,
+   "set_type": "memorabilia",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/1/d/1ddc5922-f62a-4f91-809e-f959edfcfc6a.jpg?1783948488",
+    "normal": "https://cards.scryfall.io/normal/front/1/d/1ddc5922-f62a-4f91-809e-f959edfcfc6a.jpg?1783948488",
+    "large": "https://cards.scryfall.io/large/front/1/d/1ddc5922-f62a-4f91-809e-f959edfcfc6a.jpg?1783948488"
+   }
+  },
+  {
+   "id": "ef9047f6-5e5d-49bf-a183-4d1490b291fb",
+   "name": "Lightning Bolt",
+   "set": "cei",
+   "collector_number": "162",
+   "released_at": "1993-12-10",
+   "type_line": "Instant",
+   "border_color": "black",
+   "promo": false,
+   "set_type": "memorabilia",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/e/f/ef9047f6-5e5d-49bf-a183-4d1490b291fb.jpg?1783948425",
+    "normal": "https://cards.scryfall.io/normal/front/e/f/ef9047f6-5e5d-49bf-a183-4d1490b291fb.jpg?1783948425",
+    "large": "https://cards.scryfall.io/large/front/e/f/ef9047f6-5e5d-49bf-a183-4d1490b291fb.jpg?1783948425"
+   }
+  },
+  {
+   "id": "cb9b9a9d-ae4c-4e04-bf9d-cae48f01292c",
+   "name": "Lightning Bolt",
+   "set": "3ed",
+   "collector_number": "162",
+   "released_at": "1994-04-11",
+   "type_line": "Instant",
+   "border_color": "white",
+   "promo": false,
+   "set_type": "core",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/c/b/cb9b9a9d-ae4c-4e04-bf9d-cae48f01292c.jpg?1783948311",
+    "normal": "https://cards.scryfall.io/normal/front/c/b/cb9b9a9d-ae4c-4e04-bf9d-cae48f01292c.jpg?1783948311",
+    "large": "https://cards.scryfall.io/large/front/c/b/cb9b9a9d-ae4c-4e04-bf9d-cae48f01292c.jpg?1783948311"
+   }
+  },
+  {
+   "id": "fcf2ea50-44af-46d7-80c9-36fc18606748",
+   "name": "Lightning Bolt",
+   "set": "fbb",
+   "collector_number": "162",
+   "released_at": "1994-04-11",
+   "type_line": "Instant",
+   "border_color": "black",
+   "promo": false,
+   "set_type": "core",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/f/c/fcf2ea50-44af-46d7-80c9-36fc18606748.jpg?1783948171",
+    "normal": "https://cards.scryfall.io/normal/front/f/c/fcf2ea50-44af-46d7-80c9-36fc18606748.jpg?1783948171",
+    "large": "https://cards.scryfall.io/large/front/f/c/fcf2ea50-44af-46d7-80c9-36fc18606748.jpg?1783948171"
+   }
+  },
+  {
+   "id": "fc8f431d-b7eb-4848-99dd-a5f896248145",
+   "name": "Lightning Bolt",
+   "set": "sum",
+   "collector_number": "162",
+   "released_at": "1994-06-21",
+   "type_line": "Instant",
+   "border_color": "white",
+   "promo": false,
+   "set_type": "core",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/f/c/fc8f431d-b7eb-4848-99dd-a5f896248145.jpg?1783947984",
+    "normal": "https://cards.scryfall.io/normal/front/f/c/fc8f431d-b7eb-4848-99dd-a5f896248145.jpg?1783947984",
+    "large": "https://cards.scryfall.io/large/front/f/c/fc8f431d-b7eb-4848-99dd-a5f896248145.jpg?1783947984"
+   }
+  },
+  {
+   "id": "9521375e-0bc1-45ef-b513-6d332a25f9d2",
+   "name": "Lightning Bolt",
+   "set": "4ed",
+   "collector_number": "208",
+   "released_at": "1995-04-01",
+   "type_line": "Instant",
+   "border_color": "white",
+   "promo": false,
+   "set_type": "core",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/9/5/9521375e-0bc1-45ef-b513-6d332a25f9d2.jpg?1783947826",
+    "normal": "https://cards.scryfall.io/normal/front/9/5/9521375e-0bc1-45ef-b513-6d332a25f9d2.jpg?1783947826",
+    "large": "https://cards.scryfall.io/large/front/9/5/9521375e-0bc1-45ef-b513-6d332a25f9d2.jpg?1783947826"
+   }
+  },
+  {
+   "id": "310de1ef-f1b6-4b61-9d6c-6b70382a7f95",
+   "name": "Lightning Bolt",
+   "set": "4bb",
+   "collector_number": "208",
+   "released_at": "1995-04-01",
+   "type_line": "Instant",
+   "border_color": "black",
+   "promo": false,
+   "set_type": "core",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/3/1/310de1ef-f1b6-4b61-9d6c-6b70382a7f95.jpg?1783947637",
+    "normal": "https://cards.scryfall.io/normal/front/3/1/310de1ef-f1b6-4b61-9d6c-6b70382a7f95.jpg?1783947637",
+    "large": "https://cards.scryfall.io/large/front/3/1/310de1ef-f1b6-4b61-9d6c-6b70382a7f95.jpg?1783947637"
+   }
+  },
+  {
+   "id": "02e20655-321c-4194-ab72-b4a5473238d1",
+   "name": "Lightning Bolt",
+   "set": "ptc",
+   "collector_number": "et208",
+   "released_at": "1996-05-01",
+   "type_line": "Instant",
+   "border_color": "gold",
+   "promo": false,
+   "set_type": "memorabilia",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/0/2/02e20655-321c-4194-ab72-b4a5473238d1.jpg?1783947232",
+    "normal": "https://cards.scryfall.io/normal/front/0/2/02e20655-321c-4194-ab72-b4a5473238d1.jpg?1783947232",
+    "large": "https://cards.scryfall.io/large/front/0/2/02e20655-321c-4194-ab72-b4a5473238d1.jpg?1783947232"
+   }
+  },
+  {
+   "id": "edd88c4f-58bd-4920-b41f-037462b54915",
+   "name": "Lightning Bolt",
+   "set": "ptc",
+   "collector_number": "gb208",
+   "released_at": "1996-05-01",
+   "type_line": "Instant",
+   "border_color": "gold",
+   "promo": false,
+   "set_type": "memorabilia",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/e/d/edd88c4f-58bd-4920-b41f-037462b54915.jpg?1783947232",
+    "normal": "https://cards.scryfall.io/normal/front/e/d/edd88c4f-58bd-4920-b41f-037462b54915.jpg?1783947232",
+    "large": "https://cards.scryfall.io/large/front/e/d/edd88c4f-58bd-4920-b41f-037462b54915.jpg?1783947232"
+   }
+  },
+  {
+   "id": "9809473d-f793-476f-ae7e-e535b6725d65",
+   "name": "Lightning Bolt",
+   "set": "ptc",
+   "collector_number": "mj208",
+   "released_at": "1996-05-01",
+   "type_line": "Instant",
+   "border_color": "gold",
+   "promo": false,
+   "set_type": "memorabilia",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/9/8/9809473d-f793-476f-ae7e-e535b6725d65.jpg?1783947232",
+    "normal": "https://cards.scryfall.io/normal/front/9/8/9809473d-f793-476f-ae7e-e535b6725d65.jpg?1783947232",
+    "large": "https://cards.scryfall.io/large/front/9/8/9809473d-f793-476f-ae7e-e535b6725d65.jpg?1783947232"
+   }
+  },
+  {
+   "id": "6e8b2951-3c66-4042-add9-b2615951ba52",
+   "name": "Lightning Bolt",
+   "set": "jgp",
+   "collector_number": "1",
+   "released_at": "1998-01-01",
+   "type_line": "Instant",
+   "border_color": "black",
+   "promo": true,
+   "set_type": "promo",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/6/e/6e8b2951-3c66-4042-add9-b2615951ba52.jpg?1783946579",
+    "normal": "https://cards.scryfall.io/normal/front/6/e/6e8b2951-3c66-4042-add9-b2615951ba52.jpg?1783946579",
+    "large": "https://cards.scryfall.io/large/front/6/e/6e8b2951-3c66-4042-add9-b2615951ba52.jpg?1783946579"
+   }
+  },
+  {
+   "id": "52f85017-c88b-4302-96f2-e27b23fd702f",
+   "name": "Lightning Bolt",
+   "set": "ath",
+   "collector_number": "43",
+   "released_at": "1998-11-01",
+   "type_line": "Instant",
+   "border_color": "white",
+   "promo": false,
+   "set_type": "box",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/5/2/52f85017-c88b-4302-96f2-e27b23fd702f.jpg?1783946278",
+    "normal": "https://cards.scryfall.io/normal/front/5/2/52f85017-c88b-4302-96f2-e27b23fd702f.jpg?1783946278",
+    "large": "https://cards.scryfall.io/large/front/5/2/52f85017-c88b-4302-96f2-e27b23fd702f.jpg?1783946278"
+   }
+  },
+  {
+   "id": "a9f447d7-bd08-4f35-bc09-ed335b09a0f8",
+   "name": "Lightning Bolt",
+   "set": "btd",
+   "collector_number": "41",
+   "released_at": "2000-10-01",
+   "type_line": "Instant",
+   "border_color": "white",
+   "promo": false,
+   "set_type": "box",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/a/9/a9f447d7-bd08-4f35-bc09-ed335b09a0f8.jpg?1783945731",
+    "normal": "https://cards.scryfall.io/normal/front/a/9/a9f447d7-bd08-4f35-bc09-ed335b09a0f8.jpg?1783945731",
+    "large": "https://cards.scryfall.io/large/front/a/9/a9f447d7-bd08-4f35-bc09-ed335b09a0f8.jpg?1783945731"
+   }
+  },
+  {
+   "id": "435589bb-27c6-4a6d-9d63-394d5092b9d8",
+   "name": "Lightning Bolt",
+   "set": "m10",
+   "collector_number": "146",
+   "released_at": "2009-07-17",
+   "type_line": "Instant",
+   "border_color": "black",
+   "promo": false,
+   "set_type": "core",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/4/3/435589bb-27c6-4a6d-9d63-394d5092b9d8.jpg?1783942371",
+    "normal": "https://cards.scryfall.io/normal/front/4/3/435589bb-27c6-4a6d-9d63-394d5092b9d8.jpg?1783942371",
+    "large": "https://cards.scryfall.io/large/front/4/3/435589bb-27c6-4a6d-9d63-394d5092b9d8.jpg?1783942371"
+   }
+  },
+  {
+   "id": "b539a9de-037a-4b7a-80a5-0514680af095",
+   "name": "Lightning Bolt",
+   "set": "p09",
+   "collector_number": "146",
+   "released_at": "2009-07-17",
+   "type_line": "Instant",
+   "border_color": "black",
+   "promo": true,
+   "set_type": "promo",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/b/5/b539a9de-037a-4b7a-80a5-0514680af095.jpg?1783942349",
+    "normal": "https://cards.scryfall.io/normal/front/b/5/b539a9de-037a-4b7a-80a5-0514680af095.jpg?1783942349",
+    "large": "https://cards.scryfall.io/large/front/b/5/b539a9de-037a-4b7a-80a5-0514680af095.jpg?1783942349"
+   }
+  },
+  {
+   "id": "28708c8c-4336-4d04-b43a-59a31471a9f6",
+   "name": "Lightning Bolt",
+   "set": "p10",
+   "collector_number": "1",
+   "released_at": "2010-01-01",
+   "type_line": "Instant",
+   "border_color": "black",
+   "promo": true,
+   "set_type": "promo",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/2/8/28708c8c-4336-4d04-b43a-59a31471a9f6.jpg?1783942076",
+    "normal": "https://cards.scryfall.io/normal/front/2/8/28708c8c-4336-4d04-b43a-59a31471a9f6.jpg?1783942076",
+    "large": "https://cards.scryfall.io/large/front/2/8/28708c8c-4336-4d04-b43a-59a31471a9f6.jpg?1783942076"
+   }
+  },
+  {
+   "id": "e768c957-3a1f-42f5-853a-96942f645df5",
+   "name": "Lightning Bolt",
+   "set": "m11",
+   "collector_number": "149",
+   "released_at": "2010-07-16",
+   "type_line": "Instant",
+   "border_color": "black",
+   "promo": false,
+   "set_type": "core",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/e/7/e768c957-3a1f-42f5-853a-96942f645df5.jpg?1783941805",
+    "normal": "https://cards.scryfall.io/normal/front/e/7/e768c957-3a1f-42f5-853a-96942f645df5.jpg?1783941805",
+    "large": "https://cards.scryfall.io/large/front/e/7/e768c957-3a1f-42f5-853a-96942f645df5.jpg?1783941805"
+   }
+  },
+  {
+   "id": "6773a3cf-707f-4bc0-b64d-2a96b70f7975",
+   "name": "Lightning Bolt",
+   "set": "pd2",
+   "collector_number": "17",
+   "released_at": "2010-11-19",
+   "type_line": "Instant",
+   "border_color": "black",
+   "promo": false,
+   "set_type": "premium_deck",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/6/7/6773a3cf-707f-4bc0-b64d-2a96b70f7975.jpg?1783941571",
+    "normal": "https://cards.scryfall.io/normal/front/6/7/6773a3cf-707f-4bc0-b64d-2a96b70f7975.jpg?1783941571",
+    "large": "https://cards.scryfall.io/large/front/6/7/6773a3cf-707f-4bc0-b64d-2a96b70f7975.jpg?1783941571"
+   }
+  },
+  {
+   "id": "677da834-7f4a-4f60-9151-de7ddcf29622",
+   "name": "Lightning Bolt",
+   "set": "mm2",
+   "collector_number": "122",
+   "released_at": "2015-05-22",
+   "type_line": "Instant",
+   "border_color": "black",
+   "promo": false,
+   "set_type": "masters",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/6/7/677da834-7f4a-4f60-9151-de7ddcf29622.jpg?1783938404",
+    "normal": "https://cards.scryfall.io/normal/front/6/7/677da834-7f4a-4f60-9151-de7ddcf29622.jpg?1783938404",
+    "large": "https://cards.scryfall.io/large/front/6/7/677da834-7f4a-4f60-9151-de7ddcf29622.jpg?1783938404"
+   }
+  },
+  {
+   "id": "ccee0b4c-0cb0-4c0f-8ddc-bc74b8b97273",
+   "name": "Lightning Bolt",
+   "set": "e01",
+   "collector_number": "54",
+   "released_at": "2017-06-16",
+   "type_line": "Instant",
+   "border_color": "black",
+   "promo": false,
+   "set_type": "archenemy",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/c/c/ccee0b4c-0cb0-4c0f-8ddc-bc74b8b97273.jpg?1783936148",
+    "normal": "https://cards.scryfall.io/normal/front/c/c/ccee0b4c-0cb0-4c0f-8ddc-bc74b8b97273.jpg?1783936148",
+    "large": "https://cards.scryfall.io/large/front/c/c/ccee0b4c-0cb0-4c0f-8ddc-bc74b8b97273.jpg?1783936148"
+   }
+  },
+  {
+   "id": "e3285e6b-3e79-4d7c-bf96-d920f973b122",
+   "name": "Lightning Bolt",
+   "set": "a25",
+   "collector_number": "141",
+   "released_at": "2018-03-16",
+   "type_line": "Instant",
+   "border_color": "black",
+   "promo": false,
+   "set_type": "masters",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/e/3/e3285e6b-3e79-4d7c-bf96-d920f973b122.jpg?1783935143",
+    "normal": "https://cards.scryfall.io/normal/front/e/3/e3285e6b-3e79-4d7c-bf96-d920f973b122.jpg?1783935143",
+    "large": "https://cards.scryfall.io/large/front/e/3/e3285e6b-3e79-4d7c-bf96-d920f973b122.jpg?1783935143"
+   }
+  },
+  {
+   "id": "ff204024-20a5-4bb9-82b6-f6b4337efd60",
+   "name": "Lightning Bolt",
+   "set": "pf19",
+   "collector_number": "1",
+   "released_at": "2019-01-01",
+   "type_line": "Instant",
+   "border_color": "black",
+   "promo": true,
+   "set_type": "promo",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/f/f/ff204024-20a5-4bb9-82b6-f6b4337efd60.jpg?1783933733",
+    "normal": "https://cards.scryfall.io/normal/front/f/f/ff204024-20a5-4bb9-82b6-f6b4337efd60.jpg?1783933733",
+    "large": "https://cards.scryfall.io/large/front/f/f/ff204024-20a5-4bb9-82b6-f6b4337efd60.jpg?1783933733"
+   }
+  },
+  {
+   "id": "32a180dd-9641-4546-8940-9b21084f0c71",
+   "name": "Lightning Bolt",
+   "set": "plst",
+   "collector_number": "E01-54",
+   "released_at": "2019-11-07",
+   "type_line": "Instant",
+   "border_color": "black",
+   "promo": false,
+   "set_type": "masters",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/3/2/32a180dd-9641-4546-8940-9b21084f0c71.jpg?1783932042",
+    "normal": "https://cards.scryfall.io/normal/front/3/2/32a180dd-9641-4546-8940-9b21084f0c71.jpg?1783932042",
+    "large": "https://cards.scryfall.io/large/front/3/2/32a180dd-9641-4546-8940-9b21084f0c71.jpg?1783932042"
+   }
+  },
+  {
+   "id": "45184cd7-b037-4a85-a063-e622ca928d17",
+   "name": "Lightning Bolt",
+   "set": "sld",
+   "collector_number": "83",
+   "released_at": "2020-06-04",
+   "type_line": "Instant",
+   "border_color": "black",
+   "promo": false,
+   "set_type": "box",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/4/5/45184cd7-b037-4a85-a063-e622ca928d17.jpg?1783930772",
+    "normal": "https://cards.scryfall.io/normal/front/4/5/45184cd7-b037-4a85-a063-e622ca928d17.jpg?1783930772",
+    "large": "https://cards.scryfall.io/large/front/4/5/45184cd7-b037-4a85-a063-e622ca928d17.jpg?1783930772"
+   }
+  },
+  {
+   "id": "6fb94c1b-8002-4d79-add0-c4dfef9019ee",
+   "name": "Lightning Bolt",
+   "set": "sld",
+   "collector_number": "84",
+   "released_at": "2020-06-04",
+   "type_line": "Instant",
+   "border_color": "black",
+   "promo": false,
+   "set_type": "box",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/6/f/6fb94c1b-8002-4d79-add0-c4dfef9019ee.jpg?1783930772",
+    "normal": "https://cards.scryfall.io/normal/front/6/f/6fb94c1b-8002-4d79-add0-c4dfef9019ee.jpg?1783930772",
+    "large": "https://cards.scryfall.io/large/front/6/f/6fb94c1b-8002-4d79-add0-c4dfef9019ee.jpg?1783930772"
+   }
+  },
+  {
+   "id": "6ab06973-6440-4b12-8947-8c412500fa41",
+   "name": "Lightning Bolt",
+   "set": "sld",
+   "collector_number": "85",
+   "released_at": "2020-06-04",
+   "type_line": "Instant",
+   "border_color": "black",
+   "promo": false,
+   "set_type": "box",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/6/a/6ab06973-6440-4b12-8947-8c412500fa41.jpg?1783930773",
+    "normal": "https://cards.scryfall.io/normal/front/6/a/6ab06973-6440-4b12-8947-8c412500fa41.jpg?1783930773",
+    "large": "https://cards.scryfall.io/large/front/6/a/6ab06973-6440-4b12-8947-8c412500fa41.jpg?1783930773"
+   }
+  },
+  {
+   "id": "c3eb3895-b64c-46ab-b704-3c46963920ba",
+   "name": "Lightning Bolt",
+   "set": "sld",
+   "collector_number": "86",
+   "released_at": "2020-06-04",
+   "type_line": "Instant",
+   "border_color": "black",
+   "promo": false,
+   "set_type": "box",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/c/3/c3eb3895-b64c-46ab-b704-3c46963920ba.jpg?1783930773",
+    "normal": "https://cards.scryfall.io/normal/front/c/3/c3eb3895-b64c-46ab-b704-3c46963920ba.jpg?1783930773",
+    "large": "https://cards.scryfall.io/large/front/c/3/c3eb3895-b64c-46ab-b704-3c46963920ba.jpg?1783930773"
+   }
+  },
+  {
+   "id": "ce711943-c1a1-43a0-8b89-8d169cfb8e06",
+   "name": "Lightning Bolt",
+   "set": "jmp",
+   "collector_number": "342",
+   "released_at": "2020-07-17",
+   "type_line": "Instant",
+   "border_color": "black",
+   "promo": false,
+   "set_type": "draft_innovation",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/c/e/ce711943-c1a1-43a0-8b89-8d169cfb8e06.jpg?1783930384",
+    "normal": "https://cards.scryfall.io/normal/front/c/e/ce711943-c1a1-43a0-8b89-8d169cfb8e06.jpg?1783930384",
+    "large": "https://cards.scryfall.io/large/front/c/e/ce711943-c1a1-43a0-8b89-8d169cfb8e06.jpg?1783930384"
+   }
+  },
+  {
+   "id": "0f29ea1f-a226-4ec4-8297-109e2f2b5c69",
+   "name": "Lightning Bolt",
+   "set": "plst",
+   "collector_number": "PF19-1",
+   "released_at": "2020-09-01",
+   "type_line": "Instant",
+   "border_color": "black",
+   "promo": false,
+   "set_type": "masters",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/0/f/0f29ea1f-a226-4ec4-8297-109e2f2b5c69.jpg?1783929639",
+    "normal": "https://cards.scryfall.io/normal/front/0/f/0f29ea1f-a226-4ec4-8297-109e2f2b5c69.jpg?1783929639",
+    "large": "https://cards.scryfall.io/large/front/0/f/0f29ea1f-a226-4ec4-8297-109e2f2b5c69.jpg?1783929639"
+   }
+  },
+  {
+   "id": "4eaac4fd-95f5-4f38-b593-0101e79a20f9",
+   "name": "Lightning Bolt",
+   "set": "sta",
+   "collector_number": "42",
+   "released_at": "2021-04-23",
+   "type_line": "Instant",
+   "border_color": "borderless",
+   "promo": false,
+   "set_type": "masterpiece",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/4/e/4eaac4fd-95f5-4f38-b593-0101e79a20f9.jpg?1783927429",
+    "normal": "https://cards.scryfall.io/normal/front/4/e/4eaac4fd-95f5-4f38-b593-0101e79a20f9.jpg?1783927429",
+    "large": "https://cards.scryfall.io/large/front/4/e/4eaac4fd-95f5-4f38-b593-0101e79a20f9.jpg?1783927429"
+   }
+  },
+  {
+   "id": "b14fae63-2e82-49c1-8e62-d84a65f27479",
+   "name": "Lightning Bolt",
+   "set": "sta",
+   "collector_number": "105",
+   "released_at": "2021-04-23",
+   "type_line": "Instant",
+   "border_color": "borderless",
+   "promo": false,
+   "set_type": "masterpiece",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/b/1/b14fae63-2e82-49c1-8e62-d84a65f27479.jpg?1783927405",
+    "normal": "https://cards.scryfall.io/normal/front/b/1/b14fae63-2e82-49c1-8e62-d84a65f27479.jpg?1783927405",
+    "large": "https://cards.scryfall.io/large/front/b/1/b14fae63-2e82-49c1-8e62-d84a65f27479.jpg?1783927405"
+   }
+  },
+  {
+   "id": "df77bf7d-546a-416b-a2fe-8038a4125af5",
+   "name": "Lightning Bolt",
+   "set": "plst",
+   "collector_number": "A25-141",
+   "released_at": "2021-06-19",
+   "type_line": "Instant",
+   "border_color": "black",
+   "promo": false,
+   "set_type": "masters",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/d/f/df77bf7d-546a-416b-a2fe-8038a4125af5.jpg?1783926564",
+    "normal": "https://cards.scryfall.io/normal/front/d/f/df77bf7d-546a-416b-a2fe-8038a4125af5.jpg?1783926564",
+    "large": "https://cards.scryfall.io/large/front/d/f/df77bf7d-546a-416b-a2fe-8038a4125af5.jpg?1783926564"
+   }
+  },
+  {
+   "id": "27740ea5-79c8-420f-bc49-6d5eac58dac5",
+   "name": "Lightning Bolt",
+   "set": "sld",
+   "collector_number": "675",
+   "released_at": "2022-02-18",
+   "type_line": "Instant",
+   "border_color": "borderless",
+   "promo": false,
+   "set_type": "box",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/2/7/27740ea5-79c8-420f-bc49-6d5eac58dac5.jpg?1783924002",
+    "normal": "https://cards.scryfall.io/normal/front/2/7/27740ea5-79c8-420f-bc49-6d5eac58dac5.jpg?1783924002",
+    "large": "https://cards.scryfall.io/large/front/2/7/27740ea5-79c8-420f-bc49-6d5eac58dac5.jpg?1783924002"
+   }
+  },
+  {
+   "id": "ae5f9fb1-5a55-4db3-98a1-2628e3598c18",
+   "name": "Lightning Bolt",
+   "set": "clb",
+   "collector_number": "187",
+   "released_at": "2022-06-10",
+   "type_line": "Instant",
+   "border_color": "black",
+   "promo": false,
+   "set_type": "draft_innovation",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/a/e/ae5f9fb1-5a55-4db3-98a1-2628e3598c18.jpg?1783922736",
+    "normal": "https://cards.scryfall.io/normal/front/a/e/ae5f9fb1-5a55-4db3-98a1-2628e3598c18.jpg?1783922736",
+    "large": "https://cards.scryfall.io/large/front/a/e/ae5f9fb1-5a55-4db3-98a1-2628e3598c18.jpg?1783922736"
+   }
+  },
+  {
+   "id": "c69f668b-cf28-495a-bbe1-24e9d0089fa1",
+   "name": "Lightning Bolt",
+   "set": "clb",
+   "collector_number": "401",
+   "released_at": "2022-06-10",
+   "type_line": "Instant",
+   "border_color": "black",
+   "promo": false,
+   "set_type": "draft_innovation",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/c/6/c69f668b-cf28-495a-bbe1-24e9d0089fa1.jpg?1783922637",
+    "normal": "https://cards.scryfall.io/normal/front/c/6/c69f668b-cf28-495a-bbe1-24e9d0089fa1.jpg?1783922637",
+    "large": "https://cards.scryfall.io/large/front/c/6/c69f668b-cf28-495a-bbe1-24e9d0089fa1.jpg?1783922637"
+   }
+  },
+  {
+   "id": "f29ba16f-c8fb-42fe-aabf-87089cb214a7",
+   "name": "Lightning Bolt",
+   "set": "2x2",
+   "collector_number": "117",
+   "released_at": "2022-07-08",
+   "type_line": "Instant",
+   "border_color": "black",
+   "promo": false,
+   "set_type": "masters",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/f/2/f29ba16f-c8fb-42fe-aabf-87089cb214a7.jpg?1783921885",
+    "normal": "https://cards.scryfall.io/normal/front/f/2/f29ba16f-c8fb-42fe-aabf-87089cb214a7.jpg?1783921885",
+    "large": "https://cards.scryfall.io/large/front/f/2/f29ba16f-c8fb-42fe-aabf-87089cb214a7.jpg?1783921885"
+   }
+  },
+  {
+   "id": "c8c8390f-4072-454f-8dc4-174919187a47",
+   "name": "Lightning Bolt",
+   "set": "2x2",
+   "collector_number": "361",
+   "released_at": "2022-07-08",
+   "type_line": "Instant",
+   "border_color": "borderless",
+   "promo": false,
+   "set_type": "masters",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/c/8/c8c8390f-4072-454f-8dc4-174919187a47.jpg?1783921769",
+    "normal": "https://cards.scryfall.io/normal/front/c/8/c8c8390f-4072-454f-8dc4-174919187a47.jpg?1783921769",
+    "large": "https://cards.scryfall.io/large/front/c/8/c8c8390f-4072-454f-8dc4-174919187a47.jpg?1783921769"
+   }
+  },
+  {
+   "id": "a6de74d2-0668-49c6-a385-bf706bfed8f7",
+   "name": "Lightning Bolt",
+   "set": "gn3",
+   "collector_number": "83",
+   "released_at": "2022-10-14",
+   "type_line": "Instant",
+   "border_color": "black",
+   "promo": false,
+   "set_type": "box",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/a/6/a6de74d2-0668-49c6-a385-bf706bfed8f7.jpg?1783920269",
+    "normal": "https://cards.scryfall.io/normal/front/a/6/a6de74d2-0668-49c6-a385-bf706bfed8f7.jpg?1783920269",
+    "large": "https://cards.scryfall.io/large/front/a/6/a6de74d2-0668-49c6-a385-bf706bfed8f7.jpg?1783920269"
+   }
+  },
+  {
+   "id": "54be73dd-cb3b-411b-8f48-d12ca5183dee",
+   "name": "Lightning Bolt",
+   "set": "30a",
+   "collector_number": "157",
+   "released_at": "2022-11-28",
+   "type_line": "Instant",
+   "border_color": "black",
+   "promo": false,
+   "set_type": "memorabilia",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/5/4/54be73dd-cb3b-411b-8f48-d12ca5183dee.jpg?1783919497",
+    "normal": "https://cards.scryfall.io/normal/front/5/4/54be73dd-cb3b-411b-8f48-d12ca5183dee.jpg?1783919497",
+    "large": "https://cards.scryfall.io/large/front/5/4/54be73dd-cb3b-411b-8f48-d12ca5183dee.jpg?1783919497"
+   }
+  },
+  {
+   "id": "996a81ae-0c2d-4e74-b018-5f0ec0fcfbd3",
+   "name": "Lightning Bolt",
+   "set": "30a",
+   "collector_number": "454",
+   "released_at": "2022-11-28",
+   "type_line": "Instant",
+   "border_color": "black",
+   "promo": false,
+   "set_type": "memorabilia",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/9/9/996a81ae-0c2d-4e74-b018-5f0ec0fcfbd3.jpg?1783919312",
+    "normal": "https://cards.scryfall.io/normal/front/9/9/996a81ae-0c2d-4e74-b018-5f0ec0fcfbd3.jpg?1783919312",
+    "large": "https://cards.scryfall.io/large/front/9/9/996a81ae-0c2d-4e74-b018-5f0ec0fcfbd3.jpg?1783919312"
+   }
+  },
+  {
+   "id": "0277c0b1-da97-49c1-a539-7fbaa1f77419",
+   "name": "Lightning Bolt",
+   "set": "sld",
+   "collector_number": "901",
+   "released_at": "2023-12-01",
+   "type_line": "Instant",
+   "border_color": "black",
+   "promo": true,
+   "set_type": "box",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/0/2/0277c0b1-da97-49c1-a539-7fbaa1f77419.jpg?1783913473",
+    "normal": "https://cards.scryfall.io/normal/front/0/2/0277c0b1-da97-49c1-a539-7fbaa1f77419.jpg?1783913473",
+    "large": "https://cards.scryfall.io/large/front/0/2/0277c0b1-da97-49c1-a539-7fbaa1f77419.jpg?1783913473"
+   }
+  },
+  {
+   "id": "ddaa110c-ee6e-4df5-a6c8-3fdf4b89293f",
+   "name": "Lightning Bolt",
+   "set": "olgc",
+   "collector_number": "2023",
+   "released_at": "2023-12-08",
+   "type_line": "Instant",
+   "border_color": "black",
+   "promo": false,
+   "set_type": "memorabilia",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/d/d/ddaa110c-ee6e-4df5-a6c8-3fdf4b89293f.jpg?1783913397",
+    "normal": "https://cards.scryfall.io/normal/front/d/d/ddaa110c-ee6e-4df5-a6c8-3fdf4b89293f.jpg?1783913397",
+    "large": "https://cards.scryfall.io/large/front/d/d/ddaa110c-ee6e-4df5-a6c8-3fdf4b89293f.jpg?1783913397"
+   }
+  },
+  {
+   "id": "77c6fa74-5543-42ac-9ead-0e890b188e99",
+   "name": "Lightning Bolt",
+   "set": "clu",
+   "collector_number": "141",
+   "released_at": "2024-02-23",
+   "type_line": "Instant",
+   "border_color": "black",
+   "promo": false,
+   "set_type": "draft_innovation",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/7/7/77c6fa74-5543-42ac-9ead-0e890b188e99.jpg?1783912538",
+    "normal": "https://cards.scryfall.io/normal/front/7/7/77c6fa74-5543-42ac-9ead-0e890b188e99.jpg?1783912538",
+    "large": "https://cards.scryfall.io/large/front/7/7/77c6fa74-5543-42ac-9ead-0e890b188e99.jpg?1783912538"
+   }
+  },
+  {
+   "id": "4f43c378-9e6a-4ece-9c24-5dc08c977746",
+   "name": "Lightning Bolt",
+   "set": "sld",
+   "collector_number": "1638",
+   "released_at": "2024-04-08",
+   "type_line": "Instant",
+   "border_color": "borderless",
+   "promo": false,
+   "set_type": "box",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/4/f/4f43c378-9e6a-4ece-9c24-5dc08c977746.jpg?1783912016",
+    "normal": "https://cards.scryfall.io/normal/front/4/f/4f43c378-9e6a-4ece-9c24-5dc08c977746.jpg?1783912016",
+    "large": "https://cards.scryfall.io/large/front/4/f/4f43c378-9e6a-4ece-9c24-5dc08c977746.jpg?1783912016"
+   }
+  },
+  {
+   "id": "54199d7c-02f8-4ff0-9e43-e7bf66ef9715",
+   "name": "Lightning Bolt",
+   "set": "sld",
+   "collector_number": "1638★",
+   "released_at": "2024-04-08",
+   "type_line": "Instant",
+   "border_color": "borderless",
+   "promo": false,
+   "set_type": "box",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/5/4/54199d7c-02f8-4ff0-9e43-e7bf66ef9715.jpg?1783912015",
+    "normal": "https://cards.scryfall.io/normal/front/5/4/54199d7c-02f8-4ff0-9e43-e7bf66ef9715.jpg?1783912015",
+    "large": "https://cards.scryfall.io/large/front/5/4/54199d7c-02f8-4ff0-9e43-e7bf66ef9715.jpg?1783912015"
+   }
+  },
+  {
+   "id": "074d2360-3ded-412d-90b5-2b8ab209fe47",
+   "name": "Lightning Bolt",
+   "set": "slp",
+   "collector_number": "21",
+   "released_at": "2024-08-01",
+   "type_line": "Instant",
+   "border_color": "black",
+   "promo": true,
+   "set_type": "promo",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/0/7/074d2360-3ded-412d-90b5-2b8ab209fe47.jpg?1783910869",
+    "normal": "https://cards.scryfall.io/normal/front/0/7/074d2360-3ded-412d-90b5-2b8ab209fe47.jpg?1783910869",
+    "large": "https://cards.scryfall.io/large/front/0/7/074d2360-3ded-412d-90b5-2b8ab209fe47.jpg?1783910869"
+   }
+  },
+  {
+   "id": "5fbb6751-1072-4fc0-8b54-836d05950914",
+   "name": "Lightning Bolt",
+   "set": "sld",
+   "collector_number": "1822",
+   "released_at": "2024-10-14",
+   "type_line": "Instant",
+   "border_color": "borderless",
+   "promo": false,
+   "set_type": "box",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/5/f/5fbb6751-1072-4fc0-8b54-836d05950914.jpg?1783909199",
+    "normal": "https://cards.scryfall.io/normal/front/5/f/5fbb6751-1072-4fc0-8b54-836d05950914.jpg?1783909199",
+    "large": "https://cards.scryfall.io/large/front/5/f/5fbb6751-1072-4fc0-8b54-836d05950914.jpg?1783909199"
+   }
+  },
+  {
+   "id": "24484578-7885-4125-b95f-e677d970a5a1",
+   "name": "Lightning Bolt",
+   "set": "sld",
+   "collector_number": "1743",
+   "released_at": "2024-11-04",
+   "type_line": "Instant",
+   "border_color": "borderless",
+   "promo": false,
+   "set_type": "box",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/2/4/24484578-7885-4125-b95f-e677d970a5a1.jpg?1783909136",
+    "normal": "https://cards.scryfall.io/normal/front/2/4/24484578-7885-4125-b95f-e677d970a5a1.jpg?1783909136",
+    "large": "https://cards.scryfall.io/large/front/2/4/24484578-7885-4125-b95f-e677d970a5a1.jpg?1783909136"
+   }
+  },
+  {
+   "id": "719d571c-0740-4212-86c2-e9ef38516f6c",
+   "name": "Lightning Bolt",
+   "set": "sld",
+   "collector_number": "1879",
+   "released_at": "2025-02-10",
+   "type_line": "Instant",
+   "border_color": "borderless",
+   "promo": false,
+   "set_type": "box",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/7/1/719d571c-0740-4212-86c2-e9ef38516f6c.jpg?1783907930",
+    "normal": "https://cards.scryfall.io/normal/front/7/1/719d571c-0740-4212-86c2-e9ef38516f6c.jpg?1783907930",
+    "large": "https://cards.scryfall.io/large/front/7/1/719d571c-0740-4212-86c2-e9ef38516f6c.jpg?1783907930"
+   }
+  },
+  {
+   "id": "b9399b98-a545-47b2-99bb-6d8251d9ae76",
+   "name": "Lightning Bolt",
+   "set": "slp",
+   "collector_number": "37",
+   "released_at": "2025-02-21",
+   "type_line": "Instant",
+   "border_color": "black",
+   "promo": true,
+   "set_type": "promo",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/b/9/b9399b98-a545-47b2-99bb-6d8251d9ae76.jpg?1787737305",
+    "normal": "https://cards.scryfall.io/normal/front/b/9/b9399b98-a545-47b2-99bb-6d8251d9ae76.jpg?1787737305",
+    "large": "https://cards.scryfall.io/large/front/b/9/b9399b98-a545-47b2-99bb-6d8251d9ae76.jpg?1787737305"
+   }
+  },
+  {
+   "id": "5a763474-5ce9-48cc-aaf8-8ca363df4430",
+   "name": "Lightning Bolt",
+   "set": "sld",
+   "collector_number": "1871",
+   "released_at": "2025-06-09",
+   "type_line": "Instant",
+   "border_color": "borderless",
+   "promo": false,
+   "set_type": "box",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/5/a/5a763474-5ce9-48cc-aaf8-8ca363df4430.jpg?1789284401",
+    "normal": "https://cards.scryfall.io/normal/front/5/a/5a763474-5ce9-48cc-aaf8-8ca363df4430.jpg?1789284401",
+    "large": "https://cards.scryfall.io/large/front/5/a/5a763474-5ce9-48cc-aaf8-8ca363df4430.jpg?1789284401"
+   }
+  },
+  {
+   "id": "e89794ab-6070-4916-936f-2b42fe41d31b",
+   "name": "Lightning Bolt",
+   "set": "fca",
+   "collector_number": "40",
+   "released_at": "2025-06-13",
+   "type_line": "Instant",
+   "border_color": "borderless",
+   "promo": false,
+   "set_type": "masterpiece",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/e/8/e89794ab-6070-4916-936f-2b42fe41d31b.jpg?1783906382",
+    "normal": "https://cards.scryfall.io/normal/front/e/8/e89794ab-6070-4916-936f-2b42fe41d31b.jpg?1783906382",
+    "large": "https://cards.scryfall.io/large/front/e/8/e89794ab-6070-4916-936f-2b42fe41d31b.jpg?1783906382"
+   }
+  },
+  {
+   "id": "6580f4f9-870b-4258-8dce-48c606b90a6c",
+   "name": "Lightning Bolt",
+   "set": "pf25",
+   "collector_number": "13",
+   "released_at": "2025-08-18",
+   "type_line": "Instant",
+   "border_color": "black",
+   "promo": true,
+   "set_type": "promo",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/6/5/6580f4f9-870b-4258-8dce-48c606b90a6c.jpg?1783905642",
+    "normal": "https://cards.scryfall.io/normal/front/6/5/6580f4f9-870b-4258-8dce-48c606b90a6c.jpg?1783905642",
+    "large": "https://cards.scryfall.io/large/front/6/5/6580f4f9-870b-4258-8dce-48c606b90a6c.jpg?1783905642"
+   }
+  },
+  {
+   "id": "3c738171-d0dc-4cc2-8af8-1d306143db37",
+   "name": "Lightning Bolt",
+   "set": "sld",
+   "collector_number": "2289",
+   "released_at": "2025-11-17",
+   "type_line": "Instant",
+   "border_color": "borderless",
+   "promo": false,
+   "set_type": "box",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/3/c/3c738171-d0dc-4cc2-8af8-1d306143db37.jpg?1783905090",
+    "normal": "https://cards.scryfall.io/normal/front/3/c/3c738171-d0dc-4cc2-8af8-1d306143db37.jpg?1783905090",
+    "large": "https://cards.scryfall.io/large/front/3/c/3c738171-d0dc-4cc2-8af8-1d306143db37.jpg?1783905090"
+   }
+  },
+  {
+   "id": "6881d7c8-5bb7-4f8c-9f03-50fb1309d9c8",
+   "name": "Lightning Bolt",
+   "set": "tle",
+   "collector_number": "32",
+   "released_at": "2025-11-21",
+   "type_line": "Instant",
+   "border_color": "borderless",
+   "promo": false,
+   "set_type": "eternal",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/6/8/6881d7c8-5bb7-4f8c-9f03-50fb1309d9c8.jpg?1783904851",
+    "normal": "https://cards.scryfall.io/normal/front/6/8/6881d7c8-5bb7-4f8c-9f03-50fb1309d9c8.jpg?1783904851",
+    "large": "https://cards.scryfall.io/large/front/6/8/6881d7c8-5bb7-4f8c-9f03-50fb1309d9c8.jpg?1783904851"
+   }
+  },
+  {
+   "id": "b6bc6ff3-f466-4cb0-8b4e-a20d8ed129c8",
+   "name": "Lightning Bolt",
+   "set": "pw26",
+   "collector_number": "5",
+   "released_at": "2026-01-01",
+   "type_line": "Instant",
+   "border_color": "borderless",
+   "promo": true,
+   "set_type": "promo",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/b/6/b6bc6ff3-f466-4cb0-8b4e-a20d8ed129c8.jpg?1783904637",
+    "normal": "https://cards.scryfall.io/normal/front/b/6/b6bc6ff3-f466-4cb0-8b4e-a20d8ed129c8.jpg?1783904637",
+    "large": "https://cards.scryfall.io/large/front/b/6/b6bc6ff3-f466-4cb0-8b4e-a20d8ed129c8.jpg?1783904637"
+   }
+  },
+  {
+   "id": "dc12105d-7536-429b-9510-4f56bfc0c497",
+   "name": "Lightning Bolt",
+   "set": "sld",
+   "collector_number": "IFIYW-2",
+   "released_at": "2026-04-01",
+   "type_line": "Instant",
+   "border_color": "black",
+   "promo": false,
+   "set_type": "box",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/d/c/dc12105d-7536-429b-9510-4f56bfc0c497.jpg?1783904004",
+    "normal": "https://cards.scryfall.io/normal/front/d/c/dc12105d-7536-429b-9510-4f56bfc0c497.jpg?1783904004",
+    "large": "https://cards.scryfall.io/large/front/d/c/dc12105d-7536-429b-9510-4f56bfc0c497.jpg?1783904004"
+   }
+  },
+  {
+   "id": "bde26955-6de3-4212-9e1a-5e11f73ebf44",
+   "name": "Lightning Bolt",
+   "set": "sld",
+   "collector_number": "IFIYW-7",
+   "released_at": "2026-04-01",
+   "type_line": "Instant",
+   "border_color": "black",
+   "promo": false,
+   "set_type": "box",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/b/d/bde26955-6de3-4212-9e1a-5e11f73ebf44.jpg?1783903996",
+    "normal": "https://cards.scryfall.io/normal/front/b/d/bde26955-6de3-4212-9e1a-5e11f73ebf44.jpg?1783903996",
+    "large": "https://cards.scryfall.io/large/front/b/d/bde26955-6de3-4212-9e1a-5e11f73ebf44.jpg?1783903996"
+   }
+  },
+  {
+   "id": "f58dba4f-1abb-47a3-a684-29c32bab95c0",
+   "name": "Emeritus of Conflict // Lightning Bolt",
+   "set": "sos",
+   "collector_number": "113",
+   "released_at": "2026-04-24",
+   "type_line": "Creature — Human Wizard // Instant",
+   "border_color": "black",
+   "promo": false,
+   "set_type": "expansion",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/f/5/f58dba4f-1abb-47a3-a684-29c32bab95c0.jpg?1783903670",
+    "normal": "https://cards.scryfall.io/normal/front/f/5/f58dba4f-1abb-47a3-a684-29c32bab95c0.jpg?1783903670",
+    "large": "https://cards.scryfall.io/large/front/f/5/f58dba4f-1abb-47a3-a684-29c32bab95c0.jpg?1783903670"
+   }
+  },
+  {
+   "id": "f11b8d24-375d-40dc-8497-c1ee779e156a",
+   "name": "Emeritus of Conflict // Lightning Bolt",
+   "set": "sos",
+   "collector_number": "332",
+   "released_at": "2026-04-24",
+   "type_line": "Creature — Human Wizard // Instant",
+   "border_color": "black",
+   "promo": false,
+   "set_type": "expansion",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/f/1/f11b8d24-375d-40dc-8497-c1ee779e156a.jpg?1783903593",
+    "normal": "https://cards.scryfall.io/normal/front/f/1/f11b8d24-375d-40dc-8497-c1ee779e156a.jpg?1783903593",
+    "large": "https://cards.scryfall.io/large/front/f/1/f11b8d24-375d-40dc-8497-c1ee779e156a.jpg?1783903593"
+   }
+  },
+  {
+   "id": "699c0207-901e-4fe9-b22d-1f6cb994a1f2",
+   "name": "Emeritus of Conflict // Lightning Bolt",
+   "set": "psos",
+   "collector_number": "113p",
+   "released_at": "2026-04-24",
+   "type_line": "Creature — Human Wizard // Instant",
+   "border_color": "black",
+   "promo": true,
+   "set_type": "promo",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/6/9/699c0207-901e-4fe9-b22d-1f6cb994a1f2.jpg?1783903545",
+    "normal": "https://cards.scryfall.io/normal/front/6/9/699c0207-901e-4fe9-b22d-1f6cb994a1f2.jpg?1783903545",
+    "large": "https://cards.scryfall.io/large/front/6/9/699c0207-901e-4fe9-b22d-1f6cb994a1f2.jpg?1783903545"
+   }
+  },
+  {
+   "id": "7673784e-db4b-43a1-8d55-1bb9fc1e284f",
+   "name": "Lightning Bolt",
+   "set": "msc",
+   "collector_number": "806",
+   "released_at": "2026-06-26",
+   "type_line": "Instant",
+   "border_color": "black",
+   "promo": false,
+   "set_type": "commander",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/7/6/7673784e-db4b-43a1-8d55-1bb9fc1e284f.jpg?1783903008",
+    "normal": "https://cards.scryfall.io/normal/front/7/6/7673784e-db4b-43a1-8d55-1bb9fc1e284f.jpg?1783903008",
+    "large": "https://cards.scryfall.io/large/front/7/6/7673784e-db4b-43a1-8d55-1bb9fc1e284f.jpg?1783903008"
+   }
+  },
+  {
+   "id": "a050f085-dc6a-4715-8cd3-33daf3e27bfc",
+   "name": "Lightning Bolt",
+   "set": "sld",
+   "collector_number": "2579",
+   "released_at": "2026-08-31",
+   "type_line": "Instant",
+   "border_color": "borderless",
+   "promo": false,
+   "set_type": "box",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/a/0/a050f085-dc6a-4715-8cd3-33daf3e27bfc.jpg?1788258622",
+    "normal": "https://cards.scryfall.io/normal/front/a/0/a050f085-dc6a-4715-8cd3-33daf3e27bfc.jpg?1788258622",
+    "large": "https://cards.scryfall.io/large/front/a/0/a050f085-dc6a-4715-8cd3-33daf3e27bfc.jpg?1788258622"
+   }
+  },
+  {
+   "id": "2c025b3b-a3b4-4399-9173-b855a9473b36",
+   "name": "Lightning Bolt",
+   "set": "slz",
+   "collector_number": "63",
+   "released_at": "2026-09-02",
+   "type_line": "Instant",
+   "border_color": "black",
+   "promo": false,
+   "set_type": "box",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/2/c/2c025b3b-a3b4-4399-9173-b855a9473b36.jpg?1787745711",
+    "normal": "https://cards.scryfall.io/normal/front/2/c/2c025b3b-a3b4-4399-9173-b855a9473b36.jpg?1787745711",
+    "large": "https://cards.scryfall.io/large/front/2/c/2c025b3b-a3b4-4399-9173-b855a9473b36.jpg?1787745711"
+   }
+  },
+  {
+   "id": "d1f67dc6-473c-4c98-bd03-cd1e53acb7e1",
+   "name": "Lightning Bolt",
+   "set": "slz",
+   "collector_number": "184",
+   "released_at": "2026-09-02",
+   "type_line": "Instant",
+   "border_color": "black",
+   "promo": false,
+   "set_type": "box",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/d/1/d1f67dc6-473c-4c98-bd03-cd1e53acb7e1.jpg?1787745713",
+    "normal": "https://cards.scryfall.io/normal/front/d/1/d1f67dc6-473c-4c98-bd03-cd1e53acb7e1.jpg?1787745713",
+    "large": "https://cards.scryfall.io/large/front/d/1/d1f67dc6-473c-4c98-bd03-cd1e53acb7e1.jpg?1787745713"
+   }
+  },
+  {
+   "id": "0ef3c273-ec92-41d0-9abe-0f99e33db4f5",
+   "name": "Lightning Bolt",
+   "set": "slz",
+   "collector_number": "305",
+   "released_at": "2026-09-02",
+   "type_line": "Instant",
+   "border_color": "black",
+   "promo": false,
+   "set_type": "box",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/0/e/0ef3c273-ec92-41d0-9abe-0f99e33db4f5.jpg?1787745710",
+    "normal": "https://cards.scryfall.io/normal/front/0/e/0ef3c273-ec92-41d0-9abe-0f99e33db4f5.jpg?1787745710",
+    "large": "https://cards.scryfall.io/large/front/0/e/0ef3c273-ec92-41d0-9abe-0f99e33db4f5.jpg?1787745710"
+   }
+  },
+  {
+   "id": "0852f9f3-d7ef-4d31-93e3-93bc7c5a4ec9",
+   "name": "Lightning Bolt",
+   "set": "fdc",
+   "collector_number": "163",
+   "released_at": "2026-10-02",
+   "type_line": "Instant",
+   "border_color": "black",
+   "promo": false,
+   "set_type": "commander",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/0/8/0852f9f3-d7ef-4d31-93e3-93bc7c5a4ec9.jpg?1789753088",
+    "normal": "https://cards.scryfall.io/normal/front/0/8/0852f9f3-d7ef-4d31-93e3-93bc7c5a4ec9.jpg?1789753088",
+    "large": "https://cards.scryfall.io/large/front/0/8/0852f9f3-d7ef-4d31-93e3-93bc7c5a4ec9.jpg?1789753088"
+   }
+  },
+  {
+   "id": "132dc07f-74e2-4bd7-bdb1-4f5d5253c7f2",
+   "name": "Lightning Bolt",
+   "set": "plst",
+   "collector_number": "CLB-187",
+   "released_at": "2026-11-09",
+   "type_line": "Instant",
+   "border_color": "black",
+   "promo": false,
+   "set_type": "masters",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/1/3/132dc07f-74e2-4bd7-bdb1-4f5d5253c7f2.jpg?1787678033",
+    "normal": "https://cards.scryfall.io/normal/front/1/3/132dc07f-74e2-4bd7-bdb1-4f5d5253c7f2.jpg?1787678033",
+    "large": "https://cards.scryfall.io/large/front/1/3/132dc07f-74e2-4bd7-bdb1-4f5d5253c7f2.jpg?1787678033"
+   }
+  }
+ ],
+ "Shivan Dragon": [
+  {
+   "id": "fefbf149-f988-4f8b-9f53-56f5878116a6",
+   "name": "Shivan Dragon",
+   "set": "lea",
+   "collector_number": "174",
+   "released_at": "1993-08-05",
+   "type_line": "Creature — Dragon",
+   "border_color": "black",
+   "promo": false,
+   "set_type": "core",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/f/e/fefbf149-f988-4f8b-9f53-56f5878116a6.jpg?1783948681",
+    "normal": "https://cards.scryfall.io/normal/front/f/e/fefbf149-f988-4f8b-9f53-56f5878116a6.jpg?1783948681",
+    "large": "https://cards.scryfall.io/large/front/f/e/fefbf149-f988-4f8b-9f53-56f5878116a6.jpg?1783948681"
+   }
+  },
+  {
+   "id": "5e64822a-6817-4e1e-8155-3e95f8e3763f",
+   "name": "Shivan Dragon",
+   "set": "leb",
+   "collector_number": "175",
+   "released_at": "1993-10-04",
+   "type_line": "Creature — Dragon",
+   "border_color": "black",
+   "promo": false,
+   "set_type": "core",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/5/e/5e64822a-6817-4e1e-8155-3e95f8e3763f.jpg?1783948619",
+    "normal": "https://cards.scryfall.io/normal/front/5/e/5e64822a-6817-4e1e-8155-3e95f8e3763f.jpg?1783948619",
+    "large": "https://cards.scryfall.io/large/front/5/e/5e64822a-6817-4e1e-8155-3e95f8e3763f.jpg?1783948619"
+   }
+  },
+  {
+   "id": "fd4f6e34-3f66-4e10-8170-56039c5f6fcc",
+   "name": "Shivan Dragon",
+   "set": "2ed",
+   "collector_number": "175",
+   "released_at": "1993-12-01",
+   "type_line": "Creature — Dragon",
+   "border_color": "white",
+   "promo": false,
+   "set_type": "core",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/f/d/fd4f6e34-3f66-4e10-8170-56039c5f6fcc.jpg?1783948552",
+    "normal": "https://cards.scryfall.io/normal/front/f/d/fd4f6e34-3f66-4e10-8170-56039c5f6fcc.jpg?1783948552",
+    "large": "https://cards.scryfall.io/large/front/f/d/fd4f6e34-3f66-4e10-8170-56039c5f6fcc.jpg?1783948552"
+   }
+  },
+  {
+   "id": "05082d18-ad43-43e0-8d90-973b7959aa6b",
+   "name": "Shivan Dragon",
+   "set": "ced",
+   "collector_number": "175",
+   "released_at": "1993-12-10",
+   "type_line": "Creature — Dragon",
+   "border_color": "black",
+   "promo": false,
+   "set_type": "memorabilia",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/0/5/05082d18-ad43-43e0-8d90-973b7959aa6b.jpg?1783948485",
+    "normal": "https://cards.scryfall.io/normal/front/0/5/05082d18-ad43-43e0-8d90-973b7959aa6b.jpg?1783948485",
+    "large": "https://cards.scryfall.io/large/front/0/5/05082d18-ad43-43e0-8d90-973b7959aa6b.jpg?1783948485"
+   }
+  },
+  {
+   "id": "4310cc73-79bc-4d06-b71a-679c9c6cca5c",
+   "name": "Shivan Dragon",
+   "set": "cei",
+   "collector_number": "175",
+   "released_at": "1993-12-10",
+   "type_line": "Creature — Dragon",
+   "border_color": "black",
+   "promo": false,
+   "set_type": "memorabilia",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/4/3/4310cc73-79bc-4d06-b71a-679c9c6cca5c.jpg?1783948422",
+    "normal": "https://cards.scryfall.io/normal/front/4/3/4310cc73-79bc-4d06-b71a-679c9c6cca5c.jpg?1783948422",
+    "large": "https://cards.scryfall.io/large/front/4/3/4310cc73-79bc-4d06-b71a-679c9c6cca5c.jpg?1783948422"
+   }
+  },
+  {
+   "id": "69199dd2-dbac-4039-b4da-eb2b0671645f",
+   "name": "Shivan Dragon",
+   "set": "3ed",
+   "collector_number": "177",
+   "released_at": "1994-04-11",
+   "type_line": "Creature — Dragon",
+   "border_color": "white",
+   "promo": false,
+   "set_type": "core",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/6/9/69199dd2-dbac-4039-b4da-eb2b0671645f.jpg?1783948307",
+    "normal": "https://cards.scryfall.io/normal/front/6/9/69199dd2-dbac-4039-b4da-eb2b0671645f.jpg?1783948307",
+    "large": "https://cards.scryfall.io/large/front/6/9/69199dd2-dbac-4039-b4da-eb2b0671645f.jpg?1783948307"
+   }
+  },
+  {
+   "id": "3f22dd2f-41c1-403b-a3bc-617d15922602",
+   "name": "Shivan Dragon",
+   "set": "fbb",
+   "collector_number": "177",
+   "released_at": "1994-04-11",
+   "type_line": "Creature — Dragon",
+   "border_color": "black",
+   "promo": false,
+   "set_type": "core",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/3/f/3f22dd2f-41c1-403b-a3bc-617d15922602.jpg?1783948163",
+    "normal": "https://cards.scryfall.io/normal/front/3/f/3f22dd2f-41c1-403b-a3bc-617d15922602.jpg?1783948163",
+    "large": "https://cards.scryfall.io/large/front/3/f/3f22dd2f-41c1-403b-a3bc-617d15922602.jpg?1783948163"
+   }
+  },
+  {
+   "id": "b35b0fb6-2596-4da3-820e-df28172f209b",
+   "name": "Shivan Dragon",
+   "set": "sum",
+   "collector_number": "177",
+   "released_at": "1994-06-21",
+   "type_line": "Creature — Dragon",
+   "border_color": "white",
+   "promo": false,
+   "set_type": "core",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/b/3/b35b0fb6-2596-4da3-820e-df28172f209b.jpg?1783947980",
+    "normal": "https://cards.scryfall.io/normal/front/b/3/b35b0fb6-2596-4da3-820e-df28172f209b.jpg?1783947980",
+    "large": "https://cards.scryfall.io/large/front/b/3/b35b0fb6-2596-4da3-820e-df28172f209b.jpg?1783947980"
+   }
+  },
+  {
+   "id": "70846483-9c23-42c4-9f9f-1fc5cda17c77",
+   "name": "Shivan Dragon",
+   "set": "4ed",
+   "collector_number": "220",
+   "released_at": "1995-04-01",
+   "type_line": "Creature — Dragon",
+   "border_color": "white",
+   "promo": false,
+   "set_type": "core",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/7/0/70846483-9c23-42c4-9f9f-1fc5cda17c77.jpg?1783947825",
+    "normal": "https://cards.scryfall.io/normal/front/7/0/70846483-9c23-42c4-9f9f-1fc5cda17c77.jpg?1783947825",
+    "large": "https://cards.scryfall.io/large/front/7/0/70846483-9c23-42c4-9f9f-1fc5cda17c77.jpg?1783947825"
+   }
+  },
+  {
+   "id": "a9b7d372-9324-4e7d-b09f-0e0f4c70ae65",
+   "name": "Shivan Dragon",
+   "set": "4bb",
+   "collector_number": "220",
+   "released_at": "1995-04-01",
+   "type_line": "Creature — Dragon",
+   "border_color": "black",
+   "promo": false,
+   "set_type": "core",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/a/9/a9b7d372-9324-4e7d-b09f-0e0f4c70ae65.jpg?1783947627",
+    "normal": "https://cards.scryfall.io/normal/front/a/9/a9b7d372-9324-4e7d-b09f-0e0f4c70ae65.jpg?1783947627",
+    "large": "https://cards.scryfall.io/large/front/a/9/a9b7d372-9324-4e7d-b09f-0e0f4c70ae65.jpg?1783947627"
+   }
+  },
+  {
+   "id": "64b05edd-4128-4150-9457-8aff895bd0b7",
+   "name": "Shivan Dragon",
+   "set": "5ed",
+   "collector_number": "267",
+   "released_at": "1997-03-24",
+   "type_line": "Creature — Dragon",
+   "border_color": "white",
+   "promo": false,
+   "set_type": "core",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/6/4/64b05edd-4128-4150-9457-8aff895bd0b7.jpg?1783946904",
+    "normal": "https://cards.scryfall.io/normal/front/6/4/64b05edd-4128-4150-9457-8aff895bd0b7.jpg?1783946904",
+    "large": "https://cards.scryfall.io/large/front/6/4/64b05edd-4128-4150-9457-8aff895bd0b7.jpg?1783946904"
+   }
+  },
+  {
+   "id": "03355ba4-2d93-4dcc-951d-34a4c823e40e",
+   "name": "Shivan Dragon",
+   "set": "o90p",
+   "collector_number": "5",
+   "released_at": "1998-01-01",
+   "type_line": "Creature — Dragon",
+   "border_color": "black",
+   "promo": false,
+   "set_type": "memorabilia",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/0/3/03355ba4-2d93-4dcc-951d-34a4c823e40e.jpg?1783946585",
+    "normal": "https://cards.scryfall.io/normal/front/0/3/03355ba4-2d93-4dcc-951d-34a4c823e40e.jpg?1783946585",
+    "large": "https://cards.scryfall.io/large/front/0/3/03355ba4-2d93-4dcc-951d-34a4c823e40e.jpg?1783946585"
+   }
+  },
+  {
+   "id": "475e27c5-bc2a-4907-9c18-5c8ba82d116f",
+   "name": "Shivan Dragon",
+   "set": "btd",
+   "collector_number": "44",
+   "released_at": "2000-10-01",
+   "type_line": "Creature — Dragon",
+   "border_color": "white",
+   "promo": false,
+   "set_type": "box",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/4/7/475e27c5-bc2a-4907-9c18-5c8ba82d116f.jpg?1783945730",
+    "normal": "https://cards.scryfall.io/normal/front/4/7/475e27c5-bc2a-4907-9c18-5c8ba82d116f.jpg?1783945730",
+    "large": "https://cards.scryfall.io/large/front/4/7/475e27c5-bc2a-4907-9c18-5c8ba82d116f.jpg?1783945730"
+   }
+  },
+  {
+   "id": "7fec2b71-8fa9-4818-9c4f-5d2dcd2af495",
+   "name": "Shivan Dragon",
+   "set": "7ed",
+   "collector_number": "218",
+   "released_at": "2001-04-11",
+   "type_line": "Creature — Dragon",
+   "border_color": "white",
+   "promo": false,
+   "set_type": "core",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/7/f/7fec2b71-8fa9-4818-9c4f-5d2dcd2af495.jpg?1783945446",
+    "normal": "https://cards.scryfall.io/normal/front/7/f/7fec2b71-8fa9-4818-9c4f-5d2dcd2af495.jpg?1783945446",
+    "large": "https://cards.scryfall.io/large/front/7/f/7fec2b71-8fa9-4818-9c4f-5d2dcd2af495.jpg?1783945446"
+   }
+  },
+  {
+   "id": "de98d9ad-d011-43de-92c8-f97037b42803",
+   "name": "Shivan Dragon",
+   "set": "7ed",
+   "collector_number": "218★",
+   "released_at": "2001-04-11",
+   "type_line": "Creature — Dragon",
+   "border_color": "black",
+   "promo": false,
+   "set_type": "core",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/d/e/de98d9ad-d011-43de-92c8-f97037b42803.jpg?1783945449",
+    "normal": "https://cards.scryfall.io/normal/front/d/e/de98d9ad-d011-43de-92c8-f97037b42803.jpg?1783945449",
+    "large": "https://cards.scryfall.io/large/front/d/e/de98d9ad-d011-43de-92c8-f97037b42803.jpg?1783945449"
+   }
+  },
+  {
+   "id": "e70868a4-3971-431d-a614-604aca110fe4",
+   "name": "Shivan Dragon",
+   "set": "pmei",
+   "collector_number": "2001-2",
+   "released_at": "2001-09-15",
+   "type_line": "Creature — Dragon",
+   "border_color": "white",
+   "promo": true,
+   "set_type": "promo",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/e/7/e70868a4-3971-431d-a614-604aca110fe4.jpg?1783945285",
+    "normal": "https://cards.scryfall.io/normal/front/e/7/e70868a4-3971-431d-a614-604aca110fe4.jpg?1783945285",
+    "large": "https://cards.scryfall.io/large/front/e/7/e70868a4-3971-431d-a614-604aca110fe4.jpg?1783945285"
+   }
+  },
+  {
+   "id": "e9ac007d-1616-449c-92d5-1d321235e733",
+   "name": "Shivan Dragon",
+   "set": "8ed",
+   "collector_number": "221",
+   "released_at": "2003-07-28",
+   "type_line": "Creature — Dragon",
+   "border_color": "white",
+   "promo": false,
+   "set_type": "core",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/e/9/e9ac007d-1616-449c-92d5-1d321235e733.jpg?1783944700",
+    "normal": "https://cards.scryfall.io/normal/front/e/9/e9ac007d-1616-449c-92d5-1d321235e733.jpg?1783944700",
+    "large": "https://cards.scryfall.io/large/front/e/9/e9ac007d-1616-449c-92d5-1d321235e733.jpg?1783944700"
+   }
+  },
+  {
+   "id": "d08a0542-f72a-422d-a8cf-3d37fdb5d375",
+   "name": "Shivan Dragon",
+   "set": "8ed",
+   "collector_number": "221★",
+   "released_at": "2003-07-28",
+   "type_line": "Creature — Dragon",
+   "border_color": "black",
+   "promo": false,
+   "set_type": "core",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/d/0/d08a0542-f72a-422d-a8cf-3d37fdb5d375.jpg?1783944703",
+    "normal": "https://cards.scryfall.io/normal/front/d/0/d08a0542-f72a-422d-a8cf-3d37fdb5d375.jpg?1783944703",
+    "large": "https://cards.scryfall.io/large/front/d/0/d08a0542-f72a-422d-a8cf-3d37fdb5d375.jpg?1783944703"
+   }
+  },
+  {
+   "id": "5cbf9dde-e396-43dc-8288-b39e63a23164",
+   "name": "Shivan Dragon",
+   "set": "9ed",
+   "collector_number": "219",
+   "released_at": "2005-07-29",
+   "type_line": "Creature — Dragon",
+   "border_color": "white",
+   "promo": false,
+   "set_type": "core",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/5/c/5cbf9dde-e396-43dc-8288-b39e63a23164.jpg?1783943948",
+    "normal": "https://cards.scryfall.io/normal/front/5/c/5cbf9dde-e396-43dc-8288-b39e63a23164.jpg?1783943948",
+    "large": "https://cards.scryfall.io/large/front/5/c/5cbf9dde-e396-43dc-8288-b39e63a23164.jpg?1783943948"
+   }
+  },
+  {
+   "id": "ba6ef10a-4bbc-40ce-883d-f4aa471052fc",
+   "name": "Shivan Dragon",
+   "set": "9ed",
+   "collector_number": "219★",
+   "released_at": "2005-07-29",
+   "type_line": "Creature — Dragon",
+   "border_color": "black",
+   "promo": false,
+   "set_type": "core",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/b/a/ba6ef10a-4bbc-40ce-883d-f4aa471052fc.jpg?1783943950",
+    "normal": "https://cards.scryfall.io/normal/front/b/a/ba6ef10a-4bbc-40ce-883d-f4aa471052fc.jpg?1783943950",
+    "large": "https://cards.scryfall.io/large/front/b/a/ba6ef10a-4bbc-40ce-883d-f4aa471052fc.jpg?1783943950"
+   }
+  },
+  {
+   "id": "a7a52f20-4567-4a69-9d27-73dbb71bf3d9",
+   "name": "Shivan Dragon",
+   "set": "p9ed",
+   "collector_number": "219",
+   "released_at": "2005-09-24",
+   "type_line": "Creature — Dragon",
+   "border_color": "black",
+   "promo": true,
+   "set_type": "promo",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/a/7/a7a52f20-4567-4a69-9d27-73dbb71bf3d9.jpg?1783943705",
+    "normal": "https://cards.scryfall.io/normal/front/a/7/a7a52f20-4567-4a69-9d27-73dbb71bf3d9.jpg?1783943705",
+    "large": "https://cards.scryfall.io/large/front/a/7/a7a52f20-4567-4a69-9d27-73dbb71bf3d9.jpg?1783943705"
+   }
+  },
+  {
+   "id": "0dcdd2db-1a4b-48dd-94cf-bd719ff40da9",
+   "name": "Shivan Dragon",
+   "set": "10e",
+   "collector_number": "230",
+   "released_at": "2007-07-13",
+   "type_line": "Creature — Dragon",
+   "border_color": "black",
+   "promo": false,
+   "set_type": "core",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/0/d/0dcdd2db-1a4b-48dd-94cf-bd719ff40da9.jpg?1783943012",
+    "normal": "https://cards.scryfall.io/normal/front/0/d/0dcdd2db-1a4b-48dd-94cf-bd719ff40da9.jpg?1783943012",
+    "large": "https://cards.scryfall.io/large/front/0/d/0dcdd2db-1a4b-48dd-94cf-bd719ff40da9.jpg?1783943012"
+   }
+  },
+  {
+   "id": "60bfdf43-8d4c-4415-bf19-34aa481cd91c",
+   "name": "Shivan Dragon",
+   "set": "10e",
+   "collector_number": "230★",
+   "released_at": "2007-07-13",
+   "type_line": "Creature — Dragon",
+   "border_color": "black",
+   "promo": false,
+   "set_type": "core",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/6/0/60bfdf43-8d4c-4415-bf19-34aa481cd91c.jpg?1783943013",
+    "normal": "https://cards.scryfall.io/normal/front/6/0/60bfdf43-8d4c-4415-bf19-34aa481cd91c.jpg?1783943013",
+    "large": "https://cards.scryfall.io/large/front/6/0/60bfdf43-8d4c-4415-bf19-34aa481cd91c.jpg?1783943013"
+   }
+  },
+  {
+   "id": "65126d80-97c1-4890-944c-0dd4496ae746",
+   "name": "Shivan Dragon",
+   "set": "drb",
+   "collector_number": "13",
+   "released_at": "2008-08-29",
+   "type_line": "Creature — Dragon",
+   "border_color": "black",
+   "promo": false,
+   "set_type": "from_the_vault",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/6/5/65126d80-97c1-4890-944c-0dd4496ae746.jpg?1783942649",
+    "normal": "https://cards.scryfall.io/normal/front/6/5/65126d80-97c1-4890-944c-0dd4496ae746.jpg?1783942649",
+    "large": "https://cards.scryfall.io/large/front/6/5/65126d80-97c1-4890-944c-0dd4496ae746.jpg?1783942649"
+   }
+  },
+  {
+   "id": "c5efc94a-b644-4cc4-9598-2ce16fe68420",
+   "name": "Shivan Dragon",
+   "set": "m10",
+   "collector_number": "156",
+   "released_at": "2009-07-17",
+   "type_line": "Creature — Dragon",
+   "border_color": "black",
+   "promo": false,
+   "set_type": "core",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/c/5/c5efc94a-b644-4cc4-9598-2ce16fe68420.jpg?1783942368",
+    "normal": "https://cards.scryfall.io/normal/front/c/5/c5efc94a-b644-4cc4-9598-2ce16fe68420.jpg?1783942368",
+    "large": "https://cards.scryfall.io/large/front/c/5/c5efc94a-b644-4cc4-9598-2ce16fe68420.jpg?1783942368"
+   }
+  },
+  {
+   "id": "6d8330b7-7fae-45ef-b254-12f720b85fba",
+   "name": "Shivan Dragon",
+   "set": "dpa",
+   "collector_number": "53",
+   "released_at": "2010-06-04",
+   "type_line": "Creature — Dragon",
+   "border_color": "black",
+   "promo": false,
+   "set_type": "box",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/6/d/6d8330b7-7fae-45ef-b254-12f720b85fba.jpg?1783941931",
+    "normal": "https://cards.scryfall.io/normal/front/6/d/6d8330b7-7fae-45ef-b254-12f720b85fba.jpg?1783941931",
+    "large": "https://cards.scryfall.io/large/front/6/d/6d8330b7-7fae-45ef-b254-12f720b85fba.jpg?1783941931"
+   }
+  },
+  {
+   "id": "e3d7b4a1-732c-4b4d-bfb1-45a43b54ebea",
+   "name": "Shivan Dragon",
+   "set": "ps11",
+   "collector_number": "120",
+   "released_at": "2011-01-01",
+   "type_line": "Creature — Dragon",
+   "border_color": "black",
+   "promo": false,
+   "set_type": "box",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/e/3/e3d7b4a1-732c-4b4d-bfb1-45a43b54ebea.jpg?1783941510",
+    "normal": "https://cards.scryfall.io/normal/front/e/3/e3d7b4a1-732c-4b4d-bfb1-45a43b54ebea.jpg?1783941510",
+    "large": "https://cards.scryfall.io/large/front/e/3/e3d7b4a1-732c-4b4d-bfb1-45a43b54ebea.jpg?1783941510"
+   }
+  },
+  {
+   "id": "3815cf4a-b694-432b-b618-0893f8f3dc1b",
+   "name": "Shivan Dragon",
+   "set": "m14",
+   "collector_number": "154",
+   "released_at": "2013-07-19",
+   "type_line": "Creature — Dragon",
+   "border_color": "black",
+   "promo": false,
+   "set_type": "core",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/3/8/3815cf4a-b694-432b-b618-0893f8f3dc1b.jpg?1783939911",
+    "normal": "https://cards.scryfall.io/normal/front/3/8/3815cf4a-b694-432b-b618-0893f8f3dc1b.jpg?1783939911",
+    "large": "https://cards.scryfall.io/large/front/3/8/3815cf4a-b694-432b-b618-0893f8f3dc1b.jpg?1783939911"
+   }
+  },
+  {
+   "id": "b0c76430-c5c9-46a4-9a3b-9bbf259e4b38",
+   "name": "Shivan Dragon",
+   "set": "m15",
+   "collector_number": "281",
+   "released_at": "2014-07-18",
+   "type_line": "Creature — Dragon",
+   "border_color": "black",
+   "promo": false,
+   "set_type": "core",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/b/0/b0c76430-c5c9-46a4-9a3b-9bbf259e4b38.jpg?1783939144",
+    "normal": "https://cards.scryfall.io/normal/front/b/0/b0c76430-c5c9-46a4-9a3b-9bbf259e4b38.jpg?1783939144",
+    "large": "https://cards.scryfall.io/large/front/b/0/b0c76430-c5c9-46a4-9a3b-9bbf259e4b38.jpg?1783939144"
+   }
+  },
+  {
+   "id": "b6fd9b74-8e5b-4c57-bb4f-4a7222183c44",
+   "name": "Shivan Dragon",
+   "set": "ori",
+   "collector_number": "285",
+   "released_at": "2015-07-17",
+   "type_line": "Creature — Dragon",
+   "border_color": "black",
+   "promo": false,
+   "set_type": "core",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/b/6/b6fd9b74-8e5b-4c57-bb4f-4a7222183c44.jpg?1783938297",
+    "normal": "https://cards.scryfall.io/normal/front/b/6/b6fd9b74-8e5b-4c57-bb4f-4a7222183c44.jpg?1783938297",
+    "large": "https://cards.scryfall.io/large/front/b/6/b6fd9b74-8e5b-4c57-bb4f-4a7222183c44.jpg?1783938297"
+   }
+  },
+  {
+   "id": "ca25d8fe-93b3-4d2c-96df-ca6e4f528543",
+   "name": "Shivan Dragon",
+   "set": "w16",
+   "collector_number": "13",
+   "released_at": "2016-04-08",
+   "type_line": "Creature — Dragon",
+   "border_color": "black",
+   "promo": false,
+   "set_type": "starter",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/c/a/ca25d8fe-93b3-4d2c-96df-ca6e4f528543.jpg?1783937685",
+    "normal": "https://cards.scryfall.io/normal/front/c/a/ca25d8fe-93b3-4d2c-96df-ca6e4f528543.jpg?1783937685",
+    "large": "https://cards.scryfall.io/large/front/c/a/ca25d8fe-93b3-4d2c-96df-ca6e4f528543.jpg?1783937685"
+   }
+  },
+  {
+   "id": "2160284c-2ece-43ba-ab67-5c184f81fe0e",
+   "name": "Shivan Dragon",
+   "set": "w17",
+   "collector_number": "22",
+   "released_at": "2017-04-15",
+   "type_line": "Creature — Dragon",
+   "border_color": "black",
+   "promo": false,
+   "set_type": "starter",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/2/1/2160284c-2ece-43ba-ab67-5c184f81fe0e.jpg?1783936546",
+    "normal": "https://cards.scryfall.io/normal/front/2/1/2160284c-2ece-43ba-ab67-5c184f81fe0e.jpg?1783936546",
+    "large": "https://cards.scryfall.io/large/front/2/1/2160284c-2ece-43ba-ab67-5c184f81fe0e.jpg?1783936546"
+   }
+  },
+  {
+   "id": "d389b8db-5866-4146-a379-f24b6463622b",
+   "name": "Shivan Dragon",
+   "set": "m19",
+   "collector_number": "300",
+   "released_at": "2018-07-13",
+   "type_line": "Creature — Dragon",
+   "border_color": "black",
+   "promo": false,
+   "set_type": "core",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/d/3/d389b8db-5866-4146-a379-f24b6463622b.jpg?1783934480",
+    "normal": "https://cards.scryfall.io/normal/front/d/3/d389b8db-5866-4146-a379-f24b6463622b.jpg?1783934480",
+    "large": "https://cards.scryfall.io/large/front/d/3/d389b8db-5866-4146-a379-f24b6463622b.jpg?1783934480"
+   }
+  },
+  {
+   "id": "227cf1b5-f85b-41fe-be98-66e383652039",
+   "name": "Shivan Dragon",
+   "set": "m20",
+   "collector_number": "335",
+   "released_at": "2019-07-12",
+   "type_line": "Creature — Dragon",
+   "border_color": "black",
+   "promo": false,
+   "set_type": "core",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/2/2/227cf1b5-f85b-41fe-be98-66e383652039.jpg?1783932902",
+    "normal": "https://cards.scryfall.io/normal/front/2/2/227cf1b5-f85b-41fe-be98-66e383652039.jpg?1783932902",
+    "large": "https://cards.scryfall.io/large/front/2/2/227cf1b5-f85b-41fe-be98-66e383652039.jpg?1783932902"
+   }
+  },
+  {
+   "id": "8beb06f5-05e1-461e-927f-906d38d9448c",
+   "name": "Shivan Dragon",
+   "set": "gn3",
+   "collector_number": "87",
+   "released_at": "2022-10-14",
+   "type_line": "Creature — Dragon",
+   "border_color": "black",
+   "promo": false,
+   "set_type": "box",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/8/b/8beb06f5-05e1-461e-927f-906d38d9448c.jpg?1783920266",
+    "normal": "https://cards.scryfall.io/normal/front/8/b/8beb06f5-05e1-461e-927f-906d38d9448c.jpg?1783920266",
+    "large": "https://cards.scryfall.io/large/front/8/b/8beb06f5-05e1-461e-927f-906d38d9448c.jpg?1783920266"
+   }
+  },
+  {
+   "id": "c535f7f8-a57e-4ef1-91b4-5e3281bd4407",
+   "name": "Shivan Dragon",
+   "set": "slc",
+   "collector_number": "1993",
+   "released_at": "2022-11-01",
+   "type_line": "Creature — Dragon",
+   "border_color": "borderless",
+   "promo": false,
+   "set_type": "box",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/c/5/c535f7f8-a57e-4ef1-91b4-5e3281bd4407.jpg?1783920233",
+    "normal": "https://cards.scryfall.io/normal/front/c/5/c535f7f8-a57e-4ef1-91b4-5e3281bd4407.jpg?1783920233",
+    "large": "https://cards.scryfall.io/large/front/c/5/c535f7f8-a57e-4ef1-91b4-5e3281bd4407.jpg?1783920233"
+   }
+  },
+  {
+   "id": "9a5ddd65-b731-4805-827c-a25350531d74",
+   "name": "Shivan Dragon",
+   "set": "30a",
+   "collector_number": "170",
+   "released_at": "2022-11-28",
+   "type_line": "Creature — Dragon",
+   "border_color": "black",
+   "promo": false,
+   "set_type": "memorabilia",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/9/a/9a5ddd65-b731-4805-827c-a25350531d74.jpg?1783919489",
+    "normal": "https://cards.scryfall.io/normal/front/9/a/9a5ddd65-b731-4805-827c-a25350531d74.jpg?1783919489",
+    "large": "https://cards.scryfall.io/large/front/9/a/9a5ddd65-b731-4805-827c-a25350531d74.jpg?1783919489"
+   }
+  },
+  {
+   "id": "4bbcec3a-2747-4fa3-b8cd-d4a0b1dda042",
+   "name": "Shivan Dragon",
+   "set": "30a",
+   "collector_number": "467",
+   "released_at": "2022-11-28",
+   "type_line": "Creature — Dragon",
+   "border_color": "black",
+   "promo": false,
+   "set_type": "memorabilia",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/4/b/4bbcec3a-2747-4fa3-b8cd-d4a0b1dda042.jpg?1783919303",
+    "normal": "https://cards.scryfall.io/normal/front/4/b/4bbcec3a-2747-4fa3-b8cd-d4a0b1dda042.jpg?1783919303",
+    "large": "https://cards.scryfall.io/large/front/4/b/4bbcec3a-2747-4fa3-b8cd-d4a0b1dda042.jpg?1783919303"
+   }
+  },
+  {
+   "id": "7b78eb49-bd68-47e6-90a3-83ec2eeb4312",
+   "name": "Shivan Dragon",
+   "set": "dmr",
+   "collector_number": "135",
+   "released_at": "2023-01-13",
+   "type_line": "Creature — Dragon",
+   "border_color": "black",
+   "promo": false,
+   "set_type": "masters",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/7/b/7b78eb49-bd68-47e6-90a3-83ec2eeb4312.jpg?1783918456",
+    "normal": "https://cards.scryfall.io/normal/front/7/b/7b78eb49-bd68-47e6-90a3-83ec2eeb4312.jpg?1783918456",
+    "large": "https://cards.scryfall.io/large/front/7/b/7b78eb49-bd68-47e6-90a3-83ec2eeb4312.jpg?1783918456"
+   }
+  },
+  {
+   "id": "8b5f8025-95ff-431a-a33c-4e2e7366633f",
+   "name": "Shivan Dragon",
+   "set": "dmr",
+   "collector_number": "329",
+   "released_at": "2023-01-13",
+   "type_line": "Creature — Dragon",
+   "border_color": "black",
+   "promo": false,
+   "set_type": "masters",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/8/b/8b5f8025-95ff-431a-a33c-4e2e7366633f.jpg?1787730128",
+    "normal": "https://cards.scryfall.io/normal/front/8/b/8b5f8025-95ff-431a-a33c-4e2e7366633f.jpg?1787730128",
+    "large": "https://cards.scryfall.io/large/front/8/b/8b5f8025-95ff-431a-a33c-4e2e7366633f.jpg?1787730128"
+   }
+  },
+  {
+   "id": "b0a04baf-5301-4e47-ac8f-243d2a73f18e",
+   "name": "Shivan Dragon",
+   "set": "sld",
+   "collector_number": "716",
+   "released_at": "2023-02-21",
+   "type_line": "Creature — Dragon",
+   "border_color": "borderless",
+   "promo": false,
+   "set_type": "box",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/b/0/b0a04baf-5301-4e47-ac8f-243d2a73f18e.jpg?1783917753",
+    "normal": "https://cards.scryfall.io/normal/front/b/0/b0a04baf-5301-4e47-ac8f-243d2a73f18e.jpg?1783917753",
+    "large": "https://cards.scryfall.io/large/front/b/0/b0a04baf-5301-4e47-ac8f-243d2a73f18e.jpg?1783917753"
+   }
+  },
+  {
+   "id": "f76d1d4f-4911-46cd-8adb-af4b5eba48bb",
+   "name": "Shivan Dragon",
+   "set": "p30h",
+   "collector_number": "4",
+   "released_at": "2023-03-21",
+   "type_line": "Creature — Dragon",
+   "border_color": "black",
+   "promo": true,
+   "set_type": "promo",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/f/7/f76d1d4f-4911-46cd-8adb-af4b5eba48bb.jpg?1783917727",
+    "normal": "https://cards.scryfall.io/normal/front/f/7/f76d1d4f-4911-46cd-8adb-af4b5eba48bb.jpg?1783917727",
+    "large": "https://cards.scryfall.io/large/front/f/7/f76d1d4f-4911-46cd-8adb-af4b5eba48bb.jpg?1783917727"
+   }
+  },
+  {
+   "id": "3dbbfb7f-0e50-454b-a9a1-b4813a95112e",
+   "name": "Shivan Dragon",
+   "set": "p30h",
+   "collector_number": "4★",
+   "released_at": "2023-03-21",
+   "type_line": "Creature — Dragon",
+   "border_color": "black",
+   "promo": true,
+   "set_type": "promo",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/3/d/3dbbfb7f-0e50-454b-a9a1-b4813a95112e.jpg?1787728132",
+    "normal": "https://cards.scryfall.io/normal/front/3/d/3dbbfb7f-0e50-454b-a9a1-b4813a95112e.jpg?1787728132",
+    "large": "https://cards.scryfall.io/large/front/3/d/3dbbfb7f-0e50-454b-a9a1-b4813a95112e.jpg?1787728132"
+   }
+  },
+  {
+   "id": "18927987-aeea-4af3-a1ea-90949772e56a",
+   "name": "Shivan Dragon",
+   "set": "p30t",
+   "collector_number": "2",
+   "released_at": "2023-09-01",
+   "type_line": "Creature — Dragon",
+   "border_color": "black",
+   "promo": true,
+   "set_type": "promo",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/1/8/18927987-aeea-4af3-a1ea-90949772e56a.jpg?1783915163",
+    "normal": "https://cards.scryfall.io/normal/front/1/8/18927987-aeea-4af3-a1ea-90949772e56a.jpg?1783915163",
+    "large": "https://cards.scryfall.io/large/front/1/8/18927987-aeea-4af3-a1ea-90949772e56a.jpg?1783915163"
+   }
+  },
+  {
+   "id": "0bda24b2-a9ab-4aca-8bbf-1bfb0990f68f",
+   "name": "Shivan Dragon",
+   "set": "sld",
+   "collector_number": "1709",
+   "released_at": "2024-06-24",
+   "type_line": "Creature — Dragon",
+   "border_color": "borderless",
+   "promo": false,
+   "set_type": "box",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/0/b/0bda24b2-a9ab-4aca-8bbf-1bfb0990f68f.jpg?1783911038",
+    "normal": "https://cards.scryfall.io/normal/front/0/b/0bda24b2-a9ab-4aca-8bbf-1bfb0990f68f.jpg?1783911038",
+    "large": "https://cards.scryfall.io/large/front/0/b/0bda24b2-a9ab-4aca-8bbf-1bfb0990f68f.jpg?1783911038"
+   }
+  },
+  {
+   "id": "1fcff1e0-2745-448d-a27b-e31719e222e9",
+   "name": "Shivan Dragon",
+   "set": "fdn",
+   "collector_number": "206",
+   "released_at": "2024-11-15",
+   "type_line": "Creature — Dragon",
+   "border_color": "black",
+   "promo": false,
+   "set_type": "core",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/1/f/1fcff1e0-2745-448d-a27b-e31719e222e9.jpg?1783909064",
+    "normal": "https://cards.scryfall.io/normal/front/1/f/1fcff1e0-2745-448d-a27b-e31719e222e9.jpg?1783909064",
+    "large": "https://cards.scryfall.io/large/front/1/f/1fcff1e0-2745-448d-a27b-e31719e222e9.jpg?1783909064"
+   }
+  },
+  {
+   "id": "702c4781-670b-49ae-b511-90ed119841b0",
+   "name": "Shivan Dragon",
+   "set": "fdn",
+   "collector_number": "763",
+   "released_at": "2026-04-24",
+   "type_line": "Creature — Dragon",
+   "border_color": "black",
+   "promo": false,
+   "set_type": "core",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/7/0/702c4781-670b-49ae-b511-90ed119841b0.jpg?1787562519",
+    "normal": "https://cards.scryfall.io/normal/front/7/0/702c4781-670b-49ae-b511-90ed119841b0.jpg?1787562519",
+    "large": "https://cards.scryfall.io/large/front/7/0/702c4781-670b-49ae-b511-90ed119841b0.jpg?1787562519"
+   }
+  },
+  {
+   "id": "294ca89d-549a-4302-9284-df5b4e833a69",
+   "name": "Shivan Dragon",
+   "set": "sld",
+   "collector_number": "2759",
+   "released_at": "2026-08-31",
+   "type_line": "Creature — Dragon",
+   "border_color": "borderless",
+   "promo": false,
+   "set_type": "box",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/2/9/294ca89d-549a-4302-9284-df5b4e833a69.jpg?1789446860",
+    "normal": "https://cards.scryfall.io/normal/front/2/9/294ca89d-549a-4302-9284-df5b4e833a69.jpg?1789446860",
+    "large": "https://cards.scryfall.io/large/front/2/9/294ca89d-549a-4302-9284-df5b4e833a69.jpg?1789446860"
+   }
+  },
+  {
+   "id": "d6ac5a7f-0e73-45d1-9b20-6ae1a60fa7cf",
+   "name": "Shivan Dragon",
+   "set": "sld",
+   "collector_number": "7180",
+   "released_at": "2026-08-31",
+   "type_line": "Creature — Dragon",
+   "border_color": "borderless",
+   "promo": false,
+   "set_type": "box",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/d/6/d6ac5a7f-0e73-45d1-9b20-6ae1a60fa7cf.jpg?1790063199",
+    "normal": "https://cards.scryfall.io/normal/front/d/6/d6ac5a7f-0e73-45d1-9b20-6ae1a60fa7cf.jpg?1790063199",
+    "large": "https://cards.scryfall.io/large/front/d/6/d6ac5a7f-0e73-45d1-9b20-6ae1a60fa7cf.jpg?1790063199"
+   }
+  }
+ ],
+ "Diabolic Edict": [
+  {
+   "id": "a2ecf2ee-1e2d-4ab2-8b2c-717c794b09b2",
+   "name": "Diabolic Edict",
+   "set": "tmp",
+   "collector_number": "128",
+   "released_at": "1997-10-14",
+   "type_line": "Instant",
+   "border_color": "black",
+   "promo": false,
+   "set_type": "expansion",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/a/2/a2ecf2ee-1e2d-4ab2-8b2c-717c794b09b2.jpg?1783946641",
+    "normal": "https://cards.scryfall.io/normal/front/a/2/a2ecf2ee-1e2d-4ab2-8b2c-717c794b09b2.jpg?1783946641",
+    "large": "https://cards.scryfall.io/large/front/a/2/a2ecf2ee-1e2d-4ab2-8b2c-717c794b09b2.jpg?1783946641"
+   }
+  },
+  {
+   "id": "283982a8-e2a2-44dd-8f15-81c0f1e20d54",
+   "name": "Diabolic Edict",
+   "set": "wc99",
+   "collector_number": "js128",
+   "released_at": "1999-08-04",
+   "type_line": "Instant",
+   "border_color": "gold",
+   "promo": false,
+   "set_type": "memorabilia",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/2/8/283982a8-e2a2-44dd-8f15-81c0f1e20d54.jpg?1783946003",
+    "normal": "https://cards.scryfall.io/normal/front/2/8/283982a8-e2a2-44dd-8f15-81c0f1e20d54.jpg?1783946003",
+    "large": "https://cards.scryfall.io/large/front/2/8/283982a8-e2a2-44dd-8f15-81c0f1e20d54.jpg?1783946003"
+   }
+  },
+  {
+   "id": "855fe6f4-03a1-4864-b60e-ccf7e8da1b08",
+   "name": "Diabolic Edict",
+   "set": "btd",
+   "collector_number": "23",
+   "released_at": "2000-10-01",
+   "type_line": "Instant",
+   "border_color": "white",
+   "promo": false,
+   "set_type": "box",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/8/5/855fe6f4-03a1-4864-b60e-ccf7e8da1b08.jpg?1783945735",
+    "normal": "https://cards.scryfall.io/normal/front/8/5/855fe6f4-03a1-4864-b60e-ccf7e8da1b08.jpg?1783945735",
+    "large": "https://cards.scryfall.io/large/front/8/5/855fe6f4-03a1-4864-b60e-ccf7e8da1b08.jpg?1783945735"
+   }
+  },
+  {
+   "id": "cf7acfaa-0fb7-4f2b-8607-3bfa877f8682",
+   "name": "Diabolic Edict",
+   "set": "pal01",
+   "collector_number": "10",
+   "released_at": "2001-01-01",
+   "type_line": "Instant",
+   "border_color": "black",
+   "promo": true,
+   "set_type": "promo",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/c/f/cf7acfaa-0fb7-4f2b-8607-3bfa877f8682.jpg?1783945632",
+    "normal": "https://cards.scryfall.io/normal/front/c/f/cf7acfaa-0fb7-4f2b-8607-3bfa877f8682.jpg?1783945632",
+    "large": "https://cards.scryfall.io/large/front/c/f/cf7acfaa-0fb7-4f2b-8607-3bfa877f8682.jpg?1783945632"
+   }
+  },
+  {
+   "id": "f6986173-56e2-41d8-9387-ab86721ed92e",
+   "name": "Diabolic Edict",
+   "set": "mp2",
+   "collector_number": "41",
+   "released_at": "2017-04-28",
+   "type_line": "Instant",
+   "border_color": "borderless",
+   "promo": false,
+   "set_type": "masterpiece",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/f/6/f6986173-56e2-41d8-9387-ab86721ed92e.jpg?1783936422",
+    "normal": "https://cards.scryfall.io/normal/front/f/6/f6986173-56e2-41d8-9387-ab86721ed92e.jpg?1783936422",
+    "large": "https://cards.scryfall.io/large/front/f/6/f6986173-56e2-41d8-9387-ab86721ed92e.jpg?1783936422"
+   }
+  },
+  {
+   "id": "6b4992d2-8664-4179-a3f3-bfb2166484dd",
+   "name": "Diabolic Edict",
+   "set": "a25",
+   "collector_number": "85",
+   "released_at": "2018-03-16",
+   "type_line": "Instant",
+   "border_color": "black",
+   "promo": false,
+   "set_type": "masters",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/6/b/6b4992d2-8664-4179-a3f3-bfb2166484dd.jpg?1783935169",
+    "normal": "https://cards.scryfall.io/normal/front/6/b/6b4992d2-8664-4179-a3f3-bfb2166484dd.jpg?1783935169",
+    "large": "https://cards.scryfall.io/large/front/6/b/6b4992d2-8664-4179-a3f3-bfb2166484dd.jpg?1783935169"
+   }
+  },
+  {
+   "id": "a2cda4b2-50c2-4442-9ca2-1c668cc07b0e",
+   "name": "Diabolic Edict",
+   "set": "pmei",
+   "collector_number": "2019-2",
+   "released_at": "2019-05-26",
+   "type_line": "Instant",
+   "border_color": "black",
+   "promo": true,
+   "set_type": "promo",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/a/2/a2cda4b2-50c2-4442-9ca2-1c668cc07b0e.jpg?1783933231",
+    "normal": "https://cards.scryfall.io/normal/front/a/2/a2cda4b2-50c2-4442-9ca2-1c668cc07b0e.jpg?1783933231",
+    "large": "https://cards.scryfall.io/large/front/a/2/a2cda4b2-50c2-4442-9ca2-1c668cc07b0e.jpg?1783933231"
+   }
+  },
+  {
+   "id": "4eabbed2-1399-4cf1-9eba-b53c56caced4",
+   "name": "Diabolic Edict",
+   "set": "mh1",
+   "collector_number": "87",
+   "released_at": "2019-06-14",
+   "type_line": "Instant",
+   "border_color": "black",
+   "promo": false,
+   "set_type": "draft_innovation",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/4/e/4eabbed2-1399-4cf1-9eba-b53c56caced4.jpg?1783933130",
+    "normal": "https://cards.scryfall.io/normal/front/4/e/4eabbed2-1399-4cf1-9eba-b53c56caced4.jpg?1783933130",
+    "large": "https://cards.scryfall.io/large/front/4/e/4eabbed2-1399-4cf1-9eba-b53c56caced4.jpg?1783933130"
+   }
+  },
+  {
+   "id": "e2d64421-14cb-41f8-83b1-0f4aff851685",
+   "name": "Diabolic Edict",
+   "set": "plst",
+   "collector_number": "A25-85",
+   "released_at": "2019-11-07",
+   "type_line": "Instant",
+   "border_color": "black",
+   "promo": false,
+   "set_type": "masters",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/e/2/e2d64421-14cb-41f8-83b1-0f4aff851685.jpg?1783931815",
+    "normal": "https://cards.scryfall.io/normal/front/e/2/e2d64421-14cb-41f8-83b1-0f4aff851685.jpg?1783931815",
+    "large": "https://cards.scryfall.io/large/front/e/2/e2d64421-14cb-41f8-83b1-0f4aff851685.jpg?1783931815"
+   }
+  },
+  {
+   "id": "d2abd138-b840-4222-88ad-7b0ed64a927b",
+   "name": "Diabolic Edict",
+   "set": "j22",
+   "collector_number": "67",
+   "released_at": "2022-12-02",
+   "type_line": "Instant",
+   "border_color": "black",
+   "promo": false,
+   "set_type": "draft_innovation",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/d/2/d2abd138-b840-4222-88ad-7b0ed64a927b.jpg?1783919168",
+    "normal": "https://cards.scryfall.io/normal/front/d/2/d2abd138-b840-4222-88ad-7b0ed64a927b.jpg?1783919168",
+    "large": "https://cards.scryfall.io/large/front/d/2/d2abd138-b840-4222-88ad-7b0ed64a927b.jpg?1783919168"
+   }
+  },
+  {
+   "id": "59f3b17f-6de9-4638-8104-e742d9f56f2c",
+   "name": "Diabolic Edict",
+   "set": "pmei",
+   "collector_number": "2024-5",
+   "released_at": "2024-09-12",
+   "type_line": "Instant",
+   "border_color": "black",
+   "promo": true,
+   "set_type": "promo",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/5/9/59f3b17f-6de9-4638-8104-e742d9f56f2c.jpg?1787806611",
+    "normal": "https://cards.scryfall.io/normal/front/5/9/59f3b17f-6de9-4638-8104-e742d9f56f2c.jpg?1787806611",
+    "large": "https://cards.scryfall.io/large/front/5/9/59f3b17f-6de9-4638-8104-e742d9f56f2c.jpg?1787806611"
+   }
+  }
+ ],
+ "Wastes": [
+  {
+   "id": "7019912c-bd9b-4b96-9388-400794909aa1",
+   "name": "Wastes",
+   "set": "ogw",
+   "collector_number": "183",
+   "released_at": "2016-01-22",
+   "type_line": "Basic Land",
+   "border_color": "black",
+   "promo": false,
+   "set_type": "expansion",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/7/0/7019912c-bd9b-4b96-9388-400794909aa1.jpg?1783937889",
+    "normal": "https://cards.scryfall.io/normal/front/7/0/7019912c-bd9b-4b96-9388-400794909aa1.jpg?1783937889",
+    "large": "https://cards.scryfall.io/large/front/7/0/7019912c-bd9b-4b96-9388-400794909aa1.jpg?1783937889"
+   }
+  },
+  {
+   "id": "9cc070d3-4b83-4684-9caf-063e5c473a77",
+   "name": "Wastes",
+   "set": "ogw",
+   "collector_number": "183a",
+   "released_at": "2016-01-22",
+   "type_line": "Basic Land",
+   "border_color": "black",
+   "promo": false,
+   "set_type": "expansion",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/9/c/9cc070d3-4b83-4684-9caf-063e5c473a77.jpg?1783937888",
+    "normal": "https://cards.scryfall.io/normal/front/9/c/9cc070d3-4b83-4684-9caf-063e5c473a77.jpg?1783937888",
+    "large": "https://cards.scryfall.io/large/front/9/c/9cc070d3-4b83-4684-9caf-063e5c473a77.jpg?1783937888"
+   }
+  },
+  {
+   "id": "69b215fe-0d97-4ca1-9490-174220fd454b",
+   "name": "Wastes",
+   "set": "ogw",
+   "collector_number": "184",
+   "released_at": "2016-01-22",
+   "type_line": "Basic Land",
+   "border_color": "black",
+   "promo": false,
+   "set_type": "expansion",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/6/9/69b215fe-0d97-4ca1-9490-174220fd454b.jpg?1783937889",
+    "normal": "https://cards.scryfall.io/normal/front/6/9/69b215fe-0d97-4ca1-9490-174220fd454b.jpg?1783937889",
+    "large": "https://cards.scryfall.io/large/front/6/9/69b215fe-0d97-4ca1-9490-174220fd454b.jpg?1783937889"
+   }
+  },
+  {
+   "id": "60682c00-c661-4a9d-8326-f3f014a04e3e",
+   "name": "Wastes",
+   "set": "ogw",
+   "collector_number": "184a",
+   "released_at": "2016-01-22",
+   "type_line": "Basic Land",
+   "border_color": "black",
+   "promo": false,
+   "set_type": "expansion",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/6/0/60682c00-c661-4a9d-8326-f3f014a04e3e.jpg?1783937888",
+    "normal": "https://cards.scryfall.io/normal/front/6/0/60682c00-c661-4a9d-8326-f3f014a04e3e.jpg?1783937888",
+    "large": "https://cards.scryfall.io/large/front/6/0/60682c00-c661-4a9d-8326-f3f014a04e3e.jpg?1783937888"
+   }
+  },
+  {
+   "id": "02729948-9b74-453f-a268-2f29b48a29ee",
+   "name": "Wastes",
+   "set": "plst",
+   "collector_number": "OGW-183",
+   "released_at": "2020-09-01",
+   "type_line": "Basic Land",
+   "border_color": "black",
+   "promo": false,
+   "set_type": "masters",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/0/2/02729948-9b74-453f-a268-2f29b48a29ee.jpg?1783929641",
+    "normal": "https://cards.scryfall.io/normal/front/0/2/02729948-9b74-453f-a268-2f29b48a29ee.jpg?1783929641",
+    "large": "https://cards.scryfall.io/large/front/0/2/02729948-9b74-453f-a268-2f29b48a29ee.jpg?1783929641"
+   }
+  },
+  {
+   "id": "bf10c264-c7f6-4ae3-b3ef-ff12bd7b64c0",
+   "name": "Wastes",
+   "set": "tsr",
+   "collector_number": "410",
+   "released_at": "2021-03-19",
+   "type_line": "Basic Land",
+   "border_color": "black",
+   "promo": false,
+   "set_type": "masters",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/b/f/bf10c264-c7f6-4ae3-b3ef-ff12bd7b64c0.jpg?1787742957",
+    "normal": "https://cards.scryfall.io/normal/front/b/f/bf10c264-c7f6-4ae3-b3ef-ff12bd7b64c0.jpg?1787742957",
+    "large": "https://cards.scryfall.io/large/front/b/f/bf10c264-c7f6-4ae3-b3ef-ff12bd7b64c0.jpg?1787742957"
+   }
+  },
+  {
+   "id": "0f93e8ad-8ef6-4cf1-a664-d1477f1ebae4",
+   "name": "Wastes",
+   "set": "sld",
+   "collector_number": "704",
+   "released_at": "2022-11-28",
+   "type_line": "Basic Land",
+   "border_color": "black",
+   "promo": false,
+   "set_type": "box",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/0/f/0f93e8ad-8ef6-4cf1-a664-d1477f1ebae4.jpg?1783919223",
+    "normal": "https://cards.scryfall.io/normal/front/0/f/0f93e8ad-8ef6-4cf1-a664-d1477f1ebae4.jpg?1783919223",
+    "large": "https://cards.scryfall.io/large/front/0/f/0f93e8ad-8ef6-4cf1-a664-d1477f1ebae4.jpg?1783919223"
+   }
+  },
+  {
+   "id": "d9b38015-985f-4718-a6f8-fe19de225801",
+   "name": "Wastes",
+   "set": "sld",
+   "collector_number": "705",
+   "released_at": "2022-11-28",
+   "type_line": "Basic Land",
+   "border_color": "black",
+   "promo": false,
+   "set_type": "box",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/d/9/d9b38015-985f-4718-a6f8-fe19de225801.jpg?1783919224",
+    "normal": "https://cards.scryfall.io/normal/front/d/9/d9b38015-985f-4718-a6f8-fe19de225801.jpg?1783919224",
+    "large": "https://cards.scryfall.io/large/front/d/9/d9b38015-985f-4718-a6f8-fe19de225801.jpg?1783919224"
+   }
+  },
+  {
+   "id": "c0040569-c4b1-46ad-8115-1fdb82ba3710",
+   "name": "Wastes",
+   "set": "sld",
+   "collector_number": "706",
+   "released_at": "2022-11-28",
+   "type_line": "Basic Land",
+   "border_color": "black",
+   "promo": false,
+   "set_type": "box",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/c/0/c0040569-c4b1-46ad-8115-1fdb82ba3710.jpg?1783919223",
+    "normal": "https://cards.scryfall.io/normal/front/c/0/c0040569-c4b1-46ad-8115-1fdb82ba3710.jpg?1783919223",
+    "large": "https://cards.scryfall.io/large/front/c/0/c0040569-c4b1-46ad-8115-1fdb82ba3710.jpg?1783919223"
+   }
+  },
+  {
+   "id": "56ef693d-7c48-46cb-8f52-abc660a2736e",
+   "name": "Wastes",
+   "set": "j22",
+   "collector_number": "834",
+   "released_at": "2022-12-02",
+   "type_line": "Basic Land",
+   "border_color": "black",
+   "promo": false,
+   "set_type": "draft_innovation",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/5/6/56ef693d-7c48-46cb-8f52-abc660a2736e.jpg?1783918782",
+    "normal": "https://cards.scryfall.io/normal/front/5/6/56ef693d-7c48-46cb-8f52-abc660a2736e.jpg?1783918782",
+    "large": "https://cards.scryfall.io/large/front/5/6/56ef693d-7c48-46cb-8f52-abc660a2736e.jpg?1783918782"
+   }
+  },
+  {
+   "id": "8d479a83-16f7-425c-9873-b900f39ed620",
+   "name": "Wastes",
+   "set": "cmm",
+   "collector_number": "1055",
+   "released_at": "2023-08-04",
+   "type_line": "Basic Land",
+   "border_color": "black",
+   "promo": false,
+   "set_type": "masters",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/8/d/8d479a83-16f7-425c-9873-b900f39ed620.jpg?1783915370",
+    "normal": "https://cards.scryfall.io/normal/front/8/d/8d479a83-16f7-425c-9873-b900f39ed620.jpg?1783915370",
+    "large": "https://cards.scryfall.io/large/front/8/d/8d479a83-16f7-425c-9873-b900f39ed620.jpg?1783915370"
+   }
+  },
+  {
+   "id": "2585d250-1cce-431c-a9d1-a3adce9d70cd",
+   "name": "Wastes",
+   "set": "cmm",
+   "collector_number": "1056",
+   "released_at": "2023-08-04",
+   "type_line": "Basic Land",
+   "border_color": "black",
+   "promo": false,
+   "set_type": "masters",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/2/5/2585d250-1cce-431c-a9d1-a3adce9d70cd.jpg?1783915369",
+    "normal": "https://cards.scryfall.io/normal/front/2/5/2585d250-1cce-431c-a9d1-a3adce9d70cd.jpg?1783915369",
+    "large": "https://cards.scryfall.io/large/front/2/5/2585d250-1cce-431c-a9d1-a3adce9d70cd.jpg?1783915369"
+   }
+  },
+  {
+   "id": "837edd3f-5380-4c1c-8323-0e61dac385e5",
+   "name": "Wastes",
+   "set": "sld",
+   "collector_number": "795★",
+   "released_at": "2024-04-08",
+   "type_line": "Basic Land",
+   "border_color": "black",
+   "promo": false,
+   "set_type": "box",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/8/3/837edd3f-5380-4c1c-8323-0e61dac385e5.jpg?1783912040",
+    "normal": "https://cards.scryfall.io/normal/front/8/3/837edd3f-5380-4c1c-8323-0e61dac385e5.jpg?1783912040",
+    "large": "https://cards.scryfall.io/large/front/8/3/837edd3f-5380-4c1c-8323-0e61dac385e5.jpg?1783912040"
+   }
+  },
+  {
+   "id": "475be6db-6541-412b-a07e-5357b25a499f",
+   "name": "Wastes",
+   "set": "m3c",
+   "collector_number": "408",
+   "released_at": "2024-06-14",
+   "type_line": "Basic Land",
+   "border_color": "black",
+   "promo": false,
+   "set_type": "commander",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/4/7/475be6db-6541-412b-a07e-5357b25a499f.jpg?1783911312",
+    "normal": "https://cards.scryfall.io/normal/front/4/7/475be6db-6541-412b-a07e-5357b25a499f.jpg?1783911312",
+    "large": "https://cards.scryfall.io/large/front/4/7/475be6db-6541-412b-a07e-5357b25a499f.jpg?1783911312"
+   }
+  },
+  {
+   "id": "643d0ee1-016c-4ea8-b469-3599ae7532e6",
+   "name": "Wastes",
+   "set": "plg25",
+   "collector_number": "2",
+   "released_at": "2025-04-11",
+   "type_line": "Basic Land",
+   "border_color": "black",
+   "promo": true,
+   "set_type": "promo",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/6/4/643d0ee1-016c-4ea8-b469-3599ae7532e6.jpg?1783907432",
+    "normal": "https://cards.scryfall.io/normal/front/6/4/643d0ee1-016c-4ea8-b469-3599ae7532e6.jpg?1783907432",
+    "large": "https://cards.scryfall.io/large/front/6/4/643d0ee1-016c-4ea8-b469-3599ae7532e6.jpg?1783907432"
+   }
+  },
+  {
+   "id": "c61feafd-ef09-437c-a12c-fd7d6cb8c15a",
+   "name": "Wastes",
+   "set": "fin",
+   "collector_number": "309",
+   "released_at": "2025-06-13",
+   "type_line": "Basic Land",
+   "border_color": "black",
+   "promo": false,
+   "set_type": "expansion",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/c/6/c61feafd-ef09-437c-a12c-fd7d6cb8c15a.jpg?1783906539",
+    "normal": "https://cards.scryfall.io/normal/front/c/6/c61feafd-ef09-437c-a12c-fd7d6cb8c15a.jpg?1783906539",
+    "large": "https://cards.scryfall.io/large/front/c/6/c61feafd-ef09-437c-a12c-fd7d6cb8c15a.jpg?1783906539"
+   }
+  },
+  {
+   "id": "baf8f4f2-9f25-4cd2-8d78-1041e134aeac",
+   "name": "Wastes",
+   "set": "eoc",
+   "collector_number": "191",
+   "released_at": "2025-08-01",
+   "type_line": "Basic Land",
+   "border_color": "black",
+   "promo": false,
+   "set_type": "commander",
+   "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/b/a/baf8f4f2-9f25-4cd2-8d78-1041e134aeac.jpg?1783906001",
+    "normal": "https://cards.scryfall.io/normal/front/b/a/baf8f4f2-9f25-4cd2-8d78-1041e134aeac.jpg?1783906001",
+    "large": "https://cards.scryfall.io/large/front/b/a/baf8f4f2-9f25-4cd2-8d78-1041e134aeac.jpg?1783906001"
+   }
+  }
+ ]
+}

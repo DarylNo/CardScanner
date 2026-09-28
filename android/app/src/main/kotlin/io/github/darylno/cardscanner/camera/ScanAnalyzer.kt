@@ -85,6 +85,13 @@ class ScanAnalyzer(
         fun onDetection(update: DetectionUpdate)
         fun onCaptureRequest(request: CaptureBurst)
         fun onAnalyzerError(error: Throwable)
+        /**
+         * An AUTO trigger is being held because [focusFirst] said the lens should
+         * focus on this card first. Answer with [focusDone] (any outcome); the
+         * capture then uses frames taken after focus settled, or fires anyway
+         * after [FOCUS_WAIT_NS].
+         */
+        fun onFocusRequest() {}
     }
 
     private val planes = ImageProxyPlanes()
@@ -97,6 +104,17 @@ class ScanAnalyzer(
     private var lastSample: Gray? = null
     private var lastBox: Box? = null
     private var manualPending = false
+
+    /**
+     * Asked on every AUTO trigger (analysis thread): hold this capture until the
+     * lens has focused on the card? (Mount: the first card after a bind / area
+     * change / sharpness drop — see CameraController.)
+     */
+    @Volatile var focusFirst: () -> Boolean = { false }
+    private var deferring = false
+    private var deferredBox: Box? = null
+    private var deferStartTs = NONE
+    private var focusReadyTs = NONE
     private var manualStartTs = NONE
     private var nextId = 1L
 
@@ -186,7 +204,25 @@ class ScanAnalyzer(
         }
 
         if (trigger != null) {
-            fire(CaptureTrigger.AUTO, trigger.box, uw, uh, AUTO_FRESH_NS)
+            if (mode == ScanMode.MOUNT && runCatching { focusFirst() }.getOrDefault(false)) {
+                // Focus on THIS card before shooting it (once per session / area):
+                // the capture is held, and taken from frames newer than the focus.
+                deferring = true
+                deferredBox = trigger.box
+                deferStartTs = timestampNs
+                focusReadyTs = NONE
+                runCatching { sink.onFocusRequest() }
+            } else {
+                fire(CaptureTrigger.AUTO, trigger.box, uw, uh, AUTO_FRESH_NS)
+            }
+        } else if (deferring) {
+            val sinceFocus = if (focusReadyTs == NONE || timestampNs <= focusReadyTs) -1L
+                else timestampNs - focusReadyTs - 1
+            if (sinceFocus >= 0 && ring.countFresh(sinceFocus) >= BURST) {
+                fire(CaptureTrigger.AUTO, deferredBox, uw, uh, sinceFocus)
+            } else if (timestampNs - deferStartTs >= FOCUS_WAIT_NS || timestampNs < deferStartTs) {
+                fire(CaptureTrigger.AUTO, deferredBox, uw, uh, AUTO_FRESH_NS)   // focus never answered: shoot anyway
+            }
         } else if (manualPending) {
             if (manualStartTs == NONE || timestampNs < manualStartTs) manualStartTs = timestampNs
             if (ring.countFresh(MANUAL_FRESH_NS) >= BURST ||
@@ -198,6 +234,7 @@ class ScanAnalyzer(
 
     private fun fire(trigger: CaptureTrigger, box: Box?, uw: Int, uh: Int, freshNs: Long) {
         val burst = ring.snapshotLast(BURST, freshNs)
+        deferring = false; deferredBox = null
         scanner.captureDone()
         manualPending = false
         manualStartTs = NONE
@@ -222,7 +259,12 @@ class ScanAnalyzer(
     }
 
     /** Double-tap: re-learn the empty tray. */
-    fun reset() = post { scanner.reset(); lastBox = null }
+    fun reset() = post { scanner.reset(); lastBox = null; deferring = false }
+
+    /** The focus asked for by [Sink.onFocusRequest] finished (success or not). */
+    fun focusDone() = post {
+        if (deferring && focusReadyTs == NONE) focusReadyTs = maxOf(lastFrameTs, deferStartTs)
+    }
 
     fun setAuto(enabled: Boolean) = post { scanner.setAuto(enabled) }
 
@@ -240,6 +282,7 @@ class ScanAnalyzer(
         if (newRoi != roi) {
             roi = newRoi
             scanner.reset()
+            deferring = false
             lastSample = null; lastBox = null; lastBoxInfo = null
         }
     }
@@ -251,6 +294,7 @@ class ScanAnalyzer(
         if (newMode != mode) {
             mode = newMode
             lastBox = null; lastBoxInfo = null
+            deferring = false
             if (newMode == ScanMode.MOUNT) { scanner.reset(); lastSampleTs = NONE }
         }
     }
@@ -262,6 +306,7 @@ class ScanAnalyzer(
 
     /** A (re)bind: old references are the wrong geometry. */
     fun cameraRestarted() = post {
+        deferring = false
         scanner.cameraRestarted()
         ring.clear()
         lastFrameTs = NONE; lastSampleTs = NONE
@@ -290,5 +335,7 @@ class ScanAnalyzer(
         const val MANUAL_FRESH_NS = 450_000_000L
         /** A manual scan fires with whatever fresh frames exist after this long (low fps). */
         const val MANUAL_WAIT_NS = 700_000_000L
+        /** Longest a first-card capture waits for focus before shooting anyway. */
+        const val FOCUS_WAIT_NS = 1_500_000_000L
     }
 }

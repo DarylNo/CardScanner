@@ -207,6 +207,25 @@ class ScreensSmokeTest {
     }
 
     @Test
+    fun diagnosticsActivity_compareSection_defaultOff_andTogglable() {
+        assertFalse("Compare mode must default to OFF", app.settings.compareMode)
+        // Robolectric's default network is metered, so toggling ON can't start a pack download here.
+        assertFalse(io.github.darylno.cardscanner.ident.CompareMode.unmetered(app))
+        val a = launch(DiagnosticsActivity::class.java)
+        val title = findText(a.window.decorView, a.getString(R.string.cmp_switch))
+        assertNotNull("Compare mode switch not shown", title)
+        assertNotNull(findText(a.window.decorView, a.getString(R.string.cmp_test_last)))
+        assertNotNull(findText(a.window.decorView, a.getString(R.string.cmp_copy)))
+        // The whole row toggles its switch (ScanChrome.switchRow).
+        val row = title!!.parent.parent as View
+        assertTrue(row.performClick())
+        assertTrue(app.settings.compareMode)
+        assertTrue(row.performClick())
+        assertFalse(app.settings.compareMode)
+        assertResumed(a)
+    }
+
+    @Test
     fun settings_longPressDiagnosticsHeader_opensNetworkTest() {
         pair()
         val a = launch(SettingsActivity::class.java)

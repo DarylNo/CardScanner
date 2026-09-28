@@ -23,7 +23,9 @@ import cv2
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from mtg_card_scanner.card_detect import find_card_quad, frame_sharpness  # noqa: E402
+from mtg_card_scanner.card_detect import (_texture_metrics, extract_card,  # noqa: E402
+                                          find_card_quad, frame_sharpness,
+                                          is_blank_surface)
 from tests import card_scenes  # noqa: E402
 from tests.phone_flatten_ref import (CARD_H, CARD_W, MARGINS, SCALE,  # noqa: E402
                                      choose_margin, phone_flatten)
@@ -46,6 +48,13 @@ def build() -> dict[str, bytes]:
                  "quad": None if q is None else [[round(float(x), 3), round(float(y), 3)]
                                                   for x, y in q],
                  "margin": None, "sharpness": round(frame_sharpness(img), 3)}
+        # The pipeline's blank-surface guard (Stage 2 on-phone identifier):
+        # extract_card (quad warp, else centre crop) + is_blank_surface.
+        card, detected = extract_card(img)
+        std, edge = _texture_metrics(cv2.cvtColor(card, cv2.COLOR_BGR2GRAY))
+        entry["extract_detected"] = bool(detected)
+        entry["blank"] = bool(is_blank_surface(card, detected=detected))
+        entry["blank_metrics"] = [round(std, 6), round(edge, 6)]
         if q is not None:
             m = choose_margin(q, w, h)
             entry["margin"] = m

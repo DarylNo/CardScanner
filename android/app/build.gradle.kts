@@ -60,6 +60,10 @@ android {
         // Robolectric smoke tests (ScreensSmokeTest) inflate the real manifest/resources.
         unitTests.isIncludeAndroidResources = true
     }
+    // The ident/ tests (PhoneIdentifier, ArtPackStore) replay :core's committed
+    // server fixtures — the art pack, the arthash index, recorded Scryfall pages,
+    // ranker scans/images — instead of copying them.
+    sourceSets.getByName("test").resources.srcDir("../core/src/test/resources")
 }
 
 dependencies {
@@ -71,6 +75,7 @@ dependencies {
     implementation(libs.camerax.view)
     implementation(libs.okhttp)
     implementation(libs.cronet.embedded)   // Diagnostics → Network test only (f2f/F2fProbe)
+    implementation(libs.mlkit.text.recognition)   // collector-line OCR (ocr/MlKitOcrEngine), bundled model
     implementation(libs.zxing.core)
     implementation(libs.nanohttpd)
     implementation(libs.androidx.core)

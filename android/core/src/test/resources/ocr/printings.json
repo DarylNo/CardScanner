@@ -1,0 +1,3684 @@
+{
+ "Diabolic Edict": [
+  {
+   "id": "a2ecf2ee-1e2d-4ab2-8b2c-717c794b09b2",
+   "name": "Diabolic Edict",
+   "set": "tmp",
+   "set_name": "Tempest",
+   "collector_number": "128",
+   "rarity": "common",
+   "released_at": "1997-10-14",
+   "artist": "Ron Spencer"
+  },
+  {
+   "id": "283982a8-e2a2-44dd-8f15-81c0f1e20d54",
+   "name": "Diabolic Edict",
+   "set": "wc99",
+   "set_name": "World Championship Decks 1999",
+   "collector_number": "js128",
+   "rarity": "common",
+   "released_at": "1999-08-04",
+   "artist": "Ron Spencer"
+  },
+  {
+   "id": "855fe6f4-03a1-4864-b60e-ccf7e8da1b08",
+   "name": "Diabolic Edict",
+   "set": "btd",
+   "set_name": "Beatdown Box Set",
+   "collector_number": "23",
+   "rarity": "common",
+   "released_at": "2000-10-01",
+   "artist": "Ron Spencer"
+  },
+  {
+   "id": "cf7acfaa-0fb7-4f2b-8607-3bfa877f8682",
+   "name": "Diabolic Edict",
+   "set": "pal01",
+   "set_name": "Arena League 2001",
+   "collector_number": "10",
+   "rarity": "rare",
+   "released_at": "2001-01-01",
+   "artist": "Ron Spencer"
+  },
+  {
+   "id": "f6986173-56e2-41d8-9387-ab86721ed92e",
+   "name": "Diabolic Edict",
+   "set": "mp2",
+   "set_name": "Amonkhet Invocations",
+   "collector_number": "41",
+   "rarity": "special",
+   "released_at": "2017-04-28",
+   "artist": "Daarken"
+  },
+  {
+   "id": "6b4992d2-8664-4179-a3f3-bfb2166484dd",
+   "name": "Diabolic Edict",
+   "set": "a25",
+   "set_name": "Masters 25",
+   "collector_number": "85",
+   "rarity": "common",
+   "released_at": "2018-03-16",
+   "artist": "Franz Vohwinkel"
+  },
+  {
+   "id": "a2cda4b2-50c2-4442-9ca2-1c668cc07b0e",
+   "name": "Diabolic Edict",
+   "set": "pmei",
+   "set_name": "Media and Collaboration Promos",
+   "collector_number": "2019-2",
+   "rarity": "rare",
+   "released_at": "2019-05-26",
+   "artist": "Ron Spencer"
+  },
+  {
+   "id": "4eabbed2-1399-4cf1-9eba-b53c56caced4",
+   "name": "Diabolic Edict",
+   "set": "mh1",
+   "set_name": "Modern Horizons",
+   "collector_number": "87",
+   "rarity": "common",
+   "released_at": "2019-06-14",
+   "artist": "Franz Vohwinkel"
+  },
+  {
+   "id": "e2d64421-14cb-41f8-83b1-0f4aff851685",
+   "name": "Diabolic Edict",
+   "set": "plst",
+   "set_name": "The List",
+   "collector_number": "A25-85",
+   "rarity": "common",
+   "released_at": "2019-11-07",
+   "artist": "Franz Vohwinkel"
+  },
+  {
+   "id": "d2abd138-b840-4222-88ad-7b0ed64a927b",
+   "name": "Diabolic Edict",
+   "set": "j22",
+   "set_name": "Jumpstart 2022",
+   "collector_number": "67",
+   "rarity": "common",
+   "released_at": "2022-12-02",
+   "artist": "Tetsu Kurosawa"
+  },
+  {
+   "id": "59f3b17f-6de9-4638-8104-e742d9f56f2c",
+   "name": "Diabolic Edict",
+   "set": "pmei",
+   "set_name": "Media and Collaboration Promos",
+   "collector_number": "2024-5",
+   "rarity": "rare",
+   "released_at": "2024-09-12",
+   "artist": "Ron Spencer"
+  }
+ ],
+ "Lightning Bolt": [
+  {
+   "id": "d573ef03-4730-45aa-93dd-e45ac1dbaf4a",
+   "name": "Lightning Bolt",
+   "set": "lea",
+   "set_name": "Limited Edition Alpha",
+   "collector_number": "161",
+   "rarity": "common",
+   "released_at": "1993-08-05",
+   "artist": "Christopher Rush"
+  },
+  {
+   "id": "b5d3dcab-2260-479d-9ef6-dfb92d4f6061",
+   "name": "Lightning Bolt",
+   "set": "leb",
+   "set_name": "Limited Edition Beta",
+   "collector_number": "162",
+   "rarity": "common",
+   "released_at": "1993-10-04",
+   "artist": "Christopher Rush"
+  },
+  {
+   "id": "ff1b8fc5-604a-4449-a73d-861e53642a70",
+   "name": "Lightning Bolt",
+   "set": "2ed",
+   "set_name": "Unlimited Edition",
+   "collector_number": "162",
+   "rarity": "common",
+   "released_at": "1993-12-01",
+   "artist": "Christopher Rush"
+  },
+  {
+   "id": "1ddc5922-f62a-4f91-809e-f959edfcfc6a",
+   "name": "Lightning Bolt",
+   "set": "ced",
+   "set_name": "Collectors' Edition",
+   "collector_number": "162",
+   "rarity": "common",
+   "released_at": "1993-12-10",
+   "artist": "Christopher Rush"
+  },
+  {
+   "id": "ef9047f6-5e5d-49bf-a183-4d1490b291fb",
+   "name": "Lightning Bolt",
+   "set": "cei",
+   "set_name": "Intl. Collectors' Edition",
+   "collector_number": "162",
+   "rarity": "common",
+   "released_at": "1993-12-10",
+   "artist": "Christopher Rush"
+  },
+  {
+   "id": "cb9b9a9d-ae4c-4e04-bf9d-cae48f01292c",
+   "name": "Lightning Bolt",
+   "set": "3ed",
+   "set_name": "Revised Edition",
+   "collector_number": "162",
+   "rarity": "common",
+   "released_at": "1994-04-11",
+   "artist": "Christopher Rush"
+  },
+  {
+   "id": "fcf2ea50-44af-46d7-80c9-36fc18606748",
+   "name": "Lightning Bolt",
+   "set": "fbb",
+   "set_name": "Foreign Black Border",
+   "collector_number": "162",
+   "rarity": "common",
+   "released_at": "1994-04-11",
+   "artist": "Christopher Rush"
+  },
+  {
+   "id": "fc8f431d-b7eb-4848-99dd-a5f896248145",
+   "name": "Lightning Bolt",
+   "set": "sum",
+   "set_name": "Summer Magic / Edgar",
+   "collector_number": "162",
+   "rarity": "common",
+   "released_at": "1994-06-21",
+   "artist": "Christopher Rush"
+  },
+  {
+   "id": "9521375e-0bc1-45ef-b513-6d332a25f9d2",
+   "name": "Lightning Bolt",
+   "set": "4ed",
+   "set_name": "Fourth Edition",
+   "collector_number": "208",
+   "rarity": "common",
+   "released_at": "1995-04-01",
+   "artist": "Christopher Rush"
+  },
+  {
+   "id": "310de1ef-f1b6-4b61-9d6c-6b70382a7f95",
+   "name": "Lightning Bolt",
+   "set": "4bb",
+   "set_name": "Fourth Edition Foreign Black Border",
+   "collector_number": "208",
+   "rarity": "common",
+   "released_at": "1995-04-01",
+   "artist": "Christopher Rush"
+  },
+  {
+   "id": "02e20655-321c-4194-ab72-b4a5473238d1",
+   "name": "Lightning Bolt",
+   "set": "ptc",
+   "set_name": "Pro Tour Collector Set",
+   "collector_number": "et208",
+   "rarity": "common",
+   "released_at": "1996-05-01",
+   "artist": "Christopher Rush"
+  },
+  {
+   "id": "edd88c4f-58bd-4920-b41f-037462b54915",
+   "name": "Lightning Bolt",
+   "set": "ptc",
+   "set_name": "Pro Tour Collector Set",
+   "collector_number": "gb208",
+   "rarity": "common",
+   "released_at": "1996-05-01",
+   "artist": "Christopher Rush"
+  },
+  {
+   "id": "9809473d-f793-476f-ae7e-e535b6725d65",
+   "name": "Lightning Bolt",
+   "set": "ptc",
+   "set_name": "Pro Tour Collector Set",
+   "collector_number": "mj208",
+   "rarity": "common",
+   "released_at": "1996-05-01",
+   "artist": "Christopher Rush"
+  },
+  {
+   "id": "6e8b2951-3c66-4042-add9-b2615951ba52",
+   "name": "Lightning Bolt",
+   "set": "jgp",
+   "set_name": "Judge Gift Cards 1998",
+   "collector_number": "1",
+   "rarity": "rare",
+   "released_at": "1998-01-01",
+   "artist": "Christopher Rush"
+  },
+  {
+   "id": "52f85017-c88b-4302-96f2-e27b23fd702f",
+   "name": "Lightning Bolt",
+   "set": "ath",
+   "set_name": "Anthologies",
+   "collector_number": "43",
+   "rarity": "common",
+   "released_at": "1998-11-01",
+   "artist": "Christopher Rush"
+  },
+  {
+   "id": "a9f447d7-bd08-4f35-bc09-ed335b09a0f8",
+   "name": "Lightning Bolt",
+   "set": "btd",
+   "set_name": "Beatdown Box Set",
+   "collector_number": "41",
+   "rarity": "common",
+   "released_at": "2000-10-01",
+   "artist": "Christopher Rush"
+  },
+  {
+   "id": "435589bb-27c6-4a6d-9d63-394d5092b9d8",
+   "name": "Lightning Bolt",
+   "set": "m10",
+   "set_name": "Magic 2010",
+   "collector_number": "146",
+   "rarity": "common",
+   "released_at": "2009-07-17",
+   "artist": "Christopher Moeller"
+  },
+  {
+   "id": "b539a9de-037a-4b7a-80a5-0514680af095",
+   "name": "Lightning Bolt",
+   "set": "p09",
+   "set_name": "Magic Player Rewards 2009",
+   "collector_number": "146",
+   "rarity": "common",
+   "released_at": "2009-07-17",
+   "artist": "Christopher Moeller"
+  },
+  {
+   "id": "28708c8c-4336-4d04-b43a-59a31471a9f6",
+   "name": "Lightning Bolt",
+   "set": "p10",
+   "set_name": "Magic Player Rewards 2010",
+   "collector_number": "1",
+   "rarity": "rare",
+   "released_at": "2010-01-01",
+   "artist": "Véronique Meignaud"
+  },
+  {
+   "id": "e768c957-3a1f-42f5-853a-96942f645df5",
+   "name": "Lightning Bolt",
+   "set": "m11",
+   "set_name": "Magic 2011",
+   "collector_number": "149",
+   "rarity": "common",
+   "released_at": "2010-07-16",
+   "artist": "Christopher Moeller"
+  },
+  {
+   "id": "6773a3cf-707f-4bc0-b64d-2a96b70f7975",
+   "name": "Lightning Bolt",
+   "set": "pd2",
+   "set_name": "Premium Deck Series: Fire and Lightning",
+   "collector_number": "17",
+   "rarity": "common",
+   "released_at": "2010-11-19",
+   "artist": "Christopher Moeller"
+  },
+  {
+   "id": "677da834-7f4a-4f60-9151-de7ddcf29622",
+   "name": "Lightning Bolt",
+   "set": "mm2",
+   "set_name": "Modern Masters 2015",
+   "collector_number": "122",
+   "rarity": "uncommon",
+   "released_at": "2015-05-22",
+   "artist": "Christopher Moeller"
+  },
+  {
+   "id": "ccee0b4c-0cb0-4c0f-8ddc-bc74b8b97273",
+   "name": "Lightning Bolt",
+   "set": "e01",
+   "set_name": "Archenemy: Nicol Bolas",
+   "collector_number": "54",
+   "rarity": "uncommon",
+   "released_at": "2017-06-16",
+   "artist": "Christopher Moeller"
+  },
+  {
+   "id": "e3285e6b-3e79-4d7c-bf96-d920f973b122",
+   "name": "Lightning Bolt",
+   "set": "a25",
+   "set_name": "Masters 25",
+   "collector_number": "141",
+   "rarity": "uncommon",
+   "released_at": "2018-03-16",
+   "artist": "Christopher Moeller"
+  },
+  {
+   "id": "ff204024-20a5-4bb9-82b6-f6b4337efd60",
+   "name": "Lightning Bolt",
+   "set": "pf19",
+   "set_name": "MagicFest 2019",
+   "collector_number": "1",
+   "rarity": "rare",
+   "released_at": "2019-01-01",
+   "artist": "Kekai Kotaki"
+  },
+  {
+   "id": "32a180dd-9641-4546-8940-9b21084f0c71",
+   "name": "Lightning Bolt",
+   "set": "plst",
+   "set_name": "The List",
+   "collector_number": "E01-54",
+   "rarity": "uncommon",
+   "released_at": "2019-11-07",
+   "artist": "Christopher Moeller"
+  },
+  {
+   "id": "45184cd7-b037-4a85-a063-e622ca928d17",
+   "name": "Lightning Bolt",
+   "set": "sld",
+   "set_name": "Secret Lair Drop",
+   "collector_number": "83",
+   "rarity": "rare",
+   "released_at": "2020-06-04",
+   "artist": "Noah Bradley"
+  },
+  {
+   "id": "6fb94c1b-8002-4d79-add0-c4dfef9019ee",
+   "name": "Lightning Bolt",
+   "set": "sld",
+   "set_name": "Secret Lair Drop",
+   "collector_number": "84",
+   "rarity": "rare",
+   "released_at": "2020-06-04",
+   "artist": "Brigitte Roka"
+  },
+  {
+   "id": "6ab06973-6440-4b12-8947-8c412500fa41",
+   "name": "Lightning Bolt",
+   "set": "sld",
+   "set_name": "Secret Lair Drop",
+   "collector_number": "85",
+   "rarity": "rare",
+   "released_at": "2020-06-04",
+   "artist": "Robbie Trevino"
+  },
+  {
+   "id": "c3eb3895-b64c-46ab-b704-3c46963920ba",
+   "name": "Lightning Bolt",
+   "set": "sld",
+   "set_name": "Secret Lair Drop",
+   "collector_number": "86",
+   "rarity": "rare",
+   "released_at": "2020-06-04",
+   "artist": "Alexis Ziritt"
+  },
+  {
+   "id": "ce711943-c1a1-43a0-8b89-8d169cfb8e06",
+   "name": "Lightning Bolt",
+   "set": "jmp",
+   "set_name": "Jumpstart",
+   "collector_number": "342",
+   "rarity": "uncommon",
+   "released_at": "2020-07-17",
+   "artist": "Christopher Moeller"
+  },
+  {
+   "id": "0f29ea1f-a226-4ec4-8297-109e2f2b5c69",
+   "name": "Lightning Bolt",
+   "set": "plst",
+   "set_name": "The List",
+   "collector_number": "PF19-1",
+   "rarity": "rare",
+   "released_at": "2020-09-01",
+   "artist": "Kekai Kotaki"
+  },
+  {
+   "id": "4eaac4fd-95f5-4f38-b593-0101e79a20f9",
+   "name": "Lightning Bolt",
+   "set": "sta",
+   "set_name": "Strixhaven Mystical Archive",
+   "collector_number": "42",
+   "rarity": "rare",
+   "released_at": "2021-04-23",
+   "artist": "Anato Finnstark"
+  },
+  {
+   "id": "b14fae63-2e82-49c1-8e62-d84a65f27479",
+   "name": "Lightning Bolt",
+   "set": "sta",
+   "set_name": "Strixhaven Mystical Archive",
+   "collector_number": "105",
+   "rarity": "rare",
+   "released_at": "2021-04-23",
+   "artist": "Ezoi"
+  },
+  {
+   "id": "df77bf7d-546a-416b-a2fe-8038a4125af5",
+   "name": "Lightning Bolt",
+   "set": "plst",
+   "set_name": "The List",
+   "collector_number": "A25-141",
+   "rarity": "uncommon",
+   "released_at": "2021-06-19",
+   "artist": "Christopher Moeller"
+  },
+  {
+   "id": "27740ea5-79c8-420f-bc49-6d5eac58dac5",
+   "name": "Lightning Bolt",
+   "set": "sld",
+   "set_name": "Secret Lair Drop",
+   "collector_number": "675",
+   "rarity": "rare",
+   "released_at": "2022-02-18",
+   "artist": "Jason Rainville"
+  },
+  {
+   "id": "ae5f9fb1-5a55-4db3-98a1-2628e3598c18",
+   "name": "Lightning Bolt",
+   "set": "clb",
+   "set_name": "Commander Legends: Battle for Baldur's Gate",
+   "collector_number": "187",
+   "rarity": "common",
+   "released_at": "2022-06-10",
+   "artist": "Irina Nordsol"
+  },
+  {
+   "id": "c69f668b-cf28-495a-bbe1-24e9d0089fa1",
+   "name": "Lightning Bolt",
+   "set": "clb",
+   "set_name": "Commander Legends: Battle for Baldur's Gate",
+   "collector_number": "401",
+   "rarity": "common",
+   "released_at": "2022-06-10",
+   "artist": "Phil Stone"
+  },
+  {
+   "id": "f29ba16f-c8fb-42fe-aabf-87089cb214a7",
+   "name": "Lightning Bolt",
+   "set": "2x2",
+   "set_name": "Double Masters 2022",
+   "collector_number": "117",
+   "rarity": "uncommon",
+   "released_at": "2022-07-08",
+   "artist": "Christopher Moeller"
+  },
+  {
+   "id": "c8c8390f-4072-454f-8dc4-174919187a47",
+   "name": "Lightning Bolt",
+   "set": "2x2",
+   "set_name": "Double Masters 2022",
+   "collector_number": "361",
+   "rarity": "uncommon",
+   "released_at": "2022-07-08",
+   "artist": "Chuck Lukacs"
+  },
+  {
+   "id": "a6de74d2-0668-49c6-a385-bf706bfed8f7",
+   "name": "Lightning Bolt",
+   "set": "gn3",
+   "set_name": "Game Night: Free-for-All",
+   "collector_number": "83",
+   "rarity": "uncommon",
+   "released_at": "2022-10-14",
+   "artist": "Christopher Moeller"
+  },
+  {
+   "id": "54be73dd-cb3b-411b-8f48-d12ca5183dee",
+   "name": "Lightning Bolt",
+   "set": "30a",
+   "set_name": "30th Anniversary Edition",
+   "collector_number": "157",
+   "rarity": "common",
+   "released_at": "2022-11-28",
+   "artist": "Christopher Rush"
+  },
+  {
+   "id": "996a81ae-0c2d-4e74-b018-5f0ec0fcfbd3",
+   "name": "Lightning Bolt",
+   "set": "30a",
+   "set_name": "30th Anniversary Edition",
+   "collector_number": "454",
+   "rarity": "common",
+   "released_at": "2022-11-28",
+   "artist": "Christopher Rush"
+  },
+  {
+   "id": "0277c0b1-da97-49c1-a539-7fbaa1f77419",
+   "name": "Lightning Bolt",
+   "set": "sld",
+   "set_name": "Secret Lair Drop",
+   "collector_number": "901",
+   "rarity": "rare",
+   "released_at": "2023-12-01",
+   "artist": "Christopher Rush"
+  },
+  {
+   "id": "ddaa110c-ee6e-4df5-a6c8-3fdf4b89293f",
+   "name": "Lightning Bolt",
+   "set": "olgc",
+   "set_name": "Legacy Championship",
+   "collector_number": "2023",
+   "rarity": "special",
+   "released_at": "2023-12-08",
+   "artist": "rk post"
+  },
+  {
+   "id": "77c6fa74-5543-42ac-9ead-0e890b188e99",
+   "name": "Lightning Bolt",
+   "set": "clu",
+   "set_name": "Ravnica: Clue Edition",
+   "collector_number": "141",
+   "rarity": "uncommon",
+   "released_at": "2024-02-23",
+   "artist": "Christopher Moeller"
+  },
+  {
+   "id": "4f43c378-9e6a-4ece-9c24-5dc08c977746",
+   "name": "Lightning Bolt",
+   "set": "sld",
+   "set_name": "Secret Lair Drop",
+   "collector_number": "1638",
+   "rarity": "rare",
+   "released_at": "2024-04-08",
+   "artist": "Desmuncubic"
+  },
+  {
+   "id": "54199d7c-02f8-4ff0-9e43-e7bf66ef9715",
+   "name": "Lightning Bolt",
+   "set": "sld",
+   "set_name": "Secret Lair Drop",
+   "collector_number": "1638★",
+   "rarity": "rare",
+   "released_at": "2024-04-08",
+   "artist": "Desmuncubic"
+  },
+  {
+   "id": "074d2360-3ded-412d-90b5-2b8ab209fe47",
+   "name": "Lightning Bolt",
+   "set": "slp",
+   "set_name": "Secret Lair Promo",
+   "collector_number": "21",
+   "rarity": "rare",
+   "released_at": "2024-08-01",
+   "artist": "Toru Terada"
+  },
+  {
+   "id": "5fbb6751-1072-4fc0-8b54-836d05950914",
+   "name": "Lightning Bolt",
+   "set": "sld",
+   "set_name": "Secret Lair Drop",
+   "collector_number": "1822",
+   "rarity": "rare",
+   "released_at": "2024-10-14",
+   "artist": "Mike Burns"
+  },
+  {
+   "id": "24484578-7885-4125-b95f-e677d970a5a1",
+   "name": "Lightning Bolt",
+   "set": "sld",
+   "set_name": "Secret Lair Drop",
+   "collector_number": "1743",
+   "rarity": "rare",
+   "released_at": "2024-11-04",
+   "artist": "Francisco Miyara"
+  },
+  {
+   "id": "719d571c-0740-4212-86c2-e9ef38516f6c",
+   "name": "Lightning Bolt",
+   "set": "sld",
+   "set_name": "Secret Lair Drop",
+   "collector_number": "1879",
+   "rarity": "rare",
+   "released_at": "2025-02-10",
+   "artist": "Mitsuhiro Arita"
+  },
+  {
+   "id": "b9399b98-a545-47b2-99bb-6d8251d9ae76",
+   "name": "Lightning Bolt",
+   "set": "slp",
+   "set_name": "Secret Lair Promo",
+   "collector_number": "37",
+   "rarity": "rare",
+   "released_at": "2025-02-21",
+   "artist": "Peach Momoko"
+  },
+  {
+   "id": "5a763474-5ce9-48cc-aaf8-8ca363df4430",
+   "name": "Lightning Bolt",
+   "set": "sld",
+   "set_name": "Secret Lair Drop",
+   "collector_number": "1871",
+   "rarity": "rare",
+   "released_at": "2025-06-09",
+   "artist": "Evyn Fong"
+  },
+  {
+   "id": "e89794ab-6070-4916-936f-2b42fe41d31b",
+   "name": "Lightning Bolt",
+   "set": "fca",
+   "set_name": "Final Fantasy: Through the Ages",
+   "collector_number": "40",
+   "rarity": "uncommon",
+   "released_at": "2025-06-13",
+   "artist": "Toshitaka Matsuda"
+  },
+  {
+   "id": "6580f4f9-870b-4258-8dce-48c606b90a6c",
+   "name": "Lightning Bolt",
+   "set": "pf25",
+   "set_name": "MagicFest 2025",
+   "collector_number": "13",
+   "rarity": "rare",
+   "released_at": "2025-08-18",
+   "artist": "Christopher Moeller"
+  },
+  {
+   "id": "3c738171-d0dc-4cc2-8af8-1d306143db37",
+   "name": "Lightning Bolt",
+   "set": "sld",
+   "set_name": "Secret Lair Drop",
+   "collector_number": "2289",
+   "rarity": "rare",
+   "released_at": "2025-11-17",
+   "artist": "Nathaniel Himawan"
+  },
+  {
+   "id": "6881d7c8-5bb7-4f8c-9f03-50fb1309d9c8",
+   "name": "Lightning Bolt",
+   "set": "tle",
+   "set_name": "Avatar: The Last Airbender Eternal",
+   "collector_number": "32",
+   "rarity": "mythic",
+   "released_at": "2025-11-21",
+   "artist": "Viacom"
+  },
+  {
+   "id": "b6bc6ff3-f466-4cb0-8b4e-a20d8ed129c8",
+   "name": "Lightning Bolt",
+   "set": "pw26",
+   "set_name": "Wizards Play Network 2026",
+   "collector_number": "5",
+   "rarity": "rare",
+   "released_at": "2026-01-01",
+   "artist": "Fahmi Fauzi"
+  },
+  {
+   "id": "dc12105d-7536-429b-9510-4f56bfc0c497",
+   "name": "Lightning Bolt",
+   "set": "sld",
+   "set_name": "Secret Lair Drop",
+   "collector_number": "IFIYW-2",
+   "rarity": "common",
+   "released_at": "2026-04-01",
+   "artist": "Justine Cruz & Adam Paquette"
+  },
+  {
+   "id": "bde26955-6de3-4212-9e1a-5e11f73ebf44",
+   "name": "Lightning Bolt",
+   "set": "sld",
+   "set_name": "Secret Lair Drop",
+   "collector_number": "IFIYW-7",
+   "rarity": "common",
+   "released_at": "2026-04-01",
+   "artist": "Justine Cruz & Adam Paquette"
+  },
+  {
+   "id": "f58dba4f-1abb-47a3-a684-29c32bab95c0",
+   "name": "Emeritus of Conflict // Lightning Bolt",
+   "set": "sos",
+   "set_name": "Secrets of Strixhaven",
+   "collector_number": "113",
+   "rarity": "mythic",
+   "released_at": "2026-04-24",
+   "artist": "Alix Branwyn"
+  },
+  {
+   "id": "f11b8d24-375d-40dc-8497-c1ee779e156a",
+   "name": "Emeritus of Conflict // Lightning Bolt",
+   "set": "sos",
+   "set_name": "Secrets of Strixhaven",
+   "collector_number": "332",
+   "rarity": "mythic",
+   "released_at": "2026-04-24",
+   "artist": "Alix Branwyn"
+  },
+  {
+   "id": "699c0207-901e-4fe9-b22d-1f6cb994a1f2",
+   "name": "Emeritus of Conflict // Lightning Bolt",
+   "set": "psos",
+   "set_name": "Secrets of Strixhaven Promos",
+   "collector_number": "113p",
+   "rarity": "mythic",
+   "released_at": "2026-04-24",
+   "artist": "Alix Branwyn"
+  },
+  {
+   "id": "7673784e-db4b-43a1-8d55-1bb9fc1e284f",
+   "name": "Lightning Bolt",
+   "set": "msc",
+   "set_name": "Marvel Super Heroes Commander",
+   "collector_number": "806",
+   "rarity": "uncommon",
+   "released_at": "2026-06-26",
+   "artist": "Milivoj Ćeran"
+  },
+  {
+   "id": "a050f085-dc6a-4715-8cd3-33daf3e27bfc",
+   "name": "Lightning Bolt",
+   "set": "sld",
+   "set_name": "Secret Lair Drop",
+   "collector_number": "2579",
+   "rarity": "rare",
+   "released_at": "2026-08-31",
+   "artist": "Jessica Fong"
+  },
+  {
+   "id": "2c025b3b-a3b4-4399-9173-b855a9473b36",
+   "name": "Lightning Bolt",
+   "set": "slz",
+   "set_name": "The Zeta Set",
+   "collector_number": "63",
+   "rarity": "common",
+   "released_at": "2026-09-02",
+   "artist": "MSCHF"
+  },
+  {
+   "id": "d1f67dc6-473c-4c98-bd03-cd1e53acb7e1",
+   "name": "Lightning Bolt",
+   "set": "slz",
+   "set_name": "The Zeta Set",
+   "collector_number": "184",
+   "rarity": "common",
+   "released_at": "2026-09-02",
+   "artist": "MSCHF"
+  },
+  {
+   "id": "0ef3c273-ec92-41d0-9abe-0f99e33db4f5",
+   "name": "Lightning Bolt",
+   "set": "slz",
+   "set_name": "The Zeta Set",
+   "collector_number": "305",
+   "rarity": "common",
+   "released_at": "2026-09-02",
+   "artist": "MSCHF"
+  },
+  {
+   "id": "0852f9f3-d7ef-4d31-93e3-93bc7c5a4ec9",
+   "name": "Lightning Bolt",
+   "set": "fdc",
+   "set_name": "Foundations Commander",
+   "collector_number": "163",
+   "rarity": "uncommon",
+   "released_at": "2026-10-02",
+   "artist": "Christopher Moeller"
+  },
+  {
+   "id": "132dc07f-74e2-4bd7-bdb1-4f5d5253c7f2",
+   "name": "Lightning Bolt",
+   "set": "plst",
+   "set_name": "The List",
+   "collector_number": "CLB-187",
+   "rarity": "common",
+   "released_at": "2026-11-09",
+   "artist": "Irina Nordsol"
+  }
+ ],
+ "Sol Ring": [
+  {
+   "id": "c4300d24-1cae-4dd5-be7e-38cc677cf5bd",
+   "name": "Sol Ring",
+   "set": "lea",
+   "set_name": "Limited Edition Alpha",
+   "collector_number": "269",
+   "rarity": "uncommon",
+   "released_at": "1993-08-05",
+   "artist": "Mark Tedin"
+  },
+  {
+   "id": "c0fb91ec-20a8-4c13-9469-18885b1ecca3",
+   "name": "Sol Ring",
+   "set": "leb",
+   "set_name": "Limited Edition Beta",
+   "collector_number": "270",
+   "rarity": "uncommon",
+   "released_at": "1993-10-04",
+   "artist": "Mark Tedin"
+  },
+  {
+   "id": "e07f656c-97b5-4147-821a-edbb49f34e19",
+   "name": "Sol Ring",
+   "set": "2ed",
+   "set_name": "Unlimited Edition",
+   "collector_number": "270",
+   "rarity": "uncommon",
+   "released_at": "1993-12-01",
+   "artist": "Mark Tedin"
+  },
+  {
+   "id": "dfae7531-693e-4325-8207-3ea4368e6c2c",
+   "name": "Sol Ring",
+   "set": "ced",
+   "set_name": "Collectors' Edition",
+   "collector_number": "270",
+   "rarity": "uncommon",
+   "released_at": "1993-12-10",
+   "artist": "Mark Tedin"
+  },
+  {
+   "id": "9ffc356f-9053-435c-ac1c-e36c2806b6fa",
+   "name": "Sol Ring",
+   "set": "cei",
+   "set_name": "Intl. Collectors' Edition",
+   "collector_number": "270",
+   "rarity": "uncommon",
+   "released_at": "1993-12-10",
+   "artist": "Mark Tedin"
+  },
+  {
+   "id": "803fd65f-4ca6-4fe4-abc2-72aa32ebb3a5",
+   "name": "Sol Ring",
+   "set": "3ed",
+   "set_name": "Revised Edition",
+   "collector_number": "274",
+   "rarity": "uncommon",
+   "released_at": "1994-04-11",
+   "artist": "Mark Tedin"
+  },
+  {
+   "id": "2f18e125-ac4a-45d0-8055-98f59c77324e",
+   "name": "Sol Ring",
+   "set": "fbb",
+   "set_name": "Foreign Black Border",
+   "collector_number": "274",
+   "rarity": "uncommon",
+   "released_at": "1994-04-11",
+   "artist": "Mark Tedin"
+  },
+  {
+   "id": "9138d11a-d55f-4c46-bb27-7e8e15a44e8c",
+   "name": "Sol Ring",
+   "set": "sum",
+   "set_name": "Summer Magic / Edgar",
+   "collector_number": "274",
+   "rarity": "uncommon",
+   "released_at": "1994-06-21",
+   "artist": "Mark Tedin"
+  },
+  {
+   "id": "1a5b855b-f391-4963-a3d9-47880e084a7f",
+   "name": "Sol Ring",
+   "set": "g05",
+   "set_name": "Judge Gift Cards 2005",
+   "collector_number": "3",
+   "rarity": "rare",
+   "released_at": "2005-01-01",
+   "artist": "Mark Tedin"
+  },
+  {
+   "id": "073bfdca-d7b8-4f4b-93f3-6e7c44bc0b0a",
+   "name": "Sol Ring",
+   "set": "v10",
+   "set_name": "From the Vault: Relics",
+   "collector_number": "12",
+   "rarity": "mythic",
+   "released_at": "2010-08-27",
+   "artist": "Mike Bierek"
+  },
+  {
+   "id": "71357a3d-9a9f-4ec6-8e01-1966b220206c",
+   "name": "Sol Ring",
+   "set": "cmd",
+   "set_name": "Commander 2011",
+   "collector_number": "261",
+   "rarity": "uncommon",
+   "released_at": "2011-06-17",
+   "artist": "Mike Bierek"
+  },
+  {
+   "id": "1b59533a-3e38-495d-873e-2f89fbd08494",
+   "name": "Sol Ring",
+   "set": "c13",
+   "set_name": "Commander 2013",
+   "collector_number": "259",
+   "rarity": "uncommon",
+   "released_at": "2013-11-01",
+   "artist": "Mike Bierek"
+  },
+  {
+   "id": "b79cb394-eb91-4b3b-91d4-c6a0f723feb1",
+   "name": "Sol Ring",
+   "set": "c14",
+   "set_name": "Commander 2014",
+   "collector_number": "270",
+   "rarity": "uncommon",
+   "released_at": "2014-11-07",
+   "artist": "Mike Bierek"
+  },
+  {
+   "id": "3459b229-7c46-4f70-87d4-bb31c2c17dd9",
+   "name": "Sol Ring",
+   "set": "c15",
+   "set_name": "Commander 2015",
+   "collector_number": "268",
+   "rarity": "uncommon",
+   "released_at": "2015-11-13",
+   "artist": "Mike Bierek"
+  },
+  {
+   "id": "880711b0-da06-4c4f-aa4e-1be58fc0bc67",
+   "name": "Sol Ring",
+   "set": "mps",
+   "set_name": "Kaladesh Inventions",
+   "collector_number": "24",
+   "rarity": "special",
+   "released_at": "2016-09-30",
+   "artist": "Volkan Baǵa"
+  },
+  {
+   "id": "0f003fde-be17-4159-a361-711ed0bee911",
+   "name": "Sol Ring",
+   "set": "c16",
+   "set_name": "Commander 2016",
+   "collector_number": "272",
+   "rarity": "uncommon",
+   "released_at": "2016-11-11",
+   "artist": "Mike Bierek"
+  },
+  {
+   "id": "f48f7190-9ee3-477f-8b25-91e8c2916624",
+   "name": "Sol Ring",
+   "set": "cma",
+   "set_name": "Commander Anthology",
+   "collector_number": "231",
+   "rarity": "uncommon",
+   "released_at": "2017-06-09",
+   "artist": "Mike Bierek"
+  },
+  {
+   "id": "c6399a22-cebf-4c1d-a23e-4c68f784ac1b",
+   "name": "Sol Ring",
+   "set": "c17",
+   "set_name": "Commander 2017",
+   "collector_number": "223",
+   "rarity": "uncommon",
+   "released_at": "2017-08-25",
+   "artist": "Mike Bierek"
+  },
+  {
+   "id": "f9a32f17-49c4-4654-a087-1ba474f37377",
+   "name": "Sol Ring",
+   "set": "cm2",
+   "set_name": "Commander Anthology Volume II",
+   "collector_number": "217",
+   "rarity": "uncommon",
+   "released_at": "2018-06-08",
+   "artist": "Mike Bierek"
+  },
+  {
+   "id": "83a0f2eb-2f6d-4aaa-b7a9-ea06d5de7eca",
+   "name": "Sol Ring",
+   "set": "c18",
+   "set_name": "Commander 2018",
+   "collector_number": "222",
+   "rarity": "uncommon",
+   "released_at": "2018-08-10",
+   "artist": "Mike Bierek"
+  },
+  {
+   "id": "e5ba8c01-b6f5-486d-b300-cbae2c2b5edf",
+   "name": "Sol Ring",
+   "set": "pf19",
+   "set_name": "MagicFest 2019",
+   "collector_number": "7",
+   "rarity": "rare",
+   "released_at": "2019-01-01",
+   "artist": "Mark Tedin"
+  },
+  {
+   "id": "e672d408-997c-4a19-810a-3da8411eecf2",
+   "name": "Sol Ring",
+   "set": "c19",
+   "set_name": "Commander 2019",
+   "collector_number": "221",
+   "rarity": "uncommon",
+   "released_at": "2019-08-23",
+   "artist": "Mike Bierek"
+  },
+  {
+   "id": "1b3a4537-1d51-47ac-a12e-6b8d68f530e6",
+   "name": "Sol Ring",
+   "set": "plst",
+   "set_name": "The List",
+   "collector_number": "C18-222",
+   "rarity": "uncommon",
+   "released_at": "2019-11-07",
+   "artist": "Mike Bierek"
+  },
+  {
+   "id": "286bea73-8ad8-4423-8a7c-8497420fdb54",
+   "name": "Sol Ring",
+   "set": "c20",
+   "set_name": "Commander 2020",
+   "collector_number": "252",
+   "rarity": "uncommon",
+   "released_at": "2020-04-17",
+   "artist": "Mike Bierek"
+  },
+  {
+   "id": "8a5edac3-855a-4820-b913-44de5b29b7d0",
+   "name": "Sol Ring",
+   "set": "znc",
+   "set_name": "Zendikar Rising Commander",
+   "collector_number": "120",
+   "rarity": "uncommon",
+   "released_at": "2020-09-25",
+   "artist": "Mike Bierek"
+  },
+  {
+   "id": "58b26011-e103-45c4-a253-900f4e6b2eeb",
+   "name": "Sol Ring",
+   "set": "cmr",
+   "set_name": "Commander Legends",
+   "collector_number": "472",
+   "rarity": "uncommon",
+   "released_at": "2020-11-20",
+   "artist": "Mike Bierek"
+  },
+  {
+   "id": "aa21fc27-42d0-456a-9882-34d7f404270b",
+   "name": "Sol Ring",
+   "set": "cmr",
+   "set_name": "Commander Legends",
+   "collector_number": "700",
+   "rarity": "uncommon",
+   "released_at": "2020-11-20",
+   "artist": "Mike Bierek"
+  },
+  {
+   "id": "4d76d52c-7dd0-4d00-af84-fedae29590db",
+   "name": "Sol Ring",
+   "set": "cc1",
+   "set_name": "Commander Collection: Green",
+   "collector_number": "7",
+   "rarity": "rare",
+   "released_at": "2020-12-04",
+   "artist": "Joseph Meehan"
+  },
+  {
+   "id": "0afa0e33-4804-4b00-b625-c2d6b61090fc",
+   "name": "Sol Ring",
+   "set": "khc",
+   "set_name": "Kaldheim Commander",
+   "collector_number": "104",
+   "rarity": "uncommon",
+   "released_at": "2021-02-05",
+   "artist": "Mike Bierek"
+  },
+  {
+   "id": "7bf22be9-bf1a-48ec-a825-d19504f9dfcc",
+   "name": "Sol Ring",
+   "set": "sld",
+   "set_name": "Secret Lair Drop",
+   "collector_number": "249",
+   "rarity": "rare",
+   "released_at": "2021-02-22",
+   "artist": "Thomas Zenteno"
+  },
+  {
+   "id": "4cbc6901-6a4a-4d0a-83ea-7eefa3b35021",
+   "name": "Sol Ring",
+   "set": "c21",
+   "set_name": "Commander 2021",
+   "collector_number": "263",
+   "rarity": "uncommon",
+   "released_at": "2021-04-23",
+   "artist": "Mike Bierek"
+  },
+  {
+   "id": "2c52c96d-e20f-4025-b759-674b36cf0db3",
+   "name": "Sol Ring",
+   "set": "afc",
+   "set_name": "Forgotten Realms Commander",
+   "collector_number": "215",
+   "rarity": "uncommon",
+   "released_at": "2021-07-23",
+   "artist": "Mike Bierek"
+  },
+  {
+   "id": "c46138f0-224a-4ca9-bf03-badb2ae5ee21",
+   "name": "Sol Ring",
+   "set": "mic",
+   "set_name": "Midnight Hunt Commander",
+   "collector_number": "162",
+   "rarity": "uncommon",
+   "released_at": "2021-09-24",
+   "artist": "Mike Bierek"
+  },
+  {
+   "id": "ca57eebe-5bc9-4cff-ae91-ccd509aa36ce",
+   "name": "Sol Ring",
+   "set": "voc",
+   "set_name": "Crimson Vow Commander",
+   "collector_number": "168",
+   "rarity": "uncommon",
+   "released_at": "2021-11-19",
+   "artist": "Mike Bierek"
+  },
+  {
+   "id": "38d347b7-dc17-417a-ab07-29fe99b9a101",
+   "name": "Sol Ring",
+   "set": "plst",
+   "set_name": "The List",
+   "collector_number": "C21-263",
+   "rarity": "uncommon",
+   "released_at": "2021-11-29",
+   "artist": "Mike Bierek"
+  },
+  {
+   "id": "acce65cc-9093-45a6-8c86-97edce545050",
+   "name": "Sol Ring",
+   "set": "cc2",
+   "set_name": "Commander Collection: Black",
+   "collector_number": "7",
+   "rarity": "rare",
+   "released_at": "2022-01-28",
+   "artist": "Yeong-Hao Han"
+  },
+  {
+   "id": "3917f744-b876-47ae-94ad-f72b215ff1e7",
+   "name": "Sol Ring",
+   "set": "nec",
+   "set_name": "Neon Dynasty Commander",
+   "collector_number": "161",
+   "rarity": "uncommon",
+   "released_at": "2022-02-18",
+   "artist": "Mike Bierek"
+  },
+  {
+   "id": "e1187999-521d-4ed0-8673-6eb8f3c58bb8",
+   "name": "Sol Ring",
+   "set": "ncc",
+   "set_name": "New Capenna Commander",
+   "collector_number": "379",
+   "rarity": "uncommon",
+   "released_at": "2022-04-29",
+   "artist": "Mike Bierek"
+  },
+  {
+   "id": "e3b2235b-6c18-436e-9d80-4a82ce0cac14",
+   "name": "Sol Ring",
+   "set": "sld",
+   "set_name": "Secret Lair Drop",
+   "collector_number": "1011",
+   "rarity": "rare",
+   "released_at": "2022-05-04",
+   "artist": "Lauren YS"
+  },
+  {
+   "id": "199cde21-5bc3-49cd-acd4-bae3af6e5881",
+   "name": "Sol Ring",
+   "set": "clb",
+   "set_name": "Commander Legends: Battle for Baldur's Gate",
+   "collector_number": "871",
+   "rarity": "uncommon",
+   "released_at": "2022-06-10",
+   "artist": "Mike Bierek"
+  },
+  {
+   "id": "a0dd17da-9773-4a17-9aa7-4cd8958e1ef8",
+   "name": "Sol Ring",
+   "set": "plg22",
+   "set_name": "Love Your LGS 2022",
+   "collector_number": "1",
+   "rarity": "rare",
+   "released_at": "2022-07-01",
+   "artist": "Mike Bierek"
+  },
+  {
+   "id": "beebe533-29b9-4041-ab66-0a8233c50d56",
+   "name": "Sol Ring",
+   "set": "dmc",
+   "set_name": "Dominaria United Commander",
+   "collector_number": "190",
+   "rarity": "uncommon",
+   "released_at": "2022-09-09",
+   "artist": "Mike Bierek"
+  },
+  {
+   "id": "33773feb-5b49-4d44-adca-93b99009acc0",
+   "name": "Sol Ring",
+   "set": "40k",
+   "set_name": "Warhammer 40,000 Commander",
+   "collector_number": "249",
+   "rarity": "uncommon",
+   "released_at": "2022-10-07",
+   "artist": "Thea Dumitriu"
+  },
+  {
+   "id": "40c825d3-004f-4dea-9d82-815617fb0a41",
+   "name": "Sol Ring",
+   "set": "40k",
+   "set_name": "Warhammer 40,000 Commander",
+   "collector_number": "249★",
+   "rarity": "uncommon",
+   "released_at": "2022-10-07",
+   "artist": "Thea Dumitriu"
+  },
+  {
+   "id": "508b2c62-a344-4897-a3a4-4f0555627fc1",
+   "name": "Sol Ring",
+   "set": "40k",
+   "set_name": "Warhammer 40,000 Commander",
+   "collector_number": "250",
+   "rarity": "uncommon",
+   "released_at": "2022-10-07",
+   "artist": "Kekai Kotaki"
+  },
+  {
+   "id": "6714ffab-5950-4cb7-9b25-d7423dda9ccc",
+   "name": "Sol Ring",
+   "set": "40k",
+   "set_name": "Warhammer 40,000 Commander",
+   "collector_number": "250★",
+   "rarity": "uncommon",
+   "released_at": "2022-10-07",
+   "artist": "Kekai Kotaki"
+  },
+  {
+   "id": "ebfcda26-1f28-4d60-bc7b-8c0bafc6b132",
+   "name": "Sol Ring",
+   "set": "40k",
+   "set_name": "Warhammer 40,000 Commander",
+   "collector_number": "251",
+   "rarity": "uncommon",
+   "released_at": "2022-10-07",
+   "artist": "Oleg Shekhovtsov"
+  },
+  {
+   "id": "4f943781-ce41-40e2-9c45-25dcd24f0090",
+   "name": "Sol Ring",
+   "set": "40k",
+   "set_name": "Warhammer 40,000 Commander",
+   "collector_number": "251★",
+   "rarity": "uncommon",
+   "released_at": "2022-10-07",
+   "artist": "Oleg Shekhovtsov"
+  },
+  {
+   "id": "e3450882-d791-4172-b02a-ee7fdb36acfc",
+   "name": "Sol Ring",
+   "set": "40k",
+   "set_name": "Warhammer 40,000 Commander",
+   "collector_number": "252",
+   "rarity": "uncommon",
+   "released_at": "2022-10-07",
+   "artist": "Lucas Terryn"
+  },
+  {
+   "id": "69c43267-e862-4c08-ae7b-0d400d31f297",
+   "name": "Sol Ring",
+   "set": "40k",
+   "set_name": "Warhammer 40,000 Commander",
+   "collector_number": "252★",
+   "rarity": "uncommon",
+   "released_at": "2022-10-07",
+   "artist": "Lucas Terryn"
+  },
+  {
+   "id": "772edef7-2f17-4244-b1bb-4e7a53c253e1",
+   "name": "Sol Ring",
+   "set": "brc",
+   "set_name": "The Brothers' War Commander",
+   "collector_number": "160",
+   "rarity": "uncommon",
+   "released_at": "2022-11-18",
+   "artist": "Mike Bierek"
+  },
+  {
+   "id": "0ddf922b-2005-411c-9537-ab2884b54507",
+   "name": "Sol Ring",
+   "set": "30a",
+   "set_name": "30th Anniversary Edition",
+   "collector_number": "131",
+   "rarity": "common",
+   "released_at": "2022-11-28",
+   "artist": "Mark Tedin"
+  },
+  {
+   "id": "db0dfaa7-40b2-4065-9cef-22e6af8ad53c",
+   "name": "Sol Ring",
+   "set": "30a",
+   "set_name": "30th Anniversary Edition",
+   "collector_number": "266",
+   "rarity": "uncommon",
+   "released_at": "2022-11-28",
+   "artist": "Mark Tedin"
+  },
+  {
+   "id": "90f2398b-d41e-4e4b-bc93-5a1f34b52345",
+   "name": "Sol Ring",
+   "set": "30a",
+   "set_name": "30th Anniversary Edition",
+   "collector_number": "428",
+   "rarity": "common",
+   "released_at": "2022-11-28",
+   "artist": "Mark Tedin"
+  },
+  {
+   "id": "7fccf54e-c257-4be6-af85-4e0a0fb42f36",
+   "name": "Sol Ring",
+   "set": "30a",
+   "set_name": "30th Anniversary Edition",
+   "collector_number": "563",
+   "rarity": "uncommon",
+   "released_at": "2022-11-28",
+   "artist": "Mark Tedin"
+  },
+  {
+   "id": "1b023575-4cb5-434f-92ef-d3b81aaa3c3e",
+   "name": "Sol Ring",
+   "set": "scd",
+   "set_name": "Starter Commander Decks",
+   "collector_number": "276",
+   "rarity": "uncommon",
+   "released_at": "2022-12-02",
+   "artist": "Mike Bierek"
+  },
+  {
+   "id": "c6721419-70aa-4137-98d5-98ef17720c8e",
+   "name": "Sol Ring",
+   "set": "onc",
+   "set_name": "Phyrexia: All Will Be One Commander",
+   "collector_number": "140",
+   "rarity": "uncommon",
+   "released_at": "2023-02-10",
+   "artist": "Mike Bierek"
+  },
+  {
+   "id": "eca9ae7b-a6d9-43ea-92d4-0110fd6643a7",
+   "name": "Sol Ring",
+   "set": "moc",
+   "set_name": "March of the Machine Commander",
+   "collector_number": "381",
+   "rarity": "uncommon",
+   "released_at": "2023-04-21",
+   "artist": "Mike Bierek"
+  },
+  {
+   "id": "6d5b06e4-bbc8-405b-bc53-1380dba3696e",
+   "name": "Sol Ring",
+   "set": "plst",
+   "set_name": "The List",
+   "collector_number": "CMD-261",
+   "rarity": "uncommon",
+   "released_at": "2023-05-08",
+   "artist": "Mike Bierek"
+  },
+  {
+   "id": "5805f64c-dd88-4e94-8f0a-a01dae67e3ba",
+   "name": "Sol Ring",
+   "set": "ltc",
+   "set_name": "Tales of Middle-earth Commander",
+   "collector_number": "284",
+   "rarity": "uncommon",
+   "released_at": "2023-06-23",
+   "artist": "L J Koh"
+  },
+  {
+   "id": "7a8db21f-722b-4a07-985b-8d25a0b0006a",
+   "name": "Sol Ring",
+   "set": "ltc",
+   "set_name": "Tales of Middle-earth Commander",
+   "collector_number": "408",
+   "rarity": "mythic",
+   "released_at": "2023-06-23",
+   "artist": "Randy Gallegos"
+  },
+  {
+   "id": "16089845-be81-4fc2-82a8-8a28ec7e20d4",
+   "name": "Sol Ring",
+   "set": "ltc",
+   "set_name": "Tales of Middle-earth Commander",
+   "collector_number": "408z",
+   "rarity": "mythic",
+   "released_at": "2023-06-23",
+   "artist": "Randy Gallegos"
+  },
+  {
+   "id": "60bc8cfc-8f68-4ec7-92a7-98380d92f69e",
+   "name": "Sol Ring",
+   "set": "ltc",
+   "set_name": "Tales of Middle-earth Commander",
+   "collector_number": "409",
+   "rarity": "mythic",
+   "released_at": "2023-06-23",
+   "artist": "Erikas Perl"
+  },
+  {
+   "id": "9fac535f-46a3-440b-bb93-6fe4b2dba600",
+   "name": "Sol Ring",
+   "set": "ltc",
+   "set_name": "Tales of Middle-earth Commander",
+   "collector_number": "409z",
+   "rarity": "mythic",
+   "released_at": "2023-06-23",
+   "artist": "Erikas Perl"
+  },
+  {
+   "id": "13788423-db82-4e76-83ad-3f812a4d547a",
+   "name": "Sol Ring",
+   "set": "ltc",
+   "set_name": "Tales of Middle-earth Commander",
+   "collector_number": "410",
+   "rarity": "mythic",
+   "released_at": "2023-06-23",
+   "artist": "Anastasia Balakchina"
+  },
+  {
+   "id": "ca15027f-0f32-4018-9da8-50e4002fa6f8",
+   "name": "Sol Ring",
+   "set": "ltc",
+   "set_name": "Tales of Middle-earth Commander",
+   "collector_number": "410z",
+   "rarity": "mythic",
+   "released_at": "2023-06-23",
+   "artist": "Anastasia Balakchina"
+  },
+  {
+   "id": "46ca0b66-a000-4483-b916-f5b89e710244",
+   "name": "Sol Ring",
+   "set": "cmm",
+   "set_name": "Commander Masters",
+   "collector_number": "410",
+   "rarity": "uncommon",
+   "released_at": "2023-08-04",
+   "artist": "Mike Bierek"
+  },
+  {
+   "id": "7454e0cc-98c2-48a1-b2c9-49908d2aedcc",
+   "name": "Sol Ring",
+   "set": "cmm",
+   "set_name": "Commander Masters",
+   "collector_number": "703",
+   "rarity": "uncommon",
+   "released_at": "2023-08-04",
+   "artist": "Mark Poole"
+  },
+  {
+   "id": "16fbbd8d-bb18-4a8b-95a4-30ad6d548f72",
+   "name": "Sol Ring",
+   "set": "woc",
+   "set_name": "Wilds of Eldraine Commander",
+   "collector_number": "149",
+   "rarity": "uncommon",
+   "released_at": "2023-09-08",
+   "artist": "Mike Bierek"
+  },
+  {
+   "id": "0f44a54b-512e-45ef-80ee-7982d2eaf762",
+   "name": "Sol Ring",
+   "set": "who",
+   "set_name": "Doctor Who",
+   "collector_number": "245",
+   "rarity": "uncommon",
+   "released_at": "2023-10-13",
+   "artist": "Kekai Kotaki"
+  },
+  {
+   "id": "06be8262-4636-4a2c-a0c8-de741cf45aed",
+   "name": "Sol Ring",
+   "set": "who",
+   "set_name": "Doctor Who",
+   "collector_number": "836",
+   "rarity": "uncommon",
+   "released_at": "2023-10-13",
+   "artist": "Kekai Kotaki"
+  },
+  {
+   "id": "27ea0aa3-30c0-4eb4-b262-ce70781277ce",
+   "name": "Sol Ring",
+   "set": "sld",
+   "set_name": "Secret Lair Drop",
+   "collector_number": "1074",
+   "rarity": "rare",
+   "released_at": "2023-11-06",
+   "artist": "Dan Frazier"
+  },
+  {
+   "id": "2d47121d-8b90-4d28-9ffa-0a640b9dd611",
+   "name": "Sol Ring",
+   "set": "lcc",
+   "set_name": "The Lost Caverns of Ixalan Commander",
+   "collector_number": "313",
+   "rarity": "uncommon",
+   "released_at": "2023-11-17",
+   "artist": "Mike Bierek"
+  },
+  {
+   "id": "858e0b83-7927-4e34-ae25-6ad7a787ad97",
+   "name": "Sol Ring",
+   "set": "sld",
+   "set_name": "Secret Lair Drop",
+   "collector_number": "1494",
+   "rarity": "rare",
+   "released_at": "2023-12-06",
+   "artist": "Dani Pendergast"
+  },
+  {
+   "id": "21365def-bec7-4ec0-a1e9-34c85bf6c274",
+   "name": "Sol Ring",
+   "set": "sld",
+   "set_name": "Secret Lair Drop",
+   "collector_number": "1494★",
+   "rarity": "rare",
+   "released_at": "2023-12-06",
+   "artist": "Dani Pendergast"
+  },
+  {
+   "id": "d74a72a2-d46a-41c2-a400-70571197b020",
+   "name": "Sol Ring // Sol Ring",
+   "set": "sld",
+   "set_name": "Secret Lair Drop",
+   "collector_number": "1512",
+   "rarity": "rare",
+   "released_at": "2024-01-22",
+   "artist": "Nana Qi"
+  },
+  {
+   "id": "d9e098aa-a886-430e-8f11-78fb6f2d8ada",
+   "name": "Sol Ring",
+   "set": "mkc",
+   "set_name": "Murders at Karlov Manor Commander",
+   "collector_number": "237",
+   "rarity": "uncommon",
+   "released_at": "2024-02-09",
+   "artist": "Mike Bierek"
+  },
+  {
+   "id": "7d698bdd-b485-409d-b03e-c7c7d3fe9a92",
+   "name": "Sol Ring",
+   "set": "sld",
+   "set_name": "Secret Lair Drop",
+   "collector_number": "1696",
+   "rarity": "rare",
+   "released_at": "2024-02-26",
+   "artist": "Lindsey Look"
+  },
+  {
+   "id": "e675f7e2-5c9f-4912-8fdd-daaeda284a3d",
+   "name": "Sol Ring",
+   "set": "pip",
+   "set_name": "Fallout",
+   "collector_number": "239",
+   "rarity": "uncommon",
+   "released_at": "2024-03-08",
+   "artist": "Aaron J. Riley"
+  },
+  {
+   "id": "af88e4e8-b694-4ec0-8885-701ea30bf84c",
+   "name": "Sol Ring",
+   "set": "pip",
+   "set_name": "Fallout",
+   "collector_number": "359",
+   "rarity": "mythic",
+   "released_at": "2024-03-08",
+   "artist": "AKQA"
+  },
+  {
+   "id": "a8260eef-5ff2-4058-8aa5-469b402eaf65",
+   "name": "Sol Ring",
+   "set": "pip",
+   "set_name": "Fallout",
+   "collector_number": "767",
+   "rarity": "uncommon",
+   "released_at": "2024-03-08",
+   "artist": "Aaron J. Riley"
+  },
+  {
+   "id": "76cd916c-7464-4391-814b-09eac0d8d204",
+   "name": "Sol Ring",
+   "set": "pip",
+   "set_name": "Fallout",
+   "collector_number": "887",
+   "rarity": "mythic",
+   "released_at": "2024-03-08",
+   "artist": "AKQA"
+  },
+  {
+   "id": "6c5c9437-3d99-4a7c-8255-9acdcb1acc40",
+   "name": "Sol Ring",
+   "set": "otc",
+   "set_name": "Outlaws of Thunder Junction Commander",
+   "collector_number": "267",
+   "rarity": "uncommon",
+   "released_at": "2024-04-19",
+   "artist": "Kekai Kotaki"
+  },
+  {
+   "id": "19911e6e-7c35-4281-b31c-266382f052cc",
+   "name": "Sol Ring",
+   "set": "m3c",
+   "set_name": "Modern Horizons 3 Commander",
+   "collector_number": "305",
+   "rarity": "uncommon",
+   "released_at": "2024-06-14",
+   "artist": "Mike Bierek"
+  },
+  {
+   "id": "65b145dd-8529-4bff-b381-b4be53f24b54",
+   "name": "Sol Ring",
+   "set": "sld",
+   "set_name": "Secret Lair Drop",
+   "collector_number": "1604",
+   "rarity": "rare",
+   "released_at": "2024-06-24",
+   "artist": "Narendra Bintara Adi"
+  },
+  {
+   "id": "5b9fe249-9bda-462b-922c-f01c904c233a",
+   "name": "Sol Ring",
+   "set": "sld",
+   "set_name": "Secret Lair Drop",
+   "collector_number": "1664",
+   "rarity": "rare",
+   "released_at": "2024-07-29",
+   "artist": "Bardo Bread"
+  },
+  {
+   "id": "fff440c0-7e6a-46c2-9989-f1b5af20fd44",
+   "name": "Sol Ring",
+   "set": "blc",
+   "set_name": "Bloomburrow Commander",
+   "collector_number": "129",
+   "rarity": "uncommon",
+   "released_at": "2024-08-02",
+   "artist": "Volkan Baǵa"
+  },
+  {
+   "id": "d1d8d32d-ebb2-46c2-b909-b7f71d33159e",
+   "name": "Sol Ring",
+   "set": "mb2",
+   "set_name": "Mystery Booster 2",
+   "collector_number": "233",
+   "rarity": "uncommon",
+   "released_at": "2024-08-02",
+   "artist": "Mike Bierek"
+  },
+  {
+   "id": "82f1a8a3-7fdb-49a3-9649-b5c0b4755cd5",
+   "name": "Sol Ring",
+   "set": "dsc",
+   "set_name": "Duskmourn: House of Horror Commander",
+   "collector_number": "94",
+   "rarity": "uncommon",
+   "released_at": "2024-09-27",
+   "artist": "John Stanko"
+  },
+  {
+   "id": "2824f3fb-82e6-43bd-babf-da6777a5b075",
+   "name": "Sol Ring",
+   "set": "sld",
+   "set_name": "Secret Lair Drop",
+   "collector_number": "1734",
+   "rarity": "rare",
+   "released_at": "2024-11-04",
+   "artist": "Anna Steinbauer"
+  },
+  {
+   "id": "219210d3-263c-41c4-9211-0e59b2d4ccf3",
+   "name": "Sol Ring",
+   "set": "fdc",
+   "set_name": "Foundations Commander",
+   "collector_number": "2",
+   "rarity": "uncommon",
+   "released_at": "2024-11-15",
+   "artist": "Mike Bierek"
+  },
+  {
+   "id": "120e2b4b-afc7-4bf0-a09f-568e08f6bd8f",
+   "name": "Sol Ring",
+   "set": "pfdn",
+   "set_name": "Foundations Promos",
+   "collector_number": "1",
+   "rarity": "rare",
+   "released_at": "2024-11-15",
+   "artist": "Mike Bierek"
+  },
+  {
+   "id": "b162b131-5612-4605-9de8-a5731eeac37e",
+   "name": "Sol Ring",
+   "set": "sld",
+   "set_name": "Secret Lair Drop",
+   "collector_number": "1833",
+   "rarity": "rare",
+   "released_at": "2024-12-02",
+   "artist": "Aya Kakeda"
+  },
+  {
+   "id": "3e10052f-b3e5-4a2c-b268-9a12ce354eb9",
+   "name": "Sol Ring",
+   "set": "sld",
+   "set_name": "Secret Lair Drop",
+   "collector_number": "910",
+   "rarity": "rare",
+   "released_at": "2025-02-10",
+   "artist": "6VCR"
+  },
+  {
+   "id": "fe202721-c5be-46de-9fb3-ac18c699e10d",
+   "name": "Sol Ring",
+   "set": "drc",
+   "set_name": "Aetherdrift Commander",
+   "collector_number": "56",
+   "rarity": "uncommon",
+   "released_at": "2025-02-14",
+   "artist": "Rémi Jacquot"
+  },
+  {
+   "id": "c946b161-0e4f-4c0a-a075-cdcf05504d0b",
+   "name": "Sol Ring",
+   "set": "drc",
+   "set_name": "Aetherdrift Commander",
+   "collector_number": "57",
+   "rarity": "uncommon",
+   "released_at": "2025-02-14",
+   "artist": "Piotr Dura"
+  },
+  {
+   "id": "7b0ccfd4-f118-4497-9c5a-54cf12000e16",
+   "name": "Sol Ring",
+   "set": "tdc",
+   "set_name": "Tarkir: Dragonstorm Commander",
+   "collector_number": "106",
+   "rarity": "uncommon",
+   "released_at": "2025-04-11",
+   "artist": "Leon Tukker"
+  },
+  {
+   "id": "74109c41-d1e7-4108-bed1-3d9110d5e7d2",
+   "name": "Sol Ring",
+   "set": "sld",
+   "set_name": "Secret Lair Drop",
+   "collector_number": "1905",
+   "rarity": "rare",
+   "released_at": "2025-05-12",
+   "artist": "Ejiwa \"Edge\" Ebenebe"
+  },
+  {
+   "id": "8fb860f9-3729-436e-adfb-c98c2a389d5d",
+   "name": "Sol Ring",
+   "set": "fic",
+   "set_name": "Final Fantasy Commander",
+   "collector_number": "356",
+   "rarity": "uncommon",
+   "released_at": "2025-06-13",
+   "artist": "Andrea Tentori Montalto"
+  },
+  {
+   "id": "d105068a-d4f1-4971-b5a0-72806a798497",
+   "name": "Sol Ring",
+   "set": "fic",
+   "set_name": "Final Fantasy Commander",
+   "collector_number": "357",
+   "rarity": "uncommon",
+   "released_at": "2025-06-13",
+   "artist": "Kevin Glint"
+  },
+  {
+   "id": "9a34ac23-e318-4c0b-ab4c-e1eaa0e2547e",
+   "name": "Sol Ring",
+   "set": "fic",
+   "set_name": "Final Fantasy Commander",
+   "collector_number": "358",
+   "rarity": "uncommon",
+   "released_at": "2025-06-13",
+   "artist": "Grace Zhu"
+  },
+  {
+   "id": "1abcafa9-0f27-482f-95a9-24520f0106b8",
+   "name": "Sol Ring",
+   "set": "fic",
+   "set_name": "Final Fantasy Commander",
+   "collector_number": "359",
+   "rarity": "uncommon",
+   "released_at": "2025-06-13",
+   "artist": "Piotr Dura"
+  },
+  {
+   "id": "d582b3c3-996e-4f4b-9efd-134e127d563c",
+   "name": "Sol Ring",
+   "set": "sld",
+   "set_name": "Secret Lair Drop",
+   "collector_number": "2063",
+   "rarity": "rare",
+   "released_at": "2025-06-16",
+   "artist": "Izzy"
+  },
+  {
+   "id": "f19a0013-ebf9-4472-a2ed-462c59d212a5",
+   "name": "Sol Ring",
+   "set": "sld",
+   "set_name": "Secret Lair Drop",
+   "collector_number": "2093",
+   "rarity": "rare",
+   "released_at": "2025-07-14",
+   "artist": "Evan Stanley"
+  },
+  {
+   "id": "ee6e5a35-fe21-4dee-b0ef-a8f2841511ad",
+   "name": "Sol Ring",
+   "set": "eoc",
+   "set_name": "Edge of Eternities Commander",
+   "collector_number": "57",
+   "rarity": "uncommon",
+   "released_at": "2025-08-01",
+   "artist": "Steven Belledin"
+  },
+  {
+   "id": "180000d4-6844-4292-b768-b1f74a3b8b2d",
+   "name": "Sol Ring",
+   "set": "sld",
+   "set_name": "Secret Lair Drop",
+   "collector_number": "1988",
+   "rarity": "rare",
+   "released_at": "2025-09-22",
+   "artist": "Roberta Ingranata"
+  },
+  {
+   "id": "c5430a1d-a575-4853-93f2-635c327eea15",
+   "name": "Sol Ring",
+   "set": "sld",
+   "set_name": "Secret Lair Drop",
+   "collector_number": "1993",
+   "rarity": "rare",
+   "released_at": "2025-09-22",
+   "artist": "Todd Nauck"
+  },
+  {
+   "id": "835df088-5860-46b1-9c4d-3607d0293963",
+   "name": "Sol Ring",
+   "set": "sld",
+   "set_name": "Secret Lair Drop",
+   "collector_number": "2315",
+   "rarity": "rare",
+   "released_at": "2025-10-13",
+   "artist": "Nathan Jurevicius"
+  },
+  {
+   "id": "9f4d9a0c-5a9a-4486-b8a0-942e73688fb4",
+   "name": "Sol Ring",
+   "set": "sld",
+   "set_name": "Secret Lair Drop",
+   "collector_number": "2330",
+   "rarity": "rare",
+   "released_at": "2025-10-13",
+   "artist": "Nathan Jurevicius"
+  },
+  {
+   "id": "ab696cab-2d83-444f-8068-dbf071c75de9",
+   "name": "Sol Ring",
+   "set": "sld",
+   "set_name": "Secret Lair Drop",
+   "collector_number": "912",
+   "rarity": "rare",
+   "released_at": "2025-10-27",
+   "artist": "Bill McConkey"
+  },
+  {
+   "id": "193a5688-9e9b-48f4-9904-53134ec73c97",
+   "name": "Sol Ring",
+   "set": "slc",
+   "set_name": "Secret Lair Countdown",
+   "collector_number": "19",
+   "rarity": "rare",
+   "released_at": "2025-11-03",
+   "artist": "Souther Salazar"
+  },
+  {
+   "id": "2f4e1e26-95cc-45bd-90e9-3ae00f1708cf",
+   "name": "Sol Ring",
+   "set": "slc",
+   "set_name": "Secret Lair Countdown",
+   "collector_number": "46",
+   "rarity": "rare",
+   "released_at": "2025-11-03",
+   "artist": "Souther Salazar"
+  },
+  {
+   "id": "c1f93f78-645b-4f21-a80b-5542f3328111",
+   "name": "Sol Ring",
+   "set": "tle",
+   "set_name": "Avatar: The Last Airbender Eternal",
+   "collector_number": "316",
+   "rarity": "rare",
+   "released_at": "2025-11-21",
+   "artist": "Barbara Rosiak"
+  },
+  {
+   "id": "16a2c470-b2b8-4633-89b1-7b936bcaff8d",
+   "name": "Sol Ring",
+   "set": "sld",
+   "set_name": "Secret Lair Drop",
+   "collector_number": "913",
+   "rarity": "rare",
+   "released_at": "2025-12-01",
+   "artist": "Lē Yamamura"
+  },
+  {
+   "id": "04002706-2236-4b79-bdea-4f263e43cb9c",
+   "name": "Sol Ring",
+   "set": "ecc",
+   "set_name": "Lorwyn Eclipsed Commander",
+   "collector_number": "57",
+   "rarity": "uncommon",
+   "released_at": "2026-01-23",
+   "artist": "Daria Aksenova"
+  },
+  {
+   "id": "0d38ff41-a60c-4d70-92e4-4d3d3ab073a3",
+   "name": "Sol Ring",
+   "set": "ecc",
+   "set_name": "Lorwyn Eclipsed Commander",
+   "collector_number": "58",
+   "rarity": "uncommon",
+   "released_at": "2026-01-23",
+   "artist": "Daria Aksenova"
+  },
+  {
+   "id": "8f69a74a-778c-4a1d-99ad-6ca04771fb23",
+   "name": "Sol Ring",
+   "set": "sld",
+   "set_name": "Secret Lair Drop",
+   "collector_number": "2467",
+   "rarity": "rare",
+   "released_at": "2026-01-26",
+   "artist": "Chris Seaman"
+  },
+  {
+   "id": "14dbce79-1fcc-4cc9-bf38-7729e44a411e",
+   "name": "Sol Ring",
+   "set": "tmc",
+   "set_name": "Teenage Mutant Ninja Turtles Eternal",
+   "collector_number": "59",
+   "rarity": "uncommon",
+   "released_at": "2026-03-06",
+   "artist": "Daniel Romanovsky"
+  },
+  {
+   "id": "3dd5ea51-68f7-4c12-a96b-8caca0d54640",
+   "name": "Sol Ring",
+   "set": "sld",
+   "set_name": "Secret Lair Drop",
+   "collector_number": "IFIYW-5",
+   "rarity": "rare",
+   "released_at": "2026-04-01",
+   "artist": "Kevin Sidharta & Henry G. Higginbotham"
+  },
+  {
+   "id": "d75bfbe3-41a0-44e1-86ce-f56c9bcf57d7",
+   "name": "Sol Ring",
+   "set": "sld",
+   "set_name": "Secret Lair Drop",
+   "collector_number": "IFIYW-10",
+   "rarity": "rare",
+   "released_at": "2026-04-01",
+   "artist": "Kevin Sidharta & Henry G. Higginbotham"
+  },
+  {
+   "id": "870ec754-a76c-40ea-9b81-81b3dca1f62c",
+   "name": "Sol Ring",
+   "set": "soc",
+   "set_name": "Secrets of Strixhaven Commander",
+   "collector_number": "128",
+   "rarity": "uncommon",
+   "released_at": "2026-04-24",
+   "artist": "Jorge Jacinto"
+  },
+  {
+   "id": "9ef06694-e05d-4e96-a588-bd276447dcf8",
+   "name": "Sol Ring",
+   "set": "soc",
+   "set_name": "Secrets of Strixhaven Commander",
+   "collector_number": "427",
+   "rarity": "mythic",
+   "released_at": "2026-04-24",
+   "artist": "Qistina Khalidah"
+  },
+  {
+   "id": "8ae6d023-2945-47f1-bc9f-f9c5ff9f5282",
+   "name": "Sol Ring",
+   "set": "sld",
+   "set_name": "Secret Lair Drop",
+   "collector_number": "2539",
+   "rarity": "rare",
+   "released_at": "2026-04-27",
+   "artist": "Anna Steinbauer"
+  },
+  {
+   "id": "2418af21-7be9-4dec-8be6-4d0bcf84a7ca",
+   "name": "Sol Ring",
+   "set": "sld",
+   "set_name": "Secret Lair Drop",
+   "collector_number": "2417",
+   "rarity": "rare",
+   "released_at": "2026-05-18",
+   "artist": "Wizard of Barge"
+  },
+  {
+   "id": "b68a8c69-0e59-4491-9e4d-4c50600a035e",
+   "name": "Sol Ring",
+   "set": "sld",
+   "set_name": "Secret Lair Drop",
+   "collector_number": "2672",
+   "rarity": "rare",
+   "released_at": "2026-06-15",
+   "artist": "Caleb Meurer"
+  },
+  {
+   "id": "91fdb56b-54d5-4272-8319-505ff987fe9b",
+   "name": "Sol Ring",
+   "set": "msc",
+   "set_name": "Marvel Super Heroes Commander",
+   "collector_number": "211",
+   "rarity": "uncommon",
+   "released_at": "2026-06-26",
+   "artist": "Myles Wohl"
+  },
+  {
+   "id": "5bef0790-aa1b-4144-8391-338e59e86115",
+   "name": "Sol Ring",
+   "set": "msc",
+   "set_name": "Marvel Super Heroes Commander",
+   "collector_number": "212",
+   "rarity": "uncommon",
+   "released_at": "2026-06-26",
+   "artist": "Pace Wilder"
+  },
+  {
+   "id": "a7fc546e-7e3c-436d-a0b9-9ac3548ec344",
+   "name": "Sol Ring",
+   "set": "msc",
+   "set_name": "Marvel Super Heroes Commander",
+   "collector_number": "213",
+   "rarity": "uncommon",
+   "released_at": "2026-06-26",
+   "artist": "Alexander Gering"
+  },
+  {
+   "id": "a739dd30-1fce-49db-99fb-15e346f4f2db",
+   "name": "Sol Ring",
+   "set": "msc",
+   "set_name": "Marvel Super Heroes Commander",
+   "collector_number": "214",
+   "rarity": "uncommon",
+   "released_at": "2026-06-26",
+   "artist": "Randy Gallegos"
+  },
+  {
+   "id": "cadcddad-2f37-4a5c-81e4-242a20573952",
+   "name": "Sol Ring",
+   "set": "sld",
+   "set_name": "Secret Lair Drop",
+   "collector_number": "2683",
+   "rarity": "rare",
+   "released_at": "2026-07-20",
+   "artist": "Olena Richards"
+  },
+  {
+   "id": "3d5c99e9-7c3e-4149-82a6-3c7d5d302488",
+   "name": "Sol Ring",
+   "set": "sld",
+   "set_name": "Secret Lair Drop",
+   "collector_number": "2807",
+   "rarity": "rare",
+   "released_at": "2026-07-27",
+   "artist": "ConcernedApe"
+  },
+  {
+   "id": "3b6a6593-b08f-4627-99a5-45d68f6e1c59",
+   "name": "Sol Ring",
+   "set": "plst",
+   "set_name": "The List",
+   "collector_number": "BLC-129",
+   "rarity": "uncommon",
+   "released_at": "2026-08-10",
+   "artist": "Volkan Baǵa"
+  },
+  {
+   "id": "24afe08b-6b88-42b3-a996-33f138431a87",
+   "name": "Sol Ring",
+   "set": "sld",
+   "set_name": "Secret Lair Drop",
+   "collector_number": "2560",
+   "rarity": "rare",
+   "released_at": "2026-08-17",
+   "artist": "Brandon L. Hunt"
+  },
+  {
+   "id": "0ab38fe7-1929-44f6-b4ce-ce8cfacbfb76",
+   "name": "Sol Ring",
+   "set": "slz",
+   "set_name": "The Zeta Set",
+   "collector_number": "114",
+   "rarity": "uncommon",
+   "released_at": "2026-09-02",
+   "artist": "MSCHF"
+  },
+  {
+   "id": "47466c75-726e-46a8-9a5c-b94dbe5b2f9a",
+   "name": "Sol Ring",
+   "set": "slz",
+   "set_name": "The Zeta Set",
+   "collector_number": "235",
+   "rarity": "uncommon",
+   "released_at": "2026-09-02",
+   "artist": "MSCHF"
+  },
+  {
+   "id": "cfd2a69b-3b11-41f8-931f-5d226b683206",
+   "name": "Sol Ring",
+   "set": "slz",
+   "set_name": "The Zeta Set",
+   "collector_number": "356",
+   "rarity": "uncommon",
+   "released_at": "2026-09-02",
+   "artist": "MSCHF"
+  },
+  {
+   "id": "8670dac4-d369-4907-ae3a-d58ff204f1a6",
+   "name": "Sol Ring",
+   "set": "sld",
+   "set_name": "Secret Lair Drop",
+   "collector_number": "2783",
+   "rarity": "rare",
+   "released_at": "2026-09-14",
+   "artist": "Justyna Dura"
+  },
+  {
+   "id": "bf6b187e-5ad0-4731-9c39-638451ac1e30",
+   "name": "Sol Ring",
+   "set": "sld",
+   "set_name": "Secret Lair Drop",
+   "collector_number": "2132",
+   "rarity": "rare",
+   "released_at": "2026-09-28",
+   "artist": "Ricardo Cavolo"
+  },
+  {
+   "id": "4f152dd9-2b35-45b2-90fe-8c71d0634226",
+   "name": "Sol Ring",
+   "set": "fdc",
+   "set_name": "Foundations Commander",
+   "collector_number": "286",
+   "rarity": "uncommon",
+   "released_at": "2026-10-02",
+   "artist": "Mike Bierek"
+  },
+  {
+   "id": "8ee443cc-e17a-493b-9c93-1f9e141a30e4",
+   "name": "Sol Ring",
+   "set": "frc",
+   "set_name": "Reality Fracture Commander",
+   "collector_number": "21",
+   "rarity": "uncommon",
+   "released_at": "2026-10-02",
+   "artist": "Titus Lunter"
+  }
+ ],
+ "Fling": [
+  {
+   "id": "6b144452-2e91-4e46-abe9-ed76b39f8314",
+   "name": "Fling",
+   "set": "sth",
+   "set_name": "Stronghold",
+   "collector_number": "82",
+   "rarity": "common",
+   "released_at": "1998-03-02",
+   "artist": "Paolo Parente"
+  },
+  {
+   "id": "84ba156e-09f4-415e-a7a2-95ba5d52f4a6",
+   "name": "Fling",
+   "set": "pal01",
+   "set_name": "Arena League 2001",
+   "collector_number": "6",
+   "rarity": "rare",
+   "released_at": "2001-01-01",
+   "artist": "Paolo Parente"
+  },
+  {
+   "id": "1c1e41a8-018b-49b3-ad2d-38ec038d738c",
+   "name": "Fling",
+   "set": "m11",
+   "set_name": "Magic 2011",
+   "collector_number": "139",
+   "rarity": "common",
+   "released_at": "2010-07-16",
+   "artist": "Paolo Parente"
+  },
+  {
+   "id": "303195f3-07ac-4eed-ab27-bf7c4b5378a3",
+   "name": "Fling",
+   "set": "dci",
+   "set_name": "DCI Promos",
+   "collector_number": "50",
+   "rarity": "rare",
+   "released_at": "2010-07-31",
+   "artist": "Daren Bader"
+  },
+  {
+   "id": "ca9d200b-1384-4eb9-8efb-94dc5fa106ed",
+   "name": "Fling",
+   "set": "dci",
+   "set_name": "DCI Promos",
+   "collector_number": "69",
+   "rarity": "rare",
+   "released_at": "2011-05-31",
+   "artist": "Daren Bader"
+  },
+  {
+   "id": "3a439015-0c1c-4322-a6f1-a34040162ac4",
+   "name": "Fling",
+   "set": "m12",
+   "set_name": "Magic 2012",
+   "collector_number": "134",
+   "rarity": "common",
+   "released_at": "2011-07-15",
+   "artist": "Paolo Parente"
+  },
+  {
+   "id": "cf1ab466-44bb-45d5-a94f-21b8924f0d89",
+   "name": "Fling",
+   "set": "dka",
+   "set_name": "Dark Ascension",
+   "collector_number": "90",
+   "rarity": "common",
+   "released_at": "2012-02-03",
+   "artist": "Izzy"
+  },
+  {
+   "id": "8eb78633-cc01-4364-b028-988bdb73de5b",
+   "name": "Fling",
+   "set": "pc2",
+   "set_name": "Planechase 2012",
+   "collector_number": "44",
+   "rarity": "common",
+   "released_at": "2012-06-01",
+   "artist": "Paolo Parente"
+  },
+  {
+   "id": "9cbc4854-f022-466c-9ee0-1b8d80715feb",
+   "name": "Fling",
+   "set": "pca",
+   "set_name": "Planechase Anthology",
+   "collector_number": "44",
+   "rarity": "common",
+   "released_at": "2016-11-25",
+   "artist": "Paolo Parente"
+  },
+  {
+   "id": "f02363a7-4455-4571-bfff-4ce94c7c1e3b",
+   "name": "Fling",
+   "set": "akh",
+   "set_name": "Amonkhet",
+   "collector_number": "132",
+   "rarity": "common",
+   "released_at": "2017-04-28",
+   "artist": "Lucas Graciano"
+  },
+  {
+   "id": "cb28fe03-8269-41de-b766-42c3421aeaef",
+   "name": "Fling",
+   "set": "eld",
+   "set_name": "Throne of Eldraine",
+   "collector_number": "126",
+   "rarity": "common",
+   "released_at": "2019-10-04",
+   "artist": "Lie Setiawan"
+  },
+  {
+   "id": "60cd9d00-30eb-4060-baea-176104d3fa1a",
+   "name": "Fling",
+   "set": "plst",
+   "set_name": "The List",
+   "collector_number": "AKH-132",
+   "rarity": "common",
+   "released_at": "2019-11-07",
+   "artist": "Lucas Graciano"
+  },
+  {
+   "id": "8f42d773-c742-4465-b6d5-31feaba49146",
+   "name": "Fling",
+   "set": "jmp",
+   "set_name": "Jumpstart",
+   "collector_number": "320",
+   "rarity": "common",
+   "released_at": "2020-07-17",
+   "artist": "Lucas Graciano"
+  },
+  {
+   "id": "7121b5b3-7f05-4914-9af8-5d2bcde9b28a",
+   "name": "Fling",
+   "set": "sld",
+   "set_name": "Secret Lair Drop",
+   "collector_number": "1038",
+   "rarity": "rare",
+   "released_at": "2022-11-28",
+   "artist": "Johan Grenier"
+  },
+  {
+   "id": "1cddae19-eb96-475c-9800-17ac57df4c0a",
+   "name": "Fling",
+   "set": "otp",
+   "set_name": "Breaking News",
+   "collector_number": "24",
+   "rarity": "uncommon",
+   "released_at": "2024-04-19",
+   "artist": "Florey"
+  },
+  {
+   "id": "6873b4a8-90cb-4096-922a-4fa23cdec3c8",
+   "name": "Fling",
+   "set": "sld",
+   "set_name": "Secret Lair Drop",
+   "collector_number": "1795",
+   "rarity": "rare",
+   "released_at": "2024-08-27",
+   "artist": "Jon Vermilyea"
+  },
+  {
+   "id": "a8beb929-b502-4ed5-940a-d6de233c09a6",
+   "name": "Fling",
+   "set": "j25",
+   "set_name": "Foundations Jumpstart",
+   "collector_number": "553",
+   "rarity": "common",
+   "released_at": "2024-11-15",
+   "artist": "Lucas Graciano"
+  }
+ ],
+ "Shivan Dragon": [
+  {
+   "id": "fefbf149-f988-4f8b-9f53-56f5878116a6",
+   "name": "Shivan Dragon",
+   "set": "lea",
+   "set_name": "Limited Edition Alpha",
+   "collector_number": "174",
+   "rarity": "rare",
+   "released_at": "1993-08-05",
+   "artist": "Melissa A. Benson"
+  },
+  {
+   "id": "5e64822a-6817-4e1e-8155-3e95f8e3763f",
+   "name": "Shivan Dragon",
+   "set": "leb",
+   "set_name": "Limited Edition Beta",
+   "collector_number": "175",
+   "rarity": "rare",
+   "released_at": "1993-10-04",
+   "artist": "Melissa A. Benson"
+  },
+  {
+   "id": "fd4f6e34-3f66-4e10-8170-56039c5f6fcc",
+   "name": "Shivan Dragon",
+   "set": "2ed",
+   "set_name": "Unlimited Edition",
+   "collector_number": "175",
+   "rarity": "rare",
+   "released_at": "1993-12-01",
+   "artist": "Melissa A. Benson"
+  },
+  {
+   "id": "05082d18-ad43-43e0-8d90-973b7959aa6b",
+   "name": "Shivan Dragon",
+   "set": "ced",
+   "set_name": "Collectors' Edition",
+   "collector_number": "175",
+   "rarity": "rare",
+   "released_at": "1993-12-10",
+   "artist": "Melissa A. Benson"
+  },
+  {
+   "id": "4310cc73-79bc-4d06-b71a-679c9c6cca5c",
+   "name": "Shivan Dragon",
+   "set": "cei",
+   "set_name": "Intl. Collectors' Edition",
+   "collector_number": "175",
+   "rarity": "rare",
+   "released_at": "1993-12-10",
+   "artist": "Melissa A. Benson"
+  },
+  {
+   "id": "69199dd2-dbac-4039-b4da-eb2b0671645f",
+   "name": "Shivan Dragon",
+   "set": "3ed",
+   "set_name": "Revised Edition",
+   "collector_number": "177",
+   "rarity": "rare",
+   "released_at": "1994-04-11",
+   "artist": "Melissa A. Benson"
+  },
+  {
+   "id": "3f22dd2f-41c1-403b-a3bc-617d15922602",
+   "name": "Shivan Dragon",
+   "set": "fbb",
+   "set_name": "Foreign Black Border",
+   "collector_number": "177",
+   "rarity": "rare",
+   "released_at": "1994-04-11",
+   "artist": "Melissa A. Benson"
+  },
+  {
+   "id": "b35b0fb6-2596-4da3-820e-df28172f209b",
+   "name": "Shivan Dragon",
+   "set": "sum",
+   "set_name": "Summer Magic / Edgar",
+   "collector_number": "177",
+   "rarity": "rare",
+   "released_at": "1994-06-21",
+   "artist": "Melissa A. Benson"
+  },
+  {
+   "id": "70846483-9c23-42c4-9f9f-1fc5cda17c77",
+   "name": "Shivan Dragon",
+   "set": "4ed",
+   "set_name": "Fourth Edition",
+   "collector_number": "220",
+   "rarity": "rare",
+   "released_at": "1995-04-01",
+   "artist": "Melissa A. Benson"
+  },
+  {
+   "id": "a9b7d372-9324-4e7d-b09f-0e0f4c70ae65",
+   "name": "Shivan Dragon",
+   "set": "4bb",
+   "set_name": "Fourth Edition Foreign Black Border",
+   "collector_number": "220",
+   "rarity": "rare",
+   "released_at": "1995-04-01",
+   "artist": "Melissa A. Benson"
+  },
+  {
+   "id": "64b05edd-4128-4150-9457-8aff895bd0b7",
+   "name": "Shivan Dragon",
+   "set": "5ed",
+   "set_name": "Fifth Edition",
+   "collector_number": "267",
+   "rarity": "rare",
+   "released_at": "1997-03-24",
+   "artist": "Melissa A. Benson"
+  },
+  {
+   "id": "03355ba4-2d93-4dcc-951d-34a4c823e40e",
+   "name": "Shivan Dragon",
+   "set": "o90p",
+   "set_name": "Oversized 90's Promos",
+   "collector_number": "5",
+   "rarity": "rare",
+   "released_at": "1998-01-01",
+   "artist": "Melissa A. Benson"
+  },
+  {
+   "id": "475e27c5-bc2a-4907-9c18-5c8ba82d116f",
+   "name": "Shivan Dragon",
+   "set": "btd",
+   "set_name": "Beatdown Box Set",
+   "collector_number": "44",
+   "rarity": "rare",
+   "released_at": "2000-10-01",
+   "artist": "Melissa A. Benson"
+  },
+  {
+   "id": "7fec2b71-8fa9-4818-9c4f-5d2dcd2af495",
+   "name": "Shivan Dragon",
+   "set": "7ed",
+   "set_name": "Seventh Edition",
+   "collector_number": "218",
+   "rarity": "rare",
+   "released_at": "2001-04-11",
+   "artist": "Donato Giancola"
+  },
+  {
+   "id": "de98d9ad-d011-43de-92c8-f97037b42803",
+   "name": "Shivan Dragon",
+   "set": "7ed",
+   "set_name": "Seventh Edition",
+   "collector_number": "218★",
+   "rarity": "rare",
+   "released_at": "2001-04-11",
+   "artist": "Donato Giancola"
+  },
+  {
+   "id": "e70868a4-3971-431d-a614-604aca110fe4",
+   "name": "Shivan Dragon",
+   "set": "pmei",
+   "set_name": "Media and Collaboration Promos",
+   "collector_number": "2001-2",
+   "rarity": "rare",
+   "released_at": "2001-09-15",
+   "artist": "Donato Giancola"
+  },
+  {
+   "id": "e9ac007d-1616-449c-92d5-1d321235e733",
+   "name": "Shivan Dragon",
+   "set": "8ed",
+   "set_name": "Eighth Edition",
+   "collector_number": "221",
+   "rarity": "rare",
+   "released_at": "2003-07-28",
+   "artist": "Donato Giancola"
+  },
+  {
+   "id": "d08a0542-f72a-422d-a8cf-3d37fdb5d375",
+   "name": "Shivan Dragon",
+   "set": "8ed",
+   "set_name": "Eighth Edition",
+   "collector_number": "221★",
+   "rarity": "rare",
+   "released_at": "2003-07-28",
+   "artist": "Donato Giancola"
+  },
+  {
+   "id": "5cbf9dde-e396-43dc-8288-b39e63a23164",
+   "name": "Shivan Dragon",
+   "set": "9ed",
+   "set_name": "Ninth Edition",
+   "collector_number": "219",
+   "rarity": "rare",
+   "released_at": "2005-07-29",
+   "artist": "Donato Giancola"
+  },
+  {
+   "id": "ba6ef10a-4bbc-40ce-883d-f4aa471052fc",
+   "name": "Shivan Dragon",
+   "set": "9ed",
+   "set_name": "Ninth Edition",
+   "collector_number": "219★",
+   "rarity": "rare",
+   "released_at": "2005-07-29",
+   "artist": "Donato Giancola"
+  },
+  {
+   "id": "a7a52f20-4567-4a69-9d27-73dbb71bf3d9",
+   "name": "Shivan Dragon",
+   "set": "p9ed",
+   "set_name": "Ninth Edition Promos",
+   "collector_number": "219",
+   "rarity": "rare",
+   "released_at": "2005-09-24",
+   "artist": "Donato Giancola"
+  },
+  {
+   "id": "0dcdd2db-1a4b-48dd-94cf-bd719ff40da9",
+   "name": "Shivan Dragon",
+   "set": "10e",
+   "set_name": "Tenth Edition",
+   "collector_number": "230",
+   "rarity": "rare",
+   "released_at": "2007-07-13",
+   "artist": "Donato Giancola"
+  },
+  {
+   "id": "60bfdf43-8d4c-4415-bf19-34aa481cd91c",
+   "name": "Shivan Dragon",
+   "set": "10e",
+   "set_name": "Tenth Edition",
+   "collector_number": "230★",
+   "rarity": "rare",
+   "released_at": "2007-07-13",
+   "artist": "Donato Giancola"
+  },
+  {
+   "id": "65126d80-97c1-4890-944c-0dd4496ae746",
+   "name": "Shivan Dragon",
+   "set": "drb",
+   "set_name": "From the Vault: Dragons",
+   "collector_number": "13",
+   "rarity": "rare",
+   "released_at": "2008-08-29",
+   "artist": "Justin Sweet"
+  },
+  {
+   "id": "c5efc94a-b644-4cc4-9598-2ce16fe68420",
+   "name": "Shivan Dragon",
+   "set": "m10",
+   "set_name": "Magic 2010",
+   "collector_number": "156",
+   "rarity": "rare",
+   "released_at": "2009-07-17",
+   "artist": "Donato Giancola"
+  },
+  {
+   "id": "6d8330b7-7fae-45ef-b254-12f720b85fba",
+   "name": "Shivan Dragon",
+   "set": "dpa",
+   "set_name": "Duels of the Planeswalkers",
+   "collector_number": "53",
+   "rarity": "rare",
+   "released_at": "2010-06-04",
+   "artist": "Donato Giancola"
+  },
+  {
+   "id": "e3d7b4a1-732c-4b4d-bfb1-45a43b54ebea",
+   "name": "Shivan Dragon",
+   "set": "ps11",
+   "set_name": "Salvat 2011",
+   "collector_number": "120",
+   "rarity": "rare",
+   "released_at": "2011-01-01",
+   "artist": "Donato Giancola"
+  },
+  {
+   "id": "3815cf4a-b694-432b-b618-0893f8f3dc1b",
+   "name": "Shivan Dragon",
+   "set": "m14",
+   "set_name": "Magic 2014",
+   "collector_number": "154",
+   "rarity": "rare",
+   "released_at": "2013-07-19",
+   "artist": "Donato Giancola"
+  },
+  {
+   "id": "b0c76430-c5c9-46a4-9a3b-9bbf259e4b38",
+   "name": "Shivan Dragon",
+   "set": "m15",
+   "set_name": "Magic 2015",
+   "collector_number": "281",
+   "rarity": "rare",
+   "released_at": "2014-07-18",
+   "artist": "Donato Giancola"
+  },
+  {
+   "id": "b6fd9b74-8e5b-4c57-bb4f-4a7222183c44",
+   "name": "Shivan Dragon",
+   "set": "ori",
+   "set_name": "Magic Origins",
+   "collector_number": "285",
+   "rarity": "rare",
+   "released_at": "2015-07-17",
+   "artist": "Donato Giancola"
+  },
+  {
+   "id": "ca25d8fe-93b3-4d2c-96df-ca6e4f528543",
+   "name": "Shivan Dragon",
+   "set": "w16",
+   "set_name": "Welcome Deck 2016",
+   "collector_number": "13",
+   "rarity": "rare",
+   "released_at": "2016-04-08",
+   "artist": "Donato Giancola"
+  },
+  {
+   "id": "2160284c-2ece-43ba-ab67-5c184f81fe0e",
+   "name": "Shivan Dragon",
+   "set": "w17",
+   "set_name": "Welcome Deck 2017",
+   "collector_number": "22",
+   "rarity": "rare",
+   "released_at": "2017-04-15",
+   "artist": "Donato Giancola"
+  },
+  {
+   "id": "d389b8db-5866-4146-a379-f24b6463622b",
+   "name": "Shivan Dragon",
+   "set": "m19",
+   "set_name": "Core Set 2019",
+   "collector_number": "300",
+   "rarity": "rare",
+   "released_at": "2018-07-13",
+   "artist": "Donato Giancola"
+  },
+  {
+   "id": "227cf1b5-f85b-41fe-be98-66e383652039",
+   "name": "Shivan Dragon",
+   "set": "m20",
+   "set_name": "Core Set 2020",
+   "collector_number": "335",
+   "rarity": "rare",
+   "released_at": "2019-07-12",
+   "artist": "Donato Giancola"
+  },
+  {
+   "id": "8beb06f5-05e1-461e-927f-906d38d9448c",
+   "name": "Shivan Dragon",
+   "set": "gn3",
+   "set_name": "Game Night: Free-for-All",
+   "collector_number": "87",
+   "rarity": "rare",
+   "released_at": "2022-10-14",
+   "artist": "Donato Giancola"
+  },
+  {
+   "id": "c535f7f8-a57e-4ef1-91b4-5e3281bd4407",
+   "name": "Shivan Dragon",
+   "set": "slc",
+   "set_name": "Secret Lair Countdown",
+   "collector_number": "1993",
+   "rarity": "rare",
+   "released_at": "2022-11-01",
+   "artist": "Justine Jones"
+  },
+  {
+   "id": "9a5ddd65-b731-4805-827c-a25350531d74",
+   "name": "Shivan Dragon",
+   "set": "30a",
+   "set_name": "30th Anniversary Edition",
+   "collector_number": "170",
+   "rarity": "rare",
+   "released_at": "2022-11-28",
+   "artist": "Melissa A. Benson"
+  },
+  {
+   "id": "4bbcec3a-2747-4fa3-b8cd-d4a0b1dda042",
+   "name": "Shivan Dragon",
+   "set": "30a",
+   "set_name": "30th Anniversary Edition",
+   "collector_number": "467",
+   "rarity": "rare",
+   "released_at": "2022-11-28",
+   "artist": "Melissa A. Benson"
+  },
+  {
+   "id": "7b78eb49-bd68-47e6-90a3-83ec2eeb4312",
+   "name": "Shivan Dragon",
+   "set": "dmr",
+   "set_name": "Dominaria Remastered",
+   "collector_number": "135",
+   "rarity": "rare",
+   "released_at": "2023-01-13",
+   "artist": "Donato Giancola"
+  },
+  {
+   "id": "8b5f8025-95ff-431a-a33c-4e2e7366633f",
+   "name": "Shivan Dragon",
+   "set": "dmr",
+   "set_name": "Dominaria Remastered",
+   "collector_number": "329",
+   "rarity": "rare",
+   "released_at": "2023-01-13",
+   "artist": "Donato Giancola"
+  },
+  {
+   "id": "b0a04baf-5301-4e47-ac8f-243d2a73f18e",
+   "name": "Shivan Dragon",
+   "set": "sld",
+   "set_name": "Secret Lair Drop",
+   "collector_number": "716",
+   "rarity": "rare",
+   "released_at": "2023-02-21",
+   "artist": "Martin Ontiveros"
+  },
+  {
+   "id": "f76d1d4f-4911-46cd-8adb-af4b5eba48bb",
+   "name": "Shivan Dragon",
+   "set": "p30h",
+   "set_name": "30th Anniversary History Promos",
+   "collector_number": "4",
+   "rarity": "rare",
+   "released_at": "2023-03-21",
+   "artist": "Satoru Senda"
+  },
+  {
+   "id": "3dbbfb7f-0e50-454b-a9a1-b4813a95112e",
+   "name": "Shivan Dragon",
+   "set": "p30h",
+   "set_name": "30th Anniversary History Promos",
+   "collector_number": "4★",
+   "rarity": "rare",
+   "released_at": "2023-03-21",
+   "artist": "Satoru Senda"
+  },
+  {
+   "id": "18927987-aeea-4af3-a1ea-90949772e56a",
+   "name": "Shivan Dragon",
+   "set": "p30t",
+   "set_name": "30th Anniversary Celebration Tokyo",
+   "collector_number": "2",
+   "rarity": "rare",
+   "released_at": "2023-09-01",
+   "artist": "Kota Nakatsubo"
+  },
+  {
+   "id": "0bda24b2-a9ab-4aca-8bbf-1bfb0990f68f",
+   "name": "Shivan Dragon",
+   "set": "sld",
+   "set_name": "Secret Lair Drop",
+   "collector_number": "1709",
+   "rarity": "rare",
+   "released_at": "2024-06-24",
+   "artist": "Julie Bell"
+  },
+  {
+   "id": "1fcff1e0-2745-448d-a27b-e31719e222e9",
+   "name": "Shivan Dragon",
+   "set": "fdn",
+   "set_name": "Foundations",
+   "collector_number": "206",
+   "rarity": "uncommon",
+   "released_at": "2024-11-15",
+   "artist": "Donato Giancola"
+  },
+  {
+   "id": "702c4781-670b-49ae-b511-90ed119841b0",
+   "name": "Shivan Dragon",
+   "set": "fdn",
+   "set_name": "Foundations",
+   "collector_number": "763",
+   "rarity": "uncommon",
+   "released_at": "2026-04-24",
+   "artist": "Donato Giancola"
+  },
+  {
+   "id": "294ca89d-549a-4302-9284-df5b4e833a69",
+   "name": "Shivan Dragon",
+   "set": "sld",
+   "set_name": "Secret Lair Drop",
+   "collector_number": "2759",
+   "rarity": "rare",
+   "released_at": "2026-08-31",
+   "artist": "Ian Miller"
+  },
+  {
+   "id": "d6ac5a7f-0e73-45d1-9b20-6ae1a60fa7cf",
+   "name": "Shivan Dragon",
+   "set": "sld",
+   "set_name": "Secret Lair Drop",
+   "collector_number": "7180",
+   "rarity": "rare",
+   "released_at": "2026-08-31",
+   "artist": "Ian Miller"
+  }
+ ],
+ "Counterspell": [
+  {
+   "id": "0df55e3f-14de-46ef-b6b1-616618724d9e",
+   "name": "Counterspell",
+   "set": "lea",
+   "set_name": "Limited Edition Alpha",
+   "collector_number": "54",
+   "rarity": "uncommon",
+   "released_at": "1993-08-05",
+   "artist": "Mark Poole"
+  },
+  {
+   "id": "9e11bf7c-f439-4529-b29a-d711359807ef",
+   "name": "Counterspell",
+   "set": "leb",
+   "set_name": "Limited Edition Beta",
+   "collector_number": "55",
+   "rarity": "uncommon",
+   "released_at": "1993-10-04",
+   "artist": "Mark Poole"
+  },
+  {
+   "id": "7c666b4b-c4ff-40ca-9d16-c76aafebaa83",
+   "name": "Counterspell",
+   "set": "2ed",
+   "set_name": "Unlimited Edition",
+   "collector_number": "55",
+   "rarity": "uncommon",
+   "released_at": "1993-12-01",
+   "artist": "Mark Poole"
+  },
+  {
+   "id": "901efc0f-b444-41bf-ab55-2a2860aa4a52",
+   "name": "Counterspell",
+   "set": "ced",
+   "set_name": "Collectors' Edition",
+   "collector_number": "55",
+   "rarity": "uncommon",
+   "released_at": "1993-12-10",
+   "artist": "Mark Poole"
+  },
+  {
+   "id": "1ec94c01-4e28-4aa6-ae6d-76aec880dbc7",
+   "name": "Counterspell",
+   "set": "cei",
+   "set_name": "Intl. Collectors' Edition",
+   "collector_number": "55",
+   "rarity": "uncommon",
+   "released_at": "1993-12-10",
+   "artist": "Mark Poole"
+  },
+  {
+   "id": "0a1b4e2e-5459-4fae-81d9-1e882647daac",
+   "name": "Counterspell",
+   "set": "3ed",
+   "set_name": "Revised Edition",
+   "collector_number": "54",
+   "rarity": "uncommon",
+   "released_at": "1994-04-11",
+   "artist": "Mark Poole"
+  },
+  {
+   "id": "a7b5b4b1-1df0-46c4-97ff-f0ca2d1c91fb",
+   "name": "Counterspell",
+   "set": "fbb",
+   "set_name": "Foreign Black Border",
+   "collector_number": "54",
+   "rarity": "uncommon",
+   "released_at": "1994-04-11",
+   "artist": "Mark Poole"
+  },
+  {
+   "id": "885b5ca4-b8e4-4a66-9508-a12396959253",
+   "name": "Counterspell",
+   "set": "sum",
+   "set_name": "Summer Magic / Edgar",
+   "collector_number": "54",
+   "rarity": "uncommon",
+   "released_at": "1994-06-21",
+   "artist": "Mark Poole"
+  },
+  {
+   "id": "e8493631-6c9c-40a8-b7de-ecf26ba6bf7d",
+   "name": "Counterspell",
+   "set": "4ed",
+   "set_name": "Fourth Edition",
+   "collector_number": "65",
+   "rarity": "uncommon",
+   "released_at": "1995-04-01",
+   "artist": "Mark Poole"
+  },
+  {
+   "id": "79976df3-e989-4f99-8534-dca962f85e3d",
+   "name": "Counterspell",
+   "set": "4bb",
+   "set_name": "Fourth Edition Foreign Black Border",
+   "collector_number": "65",
+   "rarity": "uncommon",
+   "released_at": "1995-04-01",
+   "artist": "Mark Poole"
+  },
+  {
+   "id": "aedbcbaa-40f0-485f-8427-778edc2d2ec0",
+   "name": "Counterspell",
+   "set": "ice",
+   "set_name": "Ice Age",
+   "collector_number": "64",
+   "rarity": "common",
+   "released_at": "1995-06-03",
+   "artist": "Allen Williams"
+  },
+  {
+   "id": "14b62ca7-2147-422e-97dd-573b474ef97f",
+   "name": "Counterspell",
+   "set": "ptc",
+   "set_name": "Pro Tour Collector Set",
+   "collector_number": "ml65",
+   "rarity": "uncommon",
+   "released_at": "1996-05-01",
+   "artist": "Mark Poole"
+  },
+  {
+   "id": "703dc932-3f90-47e9-8d13-aad1b65f1651",
+   "name": "Counterspell",
+   "set": "ptc",
+   "set_name": "Pro Tour Collector Set",
+   "collector_number": "shr65",
+   "rarity": "uncommon",
+   "released_at": "1996-05-01",
+   "artist": "Mark Poole"
+  },
+  {
+   "id": "7065deea-6117-47d4-9d72-fc67af5bb483",
+   "name": "Counterspell",
+   "set": "plgm",
+   "set_name": "DCI Legend Membership",
+   "collector_number": "1",
+   "rarity": "rare",
+   "released_at": "1996-07-01",
+   "artist": "Dom!"
+  },
+  {
+   "id": "b975289d-d8b8-46b4-8c60-d6ed4b594519",
+   "name": "Counterspell",
+   "set": "5ed",
+   "set_name": "Fifth Edition",
+   "collector_number": "77",
+   "rarity": "common",
+   "released_at": "1997-03-24",
+   "artist": "Hannibal King"
+  },
+  {
+   "id": "4a196a26-d03e-4535-940c-0e7976da216d",
+   "name": "Counterspell",
+   "set": "wc97",
+   "set_name": "World Championship Decks 1997",
+   "collector_number": "jk77",
+   "rarity": "common",
+   "released_at": "1997-08-13",
+   "artist": "Hannibal King"
+  },
+  {
+   "id": "13c474f7-38f1-4e46-8619-dd2a1b23c158",
+   "name": "Counterspell",
+   "set": "wc97",
+   "set_name": "World Championship Decks 1997",
+   "collector_number": "pm77",
+   "rarity": "common",
+   "released_at": "1997-08-13",
+   "artist": "Hannibal King"
+  },
+  {
+   "id": "dacdd380-71cf-4832-bd02-3697501325f3",
+   "name": "Counterspell",
+   "set": "tmp",
+   "set_name": "Tempest",
+   "collector_number": "57",
+   "rarity": "common",
+   "released_at": "1997-10-14",
+   "artist": "Stephen Daniele"
+  },
+  {
+   "id": "b230b4f7-0e2a-42ba-a780-27c9714b70a2",
+   "name": "Counterspell",
+   "set": "wc98",
+   "set_name": "World Championship Decks 1998",
+   "collector_number": "rb57",
+   "rarity": "common",
+   "released_at": "1998-08-12",
+   "artist": "Stephen Daniele"
+  },
+  {
+   "id": "ee0d3f5f-7790-4772-bead-5d7114a23e94",
+   "name": "Counterspell",
+   "set": "6ed",
+   "set_name": "Classic Sixth Edition",
+   "collector_number": "61",
+   "rarity": "common",
+   "released_at": "1999-04-21",
+   "artist": "Hannibal King"
+  },
+  {
+   "id": "b2227782-6709-4d0a-82b4-5070a7ddb647",
+   "name": "Counterspell",
+   "set": "s99",
+   "set_name": "Starter 1999",
+   "collector_number": "34",
+   "rarity": "uncommon",
+   "released_at": "1999-07-01",
+   "artist": "Hannibal King"
+  },
+  {
+   "id": "7bd03c80-7812-4704-9e07-9cf73b49c01f",
+   "name": "Counterspell",
+   "set": "mmq",
+   "set_name": "Mercadian Masques",
+   "collector_number": "69",
+   "rarity": "common",
+   "released_at": "1999-10-04",
+   "artist": "Gao Yan"
+  },
+  {
+   "id": "9a765377-bc8c-480a-9903-bd942c20fc47",
+   "name": "Counterspell",
+   "set": "brb",
+   "set_name": "Battle Royale Box Set",
+   "collector_number": "15",
+   "rarity": "common",
+   "released_at": "1999-11-12",
+   "artist": "Hannibal King"
+  },
+  {
+   "id": "7700d907-e212-4893-8c65-02c8906a803c",
+   "name": "Counterspell",
+   "set": "g00",
+   "set_name": "Judge Gift Cards 2000",
+   "collector_number": "1",
+   "rarity": "rare",
+   "released_at": "2000-01-01",
+   "artist": "Dom!"
+  },
+  {
+   "id": "0a448077-3b1f-4efd-a606-e3ff40fe1621",
+   "name": "Counterspell",
+   "set": "wc00",
+   "set_name": "World Championship Decks 2000",
+   "collector_number": "tvdl61b",
+   "rarity": "common",
+   "released_at": "2000-08-02",
+   "artist": "Hannibal King"
+  },
+  {
+   "id": "0bd56820-a903-4118-bbef-3e091789482f",
+   "name": "Counterspell",
+   "set": "btd",
+   "set_name": "Beatdown Box Set",
+   "collector_number": "6",
+   "rarity": "common",
+   "released_at": "2000-10-01",
+   "artist": "Allen Williams"
+  },
+  {
+   "id": "29bb1b85-9444-4bfa-b622-092a6873631c",
+   "name": "Counterspell",
+   "set": "7ed",
+   "set_name": "Seventh Edition",
+   "collector_number": "67",
+   "rarity": "common",
+   "released_at": "2001-04-11",
+   "artist": "Mark Romanoski"
+  },
+  {
+   "id": "8bed211e-f3ec-4e9e-b9a7-0989930dd049",
+   "name": "Counterspell",
+   "set": "7ed",
+   "set_name": "Seventh Edition",
+   "collector_number": "67★",
+   "rarity": "common",
+   "released_at": "2001-04-11",
+   "artist": "Mark Romanoski"
+  },
+  {
+   "id": "5323b7eb-976b-49fa-bc95-53337b43f9a3",
+   "name": "Counterspell",
+   "set": "wc01",
+   "set_name": "World Championship Decks 2001",
+   "collector_number": "ab67",
+   "rarity": "common",
+   "released_at": "2001-08-08",
+   "artist": "Mark Romanoski"
+  },
+  {
+   "id": "4652c51c-881f-4732-872d-17f60847ef29",
+   "name": "Counterspell",
+   "set": "wc01",
+   "set_name": "World Championship Decks 2001",
+   "collector_number": "ar67",
+   "rarity": "common",
+   "released_at": "2001-08-08",
+   "artist": "Mark Romanoski"
+  },
+  {
+   "id": "180fa82e-9e25-4a9c-b9a7-3e1dffaaa5ea",
+   "name": "Counterspell",
+   "set": "wc01",
+   "set_name": "World Championship Decks 2001",
+   "collector_number": "ab69",
+   "rarity": "common",
+   "released_at": "2001-08-08",
+   "artist": "Gao Yan"
+  },
+  {
+   "id": "ec4fb462-9226-43cb-862f-7467762e6c8b",
+   "name": "Counterspell",
+   "set": "wc01",
+   "set_name": "World Championship Decks 2001",
+   "collector_number": "ar69",
+   "rarity": "common",
+   "released_at": "2001-08-08",
+   "artist": "Gao Yan"
+  },
+  {
+   "id": "22b31ea9-f967-4e5a-b293-c7773cc4a0ba",
+   "name": "Counterspell",
+   "set": "wc02",
+   "set_name": "World Championship Decks 2002",
+   "collector_number": "cr67",
+   "rarity": "common",
+   "released_at": "2002-12-01",
+   "artist": "Mark Romanoski"
+  },
+  {
+   "id": "394d65a0-0792-43d5-ab09-354cf8984428",
+   "name": "Counterspell",
+   "set": "f05",
+   "set_name": "Friday Night Magic 2005",
+   "collector_number": "11",
+   "rarity": "rare",
+   "released_at": "2005-01-01",
+   "artist": "Mark Poole"
+  },
+  {
+   "id": "71cfcba5-1571-48b8-a3db-55dca135506e",
+   "name": "Counterspell",
+   "set": "dd2",
+   "set_name": "Duel Decks: Jace vs. Chandra",
+   "collector_number": "24",
+   "rarity": "common",
+   "released_at": "2008-11-07",
+   "artist": "Jason Chan"
+  },
+  {
+   "id": "2a6c681a-2b5f-4c4e-81c3-91e8aba47985",
+   "name": "Counterspell",
+   "set": "jvc",
+   "set_name": "Duel Decks Anthology: Jace vs. Chandra",
+   "collector_number": "24",
+   "rarity": "common",
+   "released_at": "2014-12-05",
+   "artist": "Jason Chan"
+  },
+  {
+   "id": "0c9a7cb0-5bff-48ff-b620-2838816ac9b5",
+   "name": "Counterspell",
+   "set": "ema",
+   "set_name": "Eternal Masters",
+   "collector_number": "43",
+   "rarity": "common",
+   "released_at": "2016-06-10",
+   "artist": "Zack Stella"
+  },
+  {
+   "id": "3126d20f-1082-4ebc-b2fa-b12be3ba1bac",
+   "name": "Counterspell",
+   "set": "mp2",
+   "set_name": "Amonkhet Invocations",
+   "collector_number": "10",
+   "rarity": "special",
+   "released_at": "2017-04-28",
+   "artist": "Chase Stone"
+  },
+  {
+   "id": "cca8eb95-d071-46a4-885c-3da25b401806",
+   "name": "Counterspell",
+   "set": "a25",
+   "set_name": "Masters 25",
+   "collector_number": "50",
+   "rarity": "common",
+   "released_at": "2018-03-16",
+   "artist": "Zack Stella"
+  },
+  {
+   "id": "16b0b5e6-ac30-417b-938a-31cda2f697f8",
+   "name": "Counterspell",
+   "set": "ss1",
+   "set_name": "Signature Spellbook: Jace",
+   "collector_number": "4",
+   "rarity": "rare",
+   "released_at": "2018-06-15",
+   "artist": "Jason Chan"
+  },
+  {
+   "id": "6ac949a7-51ea-4c7e-ad46-87e5ee88b99b",
+   "name": "Counterspell",
+   "set": "plst",
+   "set_name": "The List",
+   "collector_number": "A25-50",
+   "rarity": "common",
+   "released_at": "2019-11-07",
+   "artist": "Zack Stella"
+  },
+  {
+   "id": "ce30f926-bc06-46ee-9f35-0cdf09a67043",
+   "name": "Counterspell",
+   "set": "cmr",
+   "set_name": "Commander Legends",
+   "collector_number": "395",
+   "rarity": "common",
+   "released_at": "2020-11-20",
+   "artist": "Zack Stella"
+  },
+  {
+   "id": "f5c6f284-fc07-4849-8210-80f12f77f518",
+   "name": "Counterspell",
+   "set": "cmr",
+   "set_name": "Commander Legends",
+   "collector_number": "632",
+   "rarity": "common",
+   "released_at": "2020-11-20",
+   "artist": "Zack Stella"
+  },
+  {
+   "id": "ffdf9d2a-c163-43df-9a2f-20b8749c86ae",
+   "name": "Counterspell",
+   "set": "sta",
+   "set_name": "Strixhaven Mystical Archive",
+   "collector_number": "15",
+   "rarity": "rare",
+   "released_at": "2021-04-23",
+   "artist": "Olena Richards"
+  },
+  {
+   "id": "8118282a-1473-4c0b-a283-1f58e0d0209a",
+   "name": "Counterspell",
+   "set": "sta",
+   "set_name": "Strixhaven Mystical Archive",
+   "collector_number": "78",
+   "rarity": "rare",
+   "released_at": "2021-04-23",
+   "artist": "Rindo Karasuba"
+  },
+  {
+   "id": "791cc2f2-2ec6-4df0-8c59-a31dee319729",
+   "name": "Counterspell",
+   "set": "pmei",
+   "set_name": "Media and Collaboration Promos",
+   "collector_number": "2021-1",
+   "rarity": "rare",
+   "released_at": "2021-04-26",
+   "artist": "Hannibal King"
+  },
+  {
+   "id": "1920dae4-fb92-4f19-ae4b-eb3276b8dac7",
+   "name": "Counterspell",
+   "set": "mh2",
+   "set_name": "Modern Horizons 2",
+   "collector_number": "267",
+   "rarity": "uncommon",
+   "released_at": "2021-06-18",
+   "artist": "Zack Stella"
+  },
+  {
+   "id": "2c358d75-01ad-4487-8104-425124b96aae",
+   "name": "Counterspell",
+   "set": "mh2",
+   "set_name": "Modern Horizons 2",
+   "collector_number": "308",
+   "rarity": "rare",
+   "released_at": "2021-06-18",
+   "artist": "Ryan Yee"
+  },
+  {
+   "id": "5932f2dc-3bb6-4f5e-8e8d-c62e7413ac0a",
+   "name": "Counterspell",
+   "set": "sld",
+   "set_name": "Secret Lair Drop",
+   "collector_number": "175",
+   "rarity": "rare",
+   "released_at": "2021-06-21",
+   "artist": "Mark Poole"
+  },
+  {
+   "id": "a457f404-ddf1-40fa-b0f0-23c8598533f4",
+   "name": "Counterspell",
+   "set": "plst",
+   "set_name": "The List",
+   "collector_number": "CMR-395",
+   "rarity": "common",
+   "released_at": "2021-11-29",
+   "artist": "Zack Stella"
+  },
+  {
+   "id": "f35ec9da-f38b-4b7f-9eb5-090ca7755668",
+   "name": "Counterspell",
+   "set": "sld",
+   "set_name": "Secret Lair Drop",
+   "collector_number": "331",
+   "rarity": "rare",
+   "released_at": "2021-11-29",
+   "artist": "Mateus Manhanini"
+  },
+  {
+   "id": "47973a25-a600-49ed-b92e-83cdd65be1e3",
+   "name": "Counterspell",
+   "set": "gn3",
+   "set_name": "Game Night: Free-for-All",
+   "collector_number": "25",
+   "rarity": "uncommon",
+   "released_at": "2022-10-14",
+   "artist": "Zack Stella"
+  },
+  {
+   "id": "68787949-4c50-47a1-a28c-05ea37dd13cd",
+   "name": "Counterspell",
+   "set": "30a",
+   "set_name": "30th Anniversary Edition",
+   "collector_number": "54",
+   "rarity": "uncommon",
+   "released_at": "2022-11-28",
+   "artist": "Mark Poole"
+  },
+  {
+   "id": "4dd995aa-6aa1-495e-8d00-37fdbdbdbc7b",
+   "name": "Counterspell",
+   "set": "30a",
+   "set_name": "30th Anniversary Edition",
+   "collector_number": "351",
+   "rarity": "uncommon",
+   "released_at": "2022-11-28",
+   "artist": "Mark Poole"
+  },
+  {
+   "id": "52042404-12db-4914-bfa0-8249a5942088",
+   "name": "Counterspell",
+   "set": "scd",
+   "set_name": "Starter Commander Decks",
+   "collector_number": "45",
+   "rarity": "common",
+   "released_at": "2022-12-02",
+   "artist": "Zack Stella"
+  },
+  {
+   "id": "02da8709-4228-4fed-9d2d-781e686661df",
+   "name": "Counterspell",
+   "set": "dmr",
+   "set_name": "Dominaria Remastered",
+   "collector_number": "45",
+   "rarity": "common",
+   "released_at": "2023-01-13",
+   "artist": "Zack Stella"
+  },
+  {
+   "id": "d14d5ff3-40c0-4f22-91ad-d6c8447cb9e0",
+   "name": "Counterspell",
+   "set": "dmr",
+   "set_name": "Dominaria Remastered",
+   "collector_number": "281",
+   "rarity": "common",
+   "released_at": "2023-01-13",
+   "artist": "Zack Stella"
+  },
+  {
+   "id": "1b73577a-8ca1-41d7-9b2b-7300286fde43",
+   "name": "Counterspell",
+   "set": "dmr",
+   "set_name": "Dominaria Remastered",
+   "collector_number": "457",
+   "rarity": "rare",
+   "released_at": "2023-01-13",
+   "artist": "Mark Poole"
+  },
+  {
+   "id": "8493131c-0a7b-4be6-a8a2-0b425f4f67fb",
+   "name": "Counterspell",
+   "set": "cmm",
+   "set_name": "Commander Masters",
+   "collector_number": "81",
+   "rarity": "common",
+   "released_at": "2023-08-04",
+   "artist": "Jason Chan"
+  },
+  {
+   "id": "7e47212d-399e-4121-92d4-9fb0d85767cb",
+   "name": "Counterspell",
+   "set": "cmm",
+   "set_name": "Commander Masters",
+   "collector_number": "630",
+   "rarity": "common",
+   "released_at": "2023-08-04",
+   "artist": "rk post"
+  },
+  {
+   "id": "7c3271da-cc20-48c2-ac61-b64a8e47f9e5",
+   "name": "Counterspell",
+   "set": "sld",
+   "set_name": "Secret Lair Drop",
+   "collector_number": "SCTLR",
+   "rarity": "rare",
+   "released_at": "2023-08-25",
+   "artist": "Mark Poole"
+  },
+  {
+   "id": "8916e24f-9c74-4b6c-9894-d60669854f35",
+   "name": "Counterspell",
+   "set": "pf24",
+   "set_name": "MagicFest 2024",
+   "collector_number": "1",
+   "rarity": "rare",
+   "released_at": "2024-02-23",
+   "artist": "Ryan Valle"
+  },
+  {
+   "id": "976f36ce-57b0-4364-9009-b3bbf5763050",
+   "name": "Counterspell",
+   "set": "mb2",
+   "set_name": "Mystery Booster 2",
+   "collector_number": "158",
+   "rarity": "common",
+   "released_at": "2024-08-02",
+   "artist": "Gao Yan"
+  },
+  {
+   "id": "4f616706-ec97-4923-bb1e-11a69fbaa1f8",
+   "name": "Counterspell",
+   "set": "dsc",
+   "set_name": "Duskmourn: House of Horror Commander",
+   "collector_number": "114",
+   "rarity": "uncommon",
+   "released_at": "2024-09-27",
+   "artist": "Zack Stella"
+  },
+  {
+   "id": "f2a7042f-a6f0-4e77-86a2-5eb0d2587363",
+   "name": "Counterspell",
+   "set": "purl",
+   "set_name": "URL/Convention Promos",
+   "collector_number": "2",
+   "rarity": "rare",
+   "released_at": "2024-10-18",
+   "artist": "Pauline Voss"
+  },
+  {
+   "id": "62504a3f-df9f-4fab-a5fc-50fc39288052",
+   "name": "Counterspell",
+   "set": "sld",
+   "set_name": "Secret Lair Drop",
+   "collector_number": "1589",
+   "rarity": "rare",
+   "released_at": "2025-02-10",
+   "artist": "Julia Metzger"
+  },
+  {
+   "id": "053f724c-c88d-44c0-9902-6400c064640b",
+   "name": "Counterspell",
+   "set": "sld",
+   "set_name": "Secret Lair Drop",
+   "collector_number": "1933",
+   "rarity": "rare",
+   "released_at": "2025-03-24",
+   "artist": "Tyler Walpole"
+  },
+  {
+   "id": "5d93b770-dc46-46ad-aefe-282dac8cc246",
+   "name": "Counterspell",
+   "set": "sld",
+   "set_name": "Secret Lair Drop",
+   "collector_number": "7010",
+   "rarity": "rare",
+   "released_at": "2025-03-30",
+   "artist": "Tyler Walpole"
+  },
+  {
+   "id": "e1e48b21-1a4f-4708-a4b4-e2e296df924c",
+   "name": "Counterspell",
+   "set": "fca",
+   "set_name": "Final Fantasy: Through the Ages",
+   "collector_number": "4",
+   "rarity": "uncommon",
+   "released_at": "2025-06-13",
+   "artist": "Yoshitaka Amano"
+  },
+  {
+   "id": "1f97c640-c580-420d-8454-7ea2a257d343",
+   "name": "Counterspell",
+   "set": "pmei",
+   "set_name": "Media and Collaboration Promos",
+   "collector_number": "2025-15",
+   "rarity": "rare",
+   "released_at": "2025-09-25",
+   "artist": "Hannibal King"
+  },
+  {
+   "id": "610a7782-ffe4-4b1c-bcc2-b3d89357e3da",
+   "name": "Counterspell",
+   "set": "mar",
+   "set_name": "Marvel Universe",
+   "collector_number": "9",
+   "rarity": "mythic",
+   "released_at": "2025-09-26",
+   "artist": "Steve Ditko"
+  },
+  {
+   "id": "87284999-8b35-4142-a711-0c9e1bdc8e1a",
+   "name": "Counterspell",
+   "set": "sld",
+   "set_name": "Secret Lair Drop",
+   "collector_number": "2497",
+   "rarity": "rare",
+   "released_at": "2026-02-09",
+   "artist": "Diego Andrade"
+  },
+  {
+   "id": "9cb2478c-1672-44eb-a9a1-a103fcdf3701",
+   "name": "Counterspell",
+   "set": "pf26",
+   "set_name": "MagicFest 2026",
+   "collector_number": "5",
+   "rarity": "rare",
+   "released_at": "2026-04-13",
+   "artist": "Stephen Daniele"
+  },
+  {
+   "id": "6522cc61-397d-4754-9a7f-9f9d50f85922",
+   "name": "Counterspell",
+   "set": "sld",
+   "set_name": "Secret Lair Drop",
+   "collector_number": "2664",
+   "rarity": "rare",
+   "released_at": "2026-06-15",
+   "artist": "Caleb Meurer"
+  },
+  {
+   "id": "379f4020-a58c-484d-9b44-72b200884079",
+   "name": "Counterspell",
+   "set": "mar",
+   "set_name": "Marvel Universe",
+   "collector_number": "52",
+   "rarity": "mythic",
+   "released_at": "2026-06-26",
+   "artist": "Adi Granov"
+  },
+  {
+   "id": "d6a1907c-59c4-4c72-b0f0-9e2402c05719",
+   "name": "Counterspell",
+   "set": "sld",
+   "set_name": "Secret Lair Drop",
+   "collector_number": "7117",
+   "rarity": "rare",
+   "released_at": "2026-07-17",
+   "artist": "Ignacio Bazan-Lazcano"
+  },
+  {
+   "id": "e28be8b0-b4ae-4f05-8481-a666496c595f",
+   "name": "Counterspell",
+   "set": "sld",
+   "set_name": "Secret Lair Drop",
+   "collector_number": "7120",
+   "rarity": "rare",
+   "released_at": "2026-07-17",
+   "artist": "Ignacio Bazan-Lazcano"
+  },
+  {
+   "id": "77d16cf5-d85a-44cf-aaac-c4134837cbe4",
+   "name": "Counterspell",
+   "set": "sld",
+   "set_name": "Secret Lair Drop",
+   "collector_number": "7123",
+   "rarity": "rare",
+   "released_at": "2026-07-17",
+   "artist": "Ignacio Bazan-Lazcano"
+  },
+  {
+   "id": "83390164-f00b-4be1-9cec-5de088c9debc",
+   "name": "Counterspell",
+   "set": "fdc",
+   "set_name": "Foundations Commander",
+   "collector_number": "61",
+   "rarity": "uncommon",
+   "released_at": "2026-10-02",
+   "artist": "Zack Stella"
+  }
+ ]
+}

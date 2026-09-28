@@ -25,6 +25,8 @@ class ScanAnalyzerTest {
         val updates = mutableListOf<DetectionUpdate>()
         val bursts = mutableListOf<CaptureBurst>()
         val errors = mutableListOf<Throwable>()
+        var focusRequests = 0
+        override fun onFocusRequest() { focusRequests++ }
         override fun onDetection(update: DetectionUpdate) { updates += update }
         override fun onCaptureRequest(request: CaptureBurst) { bursts += request }
         override fun onAnalyzerError(error: Throwable) { errors += error }
@@ -77,6 +79,42 @@ class ScanAnalyzerTest {
         assertTrue(rec.updates.any { it.event is AutoScanner.Event.NextCard })
         assertEquals(1, rec.bursts.size)
         assertTrue(rec.errors.isEmpty())
+    }
+
+    /** First card of a session: hold the capture until focus is done, then use post-focus frames only. */
+    @Test fun firstCardWaitsForFocusThenUsesFramesTakenAfterIt() {
+        var due = true
+        analyzer.focusFirst = { due }
+        feed(tray, 12)
+        feed(card, 12)                                   // trigger happens in here
+        assertEquals(1, rec.focusRequests)
+        assertTrue("held until focus answers", rec.bursts.isEmpty())
+        val focusAt = ts
+        due = false                                      // the controller clears it once focused
+        analyzer.focusDone()
+        feed(card, 2)
+        assertTrue("needs three frames newer than the focus", rec.bursts.isEmpty())
+        feed(card, 1)
+        assertEquals(1, rec.bursts.size)
+        val b = rec.bursts[0]
+        assertEquals(CaptureTrigger.AUTO, b.trigger)
+        assertEquals(3, b.frames.size)
+        assertTrue("every frame is from after the focus", b.frames.all { it.timestampNs >= focusAt })
+        // The next card shoots instantly (no second focus pass).
+        feed(tray, 4); feed(card, 12)
+        assertEquals(1, rec.focusRequests)
+        assertEquals(2, rec.bursts.size)
+    }
+
+    @Test fun aFocusThatNeverAnswersStillShootsAfterTheWait() {
+        analyzer.focusFirst = { true }
+        feed(tray, 12)
+        feed(card, 12)
+        assertEquals(1, rec.focusRequests)
+        assertTrue(rec.bursts.isEmpty())
+        feed(card, (ScanAnalyzer.FOCUS_WAIT_NS / 100_000_000L).toInt() + 1)   // no focusDone()
+        assertEquals(1, rec.bursts.size)
+        assertEquals(3, rec.bursts[0].frames.size)
     }
 
     @Test fun roiIsCarriedIntoTheBurstAndDetectionDims() {

@@ -121,4 +121,35 @@
     <string name="nettest_no_results">No runs yet.</string>
     <string name="nettest_running_verdict">So far: %1$s</string>
     <string name="nettest_error">Couldn\'t run: %1$s</string>
+    <string name="scan_rate_desc">Cards scanned per minute, and cards this session</string>
+    <string name="ack_next_card">✓ Got it — next card</string>
+    <string name="ack_got_it">✓ Got it</string>
+    <string name="ack_same_card">Same card as last — drop the next one</string>
+    <string name="settings_vibration">Vibration</string>
+    <string name="settings_vibration_desc">Buzz when a card is captured (two short = next card, one long = same card as last)</string>
+    <!-- Diagnostics → On-phone identify (Stage 2 Compare mode, ui/CompareSection) -->
+    <string name="diag_title">Diagnostics</string>
+    <string name="cmp_header">On-phone identify (Stage 2)</string>
+    <string name="cmp_intro">Compare mode identifies each card on the phone too, AFTER the computer has answered, using the same photo, and logs whether the two agree. Your scans still go to the computer and are filed exactly as before — nothing the phone concludes is used. Needs the art pack (a few MB, downloaded from GitHub on Wi-Fi, checked weekly); Scryfall lookups and printing images use whatever network the phone is on.</string>
+    <string name="cmp_switch">Compare mode</string>
+    <string name="cmp_switch_desc">Identify on the phone after every scan and log the comparison</string>
+    <string name="cmp_check_pack">Check for pack</string>
+    <string name="cmp_test_last">Test on last capture</string>
+    <string name="cmp_checking">Checking for a new art pack…</string>
+    <string name="cmp_testing">Identifying the last capture on the phone…</string>
+    <string name="cmp_check_skipped">Not checked: %1$s.</string>
+    <string name="cmp_no_pack_yet">No art pack published yet — the first CI build may still be running. Try again later.</string>
+    <string name="cmp_up_to_date">Art pack is up to date (built %1$s).</string>
+    <string name="cmp_installed">Installed a new art pack, built %2$s (artworks: %1$d).</string>
+    <string name="cmp_check_failed">Art pack check failed: %1$s</string>
+    <string name="cmp_pack_none">art pack: none installed · last check %1$s</string>
+    <string name="cmp_pack_line">art pack: built %2$s · artworks: %1$d · sha %3$s · last check %4$s</string>
+    <string name="cmp_on_idle">Compare mode is on — scan a card.</string>
+    <string name="cmp_off">Compare mode is off.</string>
+    <string name="cmp_summary_header">Comparison (last 200)</string>
+    <string name="cmp_no_rows">Nothing compared yet.</string>
+    <string name="cmp_copy">Copy report</string>
+    <string name="cmp_clear">Clear</string>
+    <string name="cmp_disagreements">Disagreements (newest first)</string>
+    <string name="cmp_no_disagreements">No disagreements.</string>
 </resources>

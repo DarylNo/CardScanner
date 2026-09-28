@@ -3,6 +3,8 @@ package io.github.darylno.cardscanner
 import android.app.Application
 import android.content.Context
 import android.util.Log
+import io.github.darylno.cardscanner.ident.CompareMode
+import io.github.darylno.cardscanner.ident.CompareUploadPort
 import io.github.darylno.cardscanner.ui.AppSettings
 import io.github.darylno.cardscanner.ui.Adapters
 import io.github.darylno.cardscanner.ui.CameraPort
@@ -25,14 +27,20 @@ class App : Application() {
         private set
     lateinit var gateway: GatewayPort
         private set
+    /** Stage 2 Compare mode (hidden, default off): shadow on-phone identification. */
+    lateinit var compare: CompareMode
+        private set
 
     override fun onCreate() {
         super.onCreate()
         if (!OpenCVLoader.initLocal()) Log.e(TAG, "OpenCV native init failed — capture will not work")
         settings = AppSettings(this)
         server = Adapters.server(this)
-        uploads = Adapters.uploads(this)
+        compare = CompareMode(this, settings)
+        // The tap only observes: uploads go through the same queue as before.
+        uploads = CompareUploadPort(Adapters.uploads(this), compare)
         gateway = Adapters.gateway(this)
+        compare.onAppStart()
     }
 
     fun newCamera(): CameraPort = Adapters.camera(this, settings)

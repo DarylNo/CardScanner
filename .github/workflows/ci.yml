@@ -66,6 +66,16 @@ jobs:
       # that moves one hash bit fails here, before the phone's thresholds drift.
       - name: Art-hash fixtures match the server
         run: python scripts/export_hash_fixtures.py --check
+      - name: Printings fixtures match the server
+        run: python scripts/export_printings_fixtures.py --check
+      - name: Printing-ranker fixtures match visual_match
+        run: python scripts/export_ranker_fixtures.py --check
+      - name: OCR match + identify-decision fixtures match the server
+        run: python scripts/export_ocr_fixtures.py --check
+      # End-to-end (IdentifyParityTest): the server's real Pipeline.scan_candidates
+      # on committed scans, printings pages and images.
+      - name: Identify fixtures match the server pipeline
+        run: python scripts/export_identify_fixtures.py --check
       - uses: actions/setup-java@v4
         with:
           distribution: temurin

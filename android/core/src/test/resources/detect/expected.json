@@ -9,6 +9,12 @@
  "scale": 1.25,
  "scenes": {
   "black_holder_only": {
+   "blank": true,
+   "blank_metrics": [
+    69.973045,
+    0.057505
+   ],
+   "extract_detected": false,
    "has_card": false,
    "height": 720,
    "margin": null,
@@ -17,6 +23,12 @@
    "width": 960
   },
   "card_near_frame_edge": {
+   "blank": false,
+   "blank_metrics": [
+    60.566568,
+    0.240984
+   ],
+   "extract_detected": true,
    "has_card": true,
    "height": 720,
    "margin": null,
@@ -42,6 +54,12 @@
    "width": 960
   },
   "dark_tray_white_border": {
+   "blank": false,
+   "blank_metrics": [
+    57.752968,
+    0.262914
+   ],
+   "extract_detected": true,
    "flat_size": [
     914,
     1276
@@ -71,6 +89,12 @@
    "width": 960
   },
   "empty_tray": {
+   "blank": true,
+   "blank_metrics": [
+    0.0,
+    0.0
+   ],
+   "extract_detected": false,
    "has_card": false,
    "height": 720,
    "margin": null,
@@ -79,6 +103,12 @@
    "width": 960
   },
   "glare_gradient_tray": {
+   "blank": false,
+   "blank_metrics": [
+    59.344174,
+    0.245858
+   ],
+   "extract_detected": true,
    "flat_size": [
     914,
     1276
@@ -108,6 +138,12 @@
    "width": 960
   },
   "holder_decoy_beside_card": {
+   "blank": false,
+   "blank_metrics": [
+    59.197305,
+    0.243908
+   ],
+   "extract_detected": true,
    "flat_size": [
     914,
     1276
@@ -137,6 +173,12 @@
    "width": 960
   },
   "portrait_frame": {
+   "blank": false,
+   "blank_metrics": [
+    55.564988,
+    0.253168
+   ],
+   "extract_detected": true,
    "flat_size": [
     914,
     1276
@@ -166,6 +208,12 @@
    "width": 720
   },
   "sideways_card": {
+   "blank": false,
+   "blank_metrics": [
+    59.486002,
+    0.222222
+   ],
+   "extract_detected": true,
    "flat_size": [
     914,
     1276
@@ -195,6 +243,12 @@
    "width": 960
   },
   "small_card_full_frame": {
+   "blank": false,
+   "blank_metrics": [
+    55.401937,
+    0.258528
+   ],
+   "extract_detected": true,
    "flat_size": [
     914,
     1276
@@ -224,6 +278,12 @@
    "width": 960
   },
   "white_tray_black_border": {
+   "blank": false,
+   "blank_metrics": [
+    62.736758,
+    0.256335
+   ],
+   "extract_detected": true,
    "flat_size": [
     882,
     1232
