@@ -80,6 +80,16 @@ Signing secrets required.
 Remove Tailscale failover, `/api/addresses` use, server cert pinning and
 the computer-server mode from the app.
 
-## Open numbers to measure (not guess)
+## Measured
+
+**Stage 1c — F2F from the phone: PASS (2026-09-28).** OnePlus Nord N200
+(DE2118, Android 12), home Wi-Fi, app 1.0.9, Cronet 143 (app-packaged):
+64/64 requests 200, **0×429**, 32/32 cards priced (incl. a foil and Black
+Lotus), pace fell from the 2 s slow start to the 0.5 s floor and stayed
+there; latency mean 304 ms / p95 457 ms; h2 + h3; 39 s total. The storefront
+gives Cronet the generous bucket, exactly like curl_cffi's Chrome handshake
+on the rig → the phone runs bulk sweeps itself; no VPS/proxy. (The OkHttp
+comparison run was not taken; Cronet is what ships, so it isn't needed.)
+
+## Still to measure (not guess)
 - Identification time per card on the Nord N200 (Stage 2).
-- F2F throttling over Cronet vs OkHttp (Stage 1c).
