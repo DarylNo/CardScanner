@@ -25,8 +25,9 @@ import kotlin.math.sqrt
  * never silently drift apart. Change card_detect.py first, then this.
  *
  * The server stays the judge: it re-detects on whatever the phone uploads.
- * `is_blank_surface` is deliberately NOT ported — rejecting blank scans is
- * the server's job, not the phone's.
+ * The CAPTURE path never rejects blank scans — that is the server's job. The
+ * Stage 2 on-phone identifier, which plays the server, has its own port of
+ * `extract_card` / `is_blank_surface` ([CardExtract]).
  *
  * Quads are `FloatArray(8)`: TL, TR, BR, BL as x0,y0, x1,y1, x2,y2, x3,y3 in
  * the pixels of the frame they were found in, arranged so the card's LONG

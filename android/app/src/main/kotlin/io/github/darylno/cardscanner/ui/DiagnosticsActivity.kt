@@ -19,6 +19,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.isNotEmpty
+import io.github.darylno.cardscanner.App
 import io.github.darylno.cardscanner.BuildConfig
 import io.github.darylno.cardscanner.R
 import io.github.darylno.cardscanner.f2f.CronetTransport
@@ -39,6 +40,11 @@ import java.util.TimeZone
 import java.util.concurrent.Executors
 
 /**
+ * Hidden diagnostics (long-press DIAGNOSTICS in Settings). Two tools:
+ *
+ * Stage 2 — On-phone identify / Compare mode ([CompareSection]): the switch,
+ * the art pack, "Test on last capture" and the server-vs-phone report.
+ *
  * Stage 1c (docs/PHONE_ONLY_PLAN.md): does Face to Face Games' storefront
  * throttle the PHONE? Prices [ProbeCards.ALL] at the rig's pacing over Cronet
  * (a real Chrome TLS handshake) and over plain OkHttp, and reports 429s and
@@ -61,6 +67,7 @@ class DiagnosticsActivity : AppCompatActivity() {
     private val buttons = mutableListOf<Button>()
     private lateinit var stopBtn: Button
     private lateinit var cooldownBtn: Button
+    private var compareSection: CompareSection? = null
 
     private val worker = Executors.newSingleThreadExecutor { r -> Thread(r, "f2f-probe") }
     private val ui = Handler(Looper.getMainLooper())
@@ -97,7 +104,7 @@ class DiagnosticsActivity : AppCompatActivity() {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(ScanChrome.Palette.BG)
-            addView(chrome.topBar(getString(R.string.nettest_title), getString(R.string.back)) { finish() },
+            addView(chrome.topBar(getString(R.string.diag_title), getString(R.string.back)) { finish() },
                 LinearLayout.LayoutParams(match(), wrap()))
             addView(ScrollView(this@DiagnosticsActivity).apply { addView(col) }, LinearLayout.LayoutParams(match(), 0, 1f))
         }
@@ -108,6 +115,7 @@ class DiagnosticsActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        compareSection?.destroy()
         stop?.set()
         worker.shutdown()      // no interrupt: the StopSignal already ends every wait
         ui.removeCallbacksAndMessages(null)
@@ -115,9 +123,12 @@ class DiagnosticsActivity : AppCompatActivity() {
     }
 
     private fun build() {
+        compareSection = CompareSection(this, chrome, App.of(this).compare).also { it.build(col) }
+
+        col.addView(chrome.sectionHeader(getString(R.string.nettest_title)))
         val intro = chrome.card()
         intro.addView(chrome.text(getString(R.string.nettest_intro, ProbeCards.ALL.size), 14f, ScanChrome.Palette.TEXT_DIM))
-        col.addView(intro, lp(8))
+        col.addView(intro, lp())
 
         col.addView(chrome.sectionHeader(getString(R.string.nettest_run)))
         val run = chrome.card()

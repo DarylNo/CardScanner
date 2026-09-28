@@ -60,6 +60,10 @@ android {
         // Robolectric smoke tests (ScreensSmokeTest) inflate the real manifest/resources.
         unitTests.isIncludeAndroidResources = true
     }
+    // The ident/ tests (PhoneIdentifier, ArtPackStore) replay :core's committed
+    // server fixtures — the art pack, the arthash index, recorded Scryfall pages,
+    // ranker scans/images — instead of copying them.
+    sourceSets.getByName("test").resources.srcDir("../core/src/test/resources")
 }
 
 dependencies {
