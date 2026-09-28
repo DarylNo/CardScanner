@@ -144,6 +144,8 @@ class SettingsActivity : AppCompatActivity() {
         cam.addView(chrome.divider(), chrome.dividerParams())
         cam.addView(chrome.switchRow(getString(R.string.settings_torch), getString(R.string.settings_torch_desc), s.torch) { s.torch = it })
         cam.addView(chrome.divider(), chrome.dividerParams())
+        cam.addView(chrome.switchRow(getString(R.string.settings_vibration), getString(R.string.settings_vibration_desc), s.vibration) { s.vibration = it })
+        cam.addView(chrome.divider(), chrome.dividerParams())
         cam.addView(chrome.switchRow(getString(R.string.settings_debug), getString(R.string.settings_debug_desc), s.debugOverlay) { s.debugOverlay = it })
         col.addView(cam, lp())
         col.addView(note(getString(R.string.settings_camera_note)))

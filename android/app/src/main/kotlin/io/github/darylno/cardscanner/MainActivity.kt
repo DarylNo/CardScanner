@@ -68,6 +68,11 @@ class MainActivity : AppCompatActivity() {
     private lateinit var statusView: TextView
     private lateinit var queueView: TextView
     private lateinit var rateView: TextView
+    /** Full-screen coloured edge flash + a big message: the "next card" / "same card" signals. */
+    private lateinit var flashView: View
+    private lateinit var ackView: TextView
+    /** Identity of the last card FILED in Mount mode (printing id, else name) — for "same card as last". */
+    private var lastFiledKey: String? = null
     /** Cards filed per minute this session (see [ScanRate]); refreshed every few seconds. */
     private val scanRate = ScanRate()
     private val rateTick = object : Runnable {
@@ -327,6 +332,20 @@ class MainActivity : AppCompatActivity() {
             bottom.setPadding(dp(16) + bars.left, dp(40), dp(16) + bars.right, dp(20) + bars.bottom)
             insets
         }
+        // Acknowledgement layer, above everything, never takes touches.
+        flashView = View(this).apply { alpha = 0f; isClickable = false; isFocusable = false }
+        root.addView(flashView, FrameLayout.LayoutParams(match(), match()))
+        ackView = TextView(this).apply {
+            alpha = 0f
+            textSize = 24f
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+            gravity = Gravity.CENTER
+            setPadding(dp(24), dp(14), dp(24), dp(14))
+            isClickable = false
+        }
+        root.addView(ackView, FrameLayout.LayoutParams(wrap(), wrap(), Gravity.CENTER).apply {
+            bottomMargin = dp(120); marginStart = dp(32); marginEnd = dp(32)   // long messages wrap inside the screen
+        })
         setContentView(root)
 
         overlay.setRoi(settings.roi)
@@ -545,6 +564,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun vibrateTick() {
+        if (!settings.vibration) return
         val v: Vibrator? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             getSystemService(VibratorManager::class.java)?.defaultVibrator
         } else {
@@ -556,6 +576,54 @@ class MainActivity : AppCompatActivity() {
         } catch (_: Exception) {
             // Haptics are a convenience; never let them break a capture.
         }
+    }
+
+    private fun vibratePattern(vararg timings: Long) {
+        if (!settings.vibration) return
+        val v: Vibrator? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            getSystemService(VibratorManager::class.java)?.defaultVibrator
+        } else {
+            @Suppress("DEPRECATION")
+            getSystemService(VIBRATOR_SERVICE) as? Vibrator
+        }
+        try {
+            v?.vibrate(VibrationEffect.createWaveform(longArrayOf(0L) + timings, -1))
+        } catch (_: Exception) {
+            // Haptics are a convenience; never let them break a capture.
+        }
+    }
+
+    private enum class Ack { NEXT_CARD, SAME_CARD }
+
+    /**
+     * The owner asked for an unmistakable "you can drop the next card" signal, and a
+     * different one when the result is the same card as last time (still on the tray,
+     * or a second copy). Coloured edge flash + a big message that fades + a haptic
+     * pattern you can feel without looking: two short buzzes = next card, one long
+     * buzz = same card as last.
+     */
+    private fun acknowledge(kind: Ack, message: String) {
+        val colour = if (kind == Ack.NEXT_CARD) ScanChrome.Palette.OK else ScanChrome.Palette.WARN
+        flashView.background = android.graphics.drawable.GradientDrawable().apply {
+            setColor(Color.TRANSPARENT)
+            setStroke(dp(14), colour)
+        }
+        ackView.text = message
+        ackView.setTextColor(ScanChrome.Palette.TEXT_ON_ACTIVE)
+        ackView.background = chrome.pill(colour)
+        for (v in listOf(flashView, ackView)) {
+            v.animate().cancel()
+            v.alpha = 1f
+            v.animate().alpha(0f).setStartDelay(if (v === ackView) 900L else 350L).setDuration(500L).start()
+        }
+        if (kind == Ack.NEXT_CARD) vibratePattern(40, 70, 40) else vibratePattern(450)
+    }
+
+    /** Same printing (else same name) as the last card filed → it's likely still on the tray. */
+    private fun filedKey(json: org.json.JSONObject): String? {
+        json.optJSONObject("selection")?.optString("scryfall_id")?.takeIf { it.isNotBlank() }?.let { return "id:$it" }
+        json.optJSONArray("candidates")?.optJSONObject(0)?.optString("id")?.takeIf { it.isNotBlank() }?.let { return "id:$it" }
+        return StatusText.name(json).takeIf { it != "?" }?.let { "name:$it" }
     }
 
     private val cameraListener = object : CameraPort.Listener {
@@ -623,6 +691,9 @@ class MainActivity : AppCompatActivity() {
         val priceCheck = manual && handheld
         if (priceCheck) awaitingPriceCheck++
         setStatus(StatusText.SCANNING)
+        // The photo is taken — the rest (upload, identify) happens in the background,
+        // so the card can go now. Say so, loudly.
+        acknowledge(Ack.NEXT_CARD, getString(if (handheld) R.string.ack_got_it else R.string.ack_next_card))
         val gen = captureGen
         // enqueue persists ≈1 MB with fsyncs — off the main thread. [io] is single-threaded,
         // so jobs still enter the FIFO queue in capture order.
@@ -682,6 +753,23 @@ class MainActivity : AppCompatActivity() {
             is Outcome.NoMatch -> outcome.scanId
             else -> null
         })
+        // Mount: a result identical to the previous card means the old card is probably
+        // still on the tray (or it's a second copy) — tell the operator to drop the next one.
+        if (!priceCheck && !handheld) {
+            val json = when (outcome) {
+                is Outcome.AutoFiled -> outcome.json
+                is Outcome.NeedsPick -> outcome.json
+                is Outcome.BestGuess -> outcome.json
+                else -> null
+            }
+            val key = json?.let(::filedKey)
+            if (key != null) {
+                if (key == lastFiledKey) {
+                    acknowledge(Ack.SAME_CARD, getString(R.string.ack_same_card))
+                }
+                lastFiledKey = key
+            }
+        }
         when (outcome) {
             is Outcome.NoCard -> {
                 setStatus(StatusText.NO_CARD, Tone.ERR)
