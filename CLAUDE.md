@@ -73,7 +73,12 @@ ranking work at 120 (oldest 60 + newest 60); that cap is deliberate.
 set-symbol template matching are pure noise for same-art same-frame reprints
 (photo-vs-CDN noise floor ~20 bits/64). That's what `ocr_id.py` is for:
 RapidOCR (pip-only, never system tesseract) reads the bottom strip;
-confusion-tolerant (I≈1, S≈5…) UNIQUE set-code match; compound collectors
+confusion-tolerant (I≈1, S≈5…) UNIQUE set-code match, the code a WHOLE
+WORD (+ a glued language tag, "MH1FN") — never across words (an AVR
+Emancipation Angel, no code printed, forged "UMA" that way) nor the start of
+one (artists MSCHF/Milivoj read as MSC…/M11…); scored on ~11k generated
+strips: wrong confirmations 142 → 9. The collector number is NOT required
+(the rig read 087/254 as "0017314" but MH1 cleanly); compound collectors
 ("A25-85") win outright so List copies don't misattribute; ambiguity = no-op.
 An OCR promotion also requires ART AGREEMENT (within _OCR_ART_SLACK of the
 best candidate) — a misread code can never promote or auto-pick a printing

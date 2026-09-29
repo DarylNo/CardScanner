@@ -104,6 +104,17 @@ class OcrMatchParityTest {
         t.done()
     }
 
+    @Test fun canonWordsMatchesTheServer() {
+        val t = Mismatches("canon_words")
+        val rows = ex.getJSONArray("canon_words")
+        for (i in 0 until rows.length()) {
+            val r = rows.getJSONArray(i)
+            val got = OcrMatch.canonWords(r.getString(0))
+            t.check(got == r.getString(1)) { "canonWords(${JSONObject.quote(r.getString(0))}) = $got, server ${r.getString(1)}" }
+        }
+        t.done()
+    }
+
     @Test fun matchPrintingMatchesTheServer() {
         val lists = ex.getJSONObject("lists")
         val parsed = HashMap<String, List<Map<String, Any?>>>()
@@ -181,7 +192,7 @@ class OcrMatchParityTest {
             // read_bottom_strip: both variants, in order, joined and canonicalised
             val seen = ArrayList<Pair<Int, Int>>()
             val blob = OcrStrip.readBottomStrip(card) { m -> seen.add(m.cols() to m.rows()); "v${seen.size} i|" }
-            assertEquals(OcrMatch.canon("v1 i| v2 i|"), blob)
+            assertEquals(OcrMatch.canonWords("v1 i| v2 i|"), blob)
             assertEquals(2, seen.size)
             assertEquals("", OcrStrip.readBottomStrip(card) { throw IllegalStateException("engine died") })
             card.release()

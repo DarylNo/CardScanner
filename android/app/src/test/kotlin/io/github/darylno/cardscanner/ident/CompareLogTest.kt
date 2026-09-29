@@ -42,6 +42,15 @@ class CompareLogTest {
         CompareRow(1L, "000000000001", "auto", server, phone, fallback, mapOf("decode" to 5L, "total" to total))
 
     @Test
+    fun thePhonesOcrTextRoundTripsThroughTheLog() {
+        val s = side(result(true, "Emancipation Angel", cand("avr-id", "avr", "19")), false)
+        val withText = row(s, s).copy(phoneOcrText = "19 244 ILLU5 5C0TT CH0U")
+        val back = CompareRow.fromJson(withText.toJson())
+        assertEquals("19 244 ILLU5 5C0TT CH0U", back.phoneOcrText)
+        assertEquals(null, CompareRow.fromJson(row(s, s).toJson()).phoneOcrText)   // OCR didn't run
+    }
+
+    @Test
     fun autoFiledServer_readsTheSelection_notCandidateZero() {
         val sel = JSONObject().put("scryfall_id", "m10-id").put("set", "m10").put("collector_number", "146").put("auto_picked", true)
         // Server's candidates[0] could differ after a re-pick; the selection is what was filed.

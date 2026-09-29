@@ -195,7 +195,8 @@ class CompareMode(private val ctx: Context, private val flag: Flag) {
         fun buildRow(jobId: String, source: String, server: Outcome, ident: PhoneIdentifier.Identified,
                      at: Long = System.currentTimeMillis()): CompareRow? {
             val s = serverSummary(server) ?: return null
-            return CompareRow(at, jobId, source, s, phoneSummary(ident), server.usedFallback, ident.timingsMs)
+            return CompareRow(at, jobId, source, s, phoneSummary(ident), server.usedFallback, ident.timingsMs,
+                phoneOcrText = ident.result.ocrText)
         }
     }
 }
