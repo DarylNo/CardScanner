@@ -41,6 +41,36 @@ def _canon(s: str) -> str:
     return "".join(out)
 
 
+def canon_words(s: str) -> str:
+    """The OCR text as canonical WORDS, single-space separated: every run of
+    alphanumerics is one word (uppercased, confusion classes collapsed, as
+    _canon); anything else separates. Idempotent.
+
+    Kept apart because a set code only counts as a WHOLE word: joining the
+    whole read into one run let letters meet ACROSS words and forge a code —
+    an AVR Emancipation Angel (whose old frame prints no set code at all)
+    "confirmed" as UMA #15 on the phone, 2026-09-29."""
+    words: list[str] = []
+    cur: list[str] = []
+    for ch in s.upper():
+        if ch.isalnum():
+            cur.append(_CONFUSION.get(ch, ch))
+        elif cur:
+            words.append("".join(cur))
+            cur = []
+    if cur:
+        words.append("".join(cur))
+    return " ".join(words)
+
+
+# Language tags a reader may glue onto the set code when it drops the "•"
+# ("UMA•EN" → "UMAEN"). "FN" is measured: the rig read scan 837's "MH1 • EN"
+# as "MH1FN".
+_LANG_TAGS = frozenset(_canon(t) for t in (
+    "EN", "FN", "FR", "DE", "IT", "ES", "PT", "JA", "JP", "KO", "RU", "ZH",
+    "CS", "CT", "PH"))
+
+
 _STRIP_Y = (0.88, 0.99)     # bottom strip of the 630x880 warp
 _STRIP_X = (0.02, 0.60)     # collector + set-code lines live bottom-left
 
@@ -89,7 +119,8 @@ def _mark_unavailable(error: str) -> None:
 
 def read_bottom_strip(card_bgr) -> str:
     """
-    OCR the card's bottom-left strip and return one canonicalized blob.
+    OCR the card's bottom-left strip and return its canonical words
+    (canon_words: word boundaries kept — match_printing needs them).
     Runs two preprocessing variants (measured on a real rig scan: color
     upscale reads the digits best, Otsu binarization reads the set-code
     line best) and unions the text. Returns "" when OCR is unavailable
@@ -120,7 +151,7 @@ def read_bottom_strip(card_bgr) -> str:
             result, _ = _ocr_engine(img)
             for row in (result or []):
                 texts.append(str(row[1]))
-        return _canon(" ".join(texts))
+        return canon_words(" ".join(texts))
     except Exception:
         return ""
 
@@ -133,18 +164,30 @@ def _find(blob: str, token: str) -> bool:
 
 def match_printing(blob: str, candidates: list[dict[str, Any]]) -> Optional[str]:
     """
-    Return the scryfall id of the ONE candidate whose set code appears in the
-    OCR blob — or None when zero or multiple match (ambiguity never guesses).
+    Return the scryfall id of the ONE candidate whose set code the OCR text
+    names — or None when zero or several match (ambiguity never guesses).
+
+    A set code counts only as a WHOLE word — "MH1", or "MH1FN" when the
+    reader glues a language tag on (_LANG_TAGS) — never letters that met
+    ACROSS words once the spaces were gone (2026-09-29: an AVR Emancipation
+    Angel, whose old frame prints no set code at all, "confirmed" as UMA #15),
+    and never the START of another word: artists MSCHF ("M5CHF") and Milivoj
+    ("M111V0J") begin with MSC and M11. Scored against the true printing over
+    the ~11k generated strips: wrong confirmations 142 → 9 (old-frame 78 → 1)
+    for ~10% fewer confirmations, nearly all from strips with every space
+    deleted. The collector number is NOT required: RapidOCR read scan 837's
+    "087/254" as "0017314" but its "MH1" cleanly, and that confirmation was
+    right.
 
     The List nuance: List cards print their ORIGINAL set's code inside the
     collector number ("A25-85"), so a plain set-code hit would misattribute
-    a List copy to the original set. When the blob also contains a matched
-    candidate's code followed by "-<digits>" that equals another candidate's
-    collector number, that other candidate wins.
+    a List copy to the original set. When the text also contains another
+    candidate's compound collector number, that other candidate wins.
     """
-    if not blob:
+    words = canon_words(blob or "").split()     # idempotent — raw or canonical input
+    if not words:
         return None
-    blob = _canon(blob)      # idempotent — accept raw or canonical input
+    joined = "".join(words)      # numbers may be split by "/" or "-": compare run-together
 
     # 1. Compound collector numbers ("A25-85", "2019-2") are the most
     #    specific token a card prints — an exact hit wins outright. This is
@@ -153,12 +196,18 @@ def match_printing(blob: str, candidates: list[dict[str, Any]]) -> Optional[str]
     compound = [c for c in candidates
                 if "-" in str(c.get("collector_number", ""))
                 and len(_canon(c.get("collector_number", ""))) >= 4
-                and _canon(c.get("collector_number", "")) in blob]
+                and _canon(c.get("collector_number", "")) in joined]
     if len(compound) == 1:
         return compound[0].get("id")
 
-    # 2. Unique set-code hit.
-    hits = [c for c in candidates if _find(blob, c.get("set", ""))]
+    # 2. Unique set-code hit — the code as a whole word (+ a language tag).
+    def set_read(c: dict[str, Any]) -> bool:
+        code = _canon(str(c.get("set", "")))
+        return len(code) >= 2 and any(
+            w == code or (w.startswith(code) and w[len(code):] in _LANG_TAGS)
+            for w in words)
+
+    hits = [c for c in candidates if set_read(c)]
     if len(hits) == 1:
         return hits[0].get("id")
 
@@ -166,7 +215,7 @@ def match_printing(blob: str, candidates: list[dict[str, Any]]) -> Optional[str]
     if len(hits) > 1:
         coll_hits = [c for c in hits
                      if len(_canon(c.get("collector_number", ""))) >= 2
-                     and _canon(c.get("collector_number", "")) in blob]
+                     and _canon(c.get("collector_number", "")) in joined]
         if len(coll_hits) == 1:
             return coll_hits[0].get("id")
     return None

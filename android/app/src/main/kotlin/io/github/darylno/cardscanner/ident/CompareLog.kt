@@ -106,6 +106,11 @@ data class CompareRow(
     val serverUsedFallback: Boolean,
     /** Phone per-stage ms: decode, blank, identify, printings, ranking, ocr, total. */
     val timingsMs: Map<String, Long>,
+    /**
+     * What the phone's OCR read (canonical words), null when it didn't run —
+     * so a wrong confirmation is diagnosed from the text, not guessed at.
+     */
+    val phoneOcrText: String? = null,
 ) {
     /** Same top name (both "no card"/"no match" counts as agreeing). */
     val nameAgree: Boolean get() = server.name == phone.name && server.noCard == phone.noCard
@@ -129,6 +134,7 @@ data class CompareRow(
         put("phone", phone.toJson())
         put("server_fallback", serverUsedFallback)
         put("ms", JSONObject(timingsMs as Map<*, *>))
+        put("phone_ocr_text", phoneOcrText ?: JSONObject.NULL)
         put("name_agree", nameAgree)
         put("printing_agree", printingAgree)
         put("auto_pick_agree", autoPickAgree)
@@ -143,6 +149,7 @@ data class CompareRow(
                 server = SideSummary.fromJson(o.getJSONObject("server")),
                 phone = SideSummary.fromJson(o.getJSONObject("phone")),
                 serverUsedFallback = o.optBoolean("server_fallback"), timingsMs = ms,
+                phoneOcrText = if (o.has("phone_ocr_text") && !o.isNull("phone_ocr_text")) o.optString("phone_ocr_text") else null,
             )
         }
     }

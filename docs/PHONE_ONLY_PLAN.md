@@ -104,8 +104,11 @@ against the server:
   OCR confirming a DIFFERENT printing than the server's art ranking put
   first: Horseshoe Crab (server 10E #87, phone DMR #55), Emancipation Angel
   (AVR #19 vs UMA #15), Frost Breath (M14 #56 vs M21 #51 — scanned between
-  six other M21 cards, so the phone is very likely right). Owner to check
-  the physical cards.
+  six other M21 cards). Owner checked the cards: the phone was right on
+  Horseshoe Crab and Frost Breath; the SERVER was right on Emancipation
+  Angel — the old AVR frame prints no set code, and "UMA" was forged from
+  letters meeting across words once the OCR text was run together. Fixed in
+  1.0.13 on both sides (a set code must be a whole word).
 - **OCR confirms far more on the phone: 38.8% vs 14.9%** (ML Kit vs
   RapidOCR on the same capture), so the phone auto-picks 88% vs 73%. Most
   auto-pick disagreements (82% agree) are the phone confirming the very
@@ -117,6 +120,4 @@ against the server:
   scan pays a cold start (identify 2.2 s).
 
 ## Still to measure (not guess)
-- Ground truth for the three printing disagreements above (the physical
-  cards decide whether ML Kit's reads should also be trusted server-side).
 - Ranking time on heavily reprinted names with a warm image cache.

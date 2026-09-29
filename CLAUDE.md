@@ -73,7 +73,12 @@ ranking work at 120 (oldest 60 + newest 60); that cap is deliberate.
 set-symbol template matching are pure noise for same-art same-frame reprints
 (photo-vs-CDN noise floor ~20 bits/64). That's what `ocr_id.py` is for:
 RapidOCR (pip-only, never system tesseract) reads the bottom strip;
-confusion-tolerant (I≈1, S≈5…) UNIQUE set-code match; compound collectors
+confusion-tolerant (I≈1, S≈5…) UNIQUE set-code match, the code a WHOLE
+WORD (+ a glued language tag, "MH1FN") — never across words (an AVR
+Emancipation Angel, no code printed, forged "UMA" that way) nor the start of
+one (artists MSCHF/Milivoj read as MSC…/M11…); scored on ~11k generated
+strips: wrong confirmations 142 → 9. The collector number is NOT required
+(the rig read 087/254 as "0017314" but MH1 cleanly); compound collectors
 ("A25-85") win outright so List copies don't misattribute; ambiguity = no-op.
 An OCR promotion also requires ART AGREEMENT (within _OCR_ART_SLACK of the
 best candidate) — a misread code can never promote or auto-pick a printing
@@ -281,6 +286,60 @@ Kotlin port is differentially tested against: port, never re-tune. When
 Stage 3 lands, guests lose delete/clear/export (they can flag for
 deletion) and the "Guests have FULL access" rule above is superseded.
 
+Where it stands (2026-09-29, after 1.0.13):
+- **Stage 1 done.** 1a: `art-pack.yml` builds the fingerprint pack weekly
+  (~2.5 h cold, cached after) and publishes it to the rolling prerelease
+  tag `art-pack` (`art-pack.bin.gz` + `art-pack.json`, 50,498 rows). It
+  pushes the tag with git first — `gh release create --target` was refused
+  403 for the GITHUB_TOKEN. 1b: bit-exact pHash port. 1c: F2F over Cronet
+  from the N200 passed (0×429).
+- **Stage 2 proven** (`docs/PHONE_ONLY_PLAN.md` → Measured): Compare mode
+  (Settings → long-press "Diagnostics" → Compare; default OFF, shadow only,
+  the server still judges) over 67 live scans: name 97% (never
+  confidently wrong), printing 94%, phone OCR confirms 39% vs the server's
+  15%, median 1.34 s / p95 4.3 s per card (printing RANKING of heavily
+  reprinted names is the slow part). Its one owner-verified wrong pick led
+  to the whole-word set-code rule (Invariants → pHash limits).
+- **Next: Stage 3** — the phone runs the server (store, API with identical
+  JSON via golden fixtures, pricing sweep with every invariant above, CSV/TXT
+  export, admin/guest roles). Invisible until Stage 4 switches over.
+
+## Working with the owner
+
+- **Releases are the owner's call.** Build on the branch, open a DRAFT PR
+  (version already bumped), report, and merge ONLY on an explicit "merge"
+  (or "merge when ready" → merge once CI is green). The owner likes
+  several requests batched into one release and to "talk it through"
+  before launching one.
+- The owner tests on the real rig (OnePlus Nord N200 on a mount over a
+  tray, Windows PC server) and reports by photo/paste. Settings →
+  Diagnostics → Copy diagnostics and the Compare report are the two pastes
+  worth asking for. Never claim a device behaviour works until they've
+  tried it — say "tested in code, not on the phone".
+- Measure, then change: when a rule is in doubt, score the candidates
+  against ground truth (e.g. the OCR rule was chosen from a scored table
+  over the generated strips, and a first attempt was rejected by it), and
+  put the numbers in the commit message.
+- Verify every UI change by driving the real page in headless Chromium
+  (Playwright, `executable_path` = `/opt/pw-browsers/chromium-*/…/chrome`
+  in cloud sessions) and every Android change with the gradle line above.
+- Bug sweeps: parallel reviewers (one Android, one web/server) found real
+  bugs twice; verify each finding before fixing, add a test that fails
+  without the fix.
+- Recent owner decisions that stand: export is "Export to CSV" (column
+  builder) + "Download TXT" — no Mana Exchange branding in the UI; swipe a
+  scan row left/right to delete (5 s Undo); Handheld sends only the card
+  guide (+15%); scan acknowledgement holds 2.5 s (same-card warning 4 s);
+  Vibration switch in Settings; cards/min + battery estimate on the scan
+  screen.
+
+Open threads for whoever picks this up:
+- Owner to confirm on the rig: no phantom scans (incl. after visiting other
+  screens), Handheld on a wood-grain table, the longer scan acknowledgement.
+- Proposed, not approved: "Fit to cards + zoom" (auto-fit the scan Area).
+- Ranking time for heavily reprinted names (cache candidate images) —
+  worth doing inside Stage 3.
+
 ## Release / distribution
 
 - `git tag vX.Y.Z && git push --tags` → 4 binaries +
@@ -318,7 +377,7 @@ deletion) and the "Guests have FULL access" rule above is superseded.
 
 ## Testing
 
-`pytest tests/` — ~350 tests, all fakes (no camera/network needed), runs on
+`pytest tests/` — ~450 tests, all fakes (no camera/network needed), runs on
 3-OS CI per push. Real-scan validation artifacts live in `scan_images/`
 (e.g. scan 837 = the Diabolic Edict OCR proof). When tuning detection or
 ranking, test against real scans before shipping — every threshold in this

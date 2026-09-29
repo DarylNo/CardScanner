@@ -58,15 +58,44 @@ object OcrMatch {
         return out.toString()
     }
 
+    /**
+     * `canon_words`: the text as canonical WORDS, single-space separated —
+     * every run of alphanumerics is one word (as [canon]), anything else
+     * separates. A set code only counts as a WHOLE word: run together,
+     * letters met across words and forged one (an AVR Emancipation Angel,
+     * which prints no set code, "confirmed" as UMA #15, 2026-09-29).
+     */
+    fun canonWords(s: String): String {
+        val up = s.uppercase()
+        val words = ArrayList<String>()
+        val cur = StringBuilder()
+        var i = 0
+        while (i < up.length) {
+            val cp = up.codePointAt(i)
+            i += Character.charCount(cp)
+            if (isAlnum(cp)) {
+                val mapped = if (cp < 0x10000) CONFUSION[cp.toChar()] else null
+                if (mapped != null) cur.append(mapped) else cur.appendCodePoint(cp)
+            } else if (cur.isNotEmpty()) {
+                words += cur.toString(); cur.setLength(0)
+            }
+        }
+        if (cur.isNotEmpty()) words += cur.toString()
+        return words.joinToString(" ")
+    }
+
+    /**
+     * `_LANG_TAGS`: language tags a reader may glue onto the set code when it
+     * drops the "•" ("UMA•EN" → "UMAEN"; "FN" is the rig's measured misread).
+     */
+    val LANG_TAGS: Set<String> = listOf(
+        "EN", "FN", "FR", "DE", "IT", "ES", "PT", "JA", "JP", "KO", "RU", "ZH",
+        "CS", "CT", "PH").map { canon(it) }.toSet()
+
     /** `c.get(key, "")` then `str(...)` — absent → "". */
     private fun field(c: Map<String, Any?>, key: String): String =
         if (c.containsKey(key)) c[key].toString() else ""
 
-    /** `_find`: canonical [token] (≥2 chars) appears in canonical [blob]. */
-    private fun find(blob: String, token: String): Boolean {
-        val t = canon(token)
-        return t.length >= 2 && blob.contains(t)
-    }
 
     /**
      * `match_printing`: the id of the ONE candidate the OCR [blob] names, or
@@ -75,12 +104,17 @@ object OcrMatch {
      *  1. a compound collector number ("A25-85", "2019-2"; canonical ≥4
      *     chars) found in the blob wins outright when exactly one candidate
      *     has it — a List copy prints its ORIGINAL set's code;
-     *  2. else a UNIQUE set-code hit;
+     *  2. else a UNIQUE set-code hit — the code as a WHOLE word, or glued to
+     *     a language tag ([LANG_TAGS]); never the start of another word
+     *     (artists MSCHF / Milivoj read as MSC… / M11…);
      *  3. else, among several set hits, a unique collector-number hit.
+     * Compound and collector numbers compare against the words run together
+     * (the reader splits them at "/" and "-").
      */
     fun matchPrinting(blob: String, candidates: List<Map<String, Any?>>): String? {
-        if (blob.isEmpty()) return null
-        val b = canon(blob)          // idempotent — raw or canonical input
+        val words = canonWords(blob).split(' ').filter { it.isNotEmpty() }   // idempotent
+        if (words.isEmpty()) return null
+        val b = words.joinToString("")
 
         val compound = candidates.filter { c ->
             val cn = field(c, "collector_number")
@@ -88,7 +122,12 @@ object OcrMatch {
         }
         if (compound.size == 1) return compound[0]["id"]?.toString()
 
-        val hits = candidates.filter { find(b, field(it, "set")) }
+        val hits = candidates.filter { c ->
+            val code = canon(field(c, "set"))
+            code.length >= 2 && words.any {
+                it == code || (it.startsWith(code) && it.substring(code.length) in LANG_TAGS)
+            }
+        }
         if (hits.size == 1) return hits[0]["id"]?.toString()
 
         if (hits.size > 1) {
@@ -157,15 +196,15 @@ object OcrStrip {
     }
 
     /**
-     * `read_bottom_strip`: run [engine] on both variants, union the text,
-     * canonicalise. Any failure reads as "" — a broken engine must never
+     * `read_bottom_strip`: run [engine] on both variants, union the text into
+     * canonical words ([OcrMatch.canonWords]). Any failure reads as "" — a broken engine must never
      * break a scan (it just leaves the art ranking untouched).
      */
     fun readBottomStrip(card: Mat, engine: OcrEngine): String {
         var vs: List<Mat> = emptyList()
         return try {
             vs = variants(card)
-            OcrMatch.canon(vs.joinToString(" ") { engine.read(it) })
+            OcrMatch.canonWords(vs.joinToString(" ") { engine.read(it) })
         } catch (e: Exception) {
             ""
         } finally {

@@ -53,7 +53,7 @@ sys.path.insert(0, str(ROOT))
 
 from mtg_card_scanner import art_index, ocr_id, pipeline  # noqa: E402
 from mtg_card_scanner.art_index import ArtIndexError  # noqa: E402
-from mtg_card_scanner.ocr_id import _canon, match_printing  # noqa: E402
+from mtg_card_scanner.ocr_id import _canon, canon_words, match_printing  # noqa: E402
 
 OUT = ROOT / "android" / "core" / "src" / "test" / "resources" / "ocr"
 CARD_NAMES = ["Diabolic Edict", "Lightning Bolt", "Sol Ring", "Fling",
@@ -196,6 +196,14 @@ def build_canon() -> list:
     return [[s, _canon(s)] for s in samples]
 
 
+def build_canon_words() -> list:
+    """canon_words over the same samples plus word-boundary shapes."""
+    samples = [r[0] for r in build_canon()] + [
+        "087/254 R\nMH1 • EN", "UMA•EN", "  lead  and   trail  ", "a-b_c.d",
+        "You MAy rest", "0017314 MH1FN", "ﬁ ne", "x² y", "٠١ ٢"]
+    return [[s, canon_words(s)] for s in samples]
+
+
 def _cands(recs: list, extra_distance=None) -> list:
     return [{"id": p["id"], "name": p["name"], "set": p["set"],
              "set_name": p["set_name"], "collector_number": p["collector_number"]}
@@ -253,6 +261,20 @@ def build_match(printings: dict) -> tuple[dict, list]:
         add(blob, "confusable_sets", "set codes equal under confusion")
     for blob in ["", "anything"]:
         add(blob, "empty", "no candidates")
+    # A set code only counts as a WHOLE word (+ a glued language tag):
+    # 2026-09-29 an AVR Emancipation Angel, no code printed, "confirmed" as
+    # UMA from letters that met across words; artists MSCHF / Milivoj begin
+    # with MSC / M11.
+    lists["cross_word"] = [_c("avr", "avr", "19"), _c("uma", "uma", "15")]
+    for blob in ["19/244 Illus. Scott Chou", "You MAy rest", "CHOUMA 19/244",
+                 "0uma", "015/254 R UMA • EN", "UMA•EN", "R 0015 umaen", "UMA AVR",
+                 "hUMAn AVR 19", "UMAX 15", "UMAFN", "umade", "AVR-EN"]:
+        add(blob, "cross_word", "set code must be a whole word")
+    lists["artist_prefix"] = [_c("slz", "slz", "63"), _c("msc", "msc", "806"),
+                              _c("m11", "m11", "149")]
+    for blob in ["C 0063 SLZ • EN Illus. MSCHF", "Illus. MSCHF", "Illus. Milivoj Ćeran",
+                 "M11 149", "MSCEN 806", "SLZEN M11"]:
+        add(blob, "artist_prefix", "an artist name is never a set code")
 
     # Real printings: every printing's strip in several styles and noises.
     rng = Rng(20260928)
@@ -326,7 +348,7 @@ def build_strip() -> tuple[dict, dict]:
             blob = ocr_id.read_bottom_strip(card)
         finally:
             ocr_id._ocr_engine = old
-        assert blob == _canon("v1 v2") and len(seen) == 2
+        assert blob == canon_words("v1 v2") and len(seen) == 2
         for a, b in zip(seen, v):
             assert a.shape == b.shape and np.array_equal(a, b), "variant drift"
         stem = p.stem
@@ -677,6 +699,7 @@ def build() -> dict[str, bytes]:
             "confusion": ocr_id._CONFUSION,
         },
         "canon": build_canon(),
+        "canon_words": build_canon_words(),
         "lists": lists,
         "match": match_rows,
         "strip": strip,

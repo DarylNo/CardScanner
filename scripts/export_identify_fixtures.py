@@ -138,8 +138,8 @@ def build() -> dict[str, bytes]:
     scenarios = {}
     try:
         for key, scan, text in SCENARIOS:
-            # The phone's OcrStrip unions its engine's two reads and canonicalises.
-            canned = ocr_id._canon(" ".join([text, text]))
+            # The phone's OcrStrip unions its engine's two reads into canonical words.
+            canned = ocr_id.canon_words(" ".join([text, text]))
             ocr_id.read_bottom_strip = lambda card_bgr, _t=canned: _t
             frame = cv2.imdecode(np.frombuffer((RES / "ranker" / "scans" / f"{scan}.jpg").read_bytes(),
                                                np.uint8), cv2.IMREAD_COLOR)

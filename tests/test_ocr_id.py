@@ -1,6 +1,6 @@
 """Tests for the collector-line OCR matcher (pure logic — no OCR engine)."""
 
-from mtg_card_scanner.ocr_id import _canon, match_printing
+from mtg_card_scanner.ocr_id import _canon, canon_words, match_printing
 
 
 def _c(sid, set_code, num):
@@ -24,8 +24,40 @@ def test_canon_collapses_ocr_confusions():
 
 
 def test_real_scan_blob_matches_mh1():
-    # exact blob read from the live Diabolic Edict scan (id 837)
-    assert match_printing("0017314MH1FN", CANDS) == "mh1"
+    # The live Diabolic Edict scan (id 837) read "0017314MH1FN" — stored run
+    # together (canonical), from the card's two printed lines "087/254 C" and
+    # "MH1 • EN". Its words: the number (garbled — hence NOT required) and
+    # the code line.
+    assert match_printing("0017314 MH1FN", CANDS) == "mh1"
+
+
+def test_a_set_code_must_be_a_whole_word():
+    # 2026-09-29: an AVR Emancipation Angel — old frame, NO set code printed —
+    # "confirmed" as UMA #15 from letters that met across words once the
+    # spaces were stripped. Only the code as a WHOLE word counts (a glued-on
+    # language tag allowed).
+    angel = [_c("avr", "avr", "19"), _c("uma", "uma", "15")]
+    assert match_printing("19/244 Illus. Scott Chou", angel) is None
+    assert match_printing("You MAy rest 19/244", angel) is None     # yoU MAy
+    assert match_printing("CHOUMA 19/244", angel) is None           # inside a word
+    assert match_printing("015/254 R UMA • EN Scott Chou", angel) == "uma"
+    assert match_printing("015/254 R UMA•EN", angel) == "uma"       # "UMAEN"
+    assert match_printing("R 0015 umaen", angel) == "uma"
+    assert match_printing("R 0015 UMAX", angel) is None                # not a language tag
+
+
+def test_an_artist_name_is_never_a_set_code():
+    # MSCHF reads "M5CHF" (starts with MSC); Milivoj reads "M111V0J" (M11).
+    sld = [_c("slz", "slz", "63"), _c("msc", "msc", "806"), _c("m11", "m11", "149")]
+    assert match_printing("C 0063 SLZ • EN Illus. MSCHF", sld) == "slz"
+    assert match_printing("Illus. Milivoj Ćeran", sld) is None
+    assert match_printing("Illus. MSCHF", sld) is None
+
+
+def test_canon_words_keeps_word_boundaries():
+    assert canon_words("087/254 R\nmh1 • En") == "087 254 R MH1 EN"
+    assert canon_words("  ") == ""
+    assert canon_words(canon_words("a25-85 PW")) == canon_words("a25-85 PW") == "A25 85 PW"
 
 
 def test_no_line_no_match():
