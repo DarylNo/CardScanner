@@ -420,7 +420,7 @@ function formatChipsHtml(scan){
 }
 
 /* ── version banner — proves which page+server combo is running ────────────── */
-const UI_VERSION = 'v37';
+const UI_VERSION = 'v38';
 fetch('/api/version').then(r => r.json())
   .then(d => { $('#ver').textContent = `${UI_VERSION} · ${d.version}`; })
   .catch(() => { $('#ver').textContent = UI_VERSION; });
@@ -914,6 +914,9 @@ stageEl.addEventListener('dblclick', () => {
 /* ── scans data + signature-diffed rendering ───────────────────────────────── */
 const scansPanel = $('#scansPanel'), scansList = $('#scansList'), scansBtn = $('#scansBtn');
 let scans = [], scansView = 'all', priceMin = null, priceMax = null;
+// Swipe-to-delete state (declared here: refreshScans may run before its block).
+const pendingDel = new Set();
+let swipeDragging = false;
 // Popularity floor + how the two bars combine (see desktop.html for why "any"
 // is the default: the price floor is what keeps an expensive UNRANKED card
 // visible when a popularity floor would otherwise drop it).
@@ -1074,7 +1077,7 @@ function renderScansPanel() {
                    (s.candidates||[]).length, (s.candidates||[])[0]?.id,
                    JSON.stringify(s.f2f?.conditions||0),
                    printInfo(s).vals.join(';'), popSig(s)].join(',')).join('|');
-  if (listSig === lastListSig) return;
+  if (listSig === lastListSig || swipeDragging) return;
   lastListSig = listSig;
 
   scansList.innerHTML = rows.map(s => {   // already newest-first from the server
@@ -1112,7 +1115,6 @@ function renderScansPanel() {
 // The DELETE is held back for UNDO_MS so a mis-swipe costs nothing; the row
 // leaves the list at once. Undo restores every scan still waiting.
 const UNDO_MS = 5000;
-const pendingDel = new Set();
 let undoTimer = null, swipeEatClick = false;
 function liveScans() { return pendingDel.size ? scans.filter(s => !pendingDel.has(s.id)) : scans; }
 function commitDeletes(keepalive) {
@@ -1136,7 +1138,7 @@ $('#undoBtn').addEventListener('click', () => {
   clearTimeout(undoTimer); undoTimer = null;
   pendingDel.clear();
   $('#undoBar').classList.remove('show');
-  scansBtn.textContent = `Scans (${scans.length})`;
+  scansBtn.textContent = `Scans (${liveScans().length})`;
   lastListSig = ''; lastStatSig = ''; renderScansPanel();
 });
 // Leaving the page (WebView closed, tab hidden for good) keeps the delete.
@@ -1157,7 +1159,7 @@ function attachSwipe(row) {
     if (!mode) {
       if (Math.abs(mx) < 10 && Math.abs(my) < 10) return;
       mode = Math.abs(mx) > Math.abs(my) * 1.5 ? 'x' : 'y';
-      if (mode === 'x') { row.setPointerCapture(pid); row.classList.add('drag'); }
+      if (mode === 'x') { row.setPointerCapture(pid); row.classList.add('drag'); swipeDragging = true; }
     }
     if (mode !== 'x') return;
     dx = mx;
@@ -1167,6 +1169,7 @@ function attachSwipe(row) {
     if (e.pointerId !== pid) return;
     pid = null;
     if (mode !== 'x') return;
+    swipeDragging = false;
     row.classList.remove('drag'); row.classList.add('snap');
     // A horizontal drag is never also a tap on the row.
     swipeEatClick = true; setTimeout(() => { swipeEatClick = false; }, 350);
@@ -1180,6 +1183,7 @@ function attachSwipe(row) {
       setTimeout(() => { queueDelete(id); renderScansPanel(); }, 330);
     } else {
       row.style.transform = '';
+      setTimeout(renderScansPanel, 200);   // catch up on anything held during the drag
     }
   };
   row.addEventListener('pointerup', end);
@@ -1226,7 +1230,7 @@ async function refreshScans() {
       fetch('/api/scans'), fetch('/api/price-status')]);
     scans = await scansRes.json();
     renderSweep(await sweepRes.json());
-    scansBtn.textContent = `Scans (${scans.length})`;
+    scansBtn.textContent = `Scans (${liveScans().length})`;
     renderScansPanel();
   } catch (e) { /* server momentarily unreachable */ }
 }

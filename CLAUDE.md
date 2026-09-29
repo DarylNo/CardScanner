@@ -86,6 +86,10 @@ repeat copy is never merged into another row's quantity (user picks, scan-time
 and retro auto-picks alike), because the owner finds cards by scan order; the
 Mana Exchange export (`server/export.py`) sums identical
 printing+condition+finish rows into one line, in first-seen order.
+The desktop "Export to CSV" builder (`build_csv`) lays columns out per the
+owner's saved layout (`export_layout.json` beside the DB); its default also
+sums identical printings, "one per scan" is the opt-in. The preview comes
+from the same server code as the download, never a client re-render.
 Unconfirmed multi-candidate scans always wait for a human. The auto-sweep
 tick also runs retro passes: strip stale art-series candidates, retro-OCR
 pending scans from their stored photos (once each, budgeted), auto-pick

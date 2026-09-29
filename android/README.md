@@ -168,7 +168,10 @@ scans are hands-free; a manual Scan (Auto off) that needs a pick opens the
 review panel on that scan, as phone.html does.
 
 **Handheld** — the walk-around **price check**. Continuous autofocus, a card
-guide, no tray learning; tap **Scan**. When the result arrives the app opens
+guide, no tray learning; fill the guide with the card and tap **Scan**. Only
+the guide plus 15% slack is sent (the guide is Handheld's scan Area): the
+whole frame let a busy background — wood grain — defeat card detection, so
+the art was hashed with the table in it. When the result arrives the app opens
 the review panel at `/phone?panel=1&detail=<id>&pricecheck=1`: the page asks
 the server to price that card at the FRONT of the pricing queue and shows each
 printing's price live as it lands. **Keep** leaves the scan in your list;

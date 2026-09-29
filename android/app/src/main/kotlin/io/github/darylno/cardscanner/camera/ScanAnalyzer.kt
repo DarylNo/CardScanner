@@ -39,7 +39,7 @@ class DetectionUpdate(
 
 /**
  * A burst handed to the capture pipeline. [frames] are private copies (time
- * order); [cropRoi] = the scan area (Mount) or null = whole frame (Handheld);
+ * order); [cropRoi] = the scan area (Mount) or the padded card guide (Handheld);
  * [scene] = the scanner's scannedFrame at capture time — hand it back to
  * [ScanAnalyzer.onNoCard] if the server answers no_card.
  */
@@ -112,6 +112,10 @@ class ScanAnalyzer(
      */
     @Volatile var focusFirst: () -> Boolean = { false }
     private var deferring = false
+    /** The last hold timed out before its focus answered (its scene may be a blur). */
+    private var heldTimedOut = false
+    /** Re-take the scanned scene from the next sample (a late focus settled). */
+    private var rebaseNext = false
     private var deferredBox: Box? = null
     private var deferStartTs = NONE
     private var focusReadyTs = NONE
@@ -178,6 +182,10 @@ class ScanAnalyzer(
             ticks++
             lastSample = g
             lastGrayDims = intArrayOf(g.w, g.h)
+            if (rebaseNext) {
+                rebaseNext = false
+                if (scanner.mode == AutoScanner.Mode.AWAIT_NEXT) scanner.rebaseScene(g)
+            }
             val ev = scanner.tick(g)
             event = ev
             lastBox = when (ev) {
@@ -218,15 +226,25 @@ class ScanAnalyzer(
         } else if (deferring) {
             val sinceFocus = if (focusReadyTs == NONE || timestampNs <= focusReadyTs) -1L
                 else timestampNs - focusReadyTs - 1
-            if (sinceFocus >= 0 && ring.countFresh(sinceFocus) >= BURST) {
-                fire(CaptureTrigger.AUTO, deferredBox, uw, uh, sinceFocus)
-            } else if (timestampNs - deferStartTs >= FOCUS_WAIT_NS || timestampNs < deferStartTs) {
-                fire(CaptureTrigger.AUTO, deferredBox, uw, uh, AUTO_FRESH_NS)   // focus never answered: shoot anyway
+            val focused = sinceFocus >= 0 && ring.countFresh(sinceFocus) >= BURST
+            if (focused || timestampNs - deferStartTs >= FOCUS_WAIT_NS || timestampNs < deferStartTs) {
+                // The lens moved since the trigger: "what was scanned" becomes
+                // THIS frame (the burst's newest), not the pre-focus trigger scene.
+                runCatching {
+                    scanner.rebaseScene(GraySampler.sampleY(p.yBuffer, p.yRowStride, sw, sh, rotation, roi))
+                }
+                // focus never answered → shoot anyway, from the usual fresh window
+                heldTimedOut = !focused
+                fire(CaptureTrigger.AUTO, deferredBox, uw, uh, if (focused) sinceFocus else AUTO_FRESH_NS)
             }
         } else if (manualPending) {
             if (manualStartTs == NONE || timestampNs < manualStartTs) manualStartTs = timestampNs
-            if (ring.countFresh(MANUAL_FRESH_NS) >= BURST ||
-                timestampNs - manualStartTs >= MANUAL_WAIT_NS) {
+            // Frames from AFTER the tap has settled: the ring's newest frames at
+            // tap time are the press itself (a jolt → handheld motion blur).
+            val sinceTap = timestampNs - (manualStartTs + MANUAL_SETTLE_NS) - 1
+            if (sinceTap >= 0 && ring.countFresh(sinceTap) >= BURST) {
+                fire(CaptureTrigger.MANUAL, lastBox, uw, uh, sinceTap)
+            } else if (timestampNs - manualStartTs >= MANUAL_WAIT_NS) {
                 fire(CaptureTrigger.MANUAL, lastBox, uw, uh, MANUAL_FRESH_NS)
             }
         }
@@ -246,7 +264,7 @@ class ScanAnalyzer(
         sink.onCaptureRequest(
             CaptureBurst(
                 id = nextId++, trigger = trigger, mode = mode, frames = burst,
-                cropRoi = if (mode == ScanMode.MOUNT) roi else null,
+                cropRoi = if (mode == ScanMode.MOUNT) roi else HandheldGuide.frac(uw, uh),
                 scene = scanner.scannedFrame, box = box, uprightW = uw, uprightH = uh,
             ),
         )
@@ -264,6 +282,9 @@ class ScanAnalyzer(
     /** The focus asked for by [Sink.onFocusRequest] finished (success or not). */
     fun focusDone() = post {
         if (deferring && focusReadyTs == NONE) focusReadyTs = maxOf(lastFrameTs, deferStartTs)
+        // The hold gave up waiting and shot while the lens was still moving: the
+        // scene it kept is a blur. Now the lens has settled, re-take it.
+        else if (!deferring && heldTimedOut) { heldTimedOut = false; rebaseNext = true }
     }
 
     fun setAuto(enabled: Boolean) = post { scanner.setAuto(enabled) }
@@ -306,7 +327,10 @@ class ScanAnalyzer(
 
     /** A (re)bind: old references are the wrong geometry. */
     fun cameraRestarted() = post {
-        deferring = false
+        // A rebind mid-hold: the held capture will never fire, so the scanner
+        // would stay SCANNING (capturing, owed a captureDone) — Auto dead.
+        if (deferring) scanner.reset()
+        deferring = false; rebaseNext = false; heldTimedOut = false
         scanner.cameraRestarted()
         ring.clear()
         lastFrameTs = NONE; lastSampleTs = NONE
@@ -335,6 +359,8 @@ class ScanAnalyzer(
         const val MANUAL_FRESH_NS = 450_000_000L
         /** A manual scan fires with whatever fresh frames exist after this long (low fps). */
         const val MANUAL_WAIT_NS = 700_000_000L
+        /** Let the tap's jolt pass before the frames a manual scan uses. */
+        const val MANUAL_SETTLE_NS = 150_000_000L
         /** Longest a first-card capture waits for focus before shooting anyway. */
         const val FOCUS_WAIT_NS = 1_500_000_000L
     }

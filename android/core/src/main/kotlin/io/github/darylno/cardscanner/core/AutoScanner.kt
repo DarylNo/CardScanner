@@ -161,6 +161,19 @@ class AutoScanner {
         mode = Mode.AWAIT_NEXT
     }
 
+    /**
+     * App-only (the Mount focus hold — phone.html has no equivalent, so the
+     * differential test never calls it): a triggered capture was HELD while the
+     * lens refocused on the card, and the refocus changes the card's look
+     * (blur crosses SWAP_FRAC). The scene the swap test compares against must
+     * be the one actually shot, or the still-present card reads as a swap and
+     * is scanned again with nothing placed. Also valid while AWAITING the next
+     * card, for a focus that settled only after a timed-out hold shot.
+     */
+    fun rebaseScene(sample: Gray) {
+        if ((capturing || mode == Mode.AWAIT_NEXT) && sample.h == mh) scannedFrame = sample
+    }
+
     /** Scan Card button: snapshot the scene BEFORE capturing (phone.html shoot handler). */
     fun manualScan(sample: Gray?) {
         mode = Mode.SCANNING

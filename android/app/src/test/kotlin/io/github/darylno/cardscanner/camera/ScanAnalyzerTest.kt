@@ -106,6 +106,42 @@ class ScanAnalyzerTest {
         assertEquals(2, rec.bursts.size)
     }
 
+    /**
+     * The refocus changes how the card looks (blur → sharp, which crosses
+     * SWAP_FRAC). The "what was scanned" scene must be the post-focus one the
+     * burst shot — the trigger-time scene made the still-present card read as
+     * a swap, and it was scanned again with nothing placed (2026-09-28).
+     */
+    @Test fun aRefocusedCardIsNotScannedAgain() {
+        val sharp = FakePlanes.nv21(w, h, { x, y ->
+            if (x in 120..231 && y in 60..215) (if (((x / 4) + (y / 4)) % 2 == 0) 255 else 150) else 100 })
+        var due = true
+        analyzer.focusFirst = { due }
+        feed(tray, 12)
+        feed(card, 12)                                   // triggers on the pre-focus look
+        assertEquals(1, rec.focusRequests)
+        due = false
+        analyzer.focusDone()
+        feed(sharp, 3)                                   // the lens moved: the card now looks different
+        assertEquals(1, rec.bursts.size)
+        assertEquals("scene = what the burst shot", rec.bursts[0].frames.last().timestampNs, ts - 100_000_000L)
+        feed(sharp, 20)                                  // nothing placed, card still there
+        assertEquals("no phantom re-scan", 1, rec.bursts.size)
+        assertTrue(rec.updates.none { (it.event as? AutoScanner.Event.NextCard)?.removed == false })
+    }
+
+    @Test fun aCameraRebindDuringTheFocusHoldDoesNotKillAuto() {
+        analyzer.focusFirst = { true }
+        feed(tray, 12)
+        feed(card, 12)
+        assertEquals(1, rec.focusRequests)
+        analyzer.cameraRestarted()                       // e.g. resolution change mid-hold
+        analyzer.focusFirst = { false }
+        feed(tray, 12)                                   // re-learn the tray
+        feed(card, 12)
+        assertEquals("auto still scans after the rebind", 1, rec.bursts.size)
+    }
+
     @Test fun aFocusThatNeverAnswersStillShootsAfterTheWait() {
         analyzer.focusFirst = { true }
         feed(tray, 12)
@@ -130,22 +166,26 @@ class ScanAnalyzerTest {
         assertEquals(w, u.uprightW); assertEquals(h, u.uprightH)
     }
 
-    @Test fun handheldManualScanUsesFreshFramesAndTheWholeFrame() {
+    @Test fun handheldManualScanUsesFreshFramesCroppedToTheGuide() {
         analyzer.setMode(ScanMode.HANDHELD)
         feed(tray, 5)
         assertTrue("handheld never runs the tray detector", rec.updates.isEmpty())
         analyzer.manualScan()
+        val tap = ts
+        feed(card, 4)
+        assertTrue("waits for 3 frames after the tap's jolt settles", rec.bursts.isEmpty())
         feed(card, 1)
         assertEquals(1, rec.bursts.size)
         val b = rec.bursts[0]
         assertEquals(CaptureTrigger.MANUAL, b.trigger)
         assertEquals(ScanMode.HANDHELD, b.mode)
-        assertNull(b.cropRoi)
-        assertEquals(3, b.frames.size)     // the ring was already running
-        assertArrayEquals(card, b.frames.last().data)
+        assertEquals(HandheldGuide.frac(b.uprightW, b.uprightH), b.cropRoi)
+        assertEquals(3, b.frames.size)
+        assertTrue("no frame from the press itself",
+            b.frames.all { it.timestampNs > tap + ScanAnalyzer.MANUAL_SETTLE_NS })
         // A second tap is a new capture, not swallowed.
         analyzer.manualScan()
-        feed(card, 1)
+        feed(card, 5)
         assertEquals(2, rec.bursts.size)
     }
 
@@ -156,7 +196,9 @@ class ScanAnalyzerTest {
         analyzer.manualScan()
         feed(card, 1)
         assertTrue("stale frames must not be used", rec.bursts.isEmpty())
-        feed(card, 2)
+        feed(card, 3)
+        assertTrue("and not the tap's own frames", rec.bursts.isEmpty())
+        feed(card, 1)
         assertEquals(1, rec.bursts.size)
         val b = rec.bursts[0]
         assertEquals(CaptureTrigger.MANUAL, b.trigger)

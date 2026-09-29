@@ -43,6 +43,8 @@ import java.util.concurrent.Executors
 
 /** A Mount capture this much softer than the session's median re-arms the card-focus pass. */
 private const val SOFT_CAPTURE_RATIO = 0.5
+/** A card focus that fails is retried on the next card, this many passes in all. */
+private const val CARD_FOCUS_TRIES = 3
 /** A finished capture: [result] on success, else [error]. [scene] is for [CameraController.onNoCard]. */
 class CaptureOutcome(
     val id: Long,
@@ -126,7 +128,10 @@ class CameraController(
             main.post { listener.onCaptureStarted(request) }
             val ok = pipeline.submit(request.frames, request.cropRoi) { r ->
                 r.getOrNull()?.let { res ->
-                    if (request.trigger == CaptureTrigger.AUTO && request.mode == ScanMode.MOUNT) {
+                    // Only captures where a card was found count: an empty-tray
+                    // (phantom) capture is always "soft", and letting it re-arm the
+                    // refocus fed a loop — refocus → stale scene → phantom → refocus.
+                    if (request.trigger == CaptureTrigger.AUTO && request.mode == ScanMode.MOUNT && res.flattened) {
                         res.sharpness.getOrNull(res.sharpestIndex)?.let(::noteSharpness)
                     }
                 }
@@ -174,6 +179,8 @@ class CameraController(
      * through [ScanAnalyzer.focusFirst].
      */
     @Volatile private var cardFocusDue = false
+    private var cardFocusSeq = 0
+    @Volatile private var cardFocusFails = 0
     private val recentSharpness = ArrayDeque<Double>()
 
     init {
@@ -216,6 +223,13 @@ class CameraController(
                 listener.onCameraError("camera provider unavailable: $e", true)
             }
         }, ContextCompat.getMainExecutor(context))
+    }
+
+    /** Our preview + analysis are still bound to the (process-wide) provider. */
+    fun isBound(): Boolean {
+        val p = provider ?: return false
+        val a = analysis ?: return false
+        return runCatching { p.isBound(a) }.getOrDefault(false)
     }
 
     /** Standard 1600×1200 / High 2048×1536 — rebinds. */
@@ -347,6 +361,7 @@ class CameraController(
             focusNote = "locking on the scan-area centre…"
             pendingAreaLock = true
             cardFocusDue = true
+            cardFocusFails = 0
         }
     }
 
@@ -374,6 +389,7 @@ class CameraController(
         focusNote = if (m == ScanMode.HANDHELD) "continuous (handheld)" else "locking on the scan-area centre…"
         pendingAreaLock = m == ScanMode.MOUNT
         cardFocusDue = m == ScanMode.MOUNT
+        cardFocusFails = 0
     }
 
     fun setAuto(enabled: Boolean) = analyzer.setAuto(enabled)
@@ -387,6 +403,7 @@ class CameraController(
         focusLocked = false   // new area: re-lock on ITS centre
         pendingAreaLock = scanMode == ScanMode.MOUNT
         cardFocusDue = scanMode == ScanMode.MOUNT
+        cardFocusFails = 0
         synchronized(recentSharpness) { recentSharpness.clear() }
     }
 
@@ -469,12 +486,21 @@ class CameraController(
      * after FOCUS_WAIT_NS.
      */
     private fun focusOnCard() {
+        val seq = ++cardFocusSeq
         val c = areaCentreSensor(null)
         if (c == null || scanMode != ScanMode.MOUNT) { analyzer.focusDone(); return }
         pendingAreaLock = false
         focusAtSensor(c, lock = true, what = "focused on card at area centre") { ok ->
-            cardFocusDue = false   // one pass per session/area; the watchdog re-arms it
-            if (ok != true) focusNote += " — will retry if captures come out soft"
+            // A superseded pass (a newer hold asked again) must not release the
+            // NEWER hold mid-sweep: that burst would shoot, and rebase, a blur.
+            if (seq != cardFocusSeq) return@focusAtSensor
+            if (ok == true || ++cardFocusFails >= CARD_FOCUS_TRIES) {
+                cardFocusDue = false   // one pass per session/area; the watchdog re-arms it
+            } else {
+                // Failed: try again on the next card (capped) — the soft-capture
+                // watchdog can't catch it, its median is soft too.
+                focusNote += " — focus failed, retrying on the next card"
+            }
             analyzer.focusDone()
         }
     }
@@ -490,6 +516,7 @@ class CameraController(
                 val median = recentSharpness.sorted()[recentSharpness.size / 2]
                 if (v < median * SOFT_CAPTURE_RATIO) {
                     cardFocusDue = true
+                    cardFocusFails = 0
                     recentSharpness.clear()
                     main.post { focusNote = "capture came out soft — refocusing on the next card" }
                     return
