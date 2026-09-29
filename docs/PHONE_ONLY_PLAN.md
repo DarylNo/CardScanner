@@ -91,5 +91,32 @@ gives Cronet the generous bucket, exactly like curl_cffi's Chrome handshake
 on the rig → the phone runs bulk sweeps itself; no VPS/proxy. (The OkHttp
 comparison run was not taken; Cronet is what ships, so it isn't needed.)
 
+**Stage 2 — the phone identifies cards: first compare run (2026-09-29).**
+Nord N200, app 1.0.11, pack 50,498 rows, 67 live Mount scans shadowed
+against the server:
+- **Name agreement 97% (65/67)**; the phone was never confidently wrong.
+  The two misses: a basic land neither side identified (Mountain vs Forest,
+  both d≈150, "no confident match" on both), and Orb of Dreams, where the
+  phone judged only the primary JPEG not confident (Pristine Talisman d=116
+  vs Orb 118, a 2-point gap) while the server got it via its multi-frame
+  retry (`server_fallback`, which the phone does not replay).
+- **Printing agreement 94%.** The 3 disagreements are all the phone's ML Kit
+  OCR confirming a DIFFERENT printing than the server's art ranking put
+  first: Horseshoe Crab (server 10E #87, phone DMR #55), Emancipation Angel
+  (AVR #19 vs UMA #15), Frost Breath (M14 #56 vs M21 #51 — scanned between
+  six other M21 cards, so the phone is very likely right). Owner to check
+  the physical cards.
+- **OCR confirms far more on the phone: 38.8% vs 14.9%** (ML Kit vs
+  RapidOCR on the same capture), so the phone auto-picks 88% vs 73%. Most
+  auto-pick disagreements (82% agree) are the phone confirming the very
+  printing the server also ranked first, but left for a human.
+- **Time: median 1.34 s, p95 4.3 s per card.** Fixed costs ≈ 0.7 s
+  (art identify ~560 ms, blank guard ~65 ms, printings ~65 ms, OCR
+  ~200 ms when run); the variable part is printing RANKING (candidate
+  images), 0.06–8 s — the outliers are heavily reprinted names. The first
+  scan pays a cold start (identify 2.2 s).
+
 ## Still to measure (not guess)
-- Identification time per card on the Nord N200 (Stage 2).
+- Ground truth for the three printing disagreements above (the physical
+  cards decide whether ML Kit's reads should also be trusted server-side).
+- Ranking time on heavily reprinted names with a warm image cache.
