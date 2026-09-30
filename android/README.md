@@ -26,7 +26,7 @@ CameraX Preview + ImageAnalysis (camera 0, 4:3, 1600x1200 or 2048x1536, EIS off)
    │  every ~200 ms: GraySampler → 176×MH luma sample
    ▼
 AutoScanner.tick()          :core — phone.html's detection + state machine, ported
-   │  Trigger (Mount, auto)  or  Scan tap (Mount manual / Handheld)
+   │  Trigger (Auto on)  or  shutter tap (Auto off, or any time)
    ▼
 CapturePipeline             last 3 ring frames → sharpest (Laplacian variance)
    │                        → CardQuad → Flatten with a margin → JPEG = PRIMARY
@@ -155,9 +155,9 @@ list; offline scans wait in the queue the same way. If that first download
 fails (no connection), the queue retries it at most once a minute — no need
 to restart the app.
 
-## Mount vs Handheld
+## Auto on / Auto off
 
-**Mount** — the phone on the mount over the tray. Auto on: the tuned
+There is one mode (1.1.2 — Handheld is gone). **Auto on**: the tuned
 phone.html behaviour — learn the empty tray, wait for a card, wait for it to be
 still, capture, file, wait for the next card. Draw the scan **Area** to crop
 sampling and capture to the tray; double-tap the preview to re-learn the empty
@@ -168,22 +168,19 @@ lens has focused at the Area centre with the card under it — and every card
 after shoots instantly with focus held. It focuses again only when the Area
 changes, the camera reopens, you tap the preview (locks where you tapped), or
 a capture comes out far softer than the session's usual (bumped mount).
-Auto-mode
-scans are hands-free; a manual Scan (Auto off) that needs a pick opens the
-review panel on that scan, as phone.html does.
+Auto-on
+scans are hands-free.
 
-**Handheld** — the walk-around **price check**. Continuous autofocus, a card
-guide, no tray learning; fill the guide with the card and tap **Scan**. Only
-the guide plus 15% slack is sent (the guide is Handheld's scan Area): the
-whole frame let a busy background — wood grain — defeat card detection, so
-the art was hashed with the table in it. When the result arrives the app opens
-the review panel at `/phone?panel=1&detail=<id>&pricecheck=1`: the page asks
-the server to price that card at the FRONT of the pricing queue and shows each
-printing's price live as it lands. **Keep** leaves the scan in your list;
-**Discard** deletes it (Back = Keep). No match → "✗ No match — Retry?" with a
-Retry button. Offline (Scryfall unreachable) → the scan waits in the queue
-and the price check opens when it is identified (if the app is in the
-foreground; otherwise find it under Scans).
+**Auto off** — tap the shutter. Auto off always scans inside a scan Area: if
+none is set, the app draws one for you — a card-shaped box in the middle of
+the picture, sized so the phone sits back from the card (close enough to read
+the collector line, far enough that its shadow stays off the card). Put the
+card in the box, or tap **Area** and drag your own (with Auto off, Area always
+draws; it never clears). When the scan is identified it OPENS: the phone
+prices it at the front of the queue and shows each printing's price live;
+Back returns to the camera. It is filed like any other scan (no Keep/Discard).
+No match → Retry. Offline → the scan waits in the queue and opens when it is
+identified (if the app is in the foreground; otherwise find it under Scans).
 
 ## A computer (optional workstation)
 
@@ -285,11 +282,12 @@ Run on the Nord N200 after installing a new build:
 - [ ] Sleeved card, dark card, foil under glare all trigger (no geometry
       rejections).
 - [ ] Empty tray / hand in frame → nothing filed as a card.
-- [ ] Mount, Auto off, manual Scan of a multi-printing card → panel opens on
-      that scan for a pick.
-- [ ] Handheld: Scan → price-check panel opens, prices appear live; Keep keeps
-      it, Discard removes it from the list; Back keeps it.
-- [ ] Handheld: a non-card → "✗ No match — Retry?"; Retry works.
+- [ ] Auto off with no Area → a card-shaped Area appears in the middle; the
+      card in it scans, reads its collector line, and no phone shadow on it
+      (if the box is too big/small, say so — its size is a guess).
+- [ ] Auto off: tap the shutter → the scan opens, prices appear live, Back
+      goes straight to the camera, the scan stays in the list.
+- [ ] Auto off: a non-card → "No match — Retry"; Retry works.
 - [ ] Airplane mode: scan 3 cards → "waiting (no connection?)"; reconnect →
       they are identified in order, each filed once.
 - [ ] Force-stop the app with jobs queued → relaunch → they are identified.

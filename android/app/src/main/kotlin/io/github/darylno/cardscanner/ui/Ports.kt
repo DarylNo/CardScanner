@@ -47,7 +47,6 @@ interface CameraPort {
      */
     fun rebind()
     fun unbind()
-    fun setHandheld(handheld: Boolean)
     fun setAuto(on: Boolean)
     fun setRoi(roi: RoiFrac?)
     /** Double-tap / area change: forget the empty tray and learn it again. */
@@ -81,18 +80,18 @@ sealed class Outcome {
 interface UploadPort {
     interface Listener {
         /**
-         * Worker thread. [manual] = the job was a manual (tap) scan; [priceCheck] =
-         * it was taken in Handheld mode (persisted with the job, so it survives a
-         * process death while queued offline). [replaceScanId] = the row a Retry
+         * Worker thread. [manual] = the job was a manual (tap) scan; [openScan] =
+         * it was tapped with Auto off, so its scan opens once identified (persisted
+         * with the job, so it survives a process death while queued offline). [replaceScanId] = the row a Retry
          * job was replacing (null for a fresh scan) — a Retry that comes back
          * no_card leaves that failed row in place, so Retry is offered again.
          */
-        fun onOutcome(jobId: String, manual: Boolean, priceCheck: Boolean, replaceScanId: Long?, outcome: Outcome)
+        fun onOutcome(jobId: String, manual: Boolean, openScan: Boolean, replaceScanId: Long?, outcome: Outcome)
         fun onState(pending: Int, lastError: String?, nextRetryInMs: Long?)
     }
 
     /** Persist the capture (disk only, never network); returns the job id. */
-    fun enqueue(capture: Captured, manual: Boolean, priceCheck: Boolean, replaceScanId: Long?): String
+    fun enqueue(capture: Captured, manual: Boolean, openScan: Boolean, replaceScanId: Long?): String
     fun retryNow()
     fun addListener(l: Listener)
     fun removeListener(l: Listener)

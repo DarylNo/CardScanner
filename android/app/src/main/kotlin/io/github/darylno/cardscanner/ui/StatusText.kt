@@ -12,13 +12,13 @@ object StatusText {
     const val WATCHING = "Auto: watching for a card…"
     const val HOLD_STILL = "Card detected — hold still…"
     const val NEW_CARD = "New card…"
-    const val AUTO_OFF = "Auto off — tap the shutter to scan."
+    const val AUTO_OFF = "Auto off — card in the box, tap the shutter."
     const val CAPTURING = "Capturing…"
     const val SCANNING = "Scanning…"
     const val NO_CARD = "No card detected."
-    const val HANDHELD_READY = "Frame the card and tap the shutter."
-    const val QUEUED_PRICE_CHECK = "Queued — the price check opens when it uploads"
+    const val QUEUED_OPEN = "Queued — the scan opens once it's identified"
     const val AREA_DRAG = "Drag a box around the tray…"
+    const val AREA_DEFAULT = "Scan area drawn for you — put the card in the box, or tap Area to draw your own."
     const val AREA_UNCHANGED = "Scan area unchanged."
     const val AREA_TOO_SMALL = "Area too small — tap Area and drag again."
     const val AREA_CLEARED = "Scan area cleared — full frame. Empty the tray to re-learn…"
@@ -54,7 +54,7 @@ object StatusText {
         "✗ " + (scan.optString("error").takeIf { it.isNotEmpty() && it != "null" } ?: "No match.") +
             " — Retry with a fresh capture?"
 
-    fun priceCheckOpening(scan: JSONObject): String = "✓ ${name(scan)}${popTag(scan)} — checking price…"
+    fun opening(scan: JSONObject): String = "✓ ${name(scan)}${popTag(scan)} — opening…"
 
     /** Queue indicator: "2 identifying…" / "3 waiting (no connection?) — retrying in 8s". */
     fun queue(pending: Int, lastError: String?, nextRetryInMs: Long?): String = when {

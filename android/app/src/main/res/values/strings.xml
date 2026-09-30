@@ -14,8 +14,6 @@
     <string name="scan_card">Scan Card</string>
     <string name="retry">Retry</string>
     <string name="cancel">Cancel</string>
-    <string name="mode_mount">Mount</string>
-    <string name="mode_handheld">Handheld</string>
     <string name="auto_on">Auto on</string>
     <string name="auto_off">Auto off</string>
     <string name="retry_capturing">Retrying — capturing…</string>
@@ -26,7 +24,6 @@
     <string name="not_now">Not now</string>
     <string name="capture_failed">Capture failed: %1$s</string>
     <string name="camera_error">Camera problem: %1$s</string>
-    <string name="no_match_retry">✗ No match — Retry?</string>
     <string name="upload_rejected">Couldn\'t read that capture (%1$d) — scan the card again.</string>
     <string name="open_scans_hint">✓ %1$s — ready: tap Scans to see its price.</string>
     <string name="close">Close</string>

@@ -22,7 +22,7 @@ import io.github.darylno.cardscanner.gateway.GatewayService
 
 /**
  * The review UI is NOT re-implemented natively: this is a WebView of the
- * phone server's own `/phone?panel=1[&detail=<id>][&pricecheck=1]` (scans
+ * phone server's own `/phone?panel=1[&detail=<id>]` (scans
  * list, filters, printing picker, walk-around price check with Keep/Discard) —
  * the same page a computer on the LAN gets.
  *
@@ -74,7 +74,6 @@ class PanelActivity : AppCompatActivity() {
         })
         phone.start()                                   // idempotent; the server may have been stopped
         val detail = intent.getLongExtra(EXTRA_DETAIL, 0L)
-        val priceCheck = intent.getBooleanExtra(EXTRA_PRICE_CHECK, false)
         val deadline = System.currentTimeMillis() + START_WAIT_MS
         val load = object : Runnable {
             override fun run() {
@@ -85,7 +84,7 @@ class PanelActivity : AppCompatActivity() {
                         val base = phone.localBase()
                         CookieManager.getInstance().setCookie(base, phone.ownerCookie())
                         CookieManager.getInstance().flush()
-                        web.loadUrl(buildUrl(base, detail, priceCheck))
+                        web.loadUrl(buildUrl(base, detail))
                     }
                     st.error != null -> showError("The scanner's server couldn't start: ${st.error}")
                     System.currentTimeMillis() > deadline -> showError("The scanner's server didn't start — try again.")
@@ -132,21 +131,15 @@ class PanelActivity : AppCompatActivity() {
 
     companion object {
         const val EXTRA_DETAIL = "detail"
-        const val EXTRA_PRICE_CHECK = "pricecheck"
         private const val START_WAIT_MS = 8_000L
 
-        fun buildUrl(base: String, detail: Long, priceCheck: Boolean): String {
+        fun buildUrl(base: String, detail: Long): String {
             val sb = StringBuilder(base.trimEnd('/')).append("/phone?panel=1")
-            if (detail > 0) {
-                sb.append("&detail=").append(detail)
-                if (priceCheck) sb.append("&pricecheck=1")
-            }
+            if (detail > 0) sb.append("&detail=").append(detail)
             return sb.toString()
         }
 
-        fun intent(ctx: Context, detail: Long = 0L, priceCheck: Boolean = false): Intent =
-            Intent(ctx, PanelActivity::class.java)
-                .putExtra(EXTRA_DETAIL, detail)
-                .putExtra(EXTRA_PRICE_CHECK, priceCheck)
+        fun intent(ctx: Context, detail: Long = 0L): Intent =
+            Intent(ctx, PanelActivity::class.java).putExtra(EXTRA_DETAIL, detail)
     }
 }

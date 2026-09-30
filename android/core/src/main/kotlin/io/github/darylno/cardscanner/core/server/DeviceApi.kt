@@ -32,7 +32,7 @@ class DeviceApi(private val device: DeviceControl) {
     }
 
     data class DeviceState(
-        val handheld: Boolean, val auto: Boolean, val roi: RoiFrac?, val torch: Boolean,
+        val auto: Boolean, val roi: RoiFrac?, val torch: Boolean,
         val vibration: Boolean, val highRes: Boolean, val aeLock: Boolean,
         /** How long the blue ✓ stays up after each scan, in ms ([CHECK_MS_MIN]..[CHECK_MS_MAX]). */
         val checkMs: Int = CHECK_MS_DEFAULT,
@@ -56,7 +56,6 @@ class DeviceApi(private val device: DeviceControl) {
     fun state(): Map<String, Any?> {
         val s = device.read()
         return linkedMapOf(
-            "mode" to if (s.handheld) "handheld" else "mount",
             "auto" to s.auto,
             "roi" to s.roi?.let { linkedMapOf("x0" to it.x0, "y0" to it.y0, "x1" to it.x1, "y1" to it.y1) },
             "torch" to s.torch, "vibration" to s.vibration, "high_res" to s.highRes,
@@ -72,11 +71,6 @@ class DeviceApi(private val device: DeviceControl) {
         var s = device.read()
         for ((k, v) in body) {
             s = when (k) {
-                "mode" -> when (v) {
-                    "mount" -> s.copy(handheld = false)
-                    "handheld" -> s.copy(handheld = true)
-                    else -> return bad("mode must be \"mount\" or \"handheld\"")
-                }
                 "auto" -> s.copy(auto = v as? Boolean ?: return bad("auto must be true or false"))
                 "torch" -> s.copy(torch = v as? Boolean ?: return bad("torch must be true or false"))
                 "vibration" -> s.copy(vibration = v as? Boolean ?: return bad("vibration must be true or false"))

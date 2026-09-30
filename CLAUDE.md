@@ -276,9 +276,16 @@ from `android/` (Node on PATH, JDK 17); CI job `android` runs it per push.
   a fresh scan got an OLD card's reply. No pack yet / Scryfall unreachable →
   IOException (the job waits and retries); an undecodable capture → 422 (given
   up, never retried forever).
-- **Handheld = walk-around PRICE CHECK** (the owner's words: scan a card, find
-  out what it's worth): the outcome opens `detail=<id>&pricecheck=1`; the PAGE
-  posts `/price-check` and offers Keep/Discard. Mount auto stays hands-free.
+- **One mode: Mount, Auto on/off (1.1.2, owner — Handheld is gone).** Auto
+  on = hands-free. Auto off = tap the shutter; that scan OPENS once identified
+  (`detail=<id>`: the page prices it at once and shows prices live; Back
+  returns to the camera; no Keep/Discard — it's filed like any scan). Auto off
+  always scans an Area: with none set, the app draws `HandheldGuide.defaultArea`
+  (a centred card at 60% of the limiting side + 15% pad — back from the card so
+  the phone's shadow stays off it; an unmeasured starting point). A drawn Area
+  is never replaced; with Auto off the Area button draws, it never clears. A
+  phone left in Handheld comes back with Auto off. `ScanMode.HANDHELD` remains
+  in the camera layer but the UI never selects it; `mode` left /api/device.
 - **Roles (the phone's gateway, Stage 3e).** The paired computer is ADMIN; the
   6-digit code makes a GUEST (review/pick/edit/flag — no delete, clear, export,
   `included`, sweep or device settings; `ScanServer.adminOnly`, fail closed).
@@ -405,8 +412,7 @@ Where it stands (2026-09-29, after 1.0.13):
   without the fix.
 - Recent owner decisions that stand: export is "Export to CSV" (column
   builder) + "Download TXT" — no Mana Exchange branding in the UI; swipe a
-  scan row left/right to delete (5 s Undo); Handheld sends only the card
-  guide (+15%); the ONLY scan signal is the blue box ✓ held 2.5 s by
+  scan row left/right to delete (5 s Undo); the ONLY scan signal is the blue box ✓ held 2.5 s by
   default (Settings / 📱 Scanner → "Check mark time", 250–10000 ms,
   `check_ms` on /api/device) (a
   centre ✓ badge when there's no box) + two short buzzes — the green edge
@@ -417,7 +423,8 @@ Where it stands (2026-09-29, after 1.0.13):
 
 Open threads for whoever picks this up:
 - Owner to confirm on the rig: no phantom scans (incl. after visiting other
-  screens), Handheld on a wood-grain table, the longer scan acknowledgement.
+  screens), the longer scan acknowledgement, the Auto-off default Area's size
+  (shadows vs collector-line OCR — 1.1.2).
 - Proposed, not approved: "Fit to cards + zoom" (auto-fit the scan Area).
 - Ranking time for heavily reprinted names (cache candidate images) —
   still worth doing on the phone.

@@ -22,11 +22,30 @@ object HandheldGuide {
     /** Slack around the guide on every side, as a fraction of the guide's own size. */
     const val PAD = 0.15
 
+    /**
+     * The scan Area drawn FOR the owner when Auto is off and none is set (1.1.2 —
+     * Handheld became "Mount, Auto off"): the same centred 63:88 card, smaller
+     * ([DEFAULT_AREA_FILL] instead of [FILL]) so the phone sits back from the card —
+     * close enough to read the collector line, not so close its own shadow falls on
+     * the card (owner: "shadows appear when we get too close") — plus [PAD] of slack
+     * for the re-detect. A starting point: drawing an Area replaces it.
+     */
+    const val DEFAULT_AREA_FILL = 0.6
+
+    fun defaultArea(w: Int, h: Int): RoiFrac = frac(w, h, PAD, DEFAULT_AREA_FILL)
+
+    /**
+     * The Area to draw for the owner now, or null: only with Auto OFF, only when none
+     * is set (a drawn one is never replaced), and only once the frame size is known.
+     */
+    fun areaToDraw(auto: Boolean, current: RoiFrac?, w: Int, h: Int): RoiFrac? =
+        if (auto || current != null || w <= 0 || h <= 0) null else defaultArea(w, h)
+
     /** The guide (pad = 0) or the capture crop (pad = [PAD]) as fractions of a [w]×[h] upright frame. */
-    fun frac(w: Int, h: Int, pad: Double = PAD): RoiFrac {
-        var gw = w * FILL
+    fun frac(w: Int, h: Int, pad: Double = PAD, fill: Double = FILL): RoiFrac {
+        var gw = w * fill
         var gh = gw * 88.0 / 63.0
-        if (gh > h * FILL) { gh = h * FILL; gw = gh * 63.0 / 88.0 }
+        if (gh > h * fill) { gh = h * fill; gw = gh * 63.0 / 88.0 }
         val px = gw * pad; val py = gh * pad
         val x0 = max(0.0, (w - gw) / 2 - px) / w
         val x1 = min(w.toDouble(), (w + gw) / 2 + px) / w

@@ -33,4 +33,30 @@ class HandheldGuideTest {
         // The default pad is the capture crop.
         assertEquals(HandheldGuide.frac(1200, 1600, HandheldGuide.PAD), HandheldGuide.frac(1200, 1600))
     }
+
+    /** 1.1.2: the Area drawn for Auto off — a centred card at 60% of the limiting side, padded 15%. */
+    @Test fun defaultAreaIsASmallerCentredCardWithSlack() {
+        for ((w, h) in listOf(1200 to 1600, 1536 to 2048, 1600 to 1200)) {
+            val a = HandheldGuide.defaultArea(w, h)
+            val aw = (a.x1 - a.x0) * w; val ah = (a.y1 - a.y0) * h
+            // the card inside it: the area less its 15% pad each side
+            val cw = aw / 1.3; val ch = ah / 1.3
+            assertEquals("$w×$h aspect", 63.0 / 88.0, cw / ch, 1e-6)
+            assertTrue("$w×$h limiting side is 60%", Math.abs(cw - w * 0.6) < 1e-6 || Math.abs(ch - h * 0.6) < 1e-6)
+            assertEquals(0.5, (a.x0 + a.x1) / 2, 1e-9)
+            assertEquals(0.5, (a.y0 + a.y1) / 2, 1e-9)
+            assertTrue("$w×$h inside the frame", a.x0 > 0 && a.y0 > 0 && a.x1 < 1 && a.y1 < 1)
+            // smaller than the old Handheld guide: the phone sits further back
+            val g = HandheldGuide.frac(w, h, 0.0)
+            assertTrue(cw < (g.x1 - g.x0) * w)
+        }
+    }
+
+    @Test fun anAreaIsDrawnOnlyWithAutoOffAndNoneSet() {
+        val mine = io.github.darylno.cardscanner.core.RoiFrac(0.1, 0.1, 0.5, 0.5)
+        assertEquals(HandheldGuide.defaultArea(1200, 1600), HandheldGuide.areaToDraw(false, null, 1200, 1600))
+        assertEquals(null, HandheldGuide.areaToDraw(true, null, 1200, 1600))      // Auto on: full frame is fine
+        assertEquals(null, HandheldGuide.areaToDraw(false, mine, 1200, 1600))     // never replaces the owner's
+        assertEquals(null, HandheldGuide.areaToDraw(false, null, 0, 0))           // frame size not known yet
+    }
 }

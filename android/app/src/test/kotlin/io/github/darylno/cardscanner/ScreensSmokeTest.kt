@@ -120,11 +120,12 @@ class ScreensSmokeTest {
 
     @Test
     fun panelActivity_forAScan_resumesAndStartsTheServer() {
-        val a = launch(PanelActivity::class.java, PanelActivity.intent(app, detail = 12, priceCheck = true))
+        val a = launch(PanelActivity::class.java, PanelActivity.intent(app, detail = 12))
         assertResumed(a)
         assertEquals(GatewayService::class.java.name, shadowOf(app).nextStartedService?.component?.className)
-        assertEquals("http://127.0.0.1:8090/phone?panel=1&detail=12&pricecheck=1",
-            PanelActivity.buildUrl(app.phoneServer.localBase(), 12, true))
+        // 1.1.2: the scan opens plainly — no price-check Keep/Discard any more
+        assertEquals("http://127.0.0.1:8090/phone?panel=1&detail=12",
+            PanelActivity.buildUrl(app.phoneServer.localBase(), 12))
     }
 
     @Test

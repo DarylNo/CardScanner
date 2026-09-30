@@ -17,13 +17,14 @@ class AppSettings(context: Context) {
     private val prefs: SharedPreferences =
         context.getSharedPreferences("ui_settings", Context.MODE_PRIVATE)
 
-    enum class Mode { MOUNT, HANDHELD }
+    init {
+        // 1.1.2 (owner): Handheld is gone — it is Mount with Auto off now. A phone that
+        // was left in Handheld comes back with Auto off, the closest thing it knew.
+        if (prefs.getString(K_MODE, null) == "HANDHELD") prefs.edit().putBoolean(K_AUTO, false).remove(K_MODE).apply()
+        else if (prefs.contains(K_MODE)) prefs.edit().remove(K_MODE).apply()
+    }
 
-    var mode: Mode
-        get() = if (prefs.getString(K_MODE, null) == Mode.HANDHELD.name) Mode.HANDHELD else Mode.MOUNT
-        set(v) = prefs.edit().putString(K_MODE, v.name).apply()
-
-    /** Mount-mode auto capture (phone.html's "Auto: ON"). */
+    /** Auto capture (phone.html's "Auto: ON"). Off = tap the shutter; each scan then opens. */
     var auto: Boolean
         get() = prefs.getBoolean(K_AUTO, true)
         set(v) = prefs.edit().putBoolean(K_AUTO, v).apply()

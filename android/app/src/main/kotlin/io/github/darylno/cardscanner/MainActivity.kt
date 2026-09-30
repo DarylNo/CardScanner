@@ -24,6 +24,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
+import io.github.darylno.cardscanner.camera.HandheldGuide
 import io.github.darylno.cardscanner.core.AutoScanner
 import io.github.darylno.cardscanner.gateway.GatewayService
 import io.github.darylno.cardscanner.ui.AppSettings
@@ -44,9 +45,11 @@ import java.util.concurrent.Executors
 import java.util.concurrent.RejectedExecutionException
 
 /**
- * The camera screen: Mount (hands-free auto capture over a tray — the tuned
- * occupancy + stillness trigger) or Handheld (tap Scan → walk-around PRICE
- * CHECK). Status wording mirrors server/static/phone.html.
+ * The camera screen: hands-free auto capture over a tray (the tuned occupancy +
+ * stillness trigger), or with Auto off, tap the shutter and the scan opens once
+ * it's identified (1.1.2: this replaced Handheld; with Auto off a scan Area is
+ * always set — one is drawn for you if there is none). Status wording mirrors
+ * server/static/phone.html.
  *
  * Threading: camera/detection callbacks and upload outcomes arrive on worker
  * threads and are posted to the UI thread; nothing here blocks on the network
@@ -61,8 +64,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var chrome: ScanChrome
     private lateinit var serverText: TextView
     private lateinit var connDot: View
-    private lateinit var mountSeg: TextView
-    private lateinit var handSeg: TextView
     private lateinit var areaBtn: TextView
     private lateinit var preview: PreviewView
     private lateinit var overlay: OverlayView
@@ -89,8 +90,11 @@ class MainActivity : AppCompatActivity() {
     private var retryScanId: Long? = null
     /** Set when Retry was tapped: the NEXT manual capture replaces this row. */
     private var pendingReplace: Long? = null
-    /** Handheld price checks captured but not yet answered (queued offline). */
-    private var awaitingPriceCheck = 0
+    /** Auto-off scans captured but not yet answered (queued offline): each opens when identified. */
+    private var awaitingOpen = 0
+    /** The upright camera frame size (the space the Area fractions live in); 0 until the camera reports it. */
+    private var frameW = 0
+    private var frameH = 0
     /**
      * Upload job id → detector scene at capture (for the no_card re-seed guard). In-memory only.
      * Concurrent: filled on [io] right after enqueue returns, read on the UI thread when the
@@ -199,13 +203,9 @@ class MainActivity : AppCompatActivity() {
         override fun applyRemoteSettings() = runOnUiThread {
             if (isFinishing || isDestroyed) return@runOnUiThread
             if (overlay.settingArea) cancelArea()
-            if (handheld != appliedHandheld) {  // what the Mount/Handheld toggle does
-                hideRetry()
-                forgetLastCapture()
-            }
             if (settings.roi != appliedRoi) {   // a new Area re-learns the tray — only when it changed
                 appliedRoi = settings.roi
-                camera?.setRoi(if (handheld) null else settings.roi)
+                camera?.setRoi(settings.roi)
             }
             applyMode()
             camera?.setTorch(settings.torch)
@@ -216,7 +216,6 @@ class MainActivity : AppCompatActivity() {
         override fun snapshotJpeg(): ByteArray? = camera?.snapshotJpeg()
     }
     private var appliedRoi: io.github.darylno.cardscanner.core.RoiFrac? = null
-    private var appliedHandheld = false
 
     /** Battery % and charging state from the sticky ACTION_BATTERY_CHANGED broadcast (no receiver kept). */
     private fun readBattery(now: Long) {
@@ -254,8 +253,7 @@ class MainActivity : AppCompatActivity() {
     // ── layout ──────────────────────────────────────────────────────────────
     // A camera app: the preview fills the screen; controls float over it on
     // scrims. Top: server status + Scans/Share/Settings. Middle: nothing but
-    // the card. Bottom: status pill, Mount|Handheld switch, and the shutter
-    // with Auto (left) and Area (right) in Mount mode.
+    // the card. Bottom: status pill, then Auto (left) · shutter · Area (right).
     private fun dp(v: Int) = chrome.dp(v)
 
     private fun wrap() = ViewGroup.LayoutParams.WRAP_CONTENT
@@ -293,7 +291,7 @@ class MainActivity : AppCompatActivity() {
             text = getString(R.string.banner_fmt, BuildConfig.VERSION_NAME, "…")
         }
         topRow.addView(serverText, LinearLayout.LayoutParams(0, wrap(), 1f))
-        topRow.addView(chrome.chip(getString(R.string.scans)) { openPanel(0L, false) },
+        topRow.addView(chrome.chip(getString(R.string.scans)) { openPanel(0L) },
             LinearLayout.LayoutParams(wrap(), wrap()).apply { marginStart = dp(6) })
         topRow.addView(chrome.chip(getString(R.string.share)) { startActivity(Intent(this, ShareActivity::class.java)) },
             LinearLayout.LayoutParams(wrap(), wrap()).apply { marginStart = dp(6) })
@@ -338,24 +336,6 @@ class MainActivity : AppCompatActivity() {
         }
         bottom.addView(retryBtn, LinearLayout.LayoutParams(wrap(), wrap()).apply { bottomMargin = dp(10) })
 
-        val seg = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            background = chrome.pill(ScanChrome.Palette.CHIP)
-            setPadding(dp(3), dp(3), dp(3), dp(3))
-        }
-        fun segItem(label: String, mode: AppSettings.Mode) = TextView(this).apply {
-            text = label
-            textSize = 14f
-            gravity = Gravity.CENTER
-            minHeight = dp(36)
-            setPadding(dp(18), 0, dp(18), 0)
-            setOnClickListener { if (settings.mode != mode) toggleMode() }
-        }
-        mountSeg = segItem(getString(R.string.mode_mount), AppSettings.Mode.MOUNT)
-        handSeg = segItem(getString(R.string.mode_handheld), AppSettings.Mode.HANDHELD)
-        seg.addView(mountSeg); seg.addView(handSeg)
-        bottom.addView(seg, LinearLayout.LayoutParams(wrap(), wrap()).apply { bottomMargin = dp(16) })
-
         val controls = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -390,10 +370,8 @@ class MainActivity : AppCompatActivity() {
         overlay.setRoi(settings.roi)
         overlay.onAreaDrawn = { r -> onAreaDrawn(r) }
         overlay.onDoubleTap = {
-            if (settings.mode == AppSettings.Mode.MOUNT) {
-                camera?.relearn()
-                setStatus(StatusText.RELEARN)
-            }
+            camera?.relearn()
+            setStatus(StatusText.RELEARN)
         }
         overlay.onTap = { x, y -> camera?.tapFocus(x, y) }
     }
@@ -431,42 +409,36 @@ class MainActivity : AppCompatActivity() {
     }
 
     // ── modes / controls ────────────────────────────────────────────────────
-    private val handheld get() = settings.mode == AppSettings.Mode.HANDHELD
-
     private fun applyMode() {
-        appliedHandheld = handheld
-        styleSegment(mountSeg, !handheld)
-        styleSegment(handSeg, handheld)
-        // INVISIBLE, not GONE: the shutter stays centred in both modes.
-        autoBtn.visibility = if (handheld) View.INVISIBLE else View.VISIBLE
-        areaBtn.visibility = if (handheld) View.INVISIBLE else View.VISIBLE
         styleAuto()
-        overlay.setHandheldGuide(handheld)
-        overlay.setRoi(if (handheld) null else settings.roi)
+        val drew = ensureArea()
+        overlay.setRoi(settings.roi)
         overlay.setBox(null, 176, 132, OverlayView.BoxState.SETTLING)
         updateAreaBtn()
-        camera?.setHandheld(handheld)
-        camera?.setAuto(!handheld && settings.auto)
+        camera?.setAuto(settings.auto)
         setStatus(
             when {
-                handheld -> StatusText.HANDHELD_READY
+                drew -> StatusText.AREA_DEFAULT
                 settings.auto -> StatusText.WAITING
                 else -> StatusText.AUTO_OFF
             }
         )
     }
 
-    private fun toggleMode() {
-        if (overlay.settingArea) cancelArea()
-        settings.mode = if (handheld) AppSettings.Mode.MOUNT else AppSettings.Mode.HANDHELD
-        hideRetry()
-        forgetLastCapture()   // a late outcome from the other mode's capture must not offer Retry
-        applyMode()
-    }
-
-    private fun styleSegment(v: TextView, on: Boolean) {
-        v.background = if (on) chrome.pill(ScanChrome.Palette.CHIP_ACTIVE) else null
-        v.setTextColor(if (on) ScanChrome.Palette.TEXT_ON_ACTIVE else ScanChrome.Palette.TEXT)
+    /**
+     * Auto off always scans a set Area (owner, 1.1.2): with none, draw the default one
+     * (a centred card box, [HandheldGuide.defaultArea]) once the frame size is known.
+     * True when it just drew one.
+     */
+    private fun ensureArea(): Boolean {
+        if (overlay.settingArea) return false
+        val r = HandheldGuide.areaToDraw(settings.auto, settings.roi, frameW, frameH) ?: return false
+        settings.roi = r
+        overlay.setRoi(r)
+        camera?.setRoi(r)
+        appliedRoi = r
+        updateAreaBtn()
+        return true
     }
 
     /** Auto reads as a toggle: filled when on. */
@@ -483,7 +455,7 @@ class MainActivity : AppCompatActivity() {
         if (settings.auto) setStatus(StatusText.WATCHING)
         else {
             overlay.setBox(null, 176, 132, OverlayView.BoxState.SETTLING)
-            setStatus(StatusText.AUTO_OFF)
+            setStatus(if (ensureArea()) StatusText.AREA_DEFAULT else StatusText.AUTO_OFF)
         }
     }
 
@@ -507,7 +479,9 @@ class MainActivity : AppCompatActivity() {
             overlay.settingArea -> {
                 cancelArea(); setStatus(StatusText.AREA_UNCHANGED)
             }
-            settings.roi != null -> {
+            // Auto on: tap clears to the full frame. Auto off always has an Area, so the
+            // tap draws a new one instead (clearing would only redraw the default).
+            settings.roi != null && settings.auto -> {
                 settings.roi = null
                 overlay.setRoi(null)
                 camera?.setRoi(null)
@@ -567,8 +541,8 @@ class MainActivity : AppCompatActivity() {
         retryBtn.visibility = View.GONE
     }
 
-    private fun openPanel(detail: Long, priceCheck: Boolean) {
-        startActivity(PanelActivity.intent(this, detail, priceCheck))
+    private fun openPanel(detail: Long) {
+        startActivity(PanelActivity.intent(this, detail))
     }
 
     /**
@@ -603,10 +577,9 @@ class MainActivity : AppCompatActivity() {
         if (camera != null) return
         val cam = app.newCamera()
         camera = cam
-        cam.setHandheld(handheld)
-        cam.setRoi(if (handheld) null else settings.roi)
+        cam.setRoi(settings.roi)
         appliedRoi = settings.roi
-        cam.setAuto(!handheld && settings.auto)
+        cam.setAuto(settings.auto)
         cam.bind(this, preview, cameraListener)
     }
 
@@ -654,7 +627,12 @@ class MainActivity : AppCompatActivity() {
 
     private val cameraListener = object : CameraPort.Listener {
         override fun onFrameSize(uprightW: Int, uprightH: Int) {
-            runOnUiThread { overlay.setFrameSize(uprightW, uprightH) }
+            runOnUiThread {
+                overlay.setFrameSize(uprightW, uprightH)
+                val first = frameW <= 0
+                frameW = uprightW; frameH = uprightH
+                if (first && ensureArea()) setStatus(StatusText.AREA_DEFAULT)
+            }
         }
 
         override fun onDetection(event: AutoScanner.Event, sampleW: Int, sampleH: Int, debug: String?) {
@@ -680,7 +658,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun handleDetection(event: AutoScanner.Event, sw: Int, sh: Int, debug: String?) {
         overlay.setDebugText(if (settings.debugOverlay) debug else null)
-        if (handheld || overlay.settingArea) return
+        if (overlay.settingArea) return
         when (event) {
             is AutoScanner.Event.Idle -> Unit
             is AutoScanner.Event.Learning -> {
@@ -714,8 +692,9 @@ class MainActivity : AppCompatActivity() {
         settings.addTiming(capture.timings)
         val replace = if (manual) pendingReplace else null
         pendingReplace = null
-        val priceCheck = manual && handheld
-        if (priceCheck) awaitingPriceCheck++
+        // Tapped with Auto off: this scan opens once it's identified (was Handheld's price check).
+        val openScan = manual && !settings.auto
+        if (openScan) awaitingOpen++
         setStatus(StatusText.SCANNING)
         // The photo is taken — the rest (upload, identify) happens in the background,
         // so the card can go now. Say so, loudly.
@@ -725,10 +704,10 @@ class MainActivity : AppCompatActivity() {
         // so jobs still enter the FIFO queue in capture order.
         val work = Runnable {
             val jobId = try {
-                app.uploads.enqueue(capture, manual, priceCheck, replace)
+                app.uploads.enqueue(capture, manual, openScan, replace)
             } catch (e: java.io.IOException) {
                 runOnUiThread {
-                    if (priceCheck && awaitingPriceCheck > 0) awaitingPriceCheck--
+                    if (openScan && awaitingOpen > 0) awaitingOpen--
                     setStatus(getString(R.string.capture_failed, e.message ?: "storage error"), Tone.ERR)
                 }
                 return@Runnable
@@ -748,8 +727,8 @@ class MainActivity : AppCompatActivity() {
 
     // ── upload outcomes ─────────────────────────────────────────────────────
     private val uploadListener = object : UploadPort.Listener {
-        override fun onOutcome(jobId: String, manual: Boolean, priceCheck: Boolean, replaceScanId: Long?, outcome: Outcome) {
-            runOnUiThread { handleOutcome(jobId, manual, priceCheck, replaceScanId, outcome) }
+        override fun onOutcome(jobId: String, manual: Boolean, openScan: Boolean, replaceScanId: Long?, outcome: Outcome) {
+            runOnUiThread { handleOutcome(jobId, manual, openScan, replaceScanId, outcome) }
         }
 
         override fun onState(pending: Int, lastError: String?, nextRetryInMs: Long?) {
@@ -757,8 +736,8 @@ class MainActivity : AppCompatActivity() {
                 val t = StatusText.queue(pending, lastError, nextRetryInMs)
                 queueView.text = t
                 queueView.visibility = if (t.isEmpty()) View.GONE else View.VISIBLE
-                if (lastError != null && awaitingPriceCheck > 0 && handheld) {
-                    setStatus(StatusText.QUEUED_PRICE_CHECK)
+                if (lastError != null && awaitingOpen > 0) {
+                    setStatus(StatusText.QUEUED_OPEN)
                 }
             }
         }
@@ -766,14 +745,14 @@ class MainActivity : AppCompatActivity() {
 
     private val resumed get() = lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
 
-    private fun handleOutcome(jobId: String, manual: Boolean, priceCheck: Boolean, replaceScanId: Long?, outcome: Outcome) {
+    private fun handleOutcome(jobId: String, manual: Boolean, openScan: Boolean, replaceScanId: Long?, outcome: Outcome) {
         val scene = sceneByJob.remove(jobId)
         // Only the most recent capture's job may offer Retry (see lastCaptureJobId).
         val current = jobId == lastCaptureJobId
-        // priceCheck = a manual scan taken in Handheld mode (walk-around price check).
-        if (priceCheck && awaitingPriceCheck > 0) awaitingPriceCheck--
-        // A Retry REPLACES its row (already counted); a price check isn't tray throughput.
-        if (replaceScanId == null && !priceCheck) countFiled(when (outcome) {   // no_card / rejected carry no row → not counted
+        // openScan = a shutter tap with Auto off: the scan opens once identified.
+        if (openScan && awaitingOpen > 0) awaitingOpen--
+        // A Retry REPLACES its row (already counted).
+        if (replaceScanId == null) countFiled(when (outcome) {   // no_card / rejected carry no row → not counted
             is Outcome.AutoFiled -> outcome.scanId
             is Outcome.NeedsPick -> outcome.scanId
             is Outcome.BestGuess -> outcome.scanId
@@ -783,25 +762,25 @@ class MainActivity : AppCompatActivity() {
         when (outcome) {
             is Outcome.NoCard -> {
                 setStatus(StatusText.NO_CARD, Tone.ERR)
-                if (!priceCheck) camera?.noCard(scene)
+                camera?.noCard(scene)
                 // A Retry that came back no_card left the failed row in place — keep offering
                 // Retry for it (phone.html does), but only while that card is still the current one.
                 if (current && replaceScanId != null && replaceScanId > 0) offerRetry(replaceScanId)
             }
             is Outcome.AutoFiled -> {
                 setStatus(StatusText.identified(outcome.json, manual), Tone.OK)
-                if (priceCheck) openPick(outcome.scanId, true, outcome.json)
+                if (openScan) openPick(outcome.scanId, true, outcome.json)
             }
             is Outcome.NeedsPick -> {
                 setStatus(StatusText.identified(outcome.json, manual), Tone.OK)
-                if (manual) openPick(outcome.scanId, priceCheck, outcome.json)
+                if (manual) openPick(outcome.scanId, openScan, outcome.json)
             }
             is Outcome.BestGuess -> {
                 setStatus(StatusText.bestGuess(outcome.json, manual), Tone.ERR)
-                if (manual) openPick(outcome.scanId, priceCheck, outcome.json)
+                if (manual) openPick(outcome.scanId, openScan, outcome.json)
             }
             is Outcome.NoMatch -> {
-                setStatus(if (priceCheck) getString(R.string.no_match_retry) else StatusText.noMatch(outcome.json), Tone.ERR)
+                setStatus(StatusText.noMatch(outcome.json), Tone.ERR)
                 // A stale job's NoMatch only sets the status line: another card is in view now.
                 if (current && outcome.scanId > 0) offerRetry(outcome.scanId)
             }
@@ -809,11 +788,11 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun openPick(scanId: Long, priceCheck: Boolean, json: org.json.JSONObject) {
+    private fun openPick(scanId: Long, openScan: Boolean, json: org.json.JSONObject) {
         if (scanId <= 0) return
         if (resumed) {
-            if (priceCheck) setStatus(StatusText.priceCheckOpening(json), Tone.OK)
-            openPanel(scanId, priceCheck)
+            if (openScan) setStatus(StatusText.opening(json), Tone.OK)
+            openPanel(scanId)
         } else {
             setStatus(getString(R.string.open_scans_hint, StatusText.name(json)), Tone.OK)
         }

@@ -250,7 +250,7 @@ class PhoneServerTest {
 
     @Test fun thePairedComputerChangesThePhonesSettingsLive() {
         val settings = io.github.darylno.cardscanner.ui.AppSettings(org.robolectric.RuntimeEnvironment.getApplication())
-        settings.mode = io.github.darylno.cardscanner.ui.AppSettings.Mode.MOUNT
+        settings.auto = true
         settings.torch = false
         settings.roi = null
         val bridge = DeviceBridge(settings)
@@ -275,13 +275,15 @@ class PhoneServerTest {
         assertEquals(false, settings.torch)
 
         assertEquals(200, req(base, admin, "PATCH", "/api/device",
-            """{"mode":"handheld","torch":true,"roi":{"x0":0.1,"y0":0.1,"x1":0.9,"y1":0.8}}"""))
-        assertEquals(io.github.darylno.cardscanner.ui.AppSettings.Mode.HANDHELD, settings.mode)
+            """{"auto":false,"torch":true,"roi":{"x0":0.1,"y0":0.1,"x1":0.9,"y1":0.8}}"""))
+        assertEquals(false, settings.auto)
         assertEquals(true, settings.torch)
         assertEquals(io.github.darylno.cardscanner.core.RoiFrac(0.1, 0.1, 0.9, 0.8), settings.roi)
         assertEquals(1, applied)                                         // the scan screen was told
         val st = MiniJson.parse(page(base, admin, "/api/device")) as Map<*, *>
-        assertEquals("handheld", st["mode"]); assertEquals(true, st["camera_live"])
+        assertEquals(false, st["auto"]); assertEquals(null, st["mode"]); assertEquals(true, st["camera_live"])
+        // 1.1.2: there is no Handheld mode any more
+        assertEquals(400, req(base, admin, "PATCH", "/api/device", """{"mode":"handheld"}"""))
         client.newCall(Request.Builder().url("$base/api/device/snapshot.jpg").header("Cookie", admin).build())
             .execute().use { r -> assertEquals(200, r.code); assertEquals("image/jpeg", r.header("Content-Type")) }
         bridge.screen = null                                            // scan screen closed

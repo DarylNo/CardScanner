@@ -7,9 +7,9 @@ import java.util.concurrent.CopyOnWriteArrayList
 
 /**
  * [UploadPort] over the NET agent's [UploadQueue]. The queue has ONE listener
- * slot; this fans it out to every attached screen. The Handheld price-check
- * flag rides in the job's persisted `tag`, so an outcome delivered after a
- * process restart still opens the price check.
+ * slot; this fans it out to every attached screen. The "open this scan" flag
+ * (tapped with Auto off) rides in the job's persisted `tag`, so an outcome
+ * delivered after a process restart still opens the scan.
  */
 class UploadAdapter(private val queue: UploadQueue) : UploadPort {
     private val listeners = CopyOnWriteArrayList<UploadPort.Listener>()
@@ -18,8 +18,8 @@ class UploadAdapter(private val queue: UploadQueue) : UploadPort {
         queue.listener = object : UploadQueue.Listener {
             override fun onOutcome(job: UploadJob, outcome: ScanOutcome) {
                 val o = map(outcome)
-                val pc = job.tag == TAG_PRICE_CHECK
-                listeners.forEach { it.onOutcome(job.id, job.manual, pc, job.replaceScanId, o) }
+                val open = job.tag == TAG_OPEN || job.tag == TAG_LEGACY_PRICE_CHECK
+                listeners.forEach { it.onOutcome(job.id, job.manual, open, job.replaceScanId, o) }
             }
 
             override fun onState(pending: Int, lastError: String?, nextRetryInMs: Long?) {
@@ -29,10 +29,10 @@ class UploadAdapter(private val queue: UploadQueue) : UploadPort {
         queue.start()
     }
 
-    override fun enqueue(capture: Captured, manual: Boolean, priceCheck: Boolean, replaceScanId: Long?): String =
+    override fun enqueue(capture: Captured, manual: Boolean, openScan: Boolean, replaceScanId: Long?): String =
         queue.enqueue(
             capture.primary, capture.fallbacks, manual, replaceScanId,
-            if (priceCheck) TAG_PRICE_CHECK else null,
+            if (openScan) TAG_OPEN else null,
         ).id
 
     override fun retryNow() = queue.retryNow()
@@ -41,7 +41,9 @@ class UploadAdapter(private val queue: UploadQueue) : UploadPort {
     override val pending: Int get() = queue.pendingCount()
 
     companion object {
-        const val TAG_PRICE_CHECK = "pricecheck"
+        const val TAG_OPEN = "open"
+        /** A Handheld price check still queued from 1.1.1 or older: opens like [TAG_OPEN]. */
+        const val TAG_LEGACY_PRICE_CHECK = "pricecheck"
 
         fun map(o: ScanOutcome): Outcome = when (o) {
             is ScanOutcome.NoCard -> Outcome.NoCard(o.error, o.usedFallback)

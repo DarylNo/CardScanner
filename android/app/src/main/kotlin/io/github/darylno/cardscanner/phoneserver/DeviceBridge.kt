@@ -22,13 +22,12 @@ class DeviceBridge(private val settings: AppSettings) : DeviceApi.DeviceControl 
     @Volatile var screen: Screen? = null
 
     override fun read() = DeviceApi.DeviceState(
-        handheld = settings.mode == AppSettings.Mode.HANDHELD, auto = settings.auto, roi = settings.roi,
+        auto = settings.auto, roi = settings.roi,
         torch = settings.torch, vibration = settings.vibration, highRes = settings.highRes,
         aeLock = settings.aeLock, checkMs = settings.checkMs,
     )
 
     override fun write(s: DeviceApi.DeviceState) {
-        settings.mode = if (s.handheld) AppSettings.Mode.HANDHELD else AppSettings.Mode.MOUNT
         settings.auto = s.auto
         settings.roi = s.roi
         settings.torch = s.torch
