@@ -3,6 +3,7 @@ package io.github.darylno.cardscanner.phoneserver
 import io.github.darylno.cardscanner.core.server.ApiRequest
 import io.github.darylno.cardscanner.core.server.ApiResponse
 import io.github.darylno.cardscanner.core.MiniJson
+import io.github.darylno.cardscanner.core.server.DeviceApi
 import io.github.darylno.cardscanner.core.server.F2fLookup
 import io.github.darylno.cardscanner.core.server.LayoutStore
 import io.github.darylno.cardscanner.core.server.PhoneApi
@@ -58,6 +59,8 @@ class PhoneBackend(
     private val paceS: () -> Double? = { null },
     private val f2fEvents: () -> List<Map<String, Any?>> = { emptyList() },
     layouts: LayoutStore = LayoutStore(null),
+    /** The phone's own settings from the browser (admin only — [ScanServer.adminOnly]). */
+    private val device: DeviceApi? = null,
 ) {
     val api = PhoneApi(store, photos)
     val sweep = PriceSweep(store, api, f2f, launch, now, interrupt, paceS)
@@ -78,6 +81,7 @@ class PhoneBackend(
             if (req.method != "GET" && req.method != "HEAD" && res.status < 300) worker.wake()
             return res
         }
+        device?.handle(req)?.let { return it }
         val get = req.method == "GET" || req.method == "HEAD"
         return when {
             get && req.path == "/" -> page("desktop.html")
@@ -166,6 +170,8 @@ class LocalUpstream(private val backend: PhoneBackend) : Upstream {
             .code(res.status)
             .message(REASONS[res.status] ?: "OK")
             .header("Cache-Control", "no-store")
+            // The gateway relays HEADERS (a body's media type alone never reaches the browser).
+            .header("Content-Type", res.contentType)
             .apply { res.headers.forEach { (k, v) -> header(k, v) } }
             .body(res.body.toResponseBody(res.contentType.toMediaType()))
             .build()

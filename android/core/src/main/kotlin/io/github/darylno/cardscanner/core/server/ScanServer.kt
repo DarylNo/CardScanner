@@ -35,7 +35,8 @@ class ScanServer(val api: PhoneApi, val sweep: PriceSweep, val layouts: LayoutSt
         /**
          * What a guest may NOT do (docs/PHONE_ONLY_PLAN.md → Roles): delete a scan,
          * clear the list, export (TXT, CSV, the saved layout), include/exclude a
-         * card from the export (PATCH "included"), or run/stop the pricing sweep.
+         * card from the export (PATCH "included"), run/stop the pricing sweep, or
+         * see/change the phone's own settings ([DeviceApi]).
          * Guests browse, search, pick, edit condition/finish/qty, price one scan,
          * and flag scans for deletion (PATCH {"flagged": true}).
          */
@@ -45,7 +46,8 @@ class ScanServer(val api: PhoneApi, val sweep: PriceSweep, val layouts: LayoutSt
                 (req.method == "PATCH" && SCAN_ID.matches(p) && patchesIncluded(req)) ||
                 p == "/api/scans/delete-all" ||
                 p == "/api/export" || p == "/api/export.csv" || p.startsWith("/api/export/") ||
-                p == "/api/price-sweep/stop" || p == "/api/scans/price-missing"
+                p == "/api/price-sweep/stop" || p == "/api/scans/price-missing" ||
+                p == "/api/device" || p.startsWith("/api/device/")          // the phone's own settings
         }
 
         private val SCAN_ID = Regex("/api/scans/[^/]+")

@@ -5,6 +5,7 @@ import android.os.StatFs
 import io.github.darylno.cardscanner.BuildConfig
 import io.github.darylno.cardscanner.core.PrintingCandidates
 import io.github.darylno.cardscanner.core.ScryfallPrintings
+import io.github.darylno.cardscanner.core.server.DeviceApi
 import io.github.darylno.cardscanner.core.server.LayoutStore
 import io.github.darylno.cardscanner.f2f.OkHttpTransport
 import io.github.darylno.cardscanner.gateway.AdminPairing
@@ -26,7 +27,7 @@ import java.util.concurrent.Executors
  * Storage: the owner's rule (2026-09-30) — at [WARN_AT] scans show the photo
  * size and free space as a warning, then keep going; nothing is pruned.
  */
-class PhoneServerPreview(private val ctx: Context, private val pack: ArtPackStore) {
+class PhoneServerPreview(private val ctx: Context, private val pack: ArtPackStore, val device: DeviceBridge) {
     private val root = File(ctx.filesDir, "phoneserver")
     val store: SqliteScanStore by lazy { SqliteScanStore(File(root, "scans.db")) }
     val photos = PhotoDir(File(root, "scan_images"))
@@ -47,6 +48,7 @@ class PhoneServerPreview(private val ctx: Context, private val pack: ArtPackStor
             paceS = { f2f.paceS() },
             f2fEvents = { f2f.recentEvents() },
             layouts = LayoutStore(File(root, "export_layout.json")),
+            device = DeviceApi(device),
         )
     }
     private val f2f by lazy { PhoneF2f(ctx, File(ctx.cacheDir, "facetoface")) }

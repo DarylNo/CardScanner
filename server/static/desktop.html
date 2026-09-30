@@ -201,6 +201,36 @@
   body.guest .admin-only { display: none !important; }
   body:not(.guest) .guest-only { display: none !important; }
   .pill.flag { background: #4a1d1d; color: #fca5a5; }
+  /* Scanner (the phone server's own settings — admin only; absent on the computer's server). */
+  #devModal { position: fixed; inset: 0; background: #000a; z-index: 70; display: none;
+              align-items: center; justify-content: center; padding: 24px; }
+  #devModal.open { display: flex; }
+  #devBox { background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+            width: min(980px, 100%); max-height: 100%; display: flex; flex-direction: column; overflow: hidden; }
+  #devBox > header { position: static; display: flex; align-items: center; gap: 10px; padding: 12px 16px;
+                     border-bottom: 1px solid var(--line); }
+  #devBox h2 { margin: 0; font-size: 16px; flex: 1; }
+  #devBody { display: grid; grid-template-columns: 300px 1fr; gap: 0; min-height: 0; overflow: auto; }
+  #devCtl { padding: 14px 16px; border-right: 1px solid var(--line); display: flex; flex-direction: column; gap: 12px; }
+  #devCtl .seg { display: flex; gap: 6px; }
+  #devCtl .seg .btn { flex: 1; }
+  #devCtl label { display: flex; align-items: center; gap: 10px; font-size: 14px; cursor: pointer; }
+  #devCtl label small { display: block; color: var(--muted); font-size: 12px; }
+  #devCtl .h { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-top: 4px; }
+  #devArea { padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+  #devStage { position: relative; align-self: center; max-width: 100%; user-select: none; touch-action: none;
+              background: #000; border-radius: 8px; overflow: hidden; line-height: 0; cursor: crosshair; }
+  #devSnap { max-width: 100%; max-height: 60vh; display: block; }
+  #devRoi { position: absolute; border: 2px solid var(--accent); box-shadow: 0 0 0 9999px #0008;
+            pointer-events: none; display: none; }
+  #devRoi.draft { border-style: dashed; border-color: var(--warn); }
+  #devNoCam { color: var(--muted); font-size: 14px; padding: 40px 12px; text-align: center; line-height: 1.5; }
+  #devMsg { font-size: 12px; color: var(--muted); min-height: 1.2em; }
+  #devMsg.err { color: var(--bad); }
+  @media (max-width: 720px) {
+    #devBody { grid-template-columns: 1fr; }
+    #devCtl { border-right: 0; border-bottom: 1px solid var(--line); }
+  }
 </style>
 </head>
 <body class="guest">
@@ -225,8 +255,47 @@
   <button class="btn danger admin-only" id="clearFlagBtn" style="display:none" title="Delete every scan a guest flagged for deletion"></button>
   <button class="btn ghost admin-only" id="clearJunkBtn" title="Delete every scan that has no chosen printing">Clear unpicked</button>
   <button class="btn danger admin-only" id="clearAllBtn" title="Delete every scan">Clear all</button>
+  <button class="btn ghost admin-only" id="devBtn" style="display:none" title="The scanner phone's own settings: mode, auto scan, scan area, torch…">📱 Scanner</button>
   <button class="btn admin-only" id="exportBtn">Export to CSV</button>
 </header>
+<div id="devModal" role="dialog" aria-modal="true" aria-labelledby="devTitle">
+  <div id="devBox">
+    <header>
+      <h2 id="devTitle">Scanner phone settings</h2>
+      <span class="stat" id="devLive"></span>
+      <button class="btn ghost sm" id="devClose">Close</button>
+    </header>
+    <div id="devBody">
+      <div id="devCtl">
+        <div class="h">Mode</div>
+        <div class="seg">
+          <button class="btn ghost" data-mode="mount">Mount</button>
+          <button class="btn ghost" data-mode="handheld">Handheld</button>
+        </div>
+        <label><input type="checkbox" data-k="auto"><span>Auto scan<small>Mount: scans each card by itself</small></span></label>
+        <div class="h">Camera</div>
+        <label><input type="checkbox" data-k="torch"><span>Torch</span></label>
+        <label><input type="checkbox" data-k="high_res"><span>High resolution<small>2048×1536 instead of 1600×1200</small></span></label>
+        <label><input type="checkbox" data-k="ae_lock"><span>Exposure lock<small>Hold exposure + white balance</small></span></label>
+        <div class="h">Phone</div>
+        <label><input type="checkbox" data-k="vibration"><span>Vibration<small>Buzz on each confirmed scan</small></span></label>
+        <div id="devMsg"></div>
+      </div>
+      <div id="devArea">
+        <div class="h" style="font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em">Scan area — drag on the picture to draw it</div>
+        <div id="devStage"><img id="devSnap" alt="" draggable="false"><div id="devRoi"></div></div>
+        <div id="devNoCam" style="display:none">Open the scan screen on the phone to see the camera<br>and draw the scan area here.</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn ghost sm" id="devShot">↻ New picture</button>
+          <span class="sp" style="flex:1"></span>
+          <button class="btn ghost sm" id="devRoiClear" title="Scan the whole camera frame">Full frame</button>
+          <button class="btn ghost sm" id="devRoiUndo" style="display:none">Cancel</button>
+          <button class="btn sm" id="devRoiSave" style="display:none">Save area</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
 <div id="csvModal" role="dialog" aria-modal="true" aria-labelledby="csvTitle">
   <div id="csvBox">
     <header>
@@ -995,7 +1064,7 @@ function sigOf(scan){
 
 // Version banner — page version · server git hash. Same rationale as the
 // phone: without it, "is this the old page?" is undebuggable.
-const UI_VERSION = "d32";
+const UI_VERSION = "d33";
 
 // Who is asking: the phone server says "guest" for the 6-digit code (admin =
 // the paired computer); the computer's own server always says admin. Guests
@@ -1407,6 +1476,121 @@ function toggleF2fLog(){
   if (open){ renderF2fLog(); f2fLogTimer = setInterval(renderF2fLog, 3000); }
 }
 $("#f2fLogBtn").addEventListener("click", toggleF2fLog);
+
+/* ── Scanner phone settings (phone server only; admin only) ──────────────────
+   GET/PATCH /api/device + /api/device/snapshot.jpg. The computer's own server
+   has no /api/device (404), so the button stays hidden there; a guest gets 403.
+   The scan Area is fractions {x0,y0,x1,y1} of the UPRIGHT camera frame — the
+   snapshot is that frame, so a rectangle drawn on it maps 1:1. */
+let dev = null, devDraft = null, devTimer = null, devDrag = null;
+const DEV_MIN_SIDE = 0.08;                    // RoiFrac.MIN_SIDE on the phone
+async function devLoad(){
+  try {
+    const r = await fetch("/api/device");
+    if (!r.ok) return null;
+    return await r.json();
+  } catch(e){ return null; }
+}
+function devShowBtn(){ devLoad().then(d => { if (d) { dev = d; $("#devBtn").style.display = ""; } }); }
+fetch("/api/me").then(r => r.ok ? r.json() : null).then(d => { if (d && d.role === "admin") devShowBtn(); }).catch(() => {});
+function devMsg(t, err){ $("#devMsg").textContent = t || ""; $("#devMsg").classList.toggle("err", !!err); }
+function devRender(){
+  if (!dev) return;
+  $("#devLive").textContent = dev.camera_live ? "scan screen open" : "scan screen closed";
+  $("#devCtl").querySelectorAll("[data-mode]").forEach(b => {
+    const on = b.dataset.mode === dev.mode;
+    b.classList.toggle("ghost", !on);
+  });
+  $("#devCtl").querySelectorAll("input[data-k]").forEach(cb => { cb.checked = !!dev[cb.dataset.k]; });
+  $("#devCtl").querySelector("input[data-k=auto]").disabled = dev.mode === "handheld";
+  devDrawRoi();
+}
+function devDrawRoi(){
+  const box = $("#devRoi"), r = devDraft || dev?.roi;
+  box.classList.toggle("draft", !!devDraft);
+  $("#devRoiSave").style.display = devDraft ? "" : "none";
+  $("#devRoiUndo").style.display = devDraft ? "" : "none";
+  $("#devRoiClear").disabled = !dev?.roi && !devDraft;
+  if (!r || !$("#devSnap").naturalWidth) { box.style.display = "none"; return; }
+  box.style.display = "block";
+  box.style.left = (r.x0 * 100) + "%"; box.style.top = (r.y0 * 100) + "%";
+  box.style.width = ((r.x1 - r.x0) * 100) + "%"; box.style.height = ((r.y1 - r.y0) * 100) + "%";
+}
+async function devPatch(body){
+  devMsg("Saving…");
+  try {
+    const r = await jsend("/api/device", "PATCH", body);
+    if (r.error || r.detail) { devMsg(r.error || r.detail, true); return false; }
+    dev = r; devRender(); devMsg("Saved — applied on the phone.");
+    return true;
+  } catch(e){ devMsg("Could not reach the phone.", true); return false; }
+}
+function devSnapshot(){
+  const img = $("#devSnap");
+  img.onload = () => { $("#devStage").style.display = ""; $("#devNoCam").style.display = "none"; devDrawRoi(); };
+  img.onerror = () => { $("#devStage").style.display = "none"; $("#devNoCam").style.display = ""; };
+  img.src = "/api/device/snapshot.jpg?t=" + Date.now();
+}
+async function openDev(){
+  const d = await devLoad();
+  if (!d) { toast("The scanner phone's settings aren't available"); return; }
+  dev = d; devDraft = null; devMsg("");
+  devRender(); devSnapshot();
+  $("#devModal").classList.add("open");
+  clearInterval(devTimer);
+  // follow changes made on the phone itself while the panel is open
+  devTimer = setInterval(async () => {
+    const n = await devLoad();
+    if (!n) return;
+    const wasLive = dev && dev.camera_live;
+    dev = n; devRender();
+    if (n.camera_live && !wasLive) devSnapshot();
+  }, 3000);
+}
+function closeDev(){ $("#devModal").classList.remove("open"); clearInterval(devTimer); devTimer = null; devDraft = null; }
+$("#devBtn").addEventListener("click", openDev);
+$("#devClose").addEventListener("click", closeDev);
+$("#devModal").addEventListener("click", e => { if (e.target.id === "devModal") closeDev(); });
+document.addEventListener("keydown", e => { if (e.key === "Escape" && $("#devModal").classList.contains("open")) closeDev(); });
+$("#devCtl").querySelectorAll("[data-mode]").forEach(b =>
+  b.addEventListener("click", () => { if (dev && dev.mode !== b.dataset.mode) devPatch({ mode: b.dataset.mode }); }));
+$("#devCtl").querySelectorAll("input[data-k]").forEach(cb =>
+  cb.addEventListener("change", () => devPatch({ [cb.dataset.k]: cb.checked })));
+$("#devShot").addEventListener("click", devSnapshot);
+$("#devRoiClear").addEventListener("click", async () => {
+  if (devDraft) { devDraft = null; devDrawRoi(); }
+  if (dev?.roi) await devPatch({ roi: null });
+});
+$("#devRoiUndo").addEventListener("click", () => { devDraft = null; devDrawRoi(); devMsg(""); });
+$("#devRoiSave").addEventListener("click", async () => {
+  if (!devDraft) return;
+  if (await devPatch({ roi: devDraft })) devDraft = null;
+  devDrawRoi();
+});
+// Draw: drag on the picture; fractions of the picture = fractions of the upright frame.
+function devFrac(e){
+  const r = $("#devSnap").getBoundingClientRect();
+  return { x: Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)),
+           y: Math.min(1, Math.max(0, (e.clientY - r.top) / r.height)) };
+}
+$("#devStage").addEventListener("pointerdown", e => {
+  if (!$("#devSnap").naturalWidth) return;
+  devDrag = devFrac(e); $("#devStage").setPointerCapture(e.pointerId); e.preventDefault();
+});
+$("#devStage").addEventListener("pointermove", e => {
+  if (!devDrag) return;
+  const p = devFrac(e), round = v => Math.round(v * 10000) / 10000;
+  devDraft = { x0: round(Math.min(devDrag.x, p.x)), y0: round(Math.min(devDrag.y, p.y)),
+               x1: round(Math.max(devDrag.x, p.x)), y1: round(Math.max(devDrag.y, p.y)) };
+  devDrawRoi();
+});
+$("#devStage").addEventListener("pointerup", () => {
+  if (!devDrag) return;
+  devDrag = null;
+  if (devDraft && (devDraft.x1 - devDraft.x0 < DEV_MIN_SIDE || devDraft.y1 - devDraft.y0 < DEV_MIN_SIDE)) {
+    devDraft = null; devDrawRoi(); devMsg("That area is too small — drag a bigger box.", true);
+  } else if (devDraft) devMsg("Save the area to use it on the phone.");
+});
 
 /* ── manual sweep start ──────────────────────────────────────────────────── */
 $("#sweepStartBtn").addEventListener("click", async () => {

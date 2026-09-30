@@ -571,6 +571,30 @@ class CameraController(
     // ---------------- diagnostics ----------------
 
     /** Multi-line report for the Diagnostics screen (Copy button). Main thread. */
+    /**
+     * The current UPRIGHT analysis frame as JPEG (long side ≤ [maxSide]) — the space the
+     * scan Area fractions live in, so a browser can draw the Area on it. Null when no frame
+     * arrives within [timeoutMs] (camera not bound). Blocks the caller; never the UI thread.
+     */
+    fun snapshotJpeg(maxSide: Int = 1280, timeoutMs: Long = 2_000): ByteArray? {
+        val got = java.util.concurrent.ArrayBlockingQueue<io.github.darylno.cardscanner.core.Nv21Frame>(1)
+        analyzer.requestSnapshot { got.offer(it) }
+        val frame = got.poll(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS) ?: return null
+        val bgr = io.github.darylno.cardscanner.core.Nv21Bgr.toUprightBgr(frame)
+        try {
+            val scale = maxSide.toDouble() / maxOf(bgr.cols(), bgr.rows())
+            if (scale < 1.0) {
+                val small = org.opencv.core.Mat()
+                org.opencv.imgproc.Imgproc.resize(bgr, small, org.opencv.core.Size(), scale, scale,
+                    org.opencv.imgproc.Imgproc.INTER_AREA)
+                try { return CapturePipeline.encodeJpeg(small) } finally { small.release() }
+            }
+            return CapturePipeline.encodeJpeg(bgr)
+        } finally {
+            bgr.release()
+        }
+    }
+
     fun diagnostics(): String = buildString {
         appendLine("device: ${Build.MANUFACTURER} ${Build.MODEL} (API ${Build.VERSION.SDK_INT})")
         if (Build.VERSION.SDK_INT >= 31) appendLine("soc: ${Build.SOC_MANUFACTURER} ${Build.SOC_MODEL}")

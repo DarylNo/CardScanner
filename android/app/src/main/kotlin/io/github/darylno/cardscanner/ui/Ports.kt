@@ -63,6 +63,8 @@ interface CameraPort {
     fun setFocusLock(on: Boolean)
     fun setHighRes(high: Boolean)
     fun diagnostics(): String
+    /** The current upright frame as JPEG, or null (see CameraController.snapshotJpeg). Off the UI thread. */
+    fun snapshotJpeg(): ByteArray? = null
 }
 
 /** Final outcome of one upload job (mirrors net.ScanOutcome). */
