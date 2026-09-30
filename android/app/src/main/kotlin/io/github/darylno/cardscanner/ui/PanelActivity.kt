@@ -96,6 +96,16 @@ class PanelActivity : AppCompatActivity() {
         ui.post(load)
     }
 
+    override fun onStart() {
+        super.onStart()
+        GatewayService.screenVisible(true)
+    }
+
+    override fun onStop() {
+        GatewayService.screenVisible(false)
+        super.onStop()
+    }
+
     private fun showError(msg: String) {
         runOnUiThread {
             errorView.text = msg

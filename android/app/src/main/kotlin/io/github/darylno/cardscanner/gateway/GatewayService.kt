@@ -94,11 +94,28 @@ class GatewayService : Service() {
         }
         server = s
         this.host = host
+        startedAt = System.currentTimeMillis()
+        main.removeCallbacks(idleCheck)
+        main.postDelayed(idleCheck, IDLE_CHECK_MS)
         runCatching { host.onServing() }
         acquireLocks()
         publish(s)
         return START_NOT_STICKY
     }
+
+    private val idleCheck = object : Runnable {
+        override fun run() {
+            val s = server ?: return
+            if (shouldIdleStop(System.currentTimeMillis(), maxOf(s.lastRemoteAt, startedAt), lastVisibleAt, visibleScreens)) {
+                shutdown()
+                stopSelf()
+                return
+            }
+            main.postDelayed(this, IDLE_CHECK_MS)
+        }
+    }
+    private val main = android.os.Handler(android.os.Looper.getMainLooper())
+    private var startedAt = 0L
 
     private fun acquireLocks() {
         if (wakeLock == null) {
@@ -126,6 +143,7 @@ class GatewayService : Service() {
     }
 
     private fun shutdown() {
+        main.removeCallbacks(idleCheck)
         server?.let {
             it.stopSharing()
             it.stop()
@@ -183,6 +201,13 @@ class GatewayService : Service() {
                 if (code != null && url != null) "Your scans are served at ${url.substringBefore("/join")}\nGuests open $url or enter $code" else text))
             .setOngoing(true)
             .setOnlyAlertOnce(true)
+            // The phone sits on a mount with its lock screen showing: never the guest code there.
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+            .setPublicVersion(NotificationCompat.Builder(this, CHANNEL_ID)
+                .setSmallIcon(android.R.drawable.ic_menu_share)
+                .setContentTitle("Scanner serving")
+                .setPriority(NotificationCompat.PRIORITY_LOW)
+                .build())
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setContentIntent(open)
             .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Stop", stop)
@@ -197,6 +222,30 @@ class GatewayService : Service() {
     }
 
     companion object {
+        /**
+         * The server stops itself (wake + Wi-Fi locks released) once no app screen has been
+         * visible and no other device has used it for this long; opening the app starts it
+         * again. Keeps "always serving" from draining a phone left in a pocket.
+         */
+        const val IDLE_STOP_MS = 30 * 60_000L
+        private const val IDLE_CHECK_MS = 60_000L
+
+        @Volatile var visibleScreens = 0
+            private set
+        @Volatile var lastVisibleAt = 0L
+            private set
+
+        /** The scan and review screens report when they are on screen (onStart / onStop). */
+        @Synchronized
+        fun screenVisible(visible: Boolean) {
+            visibleScreens = maxOf(0, visibleScreens + if (visible) 1 else -1)
+            lastVisibleAt = System.currentTimeMillis()
+        }
+
+        /** Pure: stop when nothing is on screen and nothing — local or remote — used it for [idleMs]. */
+        fun shouldIdleStop(now: Long, lastRemote: Long, lastVisible: Long, visible: Int, idleMs: Long = IDLE_STOP_MS): Boolean =
+            visible == 0 && now - maxOf(lastRemote, lastVisible) >= idleMs
+
         const val ACTION_START = "io.github.darylno.cardscanner.gateway.START"
         const val ACTION_STOP = "io.github.darylno.cardscanner.gateway.STOP"
         /** Re-reads the phone's addresses (e.g. after joining Wi-Fi / enabling the hotspot). */
@@ -215,6 +264,8 @@ class GatewayService : Service() {
         val status: StateFlow<Status> = _status.asStateFlow()
 
         fun start(context: Context, port: Int = GatewayServer.DEFAULT_PORT) {
+            // A new attempt: an earlier start's error must not read as this one's.
+            if (!_status.value.running && _status.value.error != null) _status.value = Status(running = false)
             val i = Intent(context, GatewayService::class.java).setAction(ACTION_START).putExtra(EXTRA_PORT, port)
             ContextCompat.startForegroundService(context, i)
         }

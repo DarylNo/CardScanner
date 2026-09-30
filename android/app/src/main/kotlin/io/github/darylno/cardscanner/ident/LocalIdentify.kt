@@ -54,6 +54,22 @@ class LocalIdentify(private val ctx: Context) {
     /** App start: fetch the pack now if the phone has none, else the weekly Wi-Fi check. */
     fun onAppStart(done: (ArtPackStore.Check) -> Unit = {}) = checkAsync(force = !hasPack, done)
 
+    @Volatile private var lastForcedAt = 0L
+
+    /**
+     * A queued scan needs the pack and there is none: fetch it again — at most once a
+     * minute (the queue polls every 30 s), so a first download that failed offline is
+     * retried once the phone is back online, not only at the next app start.
+     */
+    fun ensurePack(now: Long = System.currentTimeMillis()) {
+        if (!ensureDue(hasPack, checking, now, lastForcedAt)) return
+        lastForcedAt = now
+        checkAsync(force = true)
+    }
+
+    /** The scan screen opened: the missing-pack retry, or the (due-gated) weekly check. */
+    fun onScreen() = if (hasPack) checkAsync(force = false) else ensurePack()
+
     /** Check for a new pack in the background ([force] = now, any network). */
     fun checkAsync(force: Boolean, done: (ArtPackStore.Check) -> Unit = {}) {
         try {
@@ -68,6 +84,12 @@ class LocalIdentify(private val ctx: Context) {
     }
 
     companion object {
+        const val ENSURE_EVERY_MS = 60_000L
+
+        /** Fetch the missing pack now? Not while one is installed or a check runs, and once a minute. */
+        fun ensureDue(hasPack: Boolean, checking: Boolean, now: Long, lastForcedAt: Long): Boolean =
+            !hasPack && !checking && now - lastForcedAt >= ENSURE_EVERY_MS
+
         fun unmetered(ctx: Context): Boolean = try {
             val cm = ctx.getSystemService(ConnectivityManager::class.java)
             val caps = cm?.getNetworkCapabilities(cm.activeNetwork)

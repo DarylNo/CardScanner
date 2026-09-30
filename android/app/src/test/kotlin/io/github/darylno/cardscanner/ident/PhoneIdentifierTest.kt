@@ -11,6 +11,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.BeforeClass
+import org.junit.Assert.fail
 import org.junit.Test
 import org.opencv.core.Mat
 import org.opencv.imgcodecs.Imgcodecs
@@ -142,6 +143,32 @@ class PhoneIdentifierTest {
         } finally {
             id.shutdown()
         }
+    }
+
+    /** Offline / 429 / 5xx: never filed as "identified, no printings" — the queue retries it. */
+    @Test
+    fun scryfallUnreachable_isRetryableNotFiled() {
+        for (fail in listOf<Exception>(IOException("no network"), HttpStatusException(429, "{}", "application/json", "u"),
+            HttpStatusException(503, "", "", "u"))) {
+            val offline = object : HttpJson { override fun get(url: String): String = throw fail }
+            try {
+                PhoneIdentifier({ matcher }, offline, FixtureImages(), null).identify(primary)
+                fail("$fail: filed a result without printings")
+            } catch (e: PhoneIdentifier.ScryfallUnreachableException) {
+                assertTrue(e is IOException)                 // the upload queue retries IOExceptions
+            }
+        }
+    }
+
+    /** A 404 IS an answer (no such card): the result is filed as the server would. */
+    @Test
+    fun scryfall404_isAnAnswer() {
+        val notFound = object : HttpJson {
+            override fun get(url: String): String =
+                throw HttpStatusException(404, """{"object":"error","details":"No cards found"}""", "application/json", url)
+        }
+        val r = PhoneIdentifier({ matcher }, notFound, FixtureImages(), null).identify(primary)
+        assertEquals(emptyList<Any?>(), r.result.json["candidates"])
     }
 
     @Test(expected = PhoneIdentifier.NoArtPackException::class)

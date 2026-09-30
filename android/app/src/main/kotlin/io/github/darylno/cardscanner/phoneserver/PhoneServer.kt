@@ -63,7 +63,10 @@ class PhoneServer(private val ctx: Context, private val identify: LocalIdentify,
     /** The upload queue's door: identify on the phone, file here (see [LocalScanUploader]). */
     val uploader: LocalScanUploader by lazy {
         LocalScanUploader(
-            identify = { frames -> identify.identifier().identifyFrames(frames).result.json },
+            identify = { frames ->
+                identify.ensurePack()            // no card database yet → fetch it (rate-limited)
+                identify.identifier().identifyFrames(frames).result.json
+            },
             file = { result, photo, replace -> backend.file(result, photo, replace) },
             answers = File(root, "upload_answers"),
         )
@@ -89,8 +92,8 @@ class PhoneServer(private val ctx: Context, private val identify: LocalIdentify,
 
     override fun onStopped() {
         admins.cancelCode()                  // a code shown before the stop is not good after a restart
-        backend.worker.stop()
-        backend.sweep.cancel()
+        backend.sweep.cancel()               // first: a running sweep ends within one card…
+        backend.worker.stop()                // …so the worker's join doesn't time out on it
     }
 
     /** The phone's own review screen: the local address and the owner's admin cookie. */

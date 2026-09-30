@@ -60,6 +60,15 @@ class PhoneIdentifier(
 
     class NoArtPackException : Exception("no art pack installed yet")
 
+    /**
+     * Scryfall couldn't be reached for this card's printings (offline, 429, 5xx):
+     * the ported decisions would file it "identified, no printings" — correct on the
+     * always-online computer, wrong on a phone at a shop — so the run is refused and
+     * the upload queue tries again later. A 404 (no such card) is an answer, not this.
+     */
+    class ScryfallUnreachableException(cause: Throwable) :
+        java.io.IOException("can't reach Scryfall for the printings (${cause.message})", cause)
+
     /** A capture that isn't a readable JPEG — retrying can't help. */
     class UndecodableCaptureException : java.io.IOException("capture JPEG doesn't decode")
 
@@ -94,8 +103,20 @@ class PhoneIdentifier(
         try {
             for (j in jpegs) frames += CachedImageSource.decode(j) ?: throw UndecodableCaptureException()
             val decodeMs = (nanoClock() - t0) / 1_000_000L
-            val pipeline = IdentifyPipeline(m, { scryfall.getAllPrintings(it) }, ranker, ocr, nanoClock)
+            var unreachable: Throwable? = null
+            val printings = { name: String ->
+                try {
+                    scryfall.getAllPrintings(name)
+                } catch (e: io.github.darylno.cardscanner.core.ScryfallException) {
+                    throw e                                  // 404: the name has no printings — an answer
+                } catch (e: Exception) {
+                    unreachable = e                          // network / 429 / 5xx: not an answer
+                    throw e
+                }
+            }
+            val pipeline = IdentifyPipeline(m, printings, ranker, ocr, nanoClock)
             val r = pipeline.scan(frames, cancelled = cancelled)
+            unreachable?.let { throw ScryfallUnreachableException(it) }
             return Identified(r, decodeMs, (nanoClock() - t0) / 1_000_000L)
         } finally {
             frames.forEach { it.release() }

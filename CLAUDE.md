@@ -237,7 +237,10 @@ The scanner itself (Stage 4): camera + on-phone identification + the phone's
 own server. The review UI is the Python server's own `phone.html` /
 `desktop.html`, copied into the APK at build and served by the phone
 (`PanelActivity` = a WebView on 127.0.0.1). Details, build, sideload and the
-device checklist: `android/README.md`.
+device checklist: `android/README.md`. The phone's server (GatewayService,
+foreground) stops itself after 30 min with no app screen visible and no
+non-loopback request (`shouldIdleStop`); a Scryfall transport failure is
+retryable (`ScryfallUnreachableException`), never filed as "not identified".
 `./gradlew :core:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug`
 from `android/` (Node on PATH, JDK 17); CI job `android` runs it per push.
 

@@ -41,7 +41,7 @@ class LocalScanUploaderTest {
     private val script = LinkedBlockingQueue<Any>()
     private val queues = mutableListOf<UploadQueue>()
 
-    private fun uploader(dir: java.io.File = tmp.newFolder()) = LocalScanUploader(
+    private fun uploader(dir: java.io.File = tmp.newFolder()): LocalScanUploader = LocalScanUploader(
         identify = { frames ->
             identifyCalls += frames.map { String(it) }
             when (val n = script.poll() ?: error("script exhausted")) {
@@ -135,5 +135,15 @@ class LocalScanUploaderTest {
         val out = rec.next().second
         assertTrue("$out", out is ScanOutcome.Rejected && out.code == 422)
         assertEquals(0, store.count())
+    }
+
+    /** The row is filed before the answer is saved: a failed save must not throw, or the queue
+     *  retries the job and files the card twice. */
+    @Test fun anAnswerThatCannotBeSavedStillFilesOnce() {
+        script.put(strong)
+        val notADir = tmp.newFile("answers")                                        // mkdirs / write fail
+        val row = uploader(notADir).scan(listOf("P".toByteArray()), null, "nonce-p")
+        assertEquals(store.list().single()["id"], row.getLong("id"))
+        assertEquals(1, store.count())
     }
 }

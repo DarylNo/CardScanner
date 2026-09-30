@@ -54,11 +54,15 @@ class LocalScanUploader(
         val row = file(result, files[0], replaceScanId?.takeIf { it > 0 })
         val text = MiniJson.stringify(row)
         if (saved != null) {
-            saved.parentFile?.mkdirs()
-            val tmp = File(saved.path + ".tmp")
-            tmp.writeText(text, Charsets.UTF_8)
-            if (!tmp.renameTo(saved)) { saved.delete(); tmp.renameTo(saved) }
-            prune()
+            // The row is filed: nothing after this may throw, or the queue would retry and
+            // file the card a second time. A failed write only loses the dedupe for a re-run.
+            try {
+                saved.parentFile?.mkdirs()
+                val tmp = File(saved.path + ".tmp")
+                tmp.writeText(text, Charsets.UTF_8)
+                if (!tmp.renameTo(saved)) { saved.delete(); tmp.renameTo(saved) }
+                prune()
+            } catch (_: Exception) { }
         }
         return JSONObject(text)
     }

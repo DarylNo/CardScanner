@@ -85,7 +85,11 @@ class ScreensSmokeTest {
         grantCamera(true)
         val a = launch(MainActivity::class.java)
         assertResumed(a)
-        assertEquals("no other screen opens on first launch", null, nextStarted())
+        // Only the one-time notification permission prompt (the server's Stop lives there) — no screen of ours.
+        val started = nextStarted()
+        assertTrue("no other screen opens on first launch: $started",
+            started == null || started.action == "android.content.pm.action.REQUEST_PERMISSIONS")
+        assertEquals(null, nextStarted())
         val svc = shadowOf(app).nextStartedService
         assertNotNull("the phone's server must be started", svc)
         assertEquals(GatewayService::class.java.name, svc!!.component?.className)

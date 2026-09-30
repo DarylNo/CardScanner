@@ -122,7 +122,17 @@ class MainActivity : AppCompatActivity() {
     private var permissionAsked = false
 
     private val permission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
-        if (ok) startCamera() else showCameraRationale(askedNow = true)
+        if (ok) { startCamera(); askNotificationsOnce() } else showCameraRationale(askedNow = true)
+    }
+
+    /** The server runs as a foreground service: its notification carries Stop. Asked once, ever. */
+    private val notifPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
+
+    private fun askNotificationsOnce() {
+        if (Build.VERSION.SDK_INT < 33 || settings.notifAsked) return
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) return
+        settings.notifAsked = true
+        notifPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -142,6 +152,7 @@ class MainActivity : AppCompatActivity() {
         if (camera == null) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
                 startCamera()
+                askNotificationsOnce()
             } else if (!permissionAsked) {
                 permissionAsked = true
                 // Pre-ask rationale only when the system says so; the denial path is the callback's.
@@ -168,11 +179,14 @@ class MainActivity : AppCompatActivity() {
         rateView.post(rateTick)
         app.phoneServer.device.screen = remoteScreen
         app.phoneServer.start()          // the phone IS the server: keep it up while scanning
+        GatewayService.screenVisible(true)
+        app.identify.onScreen()          // a missing card database is fetched again; weekly check
     }
 
     override fun onStop() {
         rateView.removeCallbacks(rateTick)
         if (app.phoneServer.device.screen === remoteScreen) app.phoneServer.device.screen = null
+        GatewayService.screenVisible(false)
         super.onStop()
     }
 

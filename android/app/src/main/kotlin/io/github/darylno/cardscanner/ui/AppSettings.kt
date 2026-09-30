@@ -59,6 +59,11 @@ class AppSettings(context: Context) {
         get() = prefs.getBoolean(K_VIBRATION, true)
         set(v) = prefs.edit().putBoolean(K_VIBRATION, v).apply()
 
+    /** The scan screen asked for the notification permission once (the server's Stop lives there). */
+    var notifAsked: Boolean
+        get() = prefs.getBoolean(K_NOTIF_ASKED, false)
+        set(v) = prefs.edit().putBoolean(K_NOTIF_ASKED, v).apply()
+
     var debugOverlay: Boolean
         get() = prefs.getBoolean(K_DEBUG, false)
         set(v) = prefs.edit().putBoolean(K_DEBUG, v).apply()
@@ -82,6 +87,7 @@ class AppSettings(context: Context) {
         const val K_AE_LOCK = "ae_lock"
         const val K_TORCH = "torch"
         const val K_VIBRATION = "vibration"
+        const val K_NOTIF_ASKED = "notif_asked"
         const val K_DEBUG = "debug_overlay"
         const val K_TIMINGS = "recent_timings"
     }

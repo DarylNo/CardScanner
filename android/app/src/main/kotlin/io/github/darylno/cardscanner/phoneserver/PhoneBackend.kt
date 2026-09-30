@@ -73,8 +73,9 @@ class PhoneBackend(
      */
     fun file(result: Map<String, Any?>, photo: ByteArray?, replaceScanId: Long? = null): Map<String, Any?> {
         val row = if (replaceScanId != null) api.fileScan(result, photo, replaceScanId) else api.fileScan(result, photo)
-        (row["id"] as? Number)?.let { sweep.priceCheck(it.toLong()) }
-        worker.wake()
+        // Filed: pricing is best effort from here — it must never fail the filing.
+        runCatching { (row["id"] as? Number)?.let { sweep.priceCheck(it.toLong()) } }
+        runCatching { worker.wake() }
         return row
     }
 

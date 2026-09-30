@@ -16,19 +16,21 @@ class PriceWorker(
 ) {
     private val lock = Object()
     private var woken = false
-    private var stopped = true
     private var thread: Thread? = null
+    /** Each start is a new generation; a thread whose generation is gone exits (a stop → start
+     *  whose join timed out must never leave the old thread looping beside the new one). */
+    private var generation = 0L
 
     fun start() = synchronized(lock) {
         if (thread != null) return
-        stopped = false
+        val gen = ++generation
         woken = true                       // first pass straight away: price what's already owed
-        thread = Thread(::loop, "price-worker").apply { isDaemon = true; start() }
+        thread = Thread({ loop(gen) }, "price-worker").apply { isDaemon = true; start() }
     }
 
     fun stop() {
         val t = synchronized(lock) {
-            stopped = true
+            generation++
             lock.notifyAll()
             thread.also { thread = null }
         }
@@ -38,11 +40,11 @@ class PriceWorker(
     /** Something may now be owed: check at once instead of waiting out the poll. */
     fun wake() = synchronized(lock) { woken = true; lock.notifyAll() }
 
-    private fun loop() {
+    private fun loop(gen: Long) {
         var last = PriceSweep.Tick.IDLE
         while (true) {
             synchronized(lock) {
-                if (!stopped && !woken) {
+                if (gen == generation && !woken) {
                     if (last == PriceSweep.Tick.IDLE) {
                         sweep.nextCheckAt = null          // nothing owed: wait for the next scan
                         lock.wait()
@@ -51,7 +53,7 @@ class PriceWorker(
                         lock.wait((pollS * 1000).toLong())
                     }
                 }
-                if (stopped) { sweep.nextCheckAt = null; return }
+                if (gen != generation) { if (thread == null) sweep.nextCheckAt = null; return }
                 woken = false
             }
             last = try { sweep.tick() } catch (e: Exception) { onError(e); PriceSweep.Tick.OWED }

@@ -128,8 +128,8 @@ Download `mtg-card-scanner-android.apk` from the latest GitHub Release
    unknown apps → Chrome.)
 3. **Install**. If Play Protect warns about an unknown developer, choose
    **More details → Install anyway**.
-4. Open **Card Scanner**, allow the **Camera** permission (and notifications on
-   Android 13+ — the guest gateway's notification needs it).
+4. Open **Card Scanner**, allow the **Camera** permission, then notifications
+   (Android 13+, asked once: the server's notification carries its **Stop**).
 
 **Over USB (ADB)**, from a computer with platform-tools:
 
@@ -151,7 +151,9 @@ after that the phone re-checks weekly on Wi-Fi (Settings → *This phone's
 server* → **Check for a newer card database** does it now). Scans taken before
 it lands wait in the queue ("waiting for the card database") and are
 identified once it does. Identifying needs internet for Scryfall's printing
-list; offline scans wait in the queue the same way.
+list; offline scans wait in the queue the same way. If that first download
+fails (no connection), the queue retries it at most once a minute — no need
+to restart the app.
 
 ## Mount vs Handheld
 
@@ -187,7 +189,10 @@ foreground; otherwise find it under Scans).
 
 The phone serves your scans on port **8090** of its local network whenever
 the app runs (a notification stays up; its **Stop** ends serving until the app
-is opened again). On the same Wi-Fi (or the phone's hotspot):
+is opened again). With the app in the background and no computer or guest
+using it for **30 minutes**, it stops by itself (no all-day battery drain);
+opening the app starts it again. The guest code is hidden from the lock
+screen. On the same Wi-Fi (or the phone's hotspot):
 
 1. Settings → *This phone's server* → **Pair a computer as admin** shows a QR
    and a one-time 8-digit code (10 minutes, single use). Open the link on the

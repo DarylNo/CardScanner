@@ -308,6 +308,10 @@ class UploadQueue(
         } catch (e: Exception) {
             // Malformed JSON etc.: keep the scan, try again later.
             return Step.Retry(e.message ?: e.javaClass.simpleName)
+        } catch (e: Throwable) {
+            // Stage 4: identification runs on this thread — an Error (OOM, a missing native
+            // lib) must not kill the process, which would restart on the same job and loop.
+            return Step.Retry(e.message ?: e.javaClass.simpleName)
         }
     }
 

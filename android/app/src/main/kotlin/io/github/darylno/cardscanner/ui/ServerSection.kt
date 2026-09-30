@@ -34,6 +34,15 @@ class ServerSection(
 ) {
     private val ui = Handler(Looper.getMainLooper())
     private val io = Executors.newSingleThreadExecutor()
+    /** Set by [destroy]: a pack check that finishes after the screen closed must not touch it. */
+    @Volatile private var destroyed = false
+
+    private fun runIo(block: () -> Unit) {
+        if (destroyed) return
+        try { io.execute(block) } catch (_: java.util.concurrent.RejectedExecutionException) { }
+    }
+
+    private fun onUi(block: () -> Unit) { ui.post { if (!destroyed) block() } }
     private lateinit var addressText: TextView
     private lateinit var packText: TextView
     private lateinit var usageText: TextView
@@ -62,7 +71,7 @@ class ServerSection(
             AlertDialog.Builder(activity)
                 .setMessage(R.string.pv_forget_confirm)
                 .setPositiveButton(R.string.pv_forget) { _, _ ->
-                    io.execute { phone.admins.revokeAll(); ui.post { refresh() } }
+                    runIo { phone.admins.revokeAll(); onUi { refresh() } }
                 }
                 .setNegativeButton(R.string.cancel, null)
                 .show()
@@ -71,7 +80,7 @@ class ServerSection(
         packText = chrome.text("", 12f, ScanChrome.Palette.TEXT_DIM).apply { setPadding(dp(4), dp(8), dp(4), 0) }
         card.addView(packText, lp())
         card.addView(chrome.secondaryButton(s(R.string.pv_pack_check)) {
-            identify.checkAsync(force = true) { ui.post { refresh() } }
+            identify.checkAsync(force = true) { onUi { refresh() } }
             refresh()
         }, lp(8))
         usageText = chrome.text("", 12f, ScanChrome.Palette.TEXT_DIM).apply {
@@ -83,6 +92,7 @@ class ServerSection(
     }
 
     fun destroy() {
+        destroyed = true
         phone.admins.cancelCode()           // the dialog can go without onDismiss (activity destroyed)
         ui.removeCallbacksAndMessages(null)
         io.shutdown()
@@ -126,9 +136,9 @@ class ServerSection(
             else -> s(R.string.pv_pack_none) +
                 (identify.lastCheck as? ArtPackStore.Check.Failed)?.let { "\n" + s(R.string.pv_pack_failed, it.message) }.orEmpty()
         }
-        io.execute {
+        runIo {
             val u = phone.usage()
-            ui.post {
+            onUi {
                 usageText.text = u.label()
                 usageText.setTextColor(if (u.warn) ScanChrome.Palette.WARN else ScanChrome.Palette.TEXT_DIM)
             }
