@@ -318,8 +318,13 @@ Where it stands (2026-09-29, after 1.0.13):
   `F2fCache`). The phone does NOT run the rig's 60 s timed sweep: owner
   (2026-09-30) — `PriceWorker` checks every 5 s while anything is owed and
   sleeps until the next scan/pick/edit wakes it when nothing is (same
-  pause/cooldown/one-consumer rules via `PriceSweep.tick()`). Next: 3d
-  export, 3e roles. Owner
+  pause/cooldown/one-consumer rules via `PriceSweep.tick()`). 3d (1.0.16):
+  export — `core/server/Export` ports server/export.py (TXT lines, the CSV
+  builder's layout/preview/download, `LayoutStore` → `export_layout.json`
+  beside the phone's DB), golden-tested (`api/export.json`: every status,
+  content type, Content-Disposition and the TXT/CSV text byte for byte —
+  Python's exact-binary money rounding, csv quoting, formula guard). Next:
+  3e roles. Owner
   decisions (2026-09-30): START FRESH at switchover (no import of the PC's
   scans); the computer pairs once as admin via a one-time code; at 10,000
   scans show size + free space as a warning, then keep going (no pruning).

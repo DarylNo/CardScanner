@@ -133,6 +133,53 @@ object GoldenApi {
         return out
     }
 
+    /**
+     * Replays the export session (api/export.json) against [ScanServer] with a
+     * layout store kept in [layoutFile] (null = in memory): status, content
+     * type, Content-Disposition, and the TXT/CSV text byte for byte (BOM
+     * included) or the JSON body. One line per mismatch.
+     */
+    @Suppress("UNCHECKED_CAST")
+    fun replayExport(layoutFile: java.io.File?, newStore: (clock: () -> String) -> ScanStore): List<String> {
+        val fx = resource("export.json")
+        var tick = 0
+        val store = newStore { tick++; "T" + tick.toString().padStart(4, '0') }
+        val api = PhoneApi(store, object : ScanImages {
+            override fun read(id: Long): ByteArray? = null
+            override fun write(id: Long, jpeg: ByteArray) {}
+            override fun delete(id: Long) {}
+        })
+        val f2f = F2fLookup { _, _, _, _, _ -> F2fAnswer.NotListed }
+        val server = ScanServer(api, PriceSweep(store, api, f2f, launch = { it.run() }, now = { 0.0 }),
+            LayoutStore(layoutFile))
+        for (seed in fx["seeds"] as List<Map<String, Any?>>) {
+            val row = store.create(true, mapOf("name" to "seed"), emptyMap(), emptyList(), null)
+            val upd = LinkedHashMap(seed["fields"] as Map<String, Any?>)
+            (seed["selection"] as Map<String, Any?>?)?.let { upd["status"] = "selected"; upd["selection"] = it }
+            if (upd.isNotEmpty()) store.update(row["id"] as Long, upd)
+        }
+        val out = ArrayList<String>()
+        for ((i, step) in (fx["steps"] as List<Map<String, Any?>>).withIndex()) {
+            val tag = "#$i ${step["method"]} ${step["path"]}"
+            val res = server.handle(ApiRequest(step["method"] as String, step["path"] as String,
+                body = step["body"]?.let { MiniJson.stringify(it).toByteArray() }))
+            if (res == null) { out += "$tag: not handled"; continue }
+            val want = (step["status"] as Number).toInt()
+            if (res.status != want) out += "$tag: status ${res.status}, server $want"
+            if (res.contentType != step["content_type"]) out += "$tag: type ${res.contentType}, server ${step["content_type"]}"
+            if (res.headers["Content-Disposition"] != step["disposition"]) {
+                out += "$tag: disposition ${res.headers["Content-Disposition"]}, server ${step["disposition"]}"
+            }
+            val text = String(res.body, Charsets.UTF_8)
+            if (step.containsKey("text")) {
+                if (text != step["text"]) out += "$tag: text\n  got    ${MiniJson.stringify(text)}\n  server ${MiniJson.stringify(step["text"])}"
+            } else {
+                jsonDiff(step["response"], MiniJson.parse(text), "$")?.let { out += "$tag: $it" }
+            }
+        }
+        return out
+    }
+
     /** Null when equal; numbers compare by value (Python int 2 == JSON 2), booleans stay booleans. */
     fun jsonDiff(want: Any?, got: Any?, at: String): String? = when {
         want is Map<*, *> && got is Map<*, *> -> {

@@ -4,6 +4,7 @@ import io.github.darylno.cardscanner.core.server.ApiRequest
 import io.github.darylno.cardscanner.core.server.ApiResponse
 import io.github.darylno.cardscanner.core.MiniJson
 import io.github.darylno.cardscanner.core.server.F2fLookup
+import io.github.darylno.cardscanner.core.server.LayoutStore
 import io.github.darylno.cardscanner.core.server.PhoneApi
 import io.github.darylno.cardscanner.core.server.PriceSweep
 import io.github.darylno.cardscanner.core.server.PriceWorker
@@ -31,7 +32,8 @@ import java.net.URLDecoder
  *  - `/api/search` → the ported search_candidates over Scryfall ([search]);
  *  - the pages' startup reads (version, health, setup, update-check,
  *    price-debug) answered in the Python shapes, so the pages load;
- *  - export (3d) is not here yet: 501 with a clear error.
+ *  - export (3d): TXT + the CSV column builder (layout, preview, download),
+ *    server/export.py ported and golden-tested, layout saved beside the DB.
  *
  * Access control is NOT here: [LocalUpstream] plugs this into the existing
  * GatewayServer (LAN only, 6-digit code, lockouts, session cookie).
@@ -50,10 +52,11 @@ class PhoneBackend(
     interrupt: (Boolean) -> Unit = {},
     private val paceS: () -> Double? = { null },
     private val f2fEvents: () -> List<Map<String, Any?>> = { emptyList() },
+    layouts: LayoutStore = LayoutStore(null),
 ) {
     val api = PhoneApi(store, photos)
     val sweep = PriceSweep(store, api, f2f, launch, now, interrupt, paceS)
-    val server = ScanServer(api, sweep)
+    val server = ScanServer(api, sweep, layouts)
     val worker = PriceWorker(sweep, now)
 
     /** A capture the phone identified: file it, then price it (scan-time pricing). */
@@ -98,8 +101,6 @@ class PhoneBackend(
                 val cands = if (q.isBlank()) emptyList() else runCatching { search(q) }.getOrDefault(emptyList())
                 ApiResponse.json(200, mapOf("candidates" to cands))
             }
-            req.path.startsWith("/api/export") ->
-                ApiResponse.json(501, mapOf("error" to "not on the phone yet (export arrives in the next preview)"))
             else -> ApiResponse.json(404, mapOf("detail" to "Not Found"))
         }
     }
@@ -157,12 +158,13 @@ class LocalUpstream(private val backend: PhoneBackend) : Upstream {
             .code(res.status)
             .message(REASONS[res.status] ?: "OK")
             .header("Cache-Control", "no-store")
+            .apply { res.headers.forEach { (k, v) -> header(k, v) } }
             .body(res.body.toResponseBody(res.contentType.toMediaType()))
             .build()
     }
 
     private companion object {
         val REASONS = mapOf(200 to "OK", 400 to "Bad Request", 404 to "Not Found", 422 to "Unprocessable Entity",
-            500 to "Internal Server Error", 501 to "Not Implemented")
+            500 to "Internal Server Error")
     }
 }

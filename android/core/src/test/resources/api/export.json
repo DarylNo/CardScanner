@@ -1,0 +1,1188 @@
+{
+ "clock": "T%04d",
+ "seeds": [
+  {
+   "selection": {
+    "scryfall_id": "m10-146",
+    "name": "Lightning Bolt",
+    "set": "m10",
+    "set_name": "M10 set",
+    "collector_number": "146",
+    "condition": "NM",
+    "finish": "Non-Foil",
+    "quantity": 1,
+    "auto_picked": true,
+    "popularity": {
+     "tier": "staple",
+     "label": "Staple"
+    }
+   },
+   "fields": {
+    "f2f": {
+     "conditions": {
+      "NM": 2.675,
+      "PL": 2.0
+     },
+     "handle": "x",
+     "url": "/products/bolt-m10"
+    }
+   }
+  },
+  {
+   "selection": {
+    "scryfall_id": "m10-146",
+    "name": "Lightning Bolt",
+    "set": "m10",
+    "set_name": "M10 set",
+    "collector_number": "146",
+    "condition": "NM",
+    "finish": "Non-Foil",
+    "quantity": 2
+   },
+   "fields": {}
+  },
+  {
+   "selection": {
+    "scryfall_id": "ltr-1a",
+    "name": "Lórien, \"Æther\" =Name",
+    "set": "ltr",
+    "set_name": "LTR set",
+    "collector_number": "1a",
+    "condition": "lp",
+    "finish": "foil",
+    "quantity": "3"
+   },
+   "fields": {
+    "f2f": {
+     "conditions": {
+      "PL": 0.125,
+      "NM": 1
+     },
+     "handle": "x",
+     "url": "https://facetofacegames.com/products/x"
+    }
+   }
+  },
+  {
+   "selection": {
+    "scryfall_id": "tsr-7",
+    "name": "Line\nBreak; Card",
+    "set": "tsr",
+    "set_name": "Time Spiral, Remastered",
+    "collector_number": "7",
+    "condition": "dmg",
+    "finish": "Etched",
+    "quantity": 1
+   },
+   "fields": {
+    "f2f": {
+     "conditions": {
+      "HP": 5
+     },
+     "handle": "x",
+     "url": "https://facetofacegames.com/products/x"
+    }
+   }
+  },
+  {
+   "selection": {
+    "scryfall_id": "brk-",
+    "name": "",
+    "set": "brk",
+    "set_name": "BRK set",
+    "collector_number": "",
+    "condition": "NM",
+    "finish": "Non-Foil",
+    "quantity": 1
+   },
+   "fields": {}
+  },
+  {
+   "selection": {
+    "scryfall_id": "exc-1",
+    "name": "Excluded",
+    "set": "exc",
+    "set_name": "EXC set",
+    "collector_number": "1",
+    "condition": "NM",
+    "finish": "Non-Foil",
+    "quantity": 1
+   },
+   "fields": {
+    "included": false
+   }
+  },
+  {
+   "selection": null,
+   "fields": {}
+  },
+  {
+   "selection": {
+    "scryfall_id": "pln-2",
+    "name": "Plain Card",
+    "set": "pln",
+    "set_name": "PLN set",
+    "collector_number": "2",
+    "condition": null,
+    "finish": "Non Foil",
+    "quantity": 0
+   },
+   "fields": {
+    "f2f": {
+     "conditions": {},
+     "handle": "x",
+     "url": "https://example.com/abs"
+    }
+   }
+  },
+  {
+   "selection": {
+    "scryfall_id": "@tk-=1",
+    "name": "+1/+1 Counter",
+    "set": "@tk",
+    "set_name": "@TK set",
+    "collector_number": "=1",
+    "condition": "NM",
+    "finish": "Non-Foil",
+    "quantity": 1,
+    "popularity": "odd"
+   },
+   "fields": {
+    "f2f": {
+     "conditions": {
+      "NM": 0.5
+     },
+     "handle": "x",
+     "url": "https://facetofacegames.com/products/x"
+    }
+   }
+  },
+  {
+   "selection": {
+    "scryfall_id": "tex-3",
+    "name": "Tex",
+    "set": "tex",
+    "set_name": "TEX set",
+    "collector_number": "3",
+    "condition": "MP",
+    "finish": "Textured",
+    "quantity": 3
+   },
+   "fields": {
+    "f2f": {
+     "conditions": {
+      "NM": 3,
+      "MP": 1.005
+     },
+     "handle": "x",
+     "url": "https://facetofacegames.com/products/x"
+    }
+   }
+  },
+  {
+   "selection": {
+    "scryfall_id": "dom-60",
+    "name": "Opt",
+    "set": "dom",
+    "set_name": "DOM set",
+    "collector_number": "60",
+    "condition": "NM",
+    "finish": "Non-Foil",
+    "quantity": 1
+   },
+   "fields": {
+    "f2f": {
+     "conditions": {
+      "NM": 0.25
+     },
+     "handle": "x",
+     "url": "https://facetofacegames.com/products/x"
+    }
+   }
+  },
+  {
+   "selection": {
+    "scryfall_id": "dom-60",
+    "name": "Opt",
+    "set": "dom",
+    "set_name": "DOM set",
+    "collector_number": "60",
+    "condition": "NM",
+    "finish": "Foil",
+    "quantity": 1
+   },
+   "fields": {
+    "f2f": {
+     "conditions": {
+      "NM": 0.75
+     },
+     "handle": "x",
+     "url": "https://facetofacegames.com/products/x"
+    }
+   }
+  },
+  {
+   "selection": {
+    "scryfall_id": "dom-60",
+    "name": "Opt",
+    "set": "dom",
+    "set_name": "DOM set",
+    "collector_number": "60",
+    "condition": "NM",
+    "finish": "Non-Foil",
+    "quantity": 1
+   },
+   "fields": {
+    "f2f": {
+     "conditions": {
+      "NM": 0.3
+     },
+     "handle": "x",
+     "url": "https://facetofacegames.com/products/x"
+    }
+   }
+  }
+ ],
+ "steps": [
+  {
+   "method": "GET",
+   "path": "/api/export",
+   "body": null,
+   "status": 200,
+   "content_type": "text/plain; charset=utf-8",
+   "disposition": "attachment; filename=cards.txt",
+   "text": "2 DOM 60 NM Non-Foil\n1 DOM 60 NM Foil\n3 TEX 3 MP Textured\n1 @TK =1 NM Non-Foil\n1 PLN 2 NM Non-Foil\n1 TSR 7 DMG Etched\n3 LTR 1a LP Foil\n3 M10 146 NM Non-Foil\n"
+  },
+  {
+   "method": "GET",
+   "path": "/api/export/layout",
+   "body": null,
+   "status": 200,
+   "content_type": "application/json",
+   "disposition": null,
+   "response": {
+    "layout": {
+     "columns": [
+      {
+       "field": "quantity",
+       "header": "Quantity"
+      },
+      {
+       "field": "name",
+       "header": "Name"
+      },
+      {
+       "field": "set_code",
+       "header": "Set Code"
+      },
+      {
+       "field": "set_name",
+       "header": "Set Name"
+      },
+      {
+       "field": "collector_number",
+       "header": "Collector Number"
+      },
+      {
+       "field": "condition",
+       "header": "Condition"
+      },
+      {
+       "field": "finish",
+       "header": "Finish"
+      },
+      {
+       "field": "price",
+       "header": "Price"
+      }
+     ],
+     "header": true,
+     "delimiter": "comma",
+     "combine": true
+    },
+    "default": {
+     "columns": [
+      {
+       "field": "quantity",
+       "header": "Quantity"
+      },
+      {
+       "field": "name",
+       "header": "Name"
+      },
+      {
+       "field": "set_code",
+       "header": "Set Code"
+      },
+      {
+       "field": "set_name",
+       "header": "Set Name"
+      },
+      {
+       "field": "collector_number",
+       "header": "Collector Number"
+      },
+      {
+       "field": "condition",
+       "header": "Condition"
+      },
+      {
+       "field": "finish",
+       "header": "Finish"
+      },
+      {
+       "field": "price",
+       "header": "Price"
+      }
+     ],
+     "header": true,
+     "delimiter": "comma",
+     "combine": true
+    },
+    "fields": [
+     {
+      "field": "quantity",
+      "header": "Quantity"
+     },
+     {
+      "field": "name",
+      "header": "Name"
+     },
+     {
+      "field": "set_code",
+      "header": "Set Code"
+     },
+     {
+      "field": "set_name",
+      "header": "Set Name"
+     },
+     {
+      "field": "collector_number",
+      "header": "Collector Number"
+     },
+     {
+      "field": "condition",
+      "header": "Condition"
+     },
+     {
+      "field": "finish",
+      "header": "Finish"
+     },
+     {
+      "field": "foil",
+      "header": "Foil"
+     },
+     {
+      "field": "price",
+      "header": "Price"
+     },
+     {
+      "field": "total",
+      "header": "Total"
+     },
+     {
+      "field": "popularity",
+      "header": "Popularity"
+     },
+     {
+      "field": "scryfall_id",
+      "header": "Scryfall ID"
+     },
+     {
+      "field": "scan_id",
+      "header": "Scan #"
+     },
+     {
+      "field": "scanned_at",
+      "header": "Scanned At"
+     },
+     {
+      "field": "auto_picked",
+      "header": "Auto Picked"
+     },
+     {
+      "field": "f2f_url",
+      "header": "F2F Link"
+     }
+    ]
+   }
+  },
+  {
+   "method": "GET",
+   "path": "/api/export.csv",
+   "body": null,
+   "status": 200,
+   "content_type": "text/csv; charset=utf-8",
+   "disposition": "attachment; filename=cards.csv",
+   "text": "﻿Quantity,Name,Set Code,Set Name,Collector Number,Condition,Finish,Price\r\n2,Opt,DOM,DOM set,60,NM,Non-Foil,0.30\r\n1,Opt,DOM,DOM set,60,NM,Foil,0.75\r\n3,Tex,TEX,TEX set,3,MP,Textured,1.00\r\n1,'+1/+1 Counter,'@TK,'@TK set,'=1,NM,Non-Foil,0.50\r\n1,Plain Card,PLN,PLN set,2,NM,Non-Foil,\r\n1,,BRK,BRK set,,NM,Non-Foil,\r\n1,\"Line\nBreak; Card\",TSR,\"Time Spiral, Remastered\",7,DMG,Etched,5.00\r\n3,\"Lórien, \"\"Æther\"\" =Name\",LTR,LTR set,1a,LP,Foil,0.12\r\n3,Lightning Bolt,M10,M10 set,146,NM,Non-Foil,2.67\r\n"
+  },
+  {
+   "method": "POST",
+   "path": "/api/export/preview",
+   "body": {
+    "layout": {
+     "columns": [
+      {
+       "field": "name"
+      },
+      {
+       "field": "price"
+      }
+     ]
+    }
+   },
+   "status": 200,
+   "content_type": "application/json",
+   "disposition": null,
+   "response": {
+    "csv": "Name,Price\r\nOpt,0.30\r\nOpt,0.75\r\nTex,1.00\r\n'+1/+1 Counter,0.50\r\nPlain Card,\r\n,\r\n\"Line\nBreak; Card\",5.00\r\n\"Lórien, \"\"Æther\"\" =Name\",0.12\r\n",
+    "rows": 9
+   }
+  },
+  {
+   "method": "POST",
+   "path": "/api/export/preview",
+   "body": {},
+   "status": 400,
+   "content_type": "application/json",
+   "disposition": null,
+   "response": {
+    "error": "layout must be an object"
+   }
+  },
+  {
+   "method": "PUT",
+   "path": "/api/export/layout",
+   "body": {
+    "layout": []
+   },
+   "status": 400,
+   "content_type": "application/json",
+   "disposition": null,
+   "response": {
+    "error": "layout must be an object"
+   }
+  },
+  {
+   "method": "PUT",
+   "path": "/api/export/layout",
+   "body": {
+    "layout": {
+     "columns": []
+    }
+   },
+   "status": 400,
+   "content_type": "application/json",
+   "disposition": null,
+   "response": {
+    "error": "add at least one column"
+   }
+  },
+  {
+   "method": "PUT",
+   "path": "/api/export/layout",
+   "body": {
+    "layout": {
+     "columns": [
+      {
+       "field": "nope"
+      }
+     ]
+    }
+   },
+   "status": 400,
+   "content_type": "application/json",
+   "disposition": null,
+   "response": {
+    "error": "unknown column: 'nope'"
+   }
+  },
+  {
+   "method": "PUT",
+   "path": "/api/export/layout",
+   "body": {
+    "layout": {
+     "columns": [
+      5
+     ]
+    }
+   },
+   "status": 400,
+   "content_type": "application/json",
+   "disposition": null,
+   "response": {
+    "error": "unknown column: 5"
+   }
+  },
+  {
+   "method": "PUT",
+   "path": "/api/export/layout",
+   "body": {
+    "layout": {
+     "columns": [
+      "name"
+     ]
+    }
+   },
+   "status": 400,
+   "content_type": "application/json",
+   "disposition": null,
+   "response": {
+    "error": "unknown column: 'name'"
+   }
+  },
+  {
+   "method": "PUT",
+   "path": "/api/export/layout",
+   "body": {
+    "layout": {
+     "columns": [
+      {
+       "header": "x"
+      }
+     ]
+    }
+   },
+   "status": 400,
+   "content_type": "application/json",
+   "disposition": null,
+   "response": {
+    "error": "unknown column: None"
+   }
+  },
+  {
+   "method": "PUT",
+   "path": "/api/export/layout",
+   "body": {
+    "layout": {
+     "columns": [
+      {
+       "field": "name"
+      }
+     ],
+     "delimiter": "pipe"
+    }
+   },
+   "status": 400,
+   "content_type": "application/json",
+   "disposition": null,
+   "response": {
+    "error": "unknown delimiter: 'pipe'"
+   }
+  },
+  {
+   "method": "PUT",
+   "path": "/api/export/layout",
+   "body": {
+    "layout": {
+     "columns": [
+      {
+       "field": "name"
+      }
+     ],
+     "delimiter": null
+    }
+   },
+   "status": 400,
+   "content_type": "application/json",
+   "disposition": null,
+   "response": {
+    "error": "unknown delimiter: None"
+   }
+  },
+  {
+   "method": "PUT",
+   "path": "/api/export/layout",
+   "body": {
+    "layout": {
+     "columns": [
+      {
+       "field": "name"
+      },
+      {
+       "field": "name"
+      },
+      {
+       "field": "name"
+      },
+      {
+       "field": "name"
+      },
+      {
+       "field": "name"
+      },
+      {
+       "field": "name"
+      },
+      {
+       "field": "name"
+      },
+      {
+       "field": "name"
+      },
+      {
+       "field": "name"
+      },
+      {
+       "field": "name"
+      },
+      {
+       "field": "name"
+      },
+      {
+       "field": "name"
+      },
+      {
+       "field": "name"
+      },
+      {
+       "field": "name"
+      },
+      {
+       "field": "name"
+      },
+      {
+       "field": "name"
+      },
+      {
+       "field": "name"
+      },
+      {
+       "field": "name"
+      },
+      {
+       "field": "name"
+      },
+      {
+       "field": "name"
+      },
+      {
+       "field": "name"
+      },
+      {
+       "field": "name"
+      },
+      {
+       "field": "name"
+      },
+      {
+       "field": "name"
+      },
+      {
+       "field": "name"
+      },
+      {
+       "field": "name"
+      },
+      {
+       "field": "name"
+      },
+      {
+       "field": "name"
+      },
+      {
+       "field": "name"
+      },
+      {
+       "field": "name"
+      },
+      {
+       "field": "name"
+      },
+      {
+       "field": "name"
+      },
+      {
+       "field": "name"
+      },
+      {
+       "field": "name"
+      },
+      {
+       "field": "name"
+      },
+      {
+       "field": "name"
+      },
+      {
+       "field": "name"
+      },
+      {
+       "field": "name"
+      },
+      {
+       "field": "name"
+      },
+      {
+       "field": "name"
+      },
+      {
+       "field": "name"
+      }
+     ]
+    }
+   },
+   "status": 400,
+   "content_type": "application/json",
+   "disposition": null,
+   "response": {
+    "error": "too many columns (40 max)"
+   }
+  },
+  {
+   "method": "PUT",
+   "path": "/api/export/layout",
+   "body": {
+    "layout": {
+     "columns": [
+      {
+       "field": "quantity",
+       "header": "Qty"
+      },
+      {
+       "field": "name",
+       "header": ""
+      },
+      {
+       "field": "set_code",
+       "header": null
+      },
+      {
+       "field": "set_name",
+       "header": "  Set  Name "
+      },
+      {
+       "field": "collector_number",
+       "header": 7
+      },
+      {
+       "field": "condition",
+       "header": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      },
+      {
+       "field": "finish",
+       "header": "Fin;ish"
+      },
+      {
+       "field": "foil",
+       "header": "Fo\"il"
+      },
+      {
+       "field": "price",
+       "header": "=Price"
+      },
+      {
+       "field": "total",
+       "header": "Total"
+      },
+      {
+       "field": "popularity",
+       "header": "Pop"
+      },
+      {
+       "field": "scryfall_id",
+       "header": "Id"
+      },
+      {
+       "field": "scan_id",
+       "header": "Scan"
+      },
+      {
+       "field": "scanned_at",
+       "header": "At"
+      },
+      {
+       "field": "auto_picked",
+       "header": "Auto"
+      },
+      {
+       "field": "f2f_url",
+       "header": "Link"
+      }
+     ],
+     "delimiter": "semicolon",
+     "combine": false,
+     "header": 1
+    }
+   },
+   "status": 200,
+   "content_type": "application/json",
+   "disposition": null,
+   "response": {
+    "layout": {
+     "columns": [
+      {
+       "field": "quantity",
+       "header": "Qty"
+      },
+      {
+       "field": "name",
+       "header": "Name"
+      },
+      {
+       "field": "set_code",
+       "header": "Set Code"
+      },
+      {
+       "field": "set_name",
+       "header": "Set  Name"
+      },
+      {
+       "field": "collector_number",
+       "header": "7"
+      },
+      {
+       "field": "condition",
+       "header": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      },
+      {
+       "field": "finish",
+       "header": "Fin;ish"
+      },
+      {
+       "field": "foil",
+       "header": "Fo\"il"
+      },
+      {
+       "field": "price",
+       "header": "=Price"
+      },
+      {
+       "field": "total",
+       "header": "Total"
+      },
+      {
+       "field": "popularity",
+       "header": "Pop"
+      },
+      {
+       "field": "scryfall_id",
+       "header": "Id"
+      },
+      {
+       "field": "scan_id",
+       "header": "Scan"
+      },
+      {
+       "field": "scanned_at",
+       "header": "At"
+      },
+      {
+       "field": "auto_picked",
+       "header": "Auto"
+      },
+      {
+       "field": "f2f_url",
+       "header": "Link"
+      }
+     ],
+     "header": true,
+     "delimiter": "semicolon",
+     "combine": false
+    }
+   }
+  },
+  {
+   "method": "GET",
+   "path": "/api/export/layout",
+   "body": null,
+   "status": 200,
+   "content_type": "application/json",
+   "disposition": null,
+   "response": {
+    "layout": {
+     "columns": [
+      {
+       "field": "quantity",
+       "header": "Qty"
+      },
+      {
+       "field": "name",
+       "header": "Name"
+      },
+      {
+       "field": "set_code",
+       "header": "Set Code"
+      },
+      {
+       "field": "set_name",
+       "header": "Set  Name"
+      },
+      {
+       "field": "collector_number",
+       "header": "7"
+      },
+      {
+       "field": "condition",
+       "header": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      },
+      {
+       "field": "finish",
+       "header": "Fin;ish"
+      },
+      {
+       "field": "foil",
+       "header": "Fo\"il"
+      },
+      {
+       "field": "price",
+       "header": "=Price"
+      },
+      {
+       "field": "total",
+       "header": "Total"
+      },
+      {
+       "field": "popularity",
+       "header": "Pop"
+      },
+      {
+       "field": "scryfall_id",
+       "header": "Id"
+      },
+      {
+       "field": "scan_id",
+       "header": "Scan"
+      },
+      {
+       "field": "scanned_at",
+       "header": "At"
+      },
+      {
+       "field": "auto_picked",
+       "header": "Auto"
+      },
+      {
+       "field": "f2f_url",
+       "header": "Link"
+      }
+     ],
+     "header": true,
+     "delimiter": "semicolon",
+     "combine": false
+    },
+    "default": {
+     "columns": [
+      {
+       "field": "quantity",
+       "header": "Quantity"
+      },
+      {
+       "field": "name",
+       "header": "Name"
+      },
+      {
+       "field": "set_code",
+       "header": "Set Code"
+      },
+      {
+       "field": "set_name",
+       "header": "Set Name"
+      },
+      {
+       "field": "collector_number",
+       "header": "Collector Number"
+      },
+      {
+       "field": "condition",
+       "header": "Condition"
+      },
+      {
+       "field": "finish",
+       "header": "Finish"
+      },
+      {
+       "field": "price",
+       "header": "Price"
+      }
+     ],
+     "header": true,
+     "delimiter": "comma",
+     "combine": true
+    },
+    "fields": [
+     {
+      "field": "quantity",
+      "header": "Quantity"
+     },
+     {
+      "field": "name",
+      "header": "Name"
+     },
+     {
+      "field": "set_code",
+      "header": "Set Code"
+     },
+     {
+      "field": "set_name",
+      "header": "Set Name"
+     },
+     {
+      "field": "collector_number",
+      "header": "Collector Number"
+     },
+     {
+      "field": "condition",
+      "header": "Condition"
+     },
+     {
+      "field": "finish",
+      "header": "Finish"
+     },
+     {
+      "field": "foil",
+      "header": "Foil"
+     },
+     {
+      "field": "price",
+      "header": "Price"
+     },
+     {
+      "field": "total",
+      "header": "Total"
+     },
+     {
+      "field": "popularity",
+      "header": "Popularity"
+     },
+     {
+      "field": "scryfall_id",
+      "header": "Scryfall ID"
+     },
+     {
+      "field": "scan_id",
+      "header": "Scan #"
+     },
+     {
+      "field": "scanned_at",
+      "header": "Scanned At"
+     },
+     {
+      "field": "auto_picked",
+      "header": "Auto Picked"
+     },
+     {
+      "field": "f2f_url",
+      "header": "F2F Link"
+     }
+    ]
+   }
+  },
+  {
+   "method": "GET",
+   "path": "/api/export.csv",
+   "body": null,
+   "status": 200,
+   "content_type": "text/csv; charset=utf-8",
+   "disposition": "attachment; filename=cards.csv",
+   "text": "﻿Qty;Name;Set Code;Set  Name;7;xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx;\"Fin;ish\";\"Fo\"\"il\";'=Price;Total;Pop;Id;Scan;At;Auto;Link\r\n1;Opt;DOM;DOM set;60;NM;Non-Foil;No;0.30;0.30;;dom-60;13;T0024;No;https://facetofacegames.com/products/x\r\n1;Opt;DOM;DOM set;60;NM;Foil;Yes;0.75;0.75;;dom-60;12;T0022;No;https://facetofacegames.com/products/x\r\n1;Opt;DOM;DOM set;60;NM;Non-Foil;No;0.25;0.25;;dom-60;11;T0020;No;https://facetofacegames.com/products/x\r\n3;Tex;TEX;TEX set;3;MP;Textured;Yes;1.00;3.01;;tex-3;10;T0018;No;https://facetofacegames.com/products/x\r\n1;'+1/+1 Counter;'@TK;'@TK set;'=1;NM;Non-Foil;No;0.50;0.50;;'@tk-=1;9;T0016;No;https://facetofacegames.com/products/x\r\n1;Plain Card;PLN;PLN set;2;NM;Non-Foil;No;;;;pln-2;8;T0014;No;https://example.com/abs\r\n1;;BRK;BRK set;;NM;Non-Foil;No;;;;brk-;5;T0009;No;\r\n1;\"Line\nBreak; Card\";TSR;Time Spiral, Remastered;7;DMG;Etched;Yes;5.00;5.00;;tsr-7;4;T0007;No;https://facetofacegames.com/products/x\r\n3;\"Lórien, \"\"Æther\"\" =Name\";LTR;LTR set;1a;LP;Foil;Yes;0.12;0.38;;ltr-1a;3;T0005;No;https://facetofacegames.com/products/x\r\n2;Lightning Bolt;M10;M10 set;146;NM;Non-Foil;No;;;;m10-146;2;T0003;No;\r\n1;Lightning Bolt;M10;M10 set;146;NM;Non-Foil;No;2.67;2.67;Staple;m10-146;1;T0001;Yes;https://www.facetofacegames.com/products/bolt-m10\r\n"
+  },
+  {
+   "method": "POST",
+   "path": "/api/export/preview",
+   "body": {
+    "layout": {
+     "columns": [
+      {
+       "field": "total"
+      },
+      {
+       "field": "quantity"
+      }
+     ],
+     "delimiter": "tab",
+     "combine": 0
+    }
+   },
+   "status": 200,
+   "content_type": "application/json",
+   "disposition": null,
+   "response": {
+    "csv": "Total\tQuantity\r\n0.30\t1\r\n0.75\t1\r\n0.25\t1\r\n3.01\t3\r\n0.50\t1\r\n\t1\r\n\t1\r\n5.00\t1\r\n",
+    "rows": 11
+   }
+  },
+  {
+   "method": "PUT",
+   "path": "/api/export/layout",
+   "body": {
+    "layout": {
+     "columns": [
+      {
+       "field": "name"
+      }
+     ],
+     "header": 0,
+     "combine": "yes",
+     "delimiter": "tab"
+    }
+   },
+   "status": 200,
+   "content_type": "application/json",
+   "disposition": null,
+   "response": {
+    "layout": {
+     "columns": [
+      {
+       "field": "name",
+       "header": "Name"
+      }
+     ],
+     "header": false,
+     "delimiter": "tab",
+     "combine": true
+    }
+   }
+  },
+  {
+   "method": "GET",
+   "path": "/api/export.csv",
+   "body": null,
+   "status": 200,
+   "content_type": "text/csv; charset=utf-8",
+   "disposition": "attachment; filename=cards.csv",
+   "text": "﻿Opt\r\nOpt\r\nTex\r\n'+1/+1 Counter\r\nPlain Card\r\n\"\"\r\n\"Line\nBreak; Card\"\r\n\"Lórien, \"\"Æther\"\" =Name\"\r\nLightning Bolt\r\n"
+  },
+  {
+   "method": "PUT",
+   "path": "/api/export/layout",
+   "body": {
+    "layout": {
+     "columns": [
+      {
+       "field": "collector_number",
+       "header": ""
+      }
+     ],
+     "header": false,
+     "combine": false
+    }
+   },
+   "status": 200,
+   "content_type": "application/json",
+   "disposition": null,
+   "response": {
+    "layout": {
+     "columns": [
+      {
+       "field": "collector_number",
+       "header": "Collector Number"
+      }
+     ],
+     "header": false,
+     "delimiter": "comma",
+     "combine": false
+    }
+   }
+  },
+  {
+   "method": "GET",
+   "path": "/api/export.csv",
+   "body": null,
+   "status": 200,
+   "content_type": "text/csv; charset=utf-8",
+   "disposition": "attachment; filename=cards.csv",
+   "text": "﻿60\r\n60\r\n60\r\n3\r\n'=1\r\n2\r\n\"\"\r\n7\r\n1a\r\n146\r\n146\r\n"
+  }
+ ]
+}

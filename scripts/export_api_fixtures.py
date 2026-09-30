@@ -46,6 +46,7 @@ from server.store import ScanStore  # noqa: E402
 OUT = ROOT / "android" / "core" / "src" / "test" / "resources" / "api"
 EXPECTED = OUT / "expected.json"
 SWEEP_EXPECTED = OUT / "sweep.json"
+EXPORT_EXPECTED = OUT / "export.json"
 
 
 def _cand(cid, name, set_code, cn, dist, *, ocr=False, pop=None, set_name=None):
@@ -361,25 +362,152 @@ def build_sweep() -> dict:
             "seeds": [{"create": k, "selection": s} for k, s in SWEEP_SEEDS], "steps": steps}
 
 
+# ── session 3: export (Stage 3d) ─────────────────────────────────────────────
+# TXT (Mana Exchange lines), the CSV column builder's layout store, preview and
+# download. Seeds are SELECTED rows (plus an excluded and a pending one) whose
+# shapes hit every branch of server/export.py: combining (the newest copy
+# unpriced → the older copy's price), the condition fallback, finish
+# spellings, csv quoting (delimiter, quote, newline, a lone empty field),
+# formula neutralising, and Python's exact-binary 2-decimal rounding
+# (2.675 → 2.67, 0.125 → 0.12).
+
+def _xsel(name, set_code, cn, *, cond="NM", finish="Non-Foil", qty=1, extra=None):
+    sel = {"scryfall_id": f"{set_code}-{cn}", "name": name, "set": set_code,
+           "set_name": set_code.upper() + " set", "collector_number": cn,
+           "condition": cond, "finish": finish, "quantity": qty}
+    sel.update(extra or {})
+    return sel
+
+
+def _f2f(conds, url="https://facetofacegames.com/products/x"):
+    return {"conditions": conds, "handle": "x", "url": url}
+
+
+# (selection or None, extra store fields). Ids 1.. in order; lists are newest first.
+EXPORT_SEEDS = [
+    (_xsel("Lightning Bolt", "m10", "146", extra={"auto_picked": True,
+                                                   "popularity": {"tier": "staple", "label": "Staple"}}),
+     {"f2f": _f2f({"NM": 2.675, "PL": 2.0}, "/products/bolt-m10")}),
+    (_xsel("Lightning Bolt", "m10", "146", qty=2), {}),                  # combines; no price of its own
+    (_xsel('Lórien, "Æther" =Name', "ltr", "1a", cond="lp", finish="foil", qty="3"),
+     {"f2f": _f2f({"PL": 0.125, "NM": 1})}),
+    (_xsel("Line\nBreak; Card", "tsr", "7", cond="dmg", finish="Etched",
+           extra={"set_name": "Time Spiral, Remastered"}), {"f2f": _f2f({"HP": 5})}),
+    (_xsel("", "brk", ""), {}),                                          # no collector: TXT skips it
+    (_xsel("Excluded", "exc", "1"), {"included": False}),
+    (None, {}),                                                          # pending: never exported
+    (_xsel("Plain Card", "pln", "2", cond=None, finish="Non Foil", qty=0),
+     {"f2f": _f2f({}, "https://example.com/abs")}),
+    (_xsel("+1/+1 Counter", "@tk", "=1", extra={"popularity": "odd"}), {"f2f": _f2f({"NM": 0.5})}),
+    (_xsel("Tex", "tex", "3", cond="MP", finish="Textured", qty=3), {"f2f": _f2f({"NM": 3, "MP": 1.005})}),
+    (_xsel("Opt", "dom", "60"), {"f2f": _f2f({"NM": 0.25})}),
+    (_xsel("Opt", "dom", "60", finish="Foil"), {"f2f": _f2f({"NM": 0.75})}),
+    (_xsel("Opt", "dom", "60"), {"f2f": _f2f({"NM": 0.3})}),              # combines with #11
+]
+
+_ALL_FIELDS = ["quantity", "name", "set_code", "set_name", "collector_number", "condition", "finish",
+               "foil", "price", "total", "popularity", "scryfall_id", "scan_id", "scanned_at",
+               "auto_picked", "f2f_url"]
+
+EXPORT_STEPS = [
+    ("GET", "/api/export", None),
+    ("GET", "/api/export/layout", None),
+    ("GET", "/api/export.csv", None),
+    ("POST", "/api/export/preview", {"layout": {"columns": [{"field": "name"}, {"field": "price"}]}}),
+    ("POST", "/api/export/preview", {}),                                          # no layout → 400
+    ("PUT", "/api/export/layout", {"layout": []}),
+    ("PUT", "/api/export/layout", {"layout": {"columns": []}}),
+    ("PUT", "/api/export/layout", {"layout": {"columns": [{"field": "nope"}]}}),
+    ("PUT", "/api/export/layout", {"layout": {"columns": [5]}}),
+    ("PUT", "/api/export/layout", {"layout": {"columns": ["name"]}}),
+    ("PUT", "/api/export/layout", {"layout": {"columns": [{"header": "x"}]}}),
+    ("PUT", "/api/export/layout", {"layout": {"columns": [{"field": "name"}], "delimiter": "pipe"}}),
+    ("PUT", "/api/export/layout", {"layout": {"columns": [{"field": "name"}], "delimiter": None}}),
+    ("PUT", "/api/export/layout", {"layout": {"columns": [{"field": "name"}] * 41}}),
+    ("PUT", "/api/export/layout", {"layout": {
+        "columns": [{"field": f, "header": h} for f, h in zip(_ALL_FIELDS, [
+            "Qty", "", None, "  Set  Name ", 7, "x" * 90, "Fin;ish", 'Fo"il', "=Price", "Total",
+            "Pop", "Id", "Scan", "At", "Auto", "Link"])],
+        "delimiter": "semicolon", "combine": False, "header": 1}}),
+    ("GET", "/api/export/layout", None),
+    ("GET", "/api/export.csv", None),
+    ("POST", "/api/export/preview", {"layout": {"columns": [{"field": "total"}, {"field": "quantity"}],
+                                                "delimiter": "tab", "combine": 0}}),
+    ("PUT", "/api/export/layout", {"layout": {"columns": [{"field": "name"}], "header": 0,
+                                              "combine": "yes", "delimiter": "tab"}}),
+    ("GET", "/api/export.csv", None),
+    ("PUT", "/api/export/layout", {"layout": {"columns": [{"field": "collector_number", "header": ""}],
+                                              "header": False, "combine": False}}),
+    ("GET", "/api/export.csv", None),
+]
+
+
+def build_export() -> dict:
+    ticks = [0]
+
+    def clock() -> str:
+        ticks[0] += 1
+        return f"T{ticks[0]:04d}"
+
+    real_now = store_mod._now
+    store_mod._now = clock
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            store = ScanStore(Path(tmp) / "s.db")
+            try:
+                app = create_app(pipeline_factory=lambda: None, store=store, f2f=object(),
+                                 scan_images_dir=Path(tmp) / "img", auto_sweep_interval=None)
+                client = TestClient(app)
+                for sel, fields in EXPORT_SEEDS:
+                    row = store.create_scan(identified=True, card_read={"name": "seed"}, confidence={},
+                                            candidates=[])
+                    upd = copy.deepcopy(fields)
+                    if sel:
+                        upd.update(status="selected", selection=copy.deepcopy(sel))
+                    if upd:
+                        store.update_scan(row["id"], **upd)
+                steps = []
+                for method, path, body in EXPORT_STEPS:
+                    kw = {} if body is None else {"json": body}
+                    r = client.request(method, path, **kw)
+                    ctype = r.headers.get("content-type", "")
+                    step = {"method": method, "path": path, "body": body, "status": r.status_code,
+                            "content_type": ctype,
+                            "disposition": r.headers.get("content-disposition")}
+                    if ctype.startswith("application/json"):
+                        step["response"] = r.json()
+                    else:
+                        step["text"] = r.content.decode("utf-8")
+                    steps.append(step)
+            finally:
+                store.close()
+    finally:
+        store_mod._now = real_now
+    return {"clock": "T%04d",
+            "seeds": [{"selection": s, "fields": f} for s, f in EXPORT_SEEDS], "steps": steps}
+
+
 def _dumps(obj) -> str:
     return json.dumps(obj, indent=1, ensure_ascii=False) + "\n"
 
 
 def main() -> int:
-    outputs = {EXPECTED: _dumps(build()), SWEEP_EXPECTED: _dumps(build_sweep())}
+    outputs = {EXPECTED: _dumps(build()), SWEEP_EXPECTED: _dumps(build_sweep()),
+               EXPORT_EXPECTED: _dumps(build_export())}
     if "--check" in sys.argv:
         for path, text in outputs.items():
             current = path.read_text(encoding="utf-8") if path.exists() else None
             if current != text:
                 print(f"api fixtures are stale ({path.name}) — run: python scripts/export_api_fixtures.py")
                 return 1
-        print(f"api fixtures up to date ({len(STEPS)} + {len(SWEEP_STEPS)} steps)")
+        print(f"api fixtures up to date ({len(STEPS)} + {len(SWEEP_STEPS)} + {len(EXPORT_STEPS)} steps)")
         return 0
     OUT.mkdir(parents=True, exist_ok=True)
     for path, text in outputs.items():
         path.write_text(text, encoding="utf-8")
     print(f"wrote {EXPECTED.relative_to(ROOT)} ({len(STEPS)} steps), "
-          f"{SWEEP_EXPECTED.relative_to(ROOT)} ({len(SWEEP_STEPS)} steps)")
+          f"{SWEEP_EXPECTED.relative_to(ROOT)} ({len(SWEEP_STEPS)} steps), "
+          f"{EXPORT_EXPECTED.relative_to(ROOT)} ({len(EXPORT_STEPS)} steps)")
     return 0
 
 

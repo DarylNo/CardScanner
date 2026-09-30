@@ -264,9 +264,9 @@ identifies is also filed into the phone's own store (`files/phoneserver/`:
 server stays the real path; nothing here reaches it. Open the shown address on
 the computer and enter the code. Pricing (3c) runs on the phone from its own
 IP over Cronet: whatever is owed is priced, re-checked every 5 s while
-anything is, and the loop sleeps until the next scan when nothing is. Not
-yet on the phone: export (3d) and admin/guest roles (3e) — export answers
-501 for now. At 10,000
+anything is, and the loop sleeps until the next scan when nothing is.
+Export (3d) works from the served pages: Download TXT and Export to CSV
+(the column layout is saved on the phone). Not yet: admin/guest roles (3e). At 10,000
 scans the usage line turns into a warning (photo size + free space); nothing
 is pruned.
 

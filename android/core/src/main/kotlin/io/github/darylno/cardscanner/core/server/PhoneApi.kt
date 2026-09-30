@@ -12,7 +12,8 @@ class ApiRequest(
     val body: ByteArray? = null,
 )
 
-class ApiResponse(val status: Int, val contentType: String, val body: ByteArray) {
+class ApiResponse(val status: Int, val contentType: String, val body: ByteArray,
+                  val headers: Map<String, String> = emptyMap()) {
     companion object {
         fun json(status: Int, value: Any?) =
             ApiResponse(status, "application/json", MiniJson.stringify(value).toByteArray(Charsets.UTF_8))
@@ -49,7 +50,7 @@ interface ScanImages {
  * [handle] returns null for any path it doesn't own, so the HTTP layer can
  * serve pages / other endpoints.
  */
-class PhoneApi(private val store: ScanStore, private val images: ScanImages) {
+class PhoneApi(val store: ScanStore, private val images: ScanImages) {
     /** `select_lock`: every selection read-modify-write — picks, edits, the sweep's writes, retro picks. */
     val selectLock = Any()
 

@@ -71,7 +71,8 @@ server; Diagnostics → "Phone server (preview)"). 3c pricing done in
 1.0.15 (golden-tested incl. the exact F2F lookup sequence). Owner change
 for the phone: no timed sweep — price whatever is owed, re-check every 5 s
 while anything is, and sleep until the next scan when nothing is. 3d
-export, 3e roles next.
+export done in 1.0.16 (TXT + CSV builder, byte-for-byte golden). 3e roles
+next.
 
 SQLite store with the Python schema, the API with identical JSON (golden
 request/response fixtures recorded from the Python server and replayed

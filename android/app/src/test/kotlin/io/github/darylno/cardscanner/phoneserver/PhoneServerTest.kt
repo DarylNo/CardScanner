@@ -61,6 +61,14 @@ class PhoneServerTest {
         if (result.isNotEmpty()) fail(result.joinToString("\n"))
     }
 
+    @Test fun theSqliteStoreAnswersTheGoldenExportSession() {
+        var n = 0
+        val result = GoldenApi.replayExport(tmp.newFile("layout.json").also { it.delete() }) { clock ->
+            SqliteScanStore(tmp.newFile("export${n++}.db").also { it.delete() }, clock)
+        }
+        if (result.isNotEmpty()) fail(result.joinToString("\n"))
+    }
+
     @Test fun pagesAndStartupEndpointsLoad() {
         fun get(p: String, q: Map<String, String> = emptyMap()) = backend.handle(ApiRequest("GET", p, q))
         assertEquals("<html>desktop.html</html>", String(get("/").body))
@@ -75,7 +83,8 @@ class PhoneServerTest {
         assertEquals(true, setup["index_built"])                // no "build the card database" banner
         val found = MiniJson.parse(String(get("/api/search", mapOf("q" to "Opt")).body)) as Map<*, *>
         assertEquals("Opt", ((found["candidates"] as List<*>)[0] as Map<*, *>)["name"])
-        assertEquals(501, get("/api/export.csv").status)          // 3d, said plainly
+        assertEquals(200, get("/api/export.csv").status)
+        assertEquals(200, get("/api/export").status)
         assertEquals(404, get("/nope").status)
     }
 
@@ -110,5 +119,16 @@ class PhoneServerTest {
         }
         client.newCall(Request.Builder().url("$base/api/scans/1/image").header("Cookie", cookie).build())
             .execute().use { r -> assertEquals(200, r.code); assertEquals(1, r.body!!.bytes().size) }
+        // the CSV download reaches the browser as a named attachment, BOM first (Excel)
+        client.newCall(Request.Builder().url("$base/api/export.csv").header("Cookie", cookie).build())
+            .execute().use { r ->
+                assertEquals(200, r.code)
+                assertEquals("attachment; filename=cards.csv", r.header("Content-Disposition"))
+                val text = String(r.body!!.bytes(), Charsets.UTF_8)
+                assertEquals("\uFEFFQuantity,Name,Set Code,Set Name,Collector Number,Condition,Finish,Price\r\n" +
+                    "1,Opt,XLN,,65,NM,Non-Foil,\r\n", text)
+            }
+        client.newCall(Request.Builder().url("$base/api/export").header("Cookie", cookie).build())
+            .execute().use { r -> assertEquals("1 XLN 65 NM Non-Foil\n", r.body!!.string()) }
     }
 }

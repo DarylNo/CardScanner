@@ -5,6 +5,7 @@ import android.os.StatFs
 import io.github.darylno.cardscanner.BuildConfig
 import io.github.darylno.cardscanner.core.PrintingCandidates
 import io.github.darylno.cardscanner.core.ScryfallPrintings
+import io.github.darylno.cardscanner.core.server.LayoutStore
 import io.github.darylno.cardscanner.f2f.OkHttpTransport
 import io.github.darylno.cardscanner.gateway.GatewayServer
 import io.github.darylno.cardscanner.gateway.LocalAddresses
@@ -44,6 +45,7 @@ class PhoneServerPreview(private val ctx: Context, private val pack: ArtPackStor
             interrupt = { if (it) f2f.stop.set() else f2f.stop.clear() },
             paceS = { f2f.paceS() },
             f2fEvents = { f2f.recentEvents() },
+            layouts = LayoutStore(File(root, "export_layout.json")),
         )
     }
     private val f2f by lazy { PhoneF2f(ctx, File(ctx.cacheDir, "facetoface")) }
