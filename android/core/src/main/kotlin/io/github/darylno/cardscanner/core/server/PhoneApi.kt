@@ -206,8 +206,13 @@ class PhoneApi(val store: ScanStore, private val images: ScanImages) {
     private fun deleteAll(req: ApiRequest): ApiResponse {
         val body = if (req.body == null || req.body.isEmpty()) emptyMap() else bodyObject(req) ?: return unprocessable()
         val only = (if (Py.truthy(Py.get(body, "only"))) Py.str(body["only"]) else "").lowercase()
-        val targets = if (only == "flagged") store.list().filter { it["flagged"] == true }
-            else store.list().filter { only != "unselected" || it["status"] != "selected" }
+        val targets = if (only == "flagged") {
+            // "ids": only the flagged scans the admin was shown (Python: ints, and bool IS an int)
+            val keep = (body["ids"] as? List<*>)?.mapNotNull {
+                when (it) { is Long -> it; is Int -> it.toLong(); is Boolean -> if (it) 1L else 0L; else -> null }
+            }?.toSet()
+            store.list().filter { it["flagged"] == true && (keep == null || (it["id"] as Number).toLong() in keep) }
+        } else store.list().filter { only != "unselected" || it["status"] != "selected" }
         for (s in targets) {
             val id = (s["id"] as Number).toLong()
             images.delete(id)

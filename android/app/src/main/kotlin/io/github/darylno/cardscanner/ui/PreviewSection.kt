@@ -76,7 +76,9 @@ class PreviewSection(
         card.addView(chrome.destructiveButton(s(R.string.pv_forget)) {
             AlertDialog.Builder(activity)
                 .setMessage(R.string.pv_forget_confirm)
-                .setPositiveButton(R.string.pv_forget) { _, _ -> preview.admins.revokeAll(); refresh() }
+                .setPositiveButton(R.string.pv_forget) { _, _ ->
+                    io.execute { preview.admins.revokeAll(); ui.post { refresh() } }
+                }
                 .setNegativeButton(R.string.cancel, null)
                 .show()
         }, lp(8))
@@ -100,6 +102,7 @@ class PreviewSection(
     }
 
     fun destroy() {
+        preview.admins.cancelCode()         // the dialog can go without onDismiss (activity destroyed)
         ui.removeCallbacksAndMessages(null)
         io.shutdown()
     }

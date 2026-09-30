@@ -1,5 +1,7 @@
 package io.github.darylno.cardscanner.core.server
 
+import io.github.darylno.cardscanner.core.MiniJson
+
 /**
  * The phone server's API router: pricing ([PriceSweep]) in front of the scan
  * endpoints ([PhoneApi]) — `/api/scans/price-missing` must never be read as a
@@ -32,19 +34,28 @@ class ScanServer(val api: PhoneApi, val sweep: PriceSweep, val layouts: LayoutSt
     companion object {
         /**
          * What a guest may NOT do (docs/PHONE_ONLY_PLAN.md → Roles): delete a scan,
-         * clear the list, export (TXT, CSV, the saved layout), or run/stop the
-         * pricing sweep. Guests browse, search, pick, edit condition/finish/qty,
-         * price one scan, and flag scans for deletion (PATCH {"flagged": true}).
+         * clear the list, export (TXT, CSV, the saved layout), include/exclude a
+         * card from the export (PATCH "included"), or run/stop the pricing sweep.
+         * Guests browse, search, pick, edit condition/finish/qty, price one scan,
+         * and flag scans for deletion (PATCH {"flagged": true}).
          */
         fun adminOnly(req: ApiRequest): Boolean {
             val p = req.path
             return (req.method == "DELETE" && SCAN_ID.matches(p)) ||
+                (req.method == "PATCH" && SCAN_ID.matches(p) && patchesIncluded(req)) ||
                 p == "/api/scans/delete-all" ||
                 p == "/api/export" || p == "/api/export.csv" || p.startsWith("/api/export/") ||
                 p == "/api/price-sweep/stop" || p == "/api/scans/price-missing"
         }
 
         private val SCAN_ID = Regex("/api/scans/[^/]+")
+
+        /** The PATCH body names "included" — or can't be read (then PhoneApi answers 422 anyway). */
+        private fun patchesIncluded(req: ApiRequest): Boolean {
+            val raw = req.body ?: return false
+            val m = try { MiniJson.parse(String(raw, Charsets.UTF_8)) } catch (e: MiniJson.ParseException) { return true }
+            return m !is Map<*, *> || m.containsKey("included")
+        }
         private val PRICE_PATH = Regex("/api/scans/([^/]+)/(price|price-check)")
     }
 }

@@ -1290,11 +1290,16 @@ def create_app(
         ``{"only": "unselected"}`` keeps everything that already has a chosen
         printing — the usual way to sweep junk without losing real work.
         ``{"only": "flagged"}`` deletes just the scans a guest flagged for
-        deletion (the phone server's admin confirming them in one go).
+        deletion (the phone server's admin confirming them in one go); with
+        ``"ids"`` only those of them — the ones the admin was shown, so a flag
+        landing between the confirm and this request is never swept up.
         """
         only = str(body.get("only") or "").lower()
         if only == "flagged":
-            targets = [s for s in store.list_scans() if s.get("flagged")]
+            ids = body.get("ids")
+            keep = None if not isinstance(ids, list) else {i for i in ids if isinstance(i, int)}
+            targets = [s for s in store.list_scans()
+                       if s.get("flagged") and (keep is None or s["id"] in keep)]
         else:
             targets = [
                 s for s in store.list_scans()

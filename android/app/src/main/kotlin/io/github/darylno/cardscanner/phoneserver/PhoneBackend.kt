@@ -153,8 +153,9 @@ class LocalUpstream(private val backend: PhoneBackend) : Upstream {
         val path = pathAndQuery.substringBefore('?').let { URLDecoder.decode(it.replace("+", "%2B"), "UTF-8") }
         val query = if ('?' in pathAndQuery) pathAndQuery.substringAfter('?') else null
         val res = try {
-            // The role comes ONLY from the gateway (it drops any a client sends); no header = the owner.
-            val role = if (headers[GatewayServer.ROLE_HEADER] == GatewayServer.ROLE_GUEST) ROLE_GUEST else ROLE_ADMIN
+            // The role comes ONLY from the gateway (it drops any a client sends and sets its
+            // own); no header fails CLOSED as a guest.
+            val role = if (headers[GatewayServer.ROLE_HEADER] == GatewayServer.ROLE_ADMIN) ROLE_ADMIN else ROLE_GUEST
             backend.handle(ApiRequest(method, path, PhoneBackend.parseQuery(query), body, role))
         } catch (e: Exception) {
             ApiResponse.json(500, mapOf("error" to "${e.javaClass.simpleName}: ${e.message}"))

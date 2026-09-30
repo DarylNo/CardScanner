@@ -3785,6 +3785,91 @@
    }
   },
   {
+   "method": "PATCH",
+   "path": "/api/scans/4",
+   "body": {
+    "flagged": true
+   },
+   "status": 200,
+   "response": {
+    "id": 4,
+    "created_at": "T0004",
+    "updated_at": "T0036",
+    "status": "selected",
+    "identified": false,
+    "error": null,
+    "card_read": {
+     "name": "Mountain"
+    },
+    "confidence": {
+     "name": "low"
+    },
+    "candidates": [
+     {
+      "id": "m1",
+      "name": "Mountain",
+      "set": "m21",
+      "set_name": "M21 set",
+      "collector_number": "271",
+      "finishes": [
+       "nonfoil",
+       "foil"
+      ],
+      "image_small": "https://img/m1-s.jpg",
+      "image_normal": "https://img/m1-n.jpg",
+      "multi_distance": 148
+     },
+     {
+      "id": "m2",
+      "name": "Mountain",
+      "set": "dmu",
+      "set_name": "DMU set",
+      "collector_number": "276",
+      "finishes": [
+       "nonfoil",
+       "foil"
+      ],
+      "image_small": "https://img/m2-s.jpg",
+      "image_normal": "https://img/m2-n.jpg",
+      "multi_distance": 150
+     }
+    ],
+    "selection": {
+     "scryfall_id": "m9",
+     "name": "Mountain",
+     "set": "m21",
+     "set_name": "",
+     "collector_number": "271",
+     "condition": "NM",
+     "finish": "nonfoil",
+     "quantity": 1,
+     "foil": false,
+     "image_normal": "",
+     "popularity": null
+    },
+    "f2f": null,
+    "included": true,
+    "flagged": true
+   }
+  },
+  {
+   "method": "POST",
+   "path": "/api/scans/delete-all",
+   "body": {
+    "only": "flagged",
+    "ids": [
+     4,
+     1,
+     "2",
+     999
+    ]
+   },
+   "status": 200,
+   "response": {
+    "deleted": 1
+   }
+  },
+  {
    "method": "POST",
    "path": "/api/scans/delete-all",
    "body": {
@@ -4212,68 +4297,6 @@
      "confidence": {},
      "candidates": [],
      "selection": null,
-     "f2f": null,
-     "included": true,
-     "flagged": false
-    },
-    {
-     "id": 4,
-     "created_at": "T0004",
-     "updated_at": "T0009",
-     "status": "selected",
-     "identified": false,
-     "error": null,
-     "card_read": {
-      "name": "Mountain"
-     },
-     "confidence": {
-      "name": "low"
-     },
-     "candidates": [
-      {
-       "id": "m1",
-       "name": "Mountain",
-       "set": "m21",
-       "set_name": "M21 set",
-       "collector_number": "271",
-       "finishes": [
-        "nonfoil",
-        "foil"
-       ],
-       "image_small": "https://img/m1-s.jpg",
-       "image_normal": "https://img/m1-n.jpg",
-       "multi_distance": 148,
-       "other_art": false
-      },
-      {
-       "id": "m2",
-       "name": "Mountain",
-       "set": "dmu",
-       "set_name": "DMU set",
-       "collector_number": "276",
-       "finishes": [
-        "nonfoil",
-        "foil"
-       ],
-       "image_small": "https://img/m2-s.jpg",
-       "image_normal": "https://img/m2-n.jpg",
-       "multi_distance": 150,
-       "other_art": false
-      }
-     ],
-     "selection": {
-      "scryfall_id": "m9",
-      "name": "Mountain",
-      "set": "m21",
-      "set_name": "",
-      "collector_number": "271",
-      "condition": "NM",
-      "finish": "nonfoil",
-      "quantity": 1,
-      "foil": false,
-      "image_normal": "",
-      "popularity": null
-     },
      "f2f": null,
      "included": true,
      "flagged": false
@@ -4809,68 +4832,6 @@
      "flagged": false
     },
     {
-     "id": 4,
-     "created_at": "T0004",
-     "updated_at": "T0009",
-     "status": "selected",
-     "identified": false,
-     "error": null,
-     "card_read": {
-      "name": "Mountain"
-     },
-     "confidence": {
-      "name": "low"
-     },
-     "candidates": [
-      {
-       "id": "m1",
-       "name": "Mountain",
-       "set": "m21",
-       "set_name": "M21 set",
-       "collector_number": "271",
-       "finishes": [
-        "nonfoil",
-        "foil"
-       ],
-       "image_small": "https://img/m1-s.jpg",
-       "image_normal": "https://img/m1-n.jpg",
-       "multi_distance": 148,
-       "other_art": false
-      },
-      {
-       "id": "m2",
-       "name": "Mountain",
-       "set": "dmu",
-       "set_name": "DMU set",
-       "collector_number": "276",
-       "finishes": [
-        "nonfoil",
-        "foil"
-       ],
-       "image_small": "https://img/m2-s.jpg",
-       "image_normal": "https://img/m2-n.jpg",
-       "multi_distance": 150,
-       "other_art": false
-      }
-     ],
-     "selection": {
-      "scryfall_id": "m9",
-      "name": "Mountain",
-      "set": "m21",
-      "set_name": "",
-      "collector_number": "271",
-      "condition": "NM",
-      "finish": "nonfoil",
-      "quantity": 1,
-      "foil": false,
-      "image_normal": "",
-      "popularity": null
-     },
-     "f2f": null,
-     "included": true,
-     "flagged": false
-    },
-    {
      "id": 1,
      "created_at": "T0001",
      "updated_at": "T0019",
@@ -5344,68 +5305,6 @@
      "flagged": false
     },
     {
-     "id": 4,
-     "created_at": "T0004",
-     "updated_at": "T0009",
-     "status": "selected",
-     "identified": false,
-     "error": null,
-     "card_read": {
-      "name": "Mountain"
-     },
-     "confidence": {
-      "name": "low"
-     },
-     "candidates": [
-      {
-       "id": "m1",
-       "name": "Mountain",
-       "set": "m21",
-       "set_name": "M21 set",
-       "collector_number": "271",
-       "finishes": [
-        "nonfoil",
-        "foil"
-       ],
-       "image_small": "https://img/m1-s.jpg",
-       "image_normal": "https://img/m1-n.jpg",
-       "multi_distance": 148,
-       "other_art": false
-      },
-      {
-       "id": "m2",
-       "name": "Mountain",
-       "set": "dmu",
-       "set_name": "DMU set",
-       "collector_number": "276",
-       "finishes": [
-        "nonfoil",
-        "foil"
-       ],
-       "image_small": "https://img/m2-s.jpg",
-       "image_normal": "https://img/m2-n.jpg",
-       "multi_distance": 150,
-       "other_art": false
-      }
-     ],
-     "selection": {
-      "scryfall_id": "m9",
-      "name": "Mountain",
-      "set": "m21",
-      "set_name": "",
-      "collector_number": "271",
-      "condition": "NM",
-      "finish": "nonfoil",
-      "quantity": 1,
-      "foil": false,
-      "image_normal": "",
-      "popularity": null
-     },
-     "f2f": null,
-     "included": true,
-     "flagged": false
-    },
-    {
      "id": 1,
      "created_at": "T0001",
      "updated_at": "T0019",
@@ -5517,7 +5416,7 @@
    "body": null,
    "status": 200,
    "response": {
-    "deleted": 8
+    "deleted": 7
    }
   },
   {

@@ -161,7 +161,7 @@
     <string name="pv_clear">Clear the phone\'s scans</string>
     <string name="pv_pair">Pair a computer as admin</string>
     <string name="pv_pair_title">Pair this computer</string>
-    <string name="pv_pair_msg">On the computer, open this address (or scan the code with its camera):\n\n%1$s\n\nor type this one-time code on the join page: %2$s\n\nIt works once, for 10 minutes. The computer is then remembered as the admin: it can delete, clear, export and run pricing. Anyone using the 6-digit code is a guest: they can review, pick and flag cards for deletion.</string>
+    <string name="pv_pair_msg">On the computer, open this address (or scan the code with its camera):\n\n%1$s\n\nor type this one-time code on the join page: %2$s\n\nIt works once, for 10 minutes. The computer is then remembered as the admin: it can delete, clear, export and run pricing. Anyone using the 6-digit code is a guest: they can review, pick and flag cards for deletion.\n\nPair on a network you trust (your home Wi-Fi or the phone\'s own hotspot): the connection is plain HTTP, so someone else on the same network could copy the admin cookie.</string>
     <string name="pv_pair_off">Turn the phone server on first (and join Wi-Fi).</string>
     <string name="pv_paired">Paired computers (admin): %1$d</string>
     <string name="pv_forget">Forget paired computers</string>

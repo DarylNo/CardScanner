@@ -217,6 +217,7 @@ class GatewayServer(
                 // A distributed search restarts against a new unknown code. Counters reset;
                 // lockouts in force stay (they are penalties, not counts); sessions stay.
                 rotatedTo = joinCode.rotate()
+                admins?.cancelCode()        // a distributed search must not keep aiming at the admin code
                 globalFailures.clear()
                 failures.values.forEach { it.times.clear() }
                 failures.entries.removeAll { (_, x) -> x.lockedUntil <= now }

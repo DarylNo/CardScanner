@@ -927,6 +927,9 @@ def test_flag_for_deletion_and_delete_only_flagged(client):
     assert c.patch(f"/api/scans/{ids[0]}", json={"flagged": True}).json()["flagged"] is True
     assert c.patch(f"/api/scans/{ids[2]}", json={"flagged": True}).json()["flagged"] is True
     assert c.patch(f"/api/scans/{ids[2]}", json={"flagged": False}).json()["flagged"] is False
-    assert c.post("/api/scans/delete-all", json={"only": "flagged"}).json() == {"deleted": 1}
+    # "ids": only the flagged scans the admin confirmed — a later flag (ids[1]) survives
+    assert c.patch(f"/api/scans/{ids[1]}", json={"flagged": True}).json()["flagged"] is True
+    assert c.post("/api/scans/delete-all", json={"only": "flagged", "ids": [ids[0]]}).json() == {"deleted": 1}
+    assert c.patch(f"/api/scans/{ids[1]}", json={"flagged": False}).json()["flagged"] is False
     assert sorted(s["id"] for s in c.get("/api/scans").json()) == sorted(ids[1:])
     assert c.get("/api/me").json() == {"role": "admin"}

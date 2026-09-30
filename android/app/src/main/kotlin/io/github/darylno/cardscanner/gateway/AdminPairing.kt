@@ -28,7 +28,8 @@ class AdminPairing(
     private val lock = Any()
     private var pending: String? = null
     private var pendingUntil = 0L
-    private val hashes = LinkedHashMap<String, Long>()     // sha256(token) → paired at (ms)
+    private var hashes = LinkedHashMap<String, Long>()     // sha256(token) → paired at (ms)
+    private var wrong = 0                                   // wrong 8-digit tries against the waiting code
 
     init { load() }
 
@@ -37,6 +38,7 @@ class AdminPairing(
         val c = (0 until CODE_DIGITS).joinToString("") { random.nextInt(10).toString() }
         pending = c
         pendingUntil = clock() + CODE_TTL_MS
+        wrong = 0
         c
     }
 
@@ -54,12 +56,19 @@ class AdminPairing(
         val want = pending ?: return null
         if (now >= pendingUntil) { pending = null; return null }
         val g = given.filter { !it.isWhitespace() }
-        if (!MessageDigest.isEqual(g.toByteArray(), want.toByteArray())) return null
-        pending = null
+        if (!MessageDigest.isEqual(g.toByteArray(), want.toByteArray())) {
+            // Spread over many LAN addresses a search dodges the per-IP lockout, and the
+            // guest code's rotation resets those counters — so the admin code has its OWN
+            // budget: MAX_WRONG wrong 8-digit tries retire it (the owner makes a new one).
+            if (g.length == CODE_DIGITS && ++wrong >= MAX_WRONG) pending = null
+            return null
+        }
         val b = ByteArray(32).also(random::nextBytes)
         val token = b.joinToString("") { "%02x".format(it.toInt() and 0xff) }
-        hashes[sha256(token)] = now
-        save()
+        val next = LinkedHashMap(hashes).apply { put(sha256(token), now) }
+        if (!save(next)) return null          // not remembered → not paired; the code stays usable
+        hashes = next
+        pending = null
         token
     }
 
@@ -69,7 +78,12 @@ class AdminPairing(
     val count: Int get() = synchronized(lock) { hashes.size }
 
     /** Forget every paired computer (their cookies stop working at once). */
-    fun revokeAll() = synchronized(lock) { hashes.clear(); pending = null; save() }
+    fun revokeAll(): Boolean = synchronized(lock) {
+        pending = null
+        val ok = save(LinkedHashMap())      // on disk first: a failed write must not revive them later
+        hashes = LinkedHashMap()            // …but in memory they end now either way
+        ok
+    }
 
     private fun load() {
         val f = file ?: return
@@ -85,18 +99,24 @@ class AdminPairing(
         }
     }
 
-    private fun save() {
-        val f = file ?: return
-        f.parentFile?.mkdirs()
-        val tmp = File(f.path + ".tmp")
-        tmp.writeText(MiniJson.stringify(mapOf("admins" to hashes.map { (h, t) ->
-            linkedMapOf("hash" to h, "paired_at" to t) })), Charsets.UTF_8)
-        if (!tmp.renameTo(f)) { f.delete(); tmp.renameTo(f) }
+    private fun save(what: Map<String, Long>): Boolean {
+        val f = file ?: return true
+        return try {
+            f.parentFile?.mkdirs()
+            val tmp = File(f.path + ".tmp")
+            tmp.writeText(MiniJson.stringify(mapOf("admins" to what.map { (h, t) ->
+                linkedMapOf("hash" to h, "paired_at" to t) })), Charsets.UTF_8)
+            tmp.renameTo(f) || (f.delete() && tmp.renameTo(f))
+        } catch (e: Exception) {
+            false
+        }
     }
 
     companion object {
         const val CODE_DIGITS = 8
         const val CODE_TTL_MS = 10 * 60_000L
+        /** Wrong 8-digit tries (from anywhere) that retire the waiting code. */
+        const val MAX_WRONG = 10
 
         private fun sha256(s: String): String =
             MessageDigest.getInstance("SHA-256").digest(s.toByteArray()).joinToString("") { "%02x".format(it.toInt() and 0xff) }

@@ -43,6 +43,11 @@ class GuestRoleTest {
             "POST" to "/api/price-sweep/stop", "POST" to "/api/scans/price-missing")) {
             assertEquals("$m $p", 403, call(ROLE_GUEST, m, p, "{}").status)
         }
+        // dropping a card from the owner's export is the owner's call too
+        assertEquals(403, call(ROLE_GUEST, "PATCH", "/api/scans/1", """{"included":false}""").status)
+        assertEquals(403, call(ROLE_GUEST, "PATCH", "/api/scans/1", """{"flagged":true,"included":0}""").status)
+        assertEquals(true, store.get(1)!!["included"])
+        assertEquals(200, call(ROLE_ADMIN, "PATCH", "/api/scans/1", """{"included":false}""").status)
         assertEquals(2, store.count())                                       // nothing was deleted
     }
 
@@ -62,9 +67,10 @@ class GuestRoleTest {
         seed(3)
         call(ROLE_GUEST, "PATCH", "/api/scans/1", """{"flagged":true}""")
         call(ROLE_GUEST, "PATCH", "/api/scans/3", """{"flagged":true}""")
-        val r = call(ROLE_ADMIN, "POST", "/api/scans/delete-all", """{"only":"flagged"}""")
-        assertEquals(mapOf("deleted" to 2L), MiniJson.parse(String(r.body)))
-        assertEquals(listOf(2L), store.list().map { it["id"] })
+        // the admin confirmed "1 flagged" (scan 1); scan 3 was flagged after — it stays
+        val r = call(ROLE_ADMIN, "POST", "/api/scans/delete-all", """{"only":"flagged","ids":[1]}""")
+        assertEquals(mapOf("deleted" to 1L), MiniJson.parse(String(r.body)))
+        assertEquals(listOf(3L, 2L), store.list().map { it["id"] })
         assertEquals(200, call(ROLE_ADMIN, "GET", "/api/export.csv").status)
     }
 }

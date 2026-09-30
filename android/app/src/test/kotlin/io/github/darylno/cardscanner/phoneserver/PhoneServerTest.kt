@@ -90,7 +90,9 @@ class PhoneServerTest {
     }
 
     @Test fun servedThroughTheGatewayWithTheJoinCode() {
-        val g = GatewayServer(LocalUpstream(backend), port = 0, hostname = "127.0.0.1").also { gateway = it }
+        val admins = AdminPairing(null)
+        val g = GatewayServer(LocalUpstream(backend), port = 0, hostname = "127.0.0.1", admins = admins)
+            .also { gateway = it }
         g.startServing()
         val base = "http://127.0.0.1:${g.listeningPort}"
         // no cookie → the code page, never the data
@@ -120,8 +122,9 @@ class PhoneServerTest {
         }
         client.newCall(Request.Builder().url("$base/api/scans/1/image").header("Cookie", cookie).build())
             .execute().use { r -> assertEquals(200, r.code); assertEquals(1, r.body!!.bytes().size) }
-        // the CSV download reaches the browser as a named attachment, BOM first (Excel)
-        client.newCall(Request.Builder().url("$base/api/export.csv").header("Cookie", cookie).build())
+        // the CSV download (admin: the paired computer) reaches the browser as a named attachment, BOM first
+        val admin = joinCookie(base, admins.newCode(), GatewayServer.ADMIN_COOKIE)!!
+        client.newCall(Request.Builder().url("$base/api/export.csv").header("Cookie", admin).build())
             .execute().use { r ->
                 assertEquals(200, r.code)
                 assertEquals("attachment; filename=cards.csv", r.header("Content-Disposition"))
@@ -129,7 +132,7 @@ class PhoneServerTest {
                 assertEquals("\uFEFFQuantity,Name,Set Code,Set Name,Collector Number,Condition,Finish,Price\r\n" +
                     "1,Opt,XLN,,65,NM,Non-Foil,\r\n", text)
             }
-        client.newCall(Request.Builder().url("$base/api/export").header("Cookie", cookie).build())
+        client.newCall(Request.Builder().url("$base/api/export").header("Cookie", admin).build())
             .execute().use { r -> assertEquals("1 XLN 65 NM Non-Foil\n", r.body!!.string()) }
     }
 
@@ -193,6 +196,38 @@ class PhoneServerTest {
         // revoking on the phone ends the pairing at once
         admins.revokeAll()
         assertTrue(page(base, admin, "/api/scans").contains("Join the card scanner"))
+    }
+
+    @Test fun theAdminCodeHasItsOwnBudgetAcrossAddresses() {
+        // spread over many LAN addresses no IP is locked out — the code itself retires
+        val admins = AdminPairing(null)
+        val g = GatewayServer(LocalUpstream(backend), port = 0, hostname = "127.0.0.1", admins = admins)
+        val code = admins.newCode()
+        val wrong = if (code == "00000000") "11111111" else "00000000"
+        repeat(AdminPairing.MAX_WRONG) { g.attemptJoin("10.0.0.${it + 1}", wrong, 1_000L) }
+        assertEquals(null, admins.pendingCode)
+        assertTrue(g.attemptJoin("10.0.0.99", code, 1_001L) is GatewayServer.JoinResult.Wrong)
+        // 6-digit guest-code typos don't burn the owner's pairing
+        val code2 = admins.newCode()
+        repeat(AdminPairing.MAX_WRONG * 2) { admins.redeem("123456", 2_000L) }
+        assertEquals(code2, admins.pendingCode)
+    }
+
+    @Test fun rotatingTheGuestCodeRetiresTheAdminCode() {
+        val admins = AdminPairing(null)
+        val g = GatewayServer(LocalUpstream(backend), port = 0, hostname = "127.0.0.1", admins = admins)
+        admins.newCode()
+        val wrong = if (g.code == "000000") "111111" else "000000"
+        repeat(GatewayServer.GLOBAL_MAX_FAILURES) { g.attemptJoin("10.1.${it / 5}.${it % 5 + 1}", wrong, 1_000L) }
+        assertEquals(null, admins.pendingCode)
+    }
+
+    @Test fun noRoleHeaderIsAGuest() {
+        fileTwo()
+        val up = LocalUpstream(backend)
+        up.proxy("DELETE", "/api/scans/1", emptyMap(), null).use { assertEquals(403, it.code) }
+        up.proxy("DELETE", "/api/scans/1", mapOf(GatewayServer.ROLE_HEADER to "Admin"), null).use { assertEquals(403, it.code) }
+        up.proxy("DELETE", "/api/scans/1", mapOf(GatewayServer.ROLE_HEADER to "admin"), null).use { assertEquals(200, it.code) }
     }
 
     @Test fun wrongAdminCodesCountTowardTheLockout() {

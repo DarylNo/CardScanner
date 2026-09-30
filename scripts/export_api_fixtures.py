@@ -164,6 +164,8 @@ STEPS = [
     ("PATCH", "/api/scans/6", {"flagged": True}),
     ("PATCH", "/api/scans/6", {"flagged": False}),                  # un-flagged
     ("GET", "/api/me", None),
+    ("PATCH", "/api/scans/4", {"flagged": True}),
+    ("POST", "/api/scans/delete-all", {"only": "flagged", "ids": [4, 1, "2", 999]}),  # only 4: 1 isn't flagged
     ("POST", "/api/scans/delete-all", {"only": "Flagged"}),
     ("GET", "/api/scans", None),
     # deletes

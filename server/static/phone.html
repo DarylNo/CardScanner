@@ -223,7 +223,7 @@
   #lightbox img { max-width:96vw; max-height:92vh; border-radius:10px; }
 </style>
 </head>
-<body>
+<body class="guest">
   <header><span>📷 Scanner<span id="ver"></span></span>
     <span style="display:flex;gap:6px">
       <select class="hbtn" id="camSel" style="display:none;max-width:38vw" title="Choose camera"></select>
@@ -427,18 +427,21 @@ function formatChipsHtml(scan){
 }
 
 /* ── version banner — proves which page+server combo is running ────────────── */
-const UI_VERSION = 'v39';
+const UI_VERSION = 'v40';
 
 // Who is asking: the phone server says "guest" for the 6-digit code (admin =
 // the paired computer); the computer's own server always says admin. Guests
 // get the list without delete/clear/sweep — a swipe FLAGS the scan instead —
 // and the server refuses the admin-only routes anyway.
-let role = 'admin';
-fetch('/api/me').then(r => r.ok ? r.json() : null).then(d => {
+// Fails CLOSED: guest until /api/me answers (a 404 = a server from before roles = admin).
+let role = 'guest';
+fetch('/api/me').then(r => r.status === 404 ? { role: 'admin' } : r.ok ? r.json() : null).then(d => {
   if (!d) return;
-  role = d.role === 'guest' ? 'guest' : 'admin';
+  role = d.role === 'admin' ? 'admin' : 'guest';
   document.body.classList.toggle('guest', role === 'guest');
-  lastListSig = ''; if (typeof renderScansPanel === 'function') renderScansPanel();
+  lastListSig = ''; lastStatSig = '';
+  if (typeof renderScansPanel === 'function') renderScansPanel();
+  if (typeof renderScanDetail === 'function' && detailScanId) renderScanDetail();   // an open card too
 }).catch(() => {});
 fetch('/api/version').then(r => r.json())
   .then(d => { $('#ver').textContent = `${UI_VERSION} · ${d.version}`; })
@@ -1293,13 +1296,17 @@ $('#p-max').addEventListener('input', e => {
 });
 
 async function clearScans(only) {
+  // Flagged = what the button counted: rows inside their swipe-Undo window are not in it.
+  const flaggedIds = liveScans().filter(s => s.flagged).map(s => s.id);
   const n = only === 'unselected' ? scans.filter(s => s.status !== 'selected').length
-    : only === 'flagged' ? scans.filter(s => s.flagged).length : scans.length;
+    : only === 'flagged' ? flaggedIds.length : scans.length;
   if (!n) { setStatus('Nothing to delete.'); return; }
   const what = only === 'unselected' ? `${n} unpicked scan${n>1?'s':''}`
     : only === 'flagged' ? `${n} flagged scan${n>1?'s':''}` : `ALL ${n} scans`;
   if (!confirm(`Delete ${what}? This cannot be undone.`)) return;
-  const r = await jsend('/api/scans/delete-all', 'POST', only ? { only } : {});
+  // "flagged" sends those ids: a flag landing after this confirm is never swept up.
+  const r = await jsend('/api/scans/delete-all', 'POST',
+    only === 'flagged' ? { only, ids: flaggedIds } : only ? { only } : {});
   refreshScans();
   setStatus(`Deleted ${r.deleted} scan${r.deleted === 1 ? '' : 's'}.`, 'ok');
 }
@@ -1480,7 +1487,7 @@ async function renderScanDetail() {
   } else if (role === 'guest') {
     html += `<button class="dangerbtn" id="p-flag" data-flag="1">🚩 Flag for deletion</button>`;
   }
-  if (!PRICE_CHECK && role !== 'guest') html += `<button class="dangerbtn" id="p-delete">Delete this scan</button>`;
+  if (!PRICE_CHECK && role === 'admin') html += `<button class="dangerbtn admin-only" id="p-delete">Delete this scan</button>`;
   detailBody.innerHTML = html;
   $('#detailFoot').innerHTML = PRICE_CHECK
     ? `<div id="pcBar"><button id="pcDiscard">Discard</button><button id="pcKeep">Keep</button></div>` : '';

@@ -79,6 +79,7 @@ class PhoneServerPreview(private val ctx: Context, private val pack: ArtPackStor
     fun stop() {
         server?.stop()
         server = null
+        admins.cancelCode()                 // a code shown before the stop is not good after a restart
         backend.worker.stop()
         backend.sweep.cancel()
     }

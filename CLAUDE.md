@@ -331,11 +331,17 @@ Where it stands (2026-09-29, after 1.0.13):
   computer as ADMIN (long-lived `cs_admin` cookie, only its SHA-256 on disk,
   "Forget paired computers" revokes); the 6-digit code makes a GUEST. The
   gateway sets `x-cardscanner-role` on every proxied request and DROPS a
-  client's own; `ScanServer.adminOnly` refuses a guest delete, clear,
-  export and the sweep controls (403). Guests FLAG for deletion — a
+  client's own (no header = GUEST, fail closed); `ScanServer.adminOnly`
+  refuses a guest delete, clear, export, PATCH `included` and the sweep
+  controls (403). The admin code has its OWN budget (10 wrong 8-digit tries
+  from anywhere retire it; a guest-code rotation retires it too — per-IP
+  lockouts alone lose to many link-local addresses). The LAN leg is plain
+  HTTP: the pairing dialog says to pair on a trusted network. Guests FLAG for deletion — a
   `flagged` column added to store.py too (migration on both), PATCH
-  `{"flagged"}`, delete-all `{"only":"flagged"}`, `GET /api/me` (the rig's
-  server always says admin). Pages: `body.guest` hides `.admin-only`; a
+  `{"flagged"}`, delete-all `{"only":"flagged","ids":[…]}` (only the ids the
+  admin confirmed), `GET /api/me` (the rig's server always says admin; a
+  404 = pre-roles server = admin). Pages start as guest until /api/me
+  answers (`<body class="guest">`), then `body.guest` hides `.admin-only`; a
   guest's swipe flags instead of deleting; the admin gets "Delete flagged
   (n)". The rig's Share gateway (no AdminPairing) is unchanged — the
   "Guests have FULL access" rule still holds THERE. Stage 3 is feature-

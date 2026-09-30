@@ -203,7 +203,7 @@
   .pill.flag { background: #4a1d1d; color: #fca5a5; }
 </style>
 </head>
-<body>
+<body class="guest">
 <header>
   <h1>🃏 MTG Card Scanner</h1>
   <span class="stat" id="dver" style="font-size:11px"></span>
@@ -328,7 +328,7 @@ let filterText = "", priceMin = null, priceMax = null, view = "all";
 // card (Black Lotus is Commander-banned, so EDHREC never ranks it) visible
 // when a popularity floor would otherwise drop it.
 let popMin = null, filterMode = "any";
-let role = "admin";          // "guest" on the phone server's 6-digit code — see /api/me below
+let role = "guest";          // until /api/me answers — see there
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -563,7 +563,7 @@ function renderList(){
     s.selection?.scryfall_id,s.selection?.condition,s.selection?.finish,
     s.card_read?.name,s.error?'e':'',
     s.selection?.auto_picked?'a':'',JSON.stringify(s.f2f?.conditions||{}),
-    printInfo(s).vals.join(";"),popSig(s),s.id===focusedId,s.flagged?'f':''].join("~")).join("|");
+    printInfo(s).vals.join(";"),popSig(s),s.id===focusedId,s.flagged?'f':'',role].join("~")).join("|");
   if (sig === listSig) { updateStats(); return; }
   listSig = sig;
 
@@ -586,7 +586,7 @@ function renderList(){
       </div>
       <div class="right">
         ${pr?`<span class="price">${pr}</span>`:''}
-        ${sel?`<input type="checkbox" title="include in export" ${s.included?'checked':''} data-inc="${s.id}">`:''}
+        ${sel && role === "admin"?`<input type="checkbox" title="include in export" ${s.included?'checked':''} data-inc="${s.id}">`:''}
       </div>
     </div>`;
   }).join("") || `<div class="empty">No scans match.</div>`;
@@ -995,14 +995,16 @@ function sigOf(scan){
 
 // Version banner — page version · server git hash. Same rationale as the
 // phone: without it, "is this the old page?" is undebuggable.
-const UI_VERSION = "d31";
+const UI_VERSION = "d32";
 
 // Who is asking: the phone server says "guest" for the 6-digit code (admin =
 // the paired computer); the computer's own server always says admin. Guests
 // get the review page without delete/clear/export/sweep (body.guest hides the
 // .admin-only controls; the server refuses them anyway).
-jget("/api/me").then(d => {
-  role = d.role === "guest" ? "guest" : "admin";
+// Fails CLOSED: guest until /api/me answers (a 404 = a server from before roles = admin).
+fetch("/api/me").then(r => r.status === 404 ? { role: "admin" } : r.ok ? r.json() : null).then(d => {
+  if (!d) return;
+  role = d.role === "admin" ? "admin" : "guest";
   document.body.classList.toggle("guest", role === "guest");
   listSig = ""; detailSig = ""; renderList(); renderDetail();
 }).catch(() => {});
@@ -1135,7 +1137,10 @@ async function clearScans(only){
   const what = only === "unselected" ? `${n} unpicked scan${n>1?'s':''}`
     : only === "flagged" ? `${n} flagged scan${n>1?'s':''}` : `ALL ${n} scans`;
   if (!confirm(`Delete ${what}? This cannot be undone.`)) return;
-  const r = await jsend("/api/scans/delete-all", "POST", only ? { only } : {});
+  // "flagged" sends the ids counted above: a flag landing after this confirm is never swept up.
+  const body = only === "flagged" ? { only, ids: scans.filter(s => s.flagged).map(s => s.id) }
+    : only ? { only } : {};
+  const r = await jsend("/api/scans/delete-all", "POST", body);
   focusedId = null; listSig = ""; detailSig = "";
   await poll(); renderDetail();
   toast(`Deleted ${r.deleted} scan${r.deleted===1?'':'s'}`);
