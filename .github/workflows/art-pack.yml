@@ -1,5 +1,5 @@
 # Build the artwork fingerprint index and publish it as a compact pack the
-# phone downloads (docs/PHONE_ONLY_PLAN.md, Stage 1a).
+# phone downloads (its card database).
 #
 # The builder (`art_index build`) is resumable and incremental: it skips the
 # bulk download when the Scryfall revision is unchanged, keeps every `small`

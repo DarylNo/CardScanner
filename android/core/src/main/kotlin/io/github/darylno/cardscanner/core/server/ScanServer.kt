@@ -33,7 +33,7 @@ class ScanServer(val api: PhoneApi, val sweep: PriceSweep, val layouts: LayoutSt
 
     companion object {
         /**
-         * What a guest may NOT do (docs/PHONE_ONLY_PLAN.md → Roles): delete a scan,
+         * What a guest may NOT do: delete a scan,
          * clear the list, export (TXT, CSV, the saved layout), include/exclude a
          * card from the export (PATCH "included"), run/stop the pricing sweep, or
          * see/change the phone's own settings ([DeviceApi]).

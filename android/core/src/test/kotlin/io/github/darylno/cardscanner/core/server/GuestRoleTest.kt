@@ -5,7 +5,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 /**
- * Roles on the phone server (docs/PHONE_ONLY_PLAN.md → Roles): a guest can
+ * Roles on the phone server: a guest can
  * browse, pick, edit and flag, but never delete, clear, export or drive the
  * sweep; the admin can do everything, including deleting just the flagged.
  */

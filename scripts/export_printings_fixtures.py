@@ -1,7 +1,7 @@
 """
 Export name -> candidate-printings parity fixtures for the Android app's JVM tests.
 
-Stage 2A of docs/PHONE_ONLY_PLAN.md ports everything that turns a card NAME
+The phone ports everything that turns a card NAME
 into the candidate list the rig builds (scryfall.get_all_printings and its
 paged _search_all, pipeline._candidate_dict / search_candidates /
 _ranked_candidates' projection, popularity.py, artwork.other_art). The Kotlin

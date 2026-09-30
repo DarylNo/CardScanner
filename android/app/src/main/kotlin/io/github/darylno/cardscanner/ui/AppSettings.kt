@@ -26,7 +26,7 @@ class AppSettings(context: Context) {
 
     /** Auto capture (phone.html's "Auto: ON"). Off = tap the shutter; each scan then opens. */
     var auto: Boolean
-        get() = prefs.getBoolean(K_AUTO, true)
+        get() = prefs.getBoolean(K_AUTO, false)   // a fresh install starts in Tap to scan (owner)
         set(v) = prefs.edit().putBoolean(K_AUTO, v).apply()
 
     /** The user-drawn scan Area; null = full frame. */

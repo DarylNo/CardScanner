@@ -156,7 +156,9 @@ to restart the app.
 
 ## Tray / Tap to scan
 
-Two modes, switched at the bottom of the scan screen. **Tray**: the tuned
+Two modes, switched at the bottom of the scan screen (a new install starts in
+Tap to scan). **Tray**: switching to it asks you to draw a box around where
+the card will sit (Cancel keeps the current Area). Then the tuned
 phone.html behaviour — learn the empty tray, wait for a card, wait for it to be
 still, capture, file, wait for the next card. Draw the scan **Area** to crop
 sampling and capture to the tray; double-tap the preview to re-learn the empty

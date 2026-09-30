@@ -103,6 +103,25 @@ class PhoneServer(
     }
 
     /** The phone's own review screen: the local address and the owner's admin cookie. */
+    private val deleteExec = Executors.newSingleThreadExecutor { r -> Thread(r, "owner-delete").apply { isDaemon = true } }
+
+    /**
+     * Delete scans as the owner, off the UI thread — the review screen's swipes whose
+     * Undo window hadn't run out when the screen closed (see PanelActivity.onPause).
+     * Goes through the API like the page's own DELETE, so the photo goes too and the
+     * pricing worker is told; an id already deleted just answers 404.
+     */
+    fun deleteScansAsOwner(ids: List<Long>, done: () -> Unit = {}) {
+        val work = Runnable {
+            for (id in ids) runCatching {
+                backend.handle(io.github.darylno.cardscanner.core.server.ApiRequest("DELETE", "/api/scans/$id",
+                    role = io.github.darylno.cardscanner.core.server.ROLE_ADMIN))
+            }
+            done()
+        }
+        try { deleteExec.execute(work) } catch (_: java.util.concurrent.RejectedExecutionException) { work.run() }
+    }
+
     fun localBase(): String = "http://127.0.0.1:$port"
     fun ownerCookie(): String = "${GatewayServer.ADMIN_COOKIE}=${admins.ownerToken}"
 

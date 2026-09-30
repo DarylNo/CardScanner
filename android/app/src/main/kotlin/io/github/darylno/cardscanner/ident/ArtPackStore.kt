@@ -14,8 +14,8 @@ import java.security.MessageDigest
 import java.util.concurrent.TimeUnit
 
 /**
- * The artwork fingerprint pack on the phone (docs/PHONE_ONLY_PLAN.md, Stage
- * 1a/2D): CI publishes `art-pack.json` (manifest) + `art-pack.bin.gz` to the
+ * The artwork fingerprint pack on the phone (the card
+ * database): CI publishes `art-pack.json` (manifest) + `art-pack.bin.gz` to the
  * rolling `art-pack` release (.github/workflows/art-pack.yml, writer
  * mtg_card_scanner/art_pack.py); this downloads, verifies and loads it.
  *

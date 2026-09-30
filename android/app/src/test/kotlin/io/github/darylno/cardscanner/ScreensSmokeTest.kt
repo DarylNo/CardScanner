@@ -114,6 +114,39 @@ class ScreensSmokeTest {
         }
     }
 
+    /**
+     * Swipe-to-delete: a scan swiped away on the review page is deleted even when the
+     * screen closes inside its 5 s Undo window (the WebView dies with its timers) —
+     * the owner saw "deleted" scans come back.
+     */
+    @Test
+    fun panelActivity_leavingInsideTheUndoWindow_stillDeletes() {
+        val filed = app.phoneServer.backend.file(mapOf("identified" to true, "card_read" to mapOf("name" to "Opt"),
+            "confidence" to mapOf("name" to "high"), "candidates" to listOf(mapOf("id" to "o1", "name" to "Opt",
+                "set" to "dom", "collector_number" to "60"))), null)
+        val id = (filed["id"] as Number).toLong()
+        val kept = (app.phoneServer.backend.file(mapOf("identified" to true, "card_read" to mapOf("name" to "Shock"),
+            "confidence" to mapOf("name" to "high"), "candidates" to listOf(mapOf("id" to "s1", "name" to "Shock",
+                "set" to "m19", "collector_number" to "156"))), null)["id"] as Number).toLong()
+        val c = Robolectric.buildActivity(PanelActivity::class.java, PanelActivity.intent(app))
+        controllers += c
+        c.setup(); ShadowLooper.idleMainLooper()
+        c.get().pendingDeletes = listOf(id)                  // what the page reported after the swipe
+        c.pause()                                             // Back / Home before Undo ran out
+        val deadline = System.currentTimeMillis() + 5_000
+        while (app.phoneServer.store.get(id) != null && System.currentTimeMillis() < deadline) Thread.sleep(20)
+        assertEquals(null, app.phoneServer.store.get(id))
+        assertNotNull("only the swiped scan goes", app.phoneServer.store.get(kept))
+        assertTrue(c.get().pendingDeletes.isEmpty())
+    }
+
+    @Test
+    fun panelActivity_parsesThePagesPendingIds() {
+        assertEquals(listOf(3L, 7L), PanelActivity.parseIds("[3,7,7,-1,0]"))
+        assertEquals(emptyList<Long>(), PanelActivity.parseIds("[]"))
+        assertEquals(emptyList<Long>(), PanelActivity.parseIds("not json"))
+    }
+
     @Test
     fun mainActivity_cameraDenied_resumes() {
         grantCamera(false)

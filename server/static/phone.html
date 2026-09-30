@@ -422,7 +422,7 @@ function formatChipsHtml(scan){
 }
 
 /* ── version banner — proves which page+server combo is running ────────────── */
-const UI_VERSION = 'v42';
+const UI_VERSION = 'v43';
 
 // Who is asking: the phone server says "guest" for the 6-digit code (admin =
 // the paired computer); the computer's own server always says admin. Guests
@@ -1139,6 +1139,13 @@ function renderScansPanel() {
 const UNDO_MS = 5000;
 let undoTimer = null, swipeEatClick = false;
 function liveScans() { return pendingDel.size ? scans.filter(s => !pendingDel.has(s.id)) : scans; }
+// Inside the app the WebView is destroyed when its screen closes — no pagehide,
+// no timers — so a delete still inside its Undo window was lost (owner: "slide
+// to delete doesn't really delete"). The app is told what's pending and deletes
+// it itself when the screen goes away (PanelActivity.onPause).
+function tellAppPending() {
+  try { window.CardScannerApp?.pendingDeletes?.(JSON.stringify([...pendingDel])); } catch (e) {}
+}
 function commitDeletes(keepalive) {
   clearTimeout(undoTimer); undoTimer = null;
   const ids = [...pendingDel];
@@ -1146,10 +1153,11 @@ function commitDeletes(keepalive) {
   if (!ids.length) return;
   Promise.all(ids.map(id => fetch(`/api/scans/${id}`, { method: 'DELETE', keepalive })
       .catch(() => {})))
-    .finally(() => { ids.forEach(id => pendingDel.delete(id)); if (!keepalive) refreshScans(); });
+    .finally(() => { ids.forEach(id => pendingDel.delete(id)); tellAppPending(); if (!keepalive) refreshScans(); });
 }
 function queueDelete(id) {
   pendingDel.add(id);
+  tellAppPending();
   scansBtn.textContent = `Scans (${liveScans().length})`;
   $('#undoMsg').textContent = pendingDel.size > 1 ? `${pendingDel.size} scans deleted` : 'Scan deleted';
   $('#undoBar').classList.add('show');
@@ -1159,6 +1167,7 @@ function queueDelete(id) {
 $('#undoBtn').addEventListener('click', () => {
   clearTimeout(undoTimer); undoTimer = null;
   pendingDel.clear();
+  tellAppPending();
   $('#undoBar').classList.remove('show');
   scansBtn.textContent = `Scans (${liveScans().length})`;
   lastListSig = ''; lastStatSig = ''; renderScansPanel();

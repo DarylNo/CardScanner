@@ -27,10 +27,11 @@ when the phone is back online.
 
 ## Scanning
 
-The scan screen has two modes:
+The scan screen has two modes (a new install starts in Tap to scan):
 
 - **Tray** — hands-free. The phone learns the empty tray, waits for a card,
-  waits for it to be still, captures, and waits for the next card. Double-tap
+  waits for it to be still, captures, and waits for the next card. Switching
+  to Tray asks you to draw a box around where the card will sit. Double-tap
   the preview to re-learn the empty tray.
 - **Tap to scan** — tap the shutter. Tap to scan always uses a scan **Area**;
   if none is set the app draws one for you (a card-shaped box in the middle,

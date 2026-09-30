@@ -68,7 +68,6 @@ class PanelActivity : AppCompatActivity() {
         }
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
-                // Price check: Back = Keep (the page only deletes on Discard).
                 if (web.canGoBack()) web.goBack() else finish()
             }
         })
@@ -100,6 +99,28 @@ class PanelActivity : AppCompatActivity() {
         GatewayService.screenVisible(true)
     }
 
+    /**
+     * Scans swiped away on the page but not deleted yet — inside their 5 s Undo
+     * window (phone.html `pendingDel`, reported through [Bridge.pendingDeletes]).
+     */
+    @Volatile internal var pendingDeletes: List<Long> = emptyList()
+
+    /**
+     * Leaving the screen keeps the swipes: the WebView gets no pagehide and its
+     * timers die with it, so the page's own delayed DELETE never went out and the
+     * "deleted" scans came back (owner). The app deletes them itself instead.
+     */
+    override fun onPause() {
+        val ids = pendingDeletes
+        if (ids.isNotEmpty()) {
+            pendingDeletes = emptyList()
+            App.of(this).phoneServer.deleteScansAsOwner(ids)
+            // Let the page drop its Undo bar too (its own DELETE then just answers 404).
+            if (::web.isInitialized) web.evaluateJavascript("window.commitDeletes && commitDeletes(true)", null)
+        }
+        super.onPause()
+    }
+
     override fun onStop() {
         GatewayService.screenVisible(false)
         super.onStop()
@@ -121,8 +142,15 @@ class PanelActivity : AppCompatActivity() {
         super.onDestroy()
     }
 
-    /** `window.CardScannerApp.close()` — the page's Close button. */
+    /** `window.CardScannerApp` — the page's way to talk to the app. */
     private inner class Bridge {
+        /** The page's pending (swiped, not yet deleted) scan ids, as a JSON array; "[]" when none. */
+        @JavascriptInterface
+        fun pendingDeletes(json: String) {
+            this@PanelActivity.pendingDeletes = parseIds(json)
+        }
+
+        /** The page's Close button. */
         @JavascriptInterface
         fun close() {
             runOnUiThread { finish() }
@@ -131,6 +159,12 @@ class PanelActivity : AppCompatActivity() {
 
     companion object {
         const val EXTRA_DETAIL = "detail"
+
+        /** A JSON array of scan ids → the positive ones (at most 1000); anything else → empty. */
+        fun parseIds(json: String): List<Long> = try {
+            val a = org.json.JSONArray(json)
+            (0 until minOf(a.length(), 1000)).mapNotNull { i -> a.optLong(i, 0L).takeIf { it > 0 } }.distinct()
+        } catch (_: Exception) { emptyList() }
         private const val START_WAIT_MS = 8_000L
 
         fun buildUrl(base: String, detail: Long): String {

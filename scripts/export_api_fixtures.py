@@ -1,7 +1,7 @@
 """
 Export golden request/response fixtures for the phone's scan API (Stage 3b).
 
-Stage 3 of docs/PHONE_ONLY_PLAN.md moves the server onto the phone: the SAME
+The phone runs the server: the SAME
 review pages (phone.html / desktop.html) talk to a Kotlin server, so every
 endpoint must answer with the JSON the Python server gives. This script drives
 the REAL server/app.py (FastAPI TestClient over a real ScanStore) through a

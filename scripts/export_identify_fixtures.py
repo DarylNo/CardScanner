@@ -1,6 +1,6 @@
 """
 Export end-to-end identification fixtures for the Android app's on-phone
-identifier (docs/PHONE_ONLY_PLAN.md, Stage 2D).
+identifier.
 
 Runs the SERVER's real `Pipeline.scan_candidates` — card_detect's extract,
 the blank guard, ArtIndex.identify, ScryfallClient.get_all_printings,

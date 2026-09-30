@@ -1,8 +1,7 @@
 """
 Replay the rig's stored scans through the SERVER's art identification and
 record what it answered — the reference the phone's Kotlin port
-(ArtMatcher, android/core) is replayed against in Stage 2 of
-docs/PHONE_ONLY_PLAN.md. Run it ON THE RIG (it needs the built art index and
+(ArtMatcher, android/core) is replayed against. Run it ON THE RIG (it needs the built art index and
 the real `scan_images/`); the output is plain JSON the Kotlin side can load.
 
 What a stored scan is: server/app.py keeps `scan_images/<id>.jpg` = the

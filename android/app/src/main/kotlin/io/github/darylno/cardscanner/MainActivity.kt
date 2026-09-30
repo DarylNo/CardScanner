@@ -505,11 +505,21 @@ class MainActivity : AppCompatActivity() {
         settings.auto = auto
         styleAuto()
         camera?.setAuto(settings.auto)
-        if (settings.auto) setStatus(StatusText.WATCHING)
-        else {
+        if (settings.auto) {
+            // Tray scans wherever the card is put down: ask for a box around that spot
+            // (owner). Cancel keeps the current Area.
+            startDrawingArea(StatusText.AREA_DRAG_TRAY)
+        } else {
             overlay.setBox(null, 176, 132, OverlayView.BoxState.SETTLING)
             setStatus(if (ensureArea()) StatusText.AREA_DEFAULT else StatusText.AUTO_OFF)
         }
+    }
+
+    private fun startDrawingArea(prompt: String) {
+        camera?.pause(true)
+        overlay.settingArea = true
+        updateAreaBtn()
+        setStatus(prompt)
     }
 
     private fun updateAreaBtn() {
@@ -542,12 +552,7 @@ class MainActivity : AppCompatActivity() {
                 updateAreaBtn()
                 setStatus(StatusText.AREA_CLEARED)
             }
-            else -> {
-                camera?.pause(true)
-                overlay.settingArea = true
-                updateAreaBtn()
-                setStatus(StatusText.AREA_DRAG)
-            }
+            else -> startDrawingArea(StatusText.AREA_DRAG)
         }
     }
 

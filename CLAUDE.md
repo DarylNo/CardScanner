@@ -308,8 +308,10 @@ OnePlus Nord N200 5G (camera id 0 only), minSdk 29, arm64-v8a.
   IOException, the job waits and retries; a Scryfall 404 is an answer; an
   undecodable capture → 422, given up.
 - **Two modes (owner): Tray and Tap to scan** (stored as `AppSettings.auto`;
-  `/api/device` `mode: "tray" | "tap"`). Tray = hands-free, double-tap
-  re-learns the empty tray. Tap to scan = the shutter, and that scan OPENS
+  `/api/device` `mode: "tray" | "tap"`; a fresh install starts in Tap to
+  scan). Tray = hands-free, double-tap re-learns the empty tray; switching to
+  Tray on the phone asks for a box around where the card will sit (Cancel
+  keeps the current Area). Tap to scan = the shutter, and that scan OPENS
   once identified (`/phone?panel=1&detail=<id>`: the page prices it at once,
   prices land live, Back returns to the camera; no Keep/Discard — it's filed
   like any scan). Tap to scan always has an Area: with none set the app draws
@@ -318,6 +320,11 @@ OnePlus Nord N200 5G (camera id 0 only), minSdk 29, arm64-v8a.
   point, not measured). A drawn Area is never replaced; in Tap to scan the
   Area button draws, it never clears. Mount focus: locks on the Area centre,
   then on the first card; tap the preview to lock elsewhere.
+- **Swipe-to-delete holds the DELETE for a 5 s Undo.** Inside the app the
+  WebView is destroyed when its screen closes (no pagehide, timers die), so
+  the page reports its pending ids to `CardScannerApp.pendingDeletes` and
+  `PanelActivity.onPause` deletes them itself (`PhoneServer.deleteScansAsOwner`)
+  — without that, swiped scans came back.
 - **The scan signal** is ONLY the blue box ✓ (a centre ✓ badge with no box),
   held for Settings/📱 Scanner "Check mark time" (250–10000 ms, default 2500,
   `check_ms`), plus two short buzzes (Vibration switch).
