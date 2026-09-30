@@ -227,6 +227,9 @@ been measured against). Rules that must hold:
 - **"Exclude filtered" still requires a known price** even when only the
   popularity bar is on — never drop a card from the export on a price that was
   never looked up.
+The bars, the mode and the view chip persist per viewer in localStorage
+(`listFilters`, owner 2026-09-30: the app's review screen reloads the page
+every time it opens); the name search box is not kept.
 Verified by driving the real page in headless Chromium against stubbed
 `/api/scans` fixtures — not by reasoning about the predicates, which is how the
 ALL bug survived review in the first place.
@@ -403,7 +406,9 @@ Where it stands (2026-09-29, after 1.0.13):
 - Recent owner decisions that stand: export is "Export to CSV" (column
   builder) + "Download TXT" — no Mana Exchange branding in the UI; swipe a
   scan row left/right to delete (5 s Undo); Handheld sends only the card
-  guide (+15%); the ONLY scan signal is the blue box ✓ held 2.5 s (a
+  guide (+15%); the ONLY scan signal is the blue box ✓ held 2.5 s by
+  default (Settings / 📱 Scanner → "Check mark time", 250–10000 ms,
+  `check_ms` on /api/device) (a
   centre ✓ badge when there's no box) + two short buzzes — the green edge
   flash, the "Got it" pill and the "same card as last" warning were all
   removed at the owner's request ("a blue check on every confirmed scan");

@@ -24,7 +24,7 @@ class DeviceApiTest {
     @Test fun readsTheSettings() {
         val s = json(api.handle(ApiRequest("GET", "/api/device"))!!)
         assertEquals(mapOf("mode" to "mount", "auto" to true, "roi" to null, "torch" to false, "vibration" to true,
-            "high_res" to false, "ae_lock" to false, "camera_live" to true), s)
+            "high_res" to false, "ae_lock" to false, "check_ms" to 2500L, "camera_live" to true), s)
     }
 
     @Test fun appliesWhatIsGivenInOneWrite() {
@@ -41,7 +41,9 @@ class DeviceApiTest {
     @Test fun refusesBadValuesAndWritesNothing() {
         for (b in listOf("""{"mode":"pocket"}""", """{"torch":"yes"}""", """{"nope":1}""",
             """{"torch":true,"roi":{"x0":0.1,"y0":0.1,"x1":0.12,"y1":0.9}}""",       // side < 0.08
-            """{"roi":{"x0":-0.1,"y0":0,"x1":0.5,"y1":0.5}}""", """{"roi":[0,0,1,1]}""")) {
+            """{"roi":{"x0":-0.1,"y0":0,"x1":0.5,"y1":0.5}}""", """{"roi":[0,0,1,1]}""",
+            """{"check_ms":249}""", """{"check_ms":10001}""", """{"check_ms":1500.5}""", """{"check_ms":"2000"}""",
+            """{"check_ms":null}""")) {
             assertEquals(b, 400, patch(b).status)
         }
         assertEquals(422, patch("[1]").status)
@@ -59,5 +61,14 @@ class DeviceApiTest {
         for ((m, p) in listOf("GET" to "/api/device", "PATCH" to "/api/device", "GET" to "/api/device/snapshot.jpg")) {
             assertEquals("$m $p", true, ScanServer.adminOnly(ApiRequest(m, p, role = ROLE_GUEST)))
         }
+    }
+
+    @Test fun checkMarkTimeIsWholeMsInRange() {
+        assertEquals(200, patch("""{"check_ms":1200}""").status)
+        assertEquals(1200, st.checkMs)
+        assertEquals(1200L, (json(api.handle(ApiRequest("GET", "/api/device"))!!)["check_ms"] as Number).toLong())
+        assertEquals(200, patch("""{"check_ms":250}""").status)
+        assertEquals(200, patch("""{"check_ms":10000}""").status)
+        assertEquals(10000, st.checkMs)
     }
 }

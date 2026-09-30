@@ -642,13 +642,13 @@ class MainActivity : AppCompatActivity() {
 
     /**
      * The scan-taken signal — the ONLY one (owner, 2026-09-30): the blue ✓ on
-     * the card held for ACK_HOLD_MS (a centre ✓ badge when there's no box),
+     * the card held for Settings' check time (default 2.5 s; a centre ✓ badge when there's no box),
      * plus two short buzzes. A newer capture restarts the hold. (The edge
      * flash, the "Got it" pill and the "same card as last" warning were
      * removed at the owner's request.)
      */
     private fun signalCaptured() {
-        overlay.holdCheck(ACK_HOLD_MS)
+        overlay.holdCheck(settings.checkMs.toLong())
         vibratePattern(40, 70, 40)
     }
 
@@ -821,4 +821,3 @@ class MainActivity : AppCompatActivity() {
 }
 
 /** How long the scan-taken blue ✓ stays up. */
-private const val ACK_HOLD_MS = 2_500L
