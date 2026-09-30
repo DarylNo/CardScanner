@@ -1064,7 +1064,7 @@ function sigOf(scan){
 
 // Version banner — page version · server git hash. Same rationale as the
 // phone: without it, "is this the old page?" is undebuggable.
-const UI_VERSION = "d33";
+const UI_VERSION = "d34";
 
 // Who is asking: the phone server says "guest" for the 6-digit code (admin =
 // the paired computer); the computer's own server always says admin. Guests
@@ -1355,6 +1355,14 @@ function showPhoneIp(ip, port){
   $("#phoneLink").title = "Click for a QR code to open the scanner on your phone";
 }
 jget("/api/version").then(d => {
+  // Served BY the phone (Stage 4: the phone is the server): there is no phone to
+  // point at this page, and the card database comes from the phone's art pack —
+  // the phone link and the downloads panel are the computer server's.
+  if (/\(phone\)$/.test(d.version || "")) {
+    $("#phoneLink").style.display = "none";
+    $("#dlBtn").style.display = "none";
+    return;
+  }
   const port = location.port || "8443";
   const saved = localStorage.getItem("phoneIp");
   if (d.is_lan && d.lan_ip){

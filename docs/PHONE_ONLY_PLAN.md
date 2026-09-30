@@ -76,7 +76,7 @@ done in 1.0.16: the computer pairs once with a one-time 8-digit code
 (QR in Diagnostics) and is remembered until "Forget paired computers";
 6-digit-code guests review, pick and flag for deletion (a swipe flags);
 the admin sees "Delete flagged (n)". Stage 3 is feature-complete behind
-the preview switch; Stage 4 switches over.
+the preview switch; Stage 4 switched over in 1.1.0.
 
 SQLite store with the Python schema, the API with identical JSON (golden
 request/response fixtures recorded from the Python server and replayed
@@ -86,15 +86,30 @@ pricing, breaker, write-if-current, 24h cache), MX export, roles
 (admin/guest/flag-for-deletion). Dropped: self-update, index build,
 image prefetch, debug frame.
 
-### Stage 4 — switch over
-Scans go straight into the phone's store; "Open on computer" pairing;
-foreground service keeps the phone serving while scanning. The old "send
-to computer server" mode stays behind a setting as the fallback.
-Signing secrets required.
-
-### Stage 5 — clean up
-Remove Tailscale failover, `/api/addresses` use, server cert pinning and
-the computer-server mode from the app.
+### Stage 4 — switch over (done in 1.1.0; Stage 5 folded in)
+Owner decisions (2026-09-30): **full cutover** — the desktop is only an
+optional workstation; **the computer app is retired**; the owner adds the
+signing secrets. So there is no "send to computer" fallback and Stage 5's
+clean-up shipped in the same release:
+- Captures go through the persistent upload queue straight into the phone's
+  store: `LocalScanUploader` is the queue's door (identify with the ported
+  pipeline, file with `PhoneApi.fileScan`), answering in `/api/scan`'s JSON,
+  so the queue's multi-frame fallback, Retry replacement and every scan-screen
+  outcome are unchanged. Idempotent per upload id (a re-run after a crash gets
+  the row it already filed).
+- No pairing: first run downloads the art pack (any network); the review
+  screen is a WebView of the phone's own pages on 127.0.0.1 (the gateway's
+  in-memory owner token = admin); `GatewayService` keeps the server up while
+  the app runs (screen off included), and the Share screen shares it (guest
+  code; "New guest code" ends guest sessions without stopping the server).
+- Removed from the app: the server pairing/Setup screen, pinned TLS, address
+  failover (Tailscale), the server list in Settings, Compare mode and the
+  Stage 3 preview switch. Settings → "This phone's server" holds pairing a
+  computer, the card database and storage.
+- Releases ship the APK only (no desktop binaries) and FAIL without the
+  release key — no debug-key fallback (an uninstall would wipe the scans).
+- The Python server stays in the repo as the reference implementation the
+  golden fixtures and parity tests are generated from.
 
 ## Measured
 

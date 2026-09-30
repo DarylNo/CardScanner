@@ -7,6 +7,40 @@ and price.
 
 ---
 
+## The phone is the scanner (1.1.0 and later)
+
+Everything runs on one Android phone: it photographs each card, identifies it
+on the phone (the same art-fingerprint + collector-line OCR pipeline, ported
+and parity-tested), prices it against Face to Face from the phone's own
+connection, and keeps your scans. A computer is **optional** — a bigger screen
+for reviewing and exporting.
+
+1. **Install** `mtg-card-scanner-android.apk` from the
+   [latest release](https://github.com/DarylNo/CardScanner/releases/latest)
+   (allow installs from your browser when Android asks).
+2. **Open the app.** The first time, it downloads the card database (a few MB,
+   refreshed weekly on Wi-Fi). Put the phone on the mount and scan — each card
+   gets a blue ✓; **Scans** opens the review list on the phone.
+3. **Optional — review on a computer.** On the same Wi-Fi (or the phone's
+   hotspot): Settings → *This phone's server* → **Pair a computer as admin**, and
+   open the link (or scan the QR) on the computer. That computer can then
+   review, pick, delete, clear, export (CSV / TXT) and change the phone's
+   scanner settings (📱 Scanner). Others you give the 6-digit guest code (the
+   **Share** screen) can review and flag cards for deletion.
+
+**No backups:** the scans live only on the phone — uninstalling deletes them.
+Export a CSV/TXT if you want a copy.
+
+---
+
+## Retired: the computer server (1.0.x)
+
+Everything below describes the original computer server (FastAPI + the
+desktop/phone browser pages). It is **no longer shipped** — releases carry the
+Android app only — but the code stays in this repo: it is the reference
+implementation every phone port is tested against (`pytest tests/` and the
+`scripts/export_*_fixtures.py --check` steps in CI).
+
 ## Web app (phone camera + desktop control)
 
 The scanner runs as a **local web app** with two roles open at the same time:

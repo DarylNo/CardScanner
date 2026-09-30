@@ -12,13 +12,9 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.test.core.app.ApplicationProvider
 import io.github.darylno.cardscanner.gateway.GatewayService
-import io.github.darylno.cardscanner.net.PrefsConfigStore
-import io.github.darylno.cardscanner.net.ServerConfig
-import io.github.darylno.cardscanner.ui.Adapters
 import io.github.darylno.cardscanner.ui.DiagnosticsActivity
 import io.github.darylno.cardscanner.ui.PanelActivity
 import io.github.darylno.cardscanner.ui.SettingsActivity
-import io.github.darylno.cardscanner.ui.SetupActivity
 import io.github.darylno.cardscanner.ui.ShareActivity
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -49,8 +45,6 @@ class ScreensSmokeTest {
     @Before
     fun setUp() {
         app = ApplicationProvider.getApplicationContext()
-        PrefsConfigStore(app).clear()
-        freshServerAdapter()
     }
 
     @After
@@ -59,24 +53,6 @@ class ScreensSmokeTest {
         controllers.asReversed().forEach { c ->
             runCatching { c.pause().stop().destroy() }
         }
-        PrefsConfigStore(app).clear()
-    }
-
-    /**
-     * [Adapters] caches the ServerAdapter in a process-wide object, and Robolectric
-     * keeps static state across tests while handing each test a NEW Application —
-     * so rebuild it (and App.server, which App.onCreate already filled from the
-     * stale cache) against this test's context. Test-only; production calls it once.
-     */
-    private fun freshServerAdapter() {
-        Adapters::class.java.getDeclaredField("serverAdapter").apply { isAccessible = true }.set(Adapters, null)
-        val server = Adapters.server(app)
-        App::class.java.getDeclaredField("server").apply { isAccessible = true }.set(app, server)
-    }
-
-    private fun pair() {
-        PrefsConfigStore(app).save(ServerConfig(listOf("https://192.168.1.5:8443"), "a".repeat(64)))
-        assertTrue("fake pairing must read back as paired", app.server.isPaired)
     }
 
     private fun <A : Activity> launch(cls: Class<A>, intent: Intent? = null): A {
@@ -103,40 +79,27 @@ class ScreensSmokeTest {
 
     // ── MainActivity ────────────────────────────────────────────────────────
 
+    /** Stage 4: nothing to pair — the first launch scans, and the phone starts serving. */
     @Test
-    fun mainActivity_unpaired_redirectsToSetup() {
-        assertFalse(app.server.isPaired)
-        grantCamera(true)
-        val a = launch(MainActivity::class.java)
-        assertFalse("MainActivity must not finish itself when unpaired", a.isFinishing)
-        val next = nextStarted()
-        assertNotNull("unpaired launch must open SetupActivity", next)
-        assertEquals(SetupActivity::class.java.name, next!!.component?.className)
-    }
-
-    @Test
-    fun mainActivity_paired_cameraGranted_resumes() {
-        pair()
+    fun mainActivity_firstLaunch_scansAndStartsTheServer() {
         grantCamera(true)
         val a = launch(MainActivity::class.java)
         assertResumed(a)
-        // Paired: no redirect to Setup.
-        val next = nextStarted()
-        assertTrue("paired launch must not redirect to Setup",
-            next?.component?.className != SetupActivity::class.java.name)
+        assertEquals("no other screen opens on first launch", null, nextStarted())
+        val svc = shadowOf(app).nextStartedService
+        assertNotNull("the phone's server must be started", svc)
+        assertEquals(GatewayService::class.java.name, svc!!.component?.className)
     }
 
     @Test
-    fun mainActivity_paired_cameraDenied_resumes() {
-        pair()
+    fun mainActivity_cameraDenied_resumes() {
         grantCamera(false)
         val a = launch(MainActivity::class.java)
         assertResumed(a)
     }
 
     @Test
-    fun mainActivity_paired_survivesPauseResumeCycle() {
-        pair()
+    fun mainActivity_survivesPauseResumeCycle() {
         grantCamera(true)
         val c = Robolectric.buildActivity(MainActivity::class.java)
         controllers += c
@@ -152,26 +115,12 @@ class ScreensSmokeTest {
     // ── ui.* activities ─────────────────────────────────────────────────────
 
     @Test
-    fun setupActivity_unpaired_resumes() {
-        val a = launch(SetupActivity::class.java)
+    fun panelActivity_forAScan_resumesAndStartsTheServer() {
+        val a = launch(PanelActivity::class.java, PanelActivity.intent(app, detail = 12, priceCheck = true))
         assertResumed(a)
-    }
-
-    @Test
-    fun setupActivity_paired_resumes() {
-        pair()
-        val a = launch(SetupActivity::class.java)
-        assertResumed(a)
-    }
-
-    @Test
-    fun panelActivity_withExtras_resumes() {
-        pair()
-        val intent = Intent(app, PanelActivity::class.java)
-            .putExtra(PanelActivity.EXTRA_BASE, "https://192.168.1.5:8443")
-            .putExtra(PanelActivity.EXTRA_PIN, "a".repeat(64))
-        val a = launch(PanelActivity::class.java, intent)
-        assertResumed(a)
+        assertEquals(GatewayService::class.java.name, shadowOf(app).nextStartedService?.component?.className)
+        assertEquals("http://127.0.0.1:8090/phone?panel=1&detail=12&pricecheck=1",
+            PanelActivity.buildUrl(app.phoneServer.localBase(), 12, true))
     }
 
     @Test
@@ -182,22 +131,16 @@ class ScreensSmokeTest {
 
     @Test
     fun shareActivity_resumes() {
-        pair()
         val a = launch(ShareActivity::class.java)
         assertResumed(a)
     }
 
     @Test
-    fun shareActivity_unpaired_doesNotCrash() {
-        val a = launch(ShareActivity::class.java)
-        assertResumed(a)
-    }
-
-    @Test
-    fun settingsActivity_resumes() {
-        pair()
+    fun settingsActivity_showsThePhonesServer() {
         val a = launch(SettingsActivity::class.java)
         assertResumed(a)
+        assertNotNull("pairing a computer lives in Settings", findText(a.window.decorView, a.getString(R.string.pv_pair)))
+        assertNotNull(findText(a.window.decorView, a.getString(R.string.pv_pack_check)))
     }
 
     @Test
@@ -207,27 +150,7 @@ class ScreensSmokeTest {
     }
 
     @Test
-    fun diagnosticsActivity_compareSection_defaultOff_andTogglable() {
-        assertFalse("Compare mode must default to OFF", app.settings.compareMode)
-        // Robolectric's default network is metered, so toggling ON can't start a pack download here.
-        assertFalse(io.github.darylno.cardscanner.ident.CompareMode.unmetered(app))
-        val a = launch(DiagnosticsActivity::class.java)
-        val title = findText(a.window.decorView, a.getString(R.string.cmp_switch))
-        assertNotNull("Compare mode switch not shown", title)
-        assertNotNull(findText(a.window.decorView, a.getString(R.string.cmp_test_last)))
-        assertNotNull(findText(a.window.decorView, a.getString(R.string.cmp_copy)))
-        // The whole row toggles its switch (ScanChrome.switchRow).
-        val row = title!!.parent.parent as View
-        assertTrue(row.performClick())
-        assertTrue(app.settings.compareMode)
-        assertTrue(row.performClick())
-        assertFalse(app.settings.compareMode)
-        assertResumed(a)
-    }
-
-    @Test
     fun settings_longPressDiagnosticsHeader_opensNetworkTest() {
-        pair()
         val a = launch(SettingsActivity::class.java)
         val label = a.getString(R.string.settings_diagnostics).uppercase()
         val header = findText(a.window.decorView, label)
@@ -255,7 +178,7 @@ class ScreensSmokeTest {
     fun everyManifestActivity_isDeclared_onlyMainExported() {
         val pi = app.packageManager.getPackageInfo(app.packageName, PackageManager.GET_ACTIVITIES)
         val byName = pi.activities!!.associateBy { it.name }
-        listOf(MainActivity::class.java, SetupActivity::class.java, PanelActivity::class.java,
+        listOf(MainActivity::class.java, PanelActivity::class.java,
             ShareActivity::class.java, SettingsActivity::class.java, DiagnosticsActivity::class.java).forEach { cls ->
             val ai = byName[cls.name]
             assertNotNull("${cls.simpleName} missing from the manifest", ai)

@@ -67,9 +67,12 @@ class PhoneBackend(
     val server = ScanServer(api, sweep, layouts)
     val worker = PriceWorker(sweep, now)
 
-    /** A capture the phone identified: file it, then price it (scan-time pricing). */
-    fun file(result: Map<String, Any?>, photo: ByteArray?): Map<String, Any?> {
-        val row = api.fileScan(result, photo)
+    /**
+     * A capture the phone identified: file it (a Retry replaces the row it retries,
+     * as /api/scan's replace_scan_id does), then price it (scan-time pricing).
+     */
+    fun file(result: Map<String, Any?>, photo: ByteArray?, replaceScanId: Long? = null): Map<String, Any?> {
+        val row = if (replaceScanId != null) api.fileScan(result, photo, replaceScanId) else api.fileScan(result, photo)
         (row["id"] as? Number)?.let { sweep.priceCheck(it.toLong()) }
         worker.wake()
         return row

@@ -21,7 +21,8 @@ import java.util.concurrent.atomic.AtomicBoolean
  * margin), decoded like the upload handler decodes it (`Imgcodecs.imdecode`);
  * the pipeline re-detects and warps inside it as `extract_card` does.
  *
- * SHADOW ONLY until Stage 4: nothing here files, picks or uploads anything.
+ * Stage 4: this IS the scanner's identifier — [phoneserver.LocalScanUploader]
+ * runs every capture through it and files the answer in the phone's store.
  *
  * One identification at a time on its own thread ([submit]); a run is
  * cancellable ([Job.cancel], [cancelAll]) — polled between stages, and an
@@ -59,6 +60,9 @@ class PhoneIdentifier(
 
     class NoArtPackException : Exception("no art pack installed yet")
 
+    /** A capture that isn't a readable JPEG — retrying can't help. */
+    class UndecodableCaptureException : java.io.IOException("capture JPEG doesn't decode")
+
     /** A queued or running identification. */
     inner class Job internal constructor() {
         internal val cancelled = AtomicBoolean(false)
@@ -73,19 +77,28 @@ class PhoneIdentifier(
      * run). Throws [NoArtPackException] without a pack, [CancellationException]
      * when [job] is cancelled, IOException when the JPEG doesn't decode.
      */
-    fun identify(jpeg: ByteArray, job: Job? = null): Identified = synchronized(runLock) {
+    fun identify(jpeg: ByteArray, job: Job? = null): Identified = identifyFrames(listOf(jpeg), job)
+
+    /**
+     * The server's multi-frame `scan_candidates` over several JPEGs (the upload
+     * queue's fallback: the raw upright crops after a weak primary answer).
+     * Every frame must decode; the same exceptions as [identify].
+     */
+    fun identifyFrames(jpegs: List<ByteArray>, job: Job? = null): Identified = synchronized(runLock) {
+        require(jpegs.isNotEmpty()) { "no frames" }
         val cancelled = { job?.isCancelled == true }
         if (cancelled()) throw CancellationException("identification cancelled")
         val m = matcher() ?: throw NoArtPackException()
         val t0 = nanoClock()
-        val frame = CachedImageSource.decode(jpeg) ?: throw java.io.IOException("capture JPEG doesn't decode")
-        val decodeMs = (nanoClock() - t0) / 1_000_000L
+        val frames = ArrayList<org.opencv.core.Mat>(jpegs.size)
         try {
+            for (j in jpegs) frames += CachedImageSource.decode(j) ?: throw UndecodableCaptureException()
+            val decodeMs = (nanoClock() - t0) / 1_000_000L
             val pipeline = IdentifyPipeline(m, { scryfall.getAllPrintings(it) }, ranker, ocr, nanoClock)
-            val r = pipeline.scan(listOf(frame), cancelled = cancelled)
+            val r = pipeline.scan(frames, cancelled = cancelled)
             return Identified(r, decodeMs, (nanoClock() - t0) / 1_000_000L)
         } finally {
-            frame.release()
+            frames.forEach { it.release() }
         }
     }
 

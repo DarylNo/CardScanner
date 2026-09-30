@@ -20,10 +20,11 @@ import io.github.darylno.cardscanner.App
 import io.github.darylno.cardscanner.R
 
 /**
- * Guest gateway: people without Tailscale join the phone's local network
- * (shop Wi-Fi or this phone's hotspot), scan the QR / type the 6-digit code,
- * and get the FULL review UI proxied to the home server (the user's choice —
- * the warning below says exactly what that means).
+ * Share: people on the phone's local network (shop Wi-Fi or this phone's
+ * hotspot) scan the QR / type the 6-digit code and get the review pages the
+ * phone serves — as GUESTS (review, pick, flag for deletion; deleting,
+ * clearing and export are the paired computer's). "New guest code" ends every
+ * guest session; the server itself keeps running.
  */
 class ShareActivity : AppCompatActivity() {
     private lateinit var app: App
@@ -143,7 +144,7 @@ class ShareActivity : AppCompatActivity() {
                 }
             }
             body.addView(codeCard, lp(16))
-            body.addView(chrome.destructiveButton(getString(R.string.share_stop)) { gw.stop(); render() },
+            body.addView(chrome.destructiveButton(getString(R.string.share_stop)) { gw.newGuestCode(); render() },
                 LinearLayout.LayoutParams(match(), dp(52)).apply { topMargin = dp(20) })
             body.addView(chrome.text(getString(R.string.share_stop_note), 13f, ScanChrome.Palette.TEXT_FAINT).apply {
                 gravity = Gravity.CENTER_HORIZONTAL

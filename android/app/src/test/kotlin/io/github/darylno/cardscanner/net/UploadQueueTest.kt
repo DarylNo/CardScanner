@@ -263,42 +263,6 @@ class UploadQueueTest {
         assertTrue(rec.next().second is ScanOutcome.NeedsPick)
     }
 
-    /** End to end over pinned TLS: primary best-guess → 3 raw frames with replace_scan_id. */
-    @Test
-    fun fallbackOverTheWire() {
-        val held = HeldCertificate.Builder().rsa2048().commonName("mtg-card-scanner").build()
-        val s = MockWebServer().apply {
-            useHttps(HandshakeCertificates.Builder().heldCertificate(held).build().sslSocketFactory(), false)
-            start()
-            servers += this
-        }
-        s.enqueue(MockResponse().setResponseCode(502).setBody("gateway"))
-        s.enqueue(MockResponse().setBody(bestGuess))
-        s.enqueue(MockResponse().setBody(identified))
-        val client = ServerClient(
-            InMemoryConfigStore(ServerConfig(listOf("https://127.0.0.1:${s.port}"), Pin.sha256Hex(held.certificate))),
-            Timeouts(connectMs = 2_000, readMs = 5_000, writeMs = 5_000),
-        )
-        val rec = Recorder()
-        val q = queue(client, rec)
-        q.enqueue("PRIMARY".toByteArray(), listOf("R0", "R1", "R2").map { it.toByteArray() }, manual = true)
-        q.start()
-        val (_, out) = rec.next()
-        assertTrue(out is ScanOutcome.NeedsPick)
-        assertTrue(out.usedFallback)
-        assertEquals(3, s.requestCount)
-        s.takeRequest()                                    // the 502, retried
-        val primary = s.takeRequest().body.readUtf8()
-        assertTrue(primary.contains("PRIMARY"))
-        assertFalse(primary.contains("replace_scan_id"))
-        val fb = s.takeRequest().body.readUtf8()
-        for (i in 0..2) assertTrue(fb.contains("""name="files"; filename="frame$i.jpg""""))
-        assertTrue(fb.contains("R0") && fb.contains("R1") && fb.contains("R2"))
-        assertTrue(fb.contains("""name="replace_scan_id""""))
-        assertTrue(fb.contains("\r\n7\r\n"))
-        assertNotNull(q.lastOutcome)
-    }
-
     private fun waitUntil(cond: () -> Boolean) {
         val deadline = System.currentTimeMillis() + 10_000
         while (!cond()) {

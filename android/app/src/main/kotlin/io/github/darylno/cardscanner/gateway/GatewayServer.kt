@@ -410,7 +410,8 @@ button{font-size:1.1rem;padding:.55em 1.2em;margin-left:.4em;border-radius:6px;b
     }
 
     companion object {
-        const val DEFAULT_PORT = 8080
+        /** The phone server's port (Stage 4: the one server; the Share screen shares it). */
+        const val DEFAULT_PORT = 8090
         const val COOKIE = "cs_guest"
         const val ADMIN_COOKIE = "cs_admin"
         /** Set by the gateway on every proxied request when [admins] is on; a client's own is dropped. */

@@ -303,8 +303,6 @@ class UploadQueue(
             val primaryOut = if (meta.stage == STAGE_FALLBACK) readPrimaryOutcome(jobDir) else null
             if (primaryOut != null && primaryOut.scanId != null) return Step.Done(primaryOut.withFallback())
             return Step.Done(ScanOutcome.Rejected(e.code, e.body, meta.stage == STAGE_FALLBACK))
-        } catch (e: PinMismatchException) {
-            return Step.Retry(e.message ?: "Server certificate changed — re-pair")
         } catch (e: IOException) {
             return Step.Retry(e.message ?: e.javaClass.simpleName)
         } catch (e: Exception) {

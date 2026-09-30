@@ -1,7 +1,11 @@
 <resources>
     <string name="app_name">Card Scanner</string>
     <string name="banner_fmt">%1$s · %2$s</string>
-    <string name="server_offline">offline</string>
+    <string name="banner_serving">serving at %1$s</string>
+    <string name="banner_serving_no_wifi">serving (no Wi-Fi address)</string>
+    <string name="banner_not_serving">server stopped — reopen the app to serve</string>
+    <string name="banner_pack_downloading">downloading the card database…</string>
+    <string name="banner_pack_missing">no card database yet — needs internet</string>
     <string name="area">Area</string>
     <string name="area_set">Area ✓</string>
     <string name="scans">Scans</string>
@@ -17,13 +21,13 @@
     <string name="retry_capturing">Retrying — capturing…</string>
     <string name="camera_needed">The camera permission is needed to scan cards.</string>
     <string name="camera_perm_title">Camera access</string>
-    <string name="camera_perm_msg">Card Scanner uses the rear camera to photograph cards on the tray (Mount) or in your hand (Handheld). Photos go only to your own scanner server.</string>
+    <string name="camera_perm_msg">Card Scanner uses the rear camera to photograph cards on the tray (Mount) or in your hand (Handheld). Photos stay on this phone — it is the scanner\'s server.</string>
     <string name="allow">Allow</string>
     <string name="not_now">Not now</string>
     <string name="capture_failed">Capture failed: %1$s</string>
     <string name="camera_error">Camera problem: %1$s</string>
     <string name="no_match_retry">✗ No match — Retry?</string>
-    <string name="upload_rejected">Upload failed: the server answered HTTP %1$d.</string>
+    <string name="upload_rejected">Couldn\'t read that capture (%1$d) — scan the card again.</string>
     <string name="open_scans_hint">✓ %1$s — ready: tap Scans to see its price.</string>
     <string name="close">Close</string>
     <string name="copy">Copy</string>
@@ -32,43 +36,8 @@
     <string name="back">Back</string>
 
     <!-- Setup (pairing) -->
-    <string name="setup_title">Connect to your scanner</string>
-    <string name="setup_step1">On your computer, open the scanner page and click the “Phone” link at the top to show its QR code.</string>
-    <string name="setup_step2">Point this camera at the QR code.</string>
-    <string name="setup_looking">Looking for a QR code…</string>
-    <string name="setup_manual_show">Enter address instead</string>
-    <string name="setup_manual_hint">Type the server address shown on your computer, e.g. 192.168.1.42 or rig.tailnet.ts.net.</string>
-    <string name="setup_input_hint">192.168.1.42:8443</string>
-    <string name="setup_connect">Connect</string>
-    <string name="setup_done">Start scanning</string>
-    <string name="setup_paired_to">Connected addresses</string>
-    <string name="setup_no_permission">Camera permission is off — type the address instead.</string>
-    <string name="setup_camera_unavailable">Camera not available — type the address instead.</string>
-    <string name="setup_bad_address">That doesn\'t look like a server address.</string>
-    <string name="setup_contacting">Contacting %1$s…</string>
-    <string name="setup_unreachable">Couldn\'t reach %1$s. Is the scanner running, and is this phone on the same network (or Tailscale)?</string>
-    <string name="setup_pairing">Pairing with %1$s…</string>
-    <string name="setup_paired">✓ Paired. Fingerprint %1$s…</string>
-    <string name="setup_pair_failed">Pairing failed — scan the QR on your computer again.</string>
-    <string name="setup_cert_mismatch">Pairing failed: the server\'s certificate doesn\'t match the QR. Scan the QR on your computer again.</string>
-    <string name="setup_not_paired">Not paired.</string>
-    <string name="setup_trust_title">Trust this server?</string>
-    <string name="setup_trust_msg">%1$s presents certificate\n\nSHA-256 %2$s\n\nCompare it with the #pin= value in the desktop\'s phone QR link (desktop scanner page → phone QR). If they differ, do NOT trust it — scan the desktop QR instead.</string>
-    <string name="setup_trust">Trust</string>
 
     <!-- Settings -->
-    <string name="settings_server">Server</string>
-    <string name="settings_server_note">Tried in order — if one can\'t be reached, the next is used automatically.</string>
-    <string name="settings_not_paired">Not paired.</string>
-    <string name="settings_remove">Remove</string>
-    <string name="settings_keep_one">Keep at least one address (or re-pair).</string>
-    <string name="settings_add">Add address</string>
-    <string name="settings_refresh">Refresh</string>
-    <string name="settings_refreshed">Addresses updated.</string>
-    <string name="settings_refresh_failed">Couldn\'t refresh: %1$s</string>
-    <string name="settings_repair">Re-pair with a new QR</string>
-    <string name="settings_repair_confirm">Forget this server and pair again?</string>
-    <string name="settings_repair_ok">Re-pair</string>
     <string name="settings_camera">Camera</string>
     <string name="settings_camera_note">Changes apply when you return to the camera.</string>
     <string name="settings_highres">High resolution</string>
@@ -81,25 +50,21 @@
     <string name="settings_debug_desc">Mask coverage, steadiness, timings</string>
     <string name="settings_diagnostics">Diagnostics</string>
     <string name="settings_copy_diag">Copy diagnostics</string>
-    <string name="settings_add_title">Add server address</string>
-    <string name="settings_add_hint">https://host:8443</string>
-    <string name="settings_add_ok">Add</string>
-    <string name="settings_not_address">Not a server address.</string>
 
     <!-- Share -->
     <string name="share_title">Share</string>
     <string name="share_hero_title">Let others review your scans</string>
-    <string name="share_hero_body">Guests on the same Wi-Fi (or on this phone\'s hotspot) open a link and enter a 6-digit code. No Tailscale needed.</string>
-    <string name="share_warning">Guests have full access: they can pick, edit, delete, clear, export and update — only share the code with people you trust.</string>
-    <string name="share_start">Start sharing</string>
-    <string name="share_start_failed">Couldn\'t start sharing: %1$s</string>
-    <string name="share_on">Sharing is on</string>
+    <string name="share_hero_body">Guests on the same Wi-Fi (or on this phone\'s hotspot) open a link and enter a 6-digit code to see your scans.</string>
+    <string name="share_warning">Guests can review, pick and flag cards for deletion. Only a paired computer (Settings → This phone\'s server) can delete, clear or export. Share the code only with people you trust.</string>
+    <string name="share_start">Start the server</string>
+    <string name="share_start_failed">Couldn\'t start the server: %1$s</string>
+    <string name="share_on">Your scans are being served</string>
     <string name="share_scan_qr">Scan to join</string>
     <string name="share_join_code">Join code</string>
     <string name="share_or_open">Or open one of these and enter the code</string>
     <string name="share_no_wifi">No Wi-Fi address — turn on this phone\'s hotspot (Settings → Hotspot) and have guests join it, then come back here.</string>
-    <string name="share_stop">Stop sharing</string>
-    <string name="share_stop_note">A new code is made the next time you share.</string>
+    <string name="share_stop">New guest code</string>
+    <string name="share_stop_note">Ends every guest\'s session. This phone and the paired computer keep working.</string>
 
     <!-- Network test (hidden: long-press DIAGNOSTICS in Settings). Stage 1c measurement. -->
     <string name="nettest_title">Network test</string>
@@ -126,47 +91,23 @@
     <string name="settings_vibration_desc">Buzz when a card is captured</string>
     <!-- Diagnostics → On-phone identify (Stage 2 Compare mode, ui/CompareSection) -->
     <string name="diag_title">Diagnostics</string>
-    <string name="cmp_header">On-phone identify (Stage 2)</string>
-    <string name="cmp_intro">Compare mode identifies each card on the phone too, AFTER the computer has answered, using the same photo, and logs whether the two agree. Your scans still go to the computer and are filed exactly as before — nothing the phone concludes is used. Needs the art pack (a few MB, downloaded from GitHub on Wi-Fi, checked weekly); Scryfall lookups and printing images use whatever network the phone is on.</string>
-    <string name="cmp_switch">Compare mode</string>
-    <string name="cmp_switch_desc">Identify on the phone after every scan and log the comparison</string>
-    <string name="cmp_check_pack">Check for pack</string>
-    <string name="cmp_test_last">Test on last capture</string>
-    <string name="cmp_checking">Checking for a new art pack…</string>
-    <string name="cmp_testing">Identifying the last capture on the phone…</string>
-    <string name="cmp_check_skipped">Not checked: %1$s.</string>
-    <string name="cmp_no_pack_yet">No art pack published yet — the first CI build may still be running. Try again later.</string>
-    <string name="cmp_up_to_date">Art pack is up to date (built %1$s).</string>
-    <string name="cmp_installed">Installed a new art pack, built %2$s (artworks: %1$d).</string>
-    <string name="cmp_check_failed">Art pack check failed: %1$s</string>
-    <string name="cmp_pack_none">art pack: none installed · last check %1$s</string>
-    <string name="cmp_pack_line">art pack: built %2$s · artworks: %1$d · sha %3$s · last check %4$s</string>
-    <string name="cmp_on_idle">Compare mode is on — scan a card.</string>
-    <string name="cmp_off">Compare mode is off.</string>
-    <string name="cmp_summary_header">Comparison (last 200)</string>
-    <string name="cmp_no_rows">Nothing compared yet.</string>
-    <string name="cmp_copy">Copy report</string>
-    <string name="cmp_clear">Clear</string>
-    <string name="cmp_disagreements">Disagreements (newest first)</string>
-    <string name="cmp_no_disagreements">No disagreements.</string>
     <!-- Diagnostics → Phone server (preview), Stage 3 -->
-    <string name="pv_header">Phone server (preview)</string>
-    <string name="pv_intro">Runs the phone\'s own copy of the server beside the computer\'s. While on, each card the phone identifies is also filed on the phone, and the scan list is served from the phone: open the address below on the computer. The computer stays the real server — nothing here reaches it. Prices come from Face to Face straight from the phone, and TXT/CSV export works from the served pages. Pair your computer as admin below; anyone using the 6-digit code is a guest who can review and flag cards for deletion.</string>
-    <string name="pv_switch">Serve from this phone</string>
-    <string name="pv_switch_desc">Also turns on Compare (on-phone identify)</string>
-    <string name="pv_off">Off.</string>
-    <string name="pv_open">Open on the computer:\n%1$s\nCode: %2$s</string>
-    <string name="pv_no_wifi">Running, but the phone has no Wi-Fi address — join Wi-Fi or turn on the hotspot.</string>
-    <string name="pv_error">Could not start: %1$s</string>
-    <string name="pv_clear">Clear the phone\'s scans</string>
+    <string name="pv_header">This phone\'s server</string>
+    <string name="pv_intro">The phone is your scanner\'s server: it identifies and prices every card and keeps the scans. A computer on the same Wi-Fi (or the phone\'s hotspot) can open them at the address below — pair it once as admin to delete, clear and export there. Anyone using the 6-digit code is a guest who can review and flag cards for deletion.</string>
+    <string name="pv_off">Not serving right now — it starts again when you open the app.</string>
+    <string name="pv_open">Open on a computer: %1$s\nGuest code: %2$s</string>
+    <string name="pv_no_wifi">Serving, but the phone has no Wi-Fi address — join Wi-Fi or turn on the hotspot.</string>
     <string name="pv_pair">Pair a computer as admin</string>
     <string name="pv_pair_title">Pair this computer</string>
     <string name="pv_pair_msg">On the computer, open this address (or scan the code with its camera):\n\n%1$s\n\nor type this one-time code on the join page: %2$s\n\nIt works once, for 10 minutes. The computer is then remembered as the admin: it can delete, clear, export and run pricing. Anyone using the 6-digit code is a guest: they can review, pick and flag cards for deletion.\n\nPair on a network you trust (your home Wi-Fi or the phone\'s own hotspot): the connection is plain HTTP, so someone else on the same network could copy the admin cookie.</string>
-    <string name="pv_pair_off">Turn the phone server on first (and join Wi-Fi).</string>
+    <string name="pv_pair_off">The server isn\'t reachable on a network yet — join Wi-Fi or turn on the hotspot, then try again.</string>
     <string name="pv_paired">Paired computers (admin): %1$d</string>
     <string name="pv_forget">Forget paired computers</string>
     <string name="pv_forget_confirm">Stop treating every paired computer as admin? They will need a new one-time code.</string>
     <string name="pv_done">Done</string>
-    <string name="pv_clear_confirm">Delete every scan and photo stored on the phone? (The computer\'s scans are not touched.)</string>
-    <string name="pv_clear_ok">Delete</string>
+    <string name="pv_pack">Card database: %1$,d artworks (built %2$s)</string>
+    <string name="pv_pack_none">No card database yet — it downloads when the phone has internet. Scans wait until it\'s in.</string>
+    <string name="pv_pack_checking">Checking for the card database…</string>
+    <string name="pv_pack_failed">Last check failed: %1$s</string>
+    <string name="pv_pack_check">Check for a newer card database</string>
 </resources>

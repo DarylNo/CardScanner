@@ -130,11 +130,15 @@ class PhoneIdentifierTest {
             id.identify(primary)
             assertEquals(before, images.loads.get())
 
-            // Summaries the compare row is built from.
-            val phone = CompareMode.phoneSummary(r)
-            assertEquals("Lightning Bolt", phone.name)
-            assertEquals("m10", phone.set)
-            assertTrue(phone.autoPick && phone.ocrConfirmed)
+            // What gets filed: the server's /api/scan shape, the OCR-confirmed printing first.
+            val top = (r.result.json["candidates"] as List<*>)[0] as Map<*, *>
+            assertEquals("Lightning Bolt", (r.result.json["card_read"] as Map<*, *>)["name"])
+            assertEquals("m10", top["set"])
+            assertEquals(true, top["ocr_confirmed"])
+
+            // The upload queue's fallback: several frames through the same pipeline.
+            val multi = id.identifyFrames(listOf(primary, primary))
+            assertEquals(true, multi.result.json["identified"])
         } finally {
             id.shutdown()
         }
