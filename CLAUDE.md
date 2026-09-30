@@ -340,10 +340,10 @@ Where it stands (2026-09-29, after 1.0.13):
 - Recent owner decisions that stand: export is "Export to CSV" (column
   builder) + "Download TXT" — no Mana Exchange branding in the UI; swipe a
   scan row left/right to delete (5 s Undo); Handheld sends only the card
-  guide (+15%); scan-taken signal = the blue box ✓ held 2.5 s (a centre ✓
-  badge when there's no box) + buzz — the green edge flash and "Got it"
-  pill were removed at the owner's request; the amber same-card warning
-  (edge + pill) stays, 4 s;
+  guide (+15%); the ONLY scan signal is the blue box ✓ held 2.5 s (a
+  centre ✓ badge when there's no box) + two short buzzes — the green edge
+  flash, the "Got it" pill and the "same card as last" warning were all
+  removed at the owner's request ("a blue check on every confirmed scan");
   Vibration switch in Settings; cards/min + battery estimate on the scan
   screen.
 

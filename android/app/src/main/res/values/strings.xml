@@ -122,11 +122,8 @@
     <string name="nettest_running_verdict">So far: %1$s</string>
     <string name="nettest_error">Couldn\'t run: %1$s</string>
     <string name="scan_rate_desc">Cards scanned per minute, and cards this session</string>
-    <string name="ack_next_card">✓ Got it — next card</string>
-    <string name="ack_got_it">✓ Got it</string>
-    <string name="ack_same_card">Same card as last — drop the next one</string>
     <string name="settings_vibration">Vibration</string>
-    <string name="settings_vibration_desc">Buzz when a card is captured (two short = next card, one long = same card as last)</string>
+    <string name="settings_vibration_desc">Buzz when a card is captured</string>
     <!-- Diagnostics → On-phone identify (Stage 2 Compare mode, ui/CompareSection) -->
     <string name="diag_title">Diagnostics</string>
     <string name="cmp_header">On-phone identify (Stage 2)</string>

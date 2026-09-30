@@ -70,10 +70,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var queueView: TextView
     private lateinit var rateView: TextView
     /** Full-screen coloured edge flash + a big message: the "next card" / "same card" signals. */
-    private lateinit var flashView: View
-    private lateinit var ackView: TextView
     /** Identity of the last card FILED in Mount mode (printing id, else name) — for "same card as last". */
-    private var lastFiledKey: String? = null
     /** Cards filed per minute this session (see [ScanRate]); refreshed every few seconds. */
     private val scanRate = ScanRate()
     private val battery = BatteryEstimate()
@@ -346,20 +343,6 @@ class MainActivity : AppCompatActivity() {
             bottom.setPadding(dp(16) + bars.left, dp(40), dp(16) + bars.right, dp(20) + bars.bottom)
             insets
         }
-        // Acknowledgement layer, above everything, never takes touches.
-        flashView = View(this).apply { alpha = 0f; isClickable = false; isFocusable = false }
-        root.addView(flashView, FrameLayout.LayoutParams(match(), match()))
-        ackView = TextView(this).apply {
-            alpha = 0f
-            textSize = 24f
-            setTypeface(typeface, android.graphics.Typeface.BOLD)
-            gravity = Gravity.CENTER
-            setPadding(dp(24), dp(14), dp(24), dp(14))
-            isClickable = false
-        }
-        root.addView(ackView, FrameLayout.LayoutParams(wrap(), wrap(), Gravity.CENTER).apply {
-            bottomMargin = dp(120); marginStart = dp(32); marginEnd = dp(32)   // long messages wrap inside the screen
-        })
         setContentView(root)
 
         overlay.setRoi(settings.roi)
@@ -607,46 +590,16 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private enum class Ack { NEXT_CARD, SAME_CARD }
-
     /**
-     * The owner asked for an unmistakable "you can drop the next card" signal, and a
-     * different one when the result is the same card as last time (still on the tray,
-     * or a second copy). Coloured edge flash + a big message that fades + a haptic
-     * pattern you can feel without looking: two short buzzes = next card, one long
-     * buzz = same card as last.
+     * The scan-taken signal — the ONLY one (owner, 2026-09-30): the blue ✓ on
+     * the card held for ACK_HOLD_MS (a centre ✓ badge when there's no box),
+     * plus two short buzzes. A newer capture restarts the hold. (The edge
+     * flash, the "Got it" pill and the "same card as last" warning were
+     * removed at the owner's request.)
      */
-    private fun acknowledge(kind: Ack, message: String) {
-        if (kind == Ack.NEXT_CARD) {
-            // The owner's call (2026-09-30): no edge flash / "Got it" pill — just the
-            // blue ✓ on the card, held as long as the old pill was, plus the buzz.
-            // A newer capture restarts the hold, so it never hides a newer scan.
-            overlay.holdCheck(ACK_HOLD_MS)
-            vibratePattern(40, 70, 40)
-            return
-        }
-        val colour = ScanChrome.Palette.WARN
-        flashView.background = android.graphics.drawable.GradientDrawable().apply {
-            setColor(Color.TRANSPARENT)
-            setStroke(dp(14), colour)
-        }
-        ackView.text = message
-        ackView.setTextColor(ScanChrome.Palette.TEXT_ON_ACTIVE)
-        ackView.background = chrome.pill(colour)
-        // The same-card warning asks for action: it keeps its amber edge + pill.
-        for (v in listOf(flashView, ackView)) {
-            v.animate().cancel()
-            v.alpha = 1f
-            v.animate().alpha(0f).setStartDelay(ACK_WARN_HOLD_MS).setDuration(ACK_FADE_MS).start()
-        }
-        vibratePattern(450)
-    }
-
-    /** Same printing (else same name) as the last card filed → it's likely still on the tray. */
-    private fun filedKey(json: org.json.JSONObject): String? {
-        json.optJSONObject("selection")?.optString("scryfall_id")?.takeIf { it.isNotBlank() }?.let { return "id:$it" }
-        json.optJSONArray("candidates")?.optJSONObject(0)?.optString("id")?.takeIf { it.isNotBlank() }?.let { return "id:$it" }
-        return StatusText.name(json).takeIf { it != "?" }?.let { "name:$it" }
+    private fun signalCaptured() {
+        overlay.holdCheck(ACK_HOLD_MS)
+        vibratePattern(40, 70, 40)
     }
 
     private val cameraListener = object : CameraPort.Listener {
@@ -716,7 +669,7 @@ class MainActivity : AppCompatActivity() {
         setStatus(StatusText.SCANNING)
         // The photo is taken — the rest (upload, identify) happens in the background,
         // so the card can go now. Say so, loudly.
-        acknowledge(Ack.NEXT_CARD, getString(if (handheld) R.string.ack_got_it else R.string.ack_next_card))
+        signalCaptured()
         val gen = captureGen
         // enqueue persists ≈1 MB with fsyncs — off the main thread. [io] is single-threaded,
         // so jobs still enter the FIFO queue in capture order.
@@ -777,23 +730,6 @@ class MainActivity : AppCompatActivity() {
             is Outcome.NoMatch -> outcome.scanId
             else -> null
         })
-        // Mount: a result identical to the previous card means the old card is probably
-        // still on the tray (or it's a second copy) — tell the operator to drop the next one.
-        if (!priceCheck && !handheld) {
-            val json = when (outcome) {
-                is Outcome.AutoFiled -> outcome.json
-                is Outcome.NeedsPick -> outcome.json
-                is Outcome.BestGuess -> outcome.json
-                else -> null
-            }
-            val key = json?.let(::filedKey)
-            if (key != null) {
-                if (key == lastFiledKey) {
-                    acknowledge(Ack.SAME_CARD, getString(R.string.ack_same_card))
-                }
-                lastFiledKey = key
-            }
-        }
         when (outcome) {
             is Outcome.NoCard -> {
                 setStatus(StatusText.NO_CARD, Tone.ERR)
@@ -834,10 +770,5 @@ class MainActivity : AppCompatActivity() {
     }
 }
 
-/**
- * How long the scan-taken blue ✓ stays up (ACK_HOLD_MS), and how long the
- * amber same-card warning (edge + pill) stays fully on before fading.
- */
+/** How long the scan-taken blue ✓ stays up. */
 private const val ACK_HOLD_MS = 2_500L
-private const val ACK_WARN_HOLD_MS = 4_000L
-private const val ACK_FADE_MS = 600L
