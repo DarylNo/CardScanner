@@ -23,12 +23,12 @@ class DeviceApiTest {
 
     @Test fun readsTheSettings() {
         val s = json(api.handle(ApiRequest("GET", "/api/device"))!!)
-        assertEquals(mapOf("auto" to true, "roi" to null, "torch" to false, "vibration" to true,
+        assertEquals(mapOf("mode" to "tray", "roi" to null, "torch" to false, "vibration" to true,
             "high_res" to false, "ae_lock" to false, "check_ms" to 2500L, "camera_live" to true), s)
     }
 
     @Test fun appliesWhatIsGivenInOneWrite() {
-        val r = patch("""{"auto":false,"torch":true,"roi":{"x0":0.1,"y0":0.2,"x1":0.6,"y1":0.9}}""")
+        val r = patch("""{"mode":"tap","torch":true,"roi":{"x0":0.1,"y0":0.2,"x1":0.6,"y1":0.9}}""")
         assertEquals(200, r.status)
         assertEquals(1, writes)
         assertEquals(RoiFrac(0.1, 0.2, 0.6, 0.9), st.roi)
@@ -39,7 +39,7 @@ class DeviceApiTest {
     }
 
     @Test fun refusesBadValuesAndWritesNothing() {
-        for (b in listOf("""{"mode":"handheld"}""", """{"mode":"mount"}""", """{"auto":"no"}""", """{"torch":"yes"}""", """{"nope":1}""",
+        for (b in listOf("""{"mode":"handheld"}""", """{"mode":"mount"}""", """{"auto":false}""", """{"mode":true}""", """{"torch":"yes"}""", """{"nope":1}""",
             """{"torch":true,"roi":{"x0":0.1,"y0":0.1,"x1":0.12,"y1":0.9}}""",       // side < 0.08
             """{"roi":{"x0":-0.1,"y0":0,"x1":0.5,"y1":0.5}}""", """{"roi":[0,0,1,1]}""",
             """{"check_ms":249}""", """{"check_ms":10001}""", """{"check_ms":1500.5}""", """{"check_ms":"2000"}""",

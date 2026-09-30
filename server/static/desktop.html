@@ -213,6 +213,8 @@
   #devBody { display: grid; grid-template-columns: 300px 1fr; gap: 0; min-height: 0; overflow: auto; }
   #devCtl { padding: 14px 16px; border-right: 1px solid var(--line); display: flex; flex-direction: column; gap: 12px; }
   #devCtl label { display: flex; align-items: center; gap: 10px; font-size: 14px; cursor: pointer; }
+  #devCtl .seg { display: flex; gap: 6px; }
+  #devCtl .seg .btn { flex: 1; }
   #devCtl label.num input { width: 84px; }
   #devCtl label small { display: block; color: var(--muted); font-size: 12px; }
   #devCtl .h { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-top: 4px; }
@@ -254,7 +256,7 @@
   <button class="btn danger admin-only" id="clearFlagBtn" style="display:none" title="Delete every scan a guest flagged for deletion"></button>
   <button class="btn ghost admin-only" id="clearJunkBtn" title="Delete every scan that has no chosen printing">Clear unpicked</button>
   <button class="btn danger admin-only" id="clearAllBtn" title="Delete every scan">Clear all</button>
-  <button class="btn ghost admin-only" id="devBtn" style="display:none" title="The scanner phone's own settings: auto scan, scan area, torch…">📱 Scanner</button>
+  <button class="btn ghost admin-only" id="devBtn" style="display:none" title="The scanner phone's own settings: mode, scan area, torch…">📱 Scanner</button>
   <button class="btn admin-only" id="exportBtn">Export to CSV</button>
 </header>
 <div id="devModal" role="dialog" aria-modal="true" aria-labelledby="devTitle">
@@ -266,8 +268,11 @@
     </header>
     <div id="devBody">
       <div id="devCtl">
-        <div class="h">Scanning</div>
-        <label><input type="checkbox" data-k="auto"><span>Auto scan<small>On: scans each card by itself. Off: tap the shutter on the phone and the scan opens there — a scan area is drawn for you if none is set.</small></span></label>
+        <div class="h">Mode</div>
+        <div class="seg">
+          <button class="btn ghost" data-mode="tray" title="Hands-free: scans each card put on the tray">Tray</button>
+          <button class="btn ghost" data-mode="tap" title="Tap the shutter on the phone; each scan opens there. A scan area is drawn for you if none is set.">Tap to scan</button>
+        </div>
         <div class="h">Camera</div>
         <label><input type="checkbox" data-k="torch"><span>Torch</span></label>
         <label><input type="checkbox" data-k="high_res"><span>High resolution<small>2048×1536 instead of 1600×1200</small></span></label>
@@ -1060,7 +1065,7 @@ function sigOf(scan){
 
 // Version banner — page version · server git hash. Same rationale as the
 // phone: without it, "is this the old page?" is undebuggable.
-const UI_VERSION = "d37";
+const UI_VERSION = "d38";
 
 // Who is asking: the phone server says "guest" for the 6-digit code (admin =
 // the paired computer); the computer's own server always says admin. Guests
@@ -1535,6 +1540,7 @@ function devMsg(t, err){ $("#devMsg").textContent = t || ""; $("#devMsg").classL
 function devRender(){
   if (!dev) return;
   $("#devLive").textContent = dev.camera_live ? "scan screen open" : "scan screen closed";
+  $("#devCtl").querySelectorAll("[data-mode]").forEach(b => b.classList.toggle("ghost", b.dataset.mode !== dev.mode));
   $("#devCtl").querySelectorAll("input[data-k]").forEach(cb => { cb.checked = !!dev[cb.dataset.k]; });
   const cm = $("#devCheckMs");
   cm.closest("label").style.display = dev.check_ms == null ? "none" : "";   // an older phone app has no setting
@@ -1588,6 +1594,8 @@ $("#devBtn").addEventListener("click", openDev);
 $("#devClose").addEventListener("click", closeDev);
 $("#devModal").addEventListener("click", e => { if (e.target.id === "devModal") closeDev(); });
 document.addEventListener("keydown", e => { if (e.key === "Escape" && $("#devModal").classList.contains("open")) closeDev(); });
+$("#devCtl").querySelectorAll("[data-mode]").forEach(b =>
+  b.addEventListener("click", () => { if (dev && dev.mode !== b.dataset.mode) devPatch({ mode: b.dataset.mode }); }));
 $("#devCtl").querySelectorAll("input[data-k]").forEach(cb =>
   cb.addEventListener("change", () => devPatch({ [cb.dataset.k]: cb.checked })));
 $("#devCheckMs").addEventListener("change", async e => {

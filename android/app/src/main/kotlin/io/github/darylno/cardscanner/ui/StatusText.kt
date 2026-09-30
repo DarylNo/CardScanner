@@ -8,11 +8,11 @@ import org.json.JSONObject
  * sentences here. Pure functions over the `/api/scan` JSON.
  */
 object StatusText {
-    const val WAITING = "Auto: waiting for a steady view…"
-    const val WATCHING = "Auto: watching for a card…"
+    const val WAITING = "Tray: waiting for a steady view…"
+    const val WATCHING = "Tray: watching for a card…"
     const val HOLD_STILL = "Card detected — hold still…"
     const val NEW_CARD = "New card…"
-    const val AUTO_OFF = "Auto off — card in the box, tap the shutter."
+    const val AUTO_OFF = "Tap to scan — card in the box, tap the shutter."
     const val CAPTURING = "Capturing…"
     const val SCANNING = "Scanning…"
     const val NO_CARD = "No card detected."

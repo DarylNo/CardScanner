@@ -35,17 +35,25 @@ class App : Application() {
     /** The Share screen's view of the server (guest code, addresses, QR). */
     lateinit var gateway: GatewayPort
         private set
+    /** Stops scanning once a newer release is out (the owner's update lock). */
+    lateinit var updates: io.github.darylno.cardscanner.update.UpdateLock
+        private set
 
     override fun onCreate() {
         super.onCreate()
         if (!OpenCVLoader.initLocal()) Log.e(TAG, "OpenCV native init failed — capture will not work")
         settings = AppSettings(this)
+        updates = io.github.darylno.cardscanner.update.UpdateLock(this, BuildConfig.VERSION_NAME,
+            // Unit tests (Robolectric) never ask GitHub: a live answer would race the test's own state.
+            fetch = if (android.os.Build.FINGERPRINT == "robolectric") { { null } }
+                else io.github.darylno.cardscanner.update.UpdateLock::fetchLatest)
         identify = LocalIdentify(this)
-        phoneServer = PhoneServer(this, identify, DeviceBridge(settings))
+        phoneServer = PhoneServer(this, identify, DeviceBridge(settings), updates)
         GatewayService.hostProvider = { phoneServer }
         uploads = Adapters.uploads(this, phoneServer)
         gateway = Adapters.gateway(this)
         // No card database yet → fetch it now (any network); queued scans wait for it.
+        updates.checkAsync(force = true)
         identify.onAppStart { if (it is io.github.darylno.cardscanner.ident.ArtPackStore.Check.Installed) uploads.retryNow() }
     }
 

@@ -29,7 +29,12 @@ import java.util.concurrent.Executors
  * Storage: the owner's rule (2026-09-30) — at [WARN_AT] scans show the photo
  * size and free space as a warning, then keep going; nothing is pruned.
  */
-class PhoneServer(private val ctx: Context, private val identify: LocalIdentify, val device: DeviceBridge) :
+class PhoneServer(
+    private val ctx: Context,
+    private val identify: LocalIdentify,
+    val device: DeviceBridge,
+    private val updates: io.github.darylno.cardscanner.update.UpdateLock? = null,
+) :
     GatewayService.Host {
     private val root = File(ctx.filesDir, "phoneserver")
     val store: SqliteScanStore by lazy { SqliteScanStore(File(root, "scans.db")) }
@@ -52,6 +57,7 @@ class PhoneServer(private val ctx: Context, private val identify: LocalIdentify,
             f2fEvents = { f2f.recentEvents() },
             layouts = LayoutStore(File(root, "export_layout.json")),
             device = DeviceApi(device),
+            update = { updates?.let { u -> Triple(u.latest?.version, u.locked, u.latest?.apkUrl) } ?: Triple(null, false, null) },
         )
     }
     private val f2f by lazy { PhoneF2f(ctx, File(ctx.cacheDir, "facetoface")) }

@@ -95,6 +95,25 @@ class ScreensSmokeTest {
         assertEquals(GatewayService::class.java.name, svc!!.component?.className)
     }
 
+    /** The update lock: a newer release is out → "Update required" covers the scan screen. */
+    @Test
+    fun mainActivity_newerReleaseOut_stopsScanning() {
+        grantCamera(true)
+        app.getSharedPreferences("update_lock", android.content.Context.MODE_PRIVATE).edit()
+            .putString("version", "v99.0.0")
+            .putString("apk_url", "https://github.com/DarylNo/CardScanner/releases/download/v99.0.0/mtg-card-scanner-android.apk")
+            .putLong("checked_at", System.currentTimeMillis()).commit()
+        try {
+            val a = launch(MainActivity::class.java)
+            assertResumed(a)
+            val root = (a as android.app.Activity).window.decorView
+            assertTrue("the lock is shown", root.findViewWithText("Update required") != null)
+            assertTrue("Download update offered", root.findViewWithText("Download update") != null)
+        } finally {
+            app.getSharedPreferences("update_lock", android.content.Context.MODE_PRIVATE).edit().clear().commit()
+        }
+    }
+
     @Test
     fun mainActivity_cameraDenied_resumes() {
         grantCamera(false)
@@ -189,5 +208,11 @@ class ScreensSmokeTest {
             assertNotNull("${cls.simpleName} missing from the manifest", ai)
             assertEquals("${cls.simpleName} exported", cls == MainActivity::class.java, ai!!.exported)
         }
+    }
+
+    private fun android.view.View.findViewWithText(t: String): android.view.View? {
+        if (this is android.widget.TextView && text?.toString() == t && isShown) return this
+        if (this is android.view.ViewGroup) for (i in 0 until childCount) getChildAt(i).findViewWithText(t)?.let { return it }
+        return null
     }
 }

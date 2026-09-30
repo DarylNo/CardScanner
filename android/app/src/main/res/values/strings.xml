@@ -14,8 +14,12 @@
     <string name="scan_card">Scan Card</string>
     <string name="retry">Retry</string>
     <string name="cancel">Cancel</string>
-    <string name="auto_on">Auto on</string>
-    <string name="auto_off">Auto off</string>
+    <string name="update_required_title">Update required</string>
+    <string name="update_required_msg">Version %1$s is out. This version (%2$s) has stopped scanning — install the update to keep going.\n\nYour scans are safe: the Scans list, export and the computer link all still work.</string>
+    <string name="update_download">Download update</string>
+    <string name="update_required_status">Update required — scanning stopped</string>
+    <string name="mode_tray">Tray</string>
+    <string name="mode_tap">Tap to scan</string>
     <string name="retry_capturing">Retrying — capturing…</string>
     <string name="camera_needed">The camera permission is needed to scan cards.</string>
     <string name="camera_perm_title">Camera access</string>

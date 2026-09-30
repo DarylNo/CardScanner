@@ -40,6 +40,7 @@ import io.github.darylno.cardscanner.ui.SettingsActivity
 import io.github.darylno.cardscanner.ui.ShareActivity
 import io.github.darylno.cardscanner.ui.StatusText
 import io.github.darylno.cardscanner.ui.UploadPort
+import io.github.darylno.cardscanner.update.UpdateLock
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import java.util.concurrent.RejectedExecutionException
@@ -82,7 +83,11 @@ class MainActivity : AppCompatActivity() {
             rateView.postDelayed(this, 5_000)
         }
     }
-    private lateinit var autoBtn: TextView
+    /** "Update required" — covers the scan screen while the update lock holds. */
+    private lateinit var lockView: View
+    private lateinit var lockText: TextView
+    private lateinit var traySeg: TextView
+    private lateinit var tapSeg: TextView
     private lateinit var shutter: View
     private lateinit var retryBtn: TextView
 
@@ -185,10 +190,14 @@ class MainActivity : AppCompatActivity() {
         app.phoneServer.start()          // the phone IS the server: keep it up while scanning
         GatewayService.screenVisible(true)
         app.identify.onScreen()          // a missing card database is fetched again; weekly check
+        app.updates.addListener(lockListener)
+        app.updates.checkAsync()         // a newer release stops scanning (UpdateLock)
+        applyLock()
     }
 
     override fun onStop() {
         rateView.removeCallbacks(rateTick)
+        app.updates.removeListener(lockListener)
         if (app.phoneServer.device.screen === remoteScreen) app.phoneServer.device.screen = null
         GatewayService.screenVisible(false)
         super.onStop()
@@ -336,11 +345,30 @@ class MainActivity : AppCompatActivity() {
         }
         bottom.addView(retryBtn, LinearLayout.LayoutParams(wrap(), wrap()).apply { bottomMargin = dp(10) })
 
+        // The two modes (owner, 1.1.2): Tray = hands-free auto capture; Tap to scan =
+        // the shutter, and each scan opens. (Stored as AppSettings.auto.)
+        val seg = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            background = chrome.pill(ScanChrome.Palette.CHIP)
+            setPadding(dp(3), dp(3), dp(3), dp(3))
+        }
+        fun segItem(label: String, auto: Boolean) = TextView(this).apply {
+            text = label
+            textSize = 14f
+            gravity = Gravity.CENTER
+            minHeight = dp(36)
+            setPadding(dp(18), 0, dp(18), 0)
+            setOnClickListener { setAutoMode(auto) }
+        }
+        traySeg = segItem(getString(R.string.mode_tray), true)
+        tapSeg = segItem(getString(R.string.mode_tap), false)
+        seg.addView(traySeg); seg.addView(tapSeg)
+        bottom.addView(seg, LinearLayout.LayoutParams(wrap(), wrap()).apply { bottomMargin = dp(16) })
+
         val controls = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        autoBtn = chrome.chip("") { toggleAuto() }
         areaBtn = chrome.chip(getString(R.string.area)) { onAreaButton() }
         shutter = View(this).apply {
             background = chrome.shutter()
@@ -352,11 +380,32 @@ class MainActivity : AppCompatActivity() {
         val side = { v: View, g: Int -> FrameLayout(this).apply {
             addView(v, FrameLayout.LayoutParams(wrap(), wrap(), g or Gravity.CENTER_VERTICAL))
         } }
-        controls.addView(side(autoBtn, Gravity.START), LinearLayout.LayoutParams(0, wrap(), 1f))
+        controls.addView(FrameLayout(this), LinearLayout.LayoutParams(0, wrap(), 1f))   // keeps the shutter centred
         controls.addView(shutter, LinearLayout.LayoutParams(dp(76), dp(76)).apply { marginStart = dp(12); marginEnd = dp(12) })
         controls.addView(side(areaBtn, Gravity.END), LinearLayout.LayoutParams(0, wrap(), 1f))
         bottom.addView(controls, LinearLayout.LayoutParams(match(), wrap()))
         root.addView(bottom, FrameLayout.LayoutParams(match(), wrap(), Gravity.BOTTOM))
+
+        // The update lock: a newer release is out → this build stops scanning. Scans,
+        // export and the computer link stay reachable from here (nothing is locked away).
+        lockText = chrome.text("", 15f, ScanChrome.Palette.TEXT_DIM).apply { setPadding(0, dp(8), 0, dp(16)) }
+        val lockCard = chrome.card().apply {
+            addView(chrome.text(getString(R.string.update_required_title), 20f, bold = true))
+            addView(lockText)
+            addView(chrome.primaryButton(getString(R.string.update_download)) { downloadUpdate() },
+                LinearLayout.LayoutParams(match(), wrap()))
+            addView(chrome.secondaryButton(getString(R.string.scans)) { openPanel(0L) },
+                LinearLayout.LayoutParams(match(), wrap()).apply { topMargin = dp(10) })
+        }
+        lockView = FrameLayout(this).apply {
+            setBackgroundColor(Color.argb(200, 0, 0, 0))
+            isClickable = true                         // nothing under it (shutter, Area, taps) reacts
+            visibility = View.GONE
+            addView(lockCard, FrameLayout.LayoutParams(match(), wrap(), Gravity.CENTER).apply {
+                leftMargin = dp(24); rightMargin = dp(24)
+            })
+        }
+        root.addView(lockView, FrameLayout.LayoutParams(match(), match()))
 
         // Edge-to-edge (enforced on Android 15): keep the controls clear of the system bars.
         androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
@@ -423,6 +472,7 @@ class MainActivity : AppCompatActivity() {
                 else -> StatusText.AUTO_OFF
             }
         )
+        if (app.updates.locked) setStatus(getString(R.string.update_required_status), Tone.ERR)
     }
 
     /**
@@ -443,13 +493,16 @@ class MainActivity : AppCompatActivity() {
 
     /** Auto reads as a toggle: filled when on. */
     private fun styleAuto() {
-        autoBtn.text = getString(if (settings.auto) R.string.auto_on else R.string.auto_off)
-        autoBtn.background = chrome.pill(if (settings.auto) ScanChrome.Palette.CHIP_ACTIVE else ScanChrome.Palette.CHIP)
-        autoBtn.setTextColor(if (settings.auto) ScanChrome.Palette.TEXT_ON_ACTIVE else ScanChrome.Palette.TEXT)
+        for ((v, on) in listOf(traySeg to settings.auto, tapSeg to !settings.auto)) {
+            v.background = if (on) chrome.pill(ScanChrome.Palette.CHIP_ACTIVE) else null
+            v.setTextColor(if (on) ScanChrome.Palette.TEXT_ON_ACTIVE else ScanChrome.Palette.TEXT)
+        }
     }
 
-    private fun toggleAuto() {
-        settings.auto = !settings.auto
+    private fun setAutoMode(auto: Boolean) {
+        if (settings.auto == auto) return
+        if (overlay.settingArea) cancelArea()
+        settings.auto = auto
         styleAuto()
         camera?.setAuto(settings.auto)
         if (settings.auto) setStatus(StatusText.WATCHING)
@@ -469,7 +522,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun cancelArea() {
         overlay.settingArea = false
-        camera?.pause(false)
+        syncPause()
         updateAreaBtn()
     }
 
@@ -499,7 +552,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun onAreaDrawn(r: io.github.darylno.cardscanner.core.RoiFrac?) {
-        camera?.pause(false)
+        syncPause()
         if (r == null) {
             updateAreaBtn()
             setStatus(StatusText.AREA_TOO_SMALL, Tone.ERR)
@@ -514,7 +567,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun onScanTap() {
-        if (camera == null) return
+        if (camera == null || app.updates.locked) return
         hideRetry()
         forgetLastCapture()   // a new capture supersedes the previous card
         pendingReplace = null
@@ -523,6 +576,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun onRetryTap() {
+        if (app.updates.locked) return
         val id = retryScanId ?: return
         pendingReplace = id
         hideRetry()
@@ -581,6 +635,38 @@ class MainActivity : AppCompatActivity() {
         appliedRoi = settings.roi
         cam.setAuto(settings.auto)
         cam.bind(this, preview, cameraListener)
+        syncPause()
+    }
+
+    // ── the update lock ─────────────────────────────────────────────────────
+    private val lockListener: () -> Unit = { if (!isFinishing && !isDestroyed) applyLock() }
+
+    /** Detection runs only while no Area is being drawn and the update lock is off. */
+    private fun syncPause() {
+        camera?.pause(overlay.settingArea || app.updates.locked)
+    }
+
+    private fun applyLock() {
+        val locked = app.updates.locked
+        val latest = app.updates.latest
+        if (locked && latest != null) {
+            lockText.text = getString(R.string.update_required_msg, latest.version, BuildConfig.VERSION_NAME)
+            hideRetry()
+            setStatus(getString(R.string.update_required_status), Tone.ERR)
+        }
+        val was = lockView.visibility == View.VISIBLE
+        lockView.visibility = if (locked) View.VISIBLE else View.GONE
+        syncPause()
+        if (was && !locked) applyMode()   // (only a rolled-back release unlocks a running build)
+    }
+
+    private fun downloadUpdate() {
+        val url = app.updates.latest?.apkUrl ?: "https://github.com/${UpdateLock.REPO}/releases/latest"
+        try {
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+        } catch (_: android.content.ActivityNotFoundException) {
+            android.widget.Toast.makeText(this, url, android.widget.Toast.LENGTH_LONG).show()
+        }
     }
 
     private fun vibrateTick() {
