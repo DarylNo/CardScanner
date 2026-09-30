@@ -117,6 +117,22 @@ class OverlayView @JvmOverloads constructor(
         if (debugText != t) { debugText = t; invalidate() }
     }
 
+    /** Until when (uptime ms) the capture ✓ stays up; see [holdCheck]. */
+    private var checkUntil = 0L
+    private val checking: Boolean get() = android.os.SystemClock.uptimeMillis() < checkUntil
+
+    /**
+     * The scan-taken signal: the blue box + ✓ stays up for [ms] after a
+     * capture, even as detection moves on to "waiting for the next card"; with
+     * no box to draw it on (Handheld, or the card already lifted) a blue ✓
+     * badge shows in the centre instead.
+     */
+    fun holdCheck(ms: Long) {
+        checkUntil = android.os.SystemClock.uptimeMillis() + ms
+        invalidate()
+        postInvalidateDelayed(ms + 16)
+    }
+
     /** Detection box in Gray-sample coords ([sw]×[sh]); null clears it. */
     fun setBox(b: Box?, sw: Int, sh: Int, state: BoxState) {
         if (b == box && sw == sampleW && sh == sampleH && state == boxState) return
@@ -163,7 +179,8 @@ class OverlayView @JvmOverloads constructor(
                 r.x0 + rw * bx.x / sampleW, r.y0 + rh * bx.y / sampleH,
                 r.x0 + rw * (bx.x + bx.w) / sampleW, r.y0 + rh * (bx.y + bx.h) / sampleH,
             )
-            boxPaint.color = when (boxState) {
+            val state = if (checking) BoxState.CAPTURED else boxState
+            boxPaint.color = when (state) {
                 BoxState.OCCUPIED -> Color.parseColor("#6ee7a0")
                 BoxState.SETTLING -> Color.parseColor("#fbbf24")
                 BoxState.AWAIT_NEXT -> Color.parseColor("#8b93a1")
@@ -171,12 +188,21 @@ class OverlayView @JvmOverloads constructor(
             }
             boxPaint.style = Paint.Style.STROKE
             canvas.drawRect(rect, boxPaint)
-            if (boxState == BoxState.CAPTURED) {
+            if (state == BoxState.CAPTURED) {
                 boxPaint.style = Paint.Style.FILL
                 boxPaint.alpha = 60
                 canvas.drawRect(rect, boxPaint)
                 canvas.drawText("✓", rect.centerX(), rect.centerY() + checkPaint.textSize / 3, checkPaint)
             }
+        }
+
+        if (box == null && checking) {
+            val cx = width / 2f; val cy = height / 2f; val r = 44 * density
+            boxPaint.style = Paint.Style.FILL
+            boxPaint.color = Color.parseColor("#60a5fa")
+            boxPaint.alpha = 220
+            canvas.drawCircle(cx, cy, r, boxPaint)
+            canvas.drawText("✓", cx, cy + checkPaint.textSize / 3, checkPaint)
         }
 
         debugText?.let { t ->

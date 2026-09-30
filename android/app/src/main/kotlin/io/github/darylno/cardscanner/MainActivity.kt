@@ -617,7 +617,15 @@ class MainActivity : AppCompatActivity() {
      * buzz = same card as last.
      */
     private fun acknowledge(kind: Ack, message: String) {
-        val colour = if (kind == Ack.NEXT_CARD) ScanChrome.Palette.OK else ScanChrome.Palette.WARN
+        if (kind == Ack.NEXT_CARD) {
+            // The owner's call (2026-09-30): no edge flash / "Got it" pill — just the
+            // blue ✓ on the card, held as long as the old pill was, plus the buzz.
+            // A newer capture restarts the hold, so it never hides a newer scan.
+            overlay.holdCheck(ACK_HOLD_MS)
+            vibratePattern(40, 70, 40)
+            return
+        }
+        val colour = ScanChrome.Palette.WARN
         flashView.background = android.graphics.drawable.GradientDrawable().apply {
             setColor(Color.TRANSPARENT)
             setStroke(dp(14), colour)
@@ -625,15 +633,13 @@ class MainActivity : AppCompatActivity() {
         ackView.text = message
         ackView.setTextColor(ScanChrome.Palette.TEXT_ON_ACTIVE)
         ackView.background = chrome.pill(colour)
-        // Long enough to catch while reaching for the next card; a newer
-        // scan cancels and replaces it at once, so holding never hides one.
-        val hold = if (kind == Ack.NEXT_CARD) ACK_HOLD_MS else ACK_WARN_HOLD_MS
+        // The same-card warning asks for action: it keeps its amber edge + pill.
         for (v in listOf(flashView, ackView)) {
             v.animate().cancel()
             v.alpha = 1f
-            v.animate().alpha(0f).setStartDelay(hold).setDuration(ACK_FADE_MS).start()
+            v.animate().alpha(0f).setStartDelay(ACK_WARN_HOLD_MS).setDuration(ACK_FADE_MS).start()
         }
-        if (kind == Ack.NEXT_CARD) vibratePattern(40, 70, 40) else vibratePattern(450)
+        vibratePattern(450)
     }
 
     /** Same printing (else same name) as the last card filed → it's likely still on the tray. */
@@ -829,9 +835,8 @@ class MainActivity : AppCompatActivity() {
 }
 
 /**
- * How long BOTH signals — the coloured screen edge and the message pill —
- * stay fully on before fading. The same-card warning holds longer (it asks
- * for action). Was 0.35 s / 0.9 s: gone before the owner looked up.
+ * How long the scan-taken blue ✓ stays up (ACK_HOLD_MS), and how long the
+ * amber same-card warning (edge + pill) stays fully on before fading.
  */
 private const val ACK_HOLD_MS = 2_500L
 private const val ACK_WARN_HOLD_MS = 4_000L
