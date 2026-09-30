@@ -122,11 +122,8 @@
     <string name="nettest_running_verdict">So far: %1$s</string>
     <string name="nettest_error">Couldn\'t run: %1$s</string>
     <string name="scan_rate_desc">Cards scanned per minute, and cards this session</string>
-    <string name="ack_next_card">✓ Got it — next card</string>
-    <string name="ack_got_it">✓ Got it</string>
-    <string name="ack_same_card">Same card as last — drop the next one</string>
     <string name="settings_vibration">Vibration</string>
-    <string name="settings_vibration_desc">Buzz when a card is captured (two short = next card, one long = same card as last)</string>
+    <string name="settings_vibration_desc">Buzz when a card is captured</string>
     <!-- Diagnostics → On-phone identify (Stage 2 Compare mode, ui/CompareSection) -->
     <string name="diag_title">Diagnostics</string>
     <string name="cmp_header">On-phone identify (Stage 2)</string>
@@ -152,4 +149,16 @@
     <string name="cmp_clear">Clear</string>
     <string name="cmp_disagreements">Disagreements (newest first)</string>
     <string name="cmp_no_disagreements">No disagreements.</string>
+    <!-- Diagnostics → Phone server (preview), Stage 3 -->
+    <string name="pv_header">Phone server (preview)</string>
+    <string name="pv_intro">Runs the phone\'s own copy of the server beside the computer\'s. While on, each card the phone identifies is also filed on the phone, and the scan list is served from the phone: open the address below on the computer. The computer stays the real server — nothing here reaches it. Pricing and export come in the next preview.</string>
+    <string name="pv_switch">Serve from this phone</string>
+    <string name="pv_switch_desc">Also turns on Compare (on-phone identify)</string>
+    <string name="pv_off">Off.</string>
+    <string name="pv_open">Open on the computer:\n%1$s\nCode: %2$s</string>
+    <string name="pv_no_wifi">Running, but the phone has no Wi-Fi address — join Wi-Fi or turn on the hotspot.</string>
+    <string name="pv_error">Could not start: %1$s</string>
+    <string name="pv_clear">Clear the phone\'s scans</string>
+    <string name="pv_clear_confirm">Delete every scan and photo stored on the phone? (The computer\'s scans are not touched.)</string>
+    <string name="pv_clear_ok">Delete</string>
 </resources>

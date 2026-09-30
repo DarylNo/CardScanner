@@ -300,9 +300,20 @@ Where it stands (2026-09-29, after 1.0.13):
   15%, median 1.34 s / p95 4.3 s per card (printing RANKING of heavily
   reprinted names is the slow part). Its one owner-verified wrong pick led
   to the whole-word set-code rule (Invariants → pHash limits).
-- **Next: Stage 3** — the phone runs the server (store, API with identical
-  JSON via golden fixtures, pricing sweep with every invariant above, CSV/TXT
-  export, admin/guest roles). Invisible until Stage 4 switches over.
+- **Stage 3 in progress** — the phone runs the server. Done (1.0.14): 3a store
+  (`core/server/ScanStore` + app `SqliteScanStore`, server/store.py's table
+  verbatim) and 3b API (`core/server/PhoneApi`: scans list/detail/select/
+  PATCH/DELETE/delete-all/photo + `fileScan` = /api/scan's filing), golden-
+  tested: `scripts/export_api_fixtures.py` drives the REAL app.py (sweep
+  marked active — the phone is always the one F2F consumer, so picks clear
+  f2f for the sweep) and `PhoneApiParityTest` + the app's SQLite replay must
+  match every step. Diagnostics → "Phone server (preview)" serves the real
+  pages (copied into the APK at build) through the existing GatewayServer
+  (`LocalUpstream`) on :8090 and files each Compare-mode identification into
+  the phone's store. Next: 3c pricing sweep, 3d export, 3e roles. Owner
+  decisions (2026-09-30): START FRESH at switchover (no import of the PC's
+  scans); the computer pairs once as admin via a one-time code; at 10,000
+  scans show size + free space as a warning, then keep going (no pruning).
 
 ## Working with the owner
 
@@ -329,7 +340,10 @@ Where it stands (2026-09-29, after 1.0.13):
 - Recent owner decisions that stand: export is "Export to CSV" (column
   builder) + "Download TXT" — no Mana Exchange branding in the UI; swipe a
   scan row left/right to delete (5 s Undo); Handheld sends only the card
-  guide (+15%); scan acknowledgement holds 2.5 s (same-card warning 4 s);
+  guide (+15%); the ONLY scan signal is the blue box ✓ held 2.5 s (a
+  centre ✓ badge when there's no box) + two short buzzes — the green edge
+  flash, the "Got it" pill and the "same card as last" warning were all
+  removed at the owner's request ("a blue check on every confirmed scan");
   Vibration switch in Settings; cards/min + battery estimate on the scan
   screen.
 

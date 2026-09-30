@@ -64,7 +64,19 @@ android {
     // server fixtures — the art pack, the arthash index, recorded Scryfall pages,
     // ranker scans/images — instead of copying them.
     sourceSets.getByName("test").resources.srcDir("../core/src/test/resources")
+    // …and the golden API replay (core/src/testShared), run against the SQLite store.
+    sourceSets.getByName("test").java.srcDir("../core/src/testShared/kotlin")
 }
+
+// Stage 3 preview: the phone serves the SAME review pages the computer does —
+// server/static/{phone,desktop}.html are copied into the APK's assets at build
+// time (never hand-copied, so they can't drift).
+val copyReviewPages by tasks.registering(Copy::class) {
+    from(rootProject.file("../server/static")) { include("phone.html", "desktop.html") }
+    into(layout.buildDirectory.dir("generated/reviewPages/phoneserver"))
+}
+android.sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("generated/reviewPages"))
+tasks.named("preBuild") { dependsOn(copyReviewPages) }
 
 dependencies {
     implementation(project(":core"))
