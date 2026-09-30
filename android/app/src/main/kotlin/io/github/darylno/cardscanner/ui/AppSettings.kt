@@ -12,7 +12,7 @@ import io.github.darylno.cardscanner.core.RoiFrac
  * diverging copies; writes use apply() (these are conveniences, not state that
  * must survive a crash mid-write).
  */
-class AppSettings(context: Context) : io.github.darylno.cardscanner.ident.CompareMode.Flag {
+class AppSettings(context: Context) {
     private val prefs: SharedPreferences =
         context.getSharedPreferences("ui_settings", Context.MODE_PRIVATE)
 
@@ -59,17 +59,14 @@ class AppSettings(context: Context) : io.github.darylno.cardscanner.ident.Compar
         get() = prefs.getBoolean(K_VIBRATION, true)
         set(v) = prefs.edit().putBoolean(K_VIBRATION, v).apply()
 
+    /** The scan screen asked for the notification permission once (the server's Stop lives there). */
+    var notifAsked: Boolean
+        get() = prefs.getBoolean(K_NOTIF_ASKED, false)
+        set(v) = prefs.edit().putBoolean(K_NOTIF_ASKED, v).apply()
+
     var debugOverlay: Boolean
         get() = prefs.getBoolean(K_DEBUG, false)
         set(v) = prefs.edit().putBoolean(K_DEBUG, v).apply()
-
-    /**
-     * Stage 2 Compare mode (Diagnostics): identify each capture on the phone too,
-     * AFTER the server answered, and log the comparison. Default OFF.
-     */
-    override var compareMode: Boolean
-        get() = prefs.getBoolean(K_COMPARE, false)
-        set(v) = prefs.edit { putBoolean(K_COMPARE, v) }
 
     /** Last few capture timing lines, newest first (Diagnostics). */
     var recentTimings: String
@@ -90,8 +87,8 @@ class AppSettings(context: Context) : io.github.darylno.cardscanner.ident.Compar
         const val K_AE_LOCK = "ae_lock"
         const val K_TORCH = "torch"
         const val K_VIBRATION = "vibration"
+        const val K_NOTIF_ASKED = "notif_asked"
         const val K_DEBUG = "debug_overlay"
         const val K_TIMINGS = "recent_timings"
-        const val K_COMPARE = "compare_mode"
     }
 }

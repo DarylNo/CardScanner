@@ -7,6 +7,40 @@ and price.
 
 ---
 
+## The phone is the scanner (1.1.0 and later)
+
+Everything runs on one Android phone: it photographs each card, identifies it
+on the phone (the same art-fingerprint + collector-line OCR pipeline, ported
+and parity-tested), prices it against Face to Face from the phone's own
+connection, and keeps your scans. A computer is **optional** — a bigger screen
+for reviewing and exporting.
+
+1. **Install** `mtg-card-scanner-android.apk` from the
+   [latest release](https://github.com/DarylNo/CardScanner/releases/latest)
+   (allow installs from your browser when Android asks).
+2. **Open the app.** The first time, it downloads the card database (a few MB,
+   refreshed weekly on Wi-Fi). Put the phone on the mount and scan — each card
+   gets a blue ✓; **Scans** opens the review list on the phone.
+3. **Optional — review on a computer.** On the same Wi-Fi (or the phone's
+   hotspot): Settings → *This phone's server* → **Pair a computer as admin**, and
+   open the link (or scan the QR) on the computer. That computer can then
+   review, pick, delete, clear, export (CSV / TXT) and change the phone's
+   scanner settings (📱 Scanner). Others you give the 6-digit guest code (the
+   **Share** screen) can review and flag cards for deletion.
+
+**No backups:** the scans live only on the phone — uninstalling deletes them.
+Export a CSV/TXT if you want a copy.
+
+---
+
+## Retired: the computer server (1.0.x)
+
+Everything below describes the original computer server (FastAPI + the
+desktop/phone browser pages). It is **no longer shipped** — releases carry the
+Android app only — but the code stays in this repo: it is the reference
+implementation every phone port is tested against (`pytest tests/` and the
+`scripts/export_*_fixtures.py --check` steps in CI).
+
 ## Web app (phone camera + desktop control)
 
 The scanner runs as a **local web app** with two roles open at the same time:
@@ -31,9 +65,9 @@ curl -fsSL https://raw.githubusercontent.com/DarylNo/CardScanner/master/install.
 mtg-card-scanner
 ```
 
-**Windows** — grab `mtg-card-scanner-windows.exe` from
-[Releases](https://github.com/DarylNo/CardScanner/releases) and double-click it,
-or use the Python route below.
+**Windows** — `mtg-card-scanner-windows.exe` was on the 1.0.x
+[releases](https://github.com/DarylNo/CardScanner/releases) (1.1.0+ ship the
+Android app only), or use the Python route below.
 
 **Any platform with Python 3.11+** (or `uv`):
 
@@ -42,8 +76,8 @@ pipx install git+https://github.com/DarylNo/CardScanner   # or: uv tool install 
 mtg-card-scanner
 ```
 
-Prebuilt macOS/Linux binaries are also on the Releases page (macOS: the
-binaries are unsigned — right-click → Open the first time).
+Prebuilt macOS/Linux binaries were on the 1.0.x releases (macOS: unsigned —
+right-click → Open the first time); 1.1.0+ releases carry the Android app only.
 
 The launcher does everything `run_server.sh` used to require by hand:
 
@@ -106,7 +140,8 @@ install** — both are plain browser pages: point Chrome at
 
 - **install.sh / pipx / uv users:** re-run the install one-liner (or
   `pipx upgrade mtg-card-scanner`) — it reinstalls the latest master.
-- **Binary users:** download the newest release and replace the old file.
+- **Binary users:** the last desktop binaries are in the 1.0.x releases; newer
+  releases carry only the Android app (the phone is the scanner since 1.1.0).
 - Your data (`~/.mtg-card-scanner/`, art index cache) is untouched by updates.
 
 <details>

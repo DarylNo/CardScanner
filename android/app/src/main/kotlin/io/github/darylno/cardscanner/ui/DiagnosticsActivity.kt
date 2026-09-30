@@ -40,10 +40,7 @@ import java.util.TimeZone
 import java.util.concurrent.Executors
 
 /**
- * Hidden diagnostics (long-press DIAGNOSTICS in Settings). Two tools:
- *
- * Stage 2 — On-phone identify / Compare mode ([CompareSection]): the switch,
- * the art pack, "Test on last capture" and the server-vs-phone report.
+ * Hidden diagnostics (long-press DIAGNOSTICS in Settings).
  *
  * Stage 1c (docs/PHONE_ONLY_PLAN.md): does Face to Face Games' storefront
  * throttle the PHONE? Prices [ProbeCards.ALL] at the rig's pacing over Cronet
@@ -67,8 +64,6 @@ class DiagnosticsActivity : AppCompatActivity() {
     private val buttons = mutableListOf<Button>()
     private lateinit var stopBtn: Button
     private lateinit var cooldownBtn: Button
-    private var compareSection: CompareSection? = null
-    private var previewSection: PreviewSection? = null
 
     private val worker = Executors.newSingleThreadExecutor { r -> Thread(r, "f2f-probe") }
     private val ui = Handler(Looper.getMainLooper())
@@ -116,8 +111,6 @@ class DiagnosticsActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
-        compareSection?.destroy()
-        previewSection?.destroy()
         stop?.set()
         worker.shutdown()      // no interrupt: the StopSignal already ends every wait
         ui.removeCallbacksAndMessages(null)
@@ -125,10 +118,6 @@ class DiagnosticsActivity : AppCompatActivity() {
     }
 
     private fun build() {
-        compareSection = CompareSection(this, chrome, App.of(this).compare).also { it.build(col) }
-        previewSection = PreviewSection(this, chrome, App.of(this).phoneServer, App.of(this).compare)
-            .also { it.build(col) }
-
         col.addView(chrome.sectionHeader(getString(R.string.nettest_title)))
         val intro = chrome.card()
         intro.addView(chrome.text(getString(R.string.nettest_intro, ProbeCards.ALL.size), 14f, ScanChrome.Palette.TEXT_DIM))

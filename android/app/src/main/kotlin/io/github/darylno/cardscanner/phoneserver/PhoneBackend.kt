@@ -67,11 +67,15 @@ class PhoneBackend(
     val server = ScanServer(api, sweep, layouts)
     val worker = PriceWorker(sweep, now)
 
-    /** A capture the phone identified: file it, then price it (scan-time pricing). */
-    fun file(result: Map<String, Any?>, photo: ByteArray?): Map<String, Any?> {
-        val row = api.fileScan(result, photo)
-        (row["id"] as? Number)?.let { sweep.priceCheck(it.toLong()) }
-        worker.wake()
+    /**
+     * A capture the phone identified: file it (a Retry replaces the row it retries,
+     * as /api/scan's replace_scan_id does), then price it (scan-time pricing).
+     */
+    fun file(result: Map<String, Any?>, photo: ByteArray?, replaceScanId: Long? = null): Map<String, Any?> {
+        val row = if (replaceScanId != null) api.fileScan(result, photo, replaceScanId) else api.fileScan(result, photo)
+        // Filed: pricing is best effort from here — it must never fail the filing.
+        runCatching { (row["id"] as? Number)?.let { sweep.priceCheck(it.toLong()) } }
+        runCatching { worker.wake() }
         return row
     }
 
@@ -93,7 +97,10 @@ class PhoneBackend(
                     "ocr" to linkedMapOf("available" to true, "error" to null)))
             get && req.path == "/api/setup/status" -> {
                 val n = packRows().toLong()
-                ApiResponse.json(200, linkedMapOf("index_built" to (n > 1000), "indexed" to n, "total" to n,
+                // Always "built": the phone's card database is its art pack, fetched by the app
+                // (its banner + Settings show that state). The page's "Build (~1 hr)" and
+                // "Download all images" are the retired computer's and would 404 here.
+                ApiResponse.json(200, linkedMapOf("index_built" to true, "indexed" to n, "total" to n,
                     "building" to false, "error" to null, "images" to 0L, "images_total" to 0L,
                     "prefetching" to false, "prefetch_error" to null, "build_progress" to null,
                     "prefetch_progress" to null))

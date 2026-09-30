@@ -4,6 +4,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -75,5 +76,25 @@ class PriceWorkerTest {
             waitFor("idle") { sweep.nextCheckAt == null && !sweep.active }
         } finally { w.stop() }
         assertEquals(3, lookups.size)
+    }
+
+    /** A stop whose join timed out (a lookup still in flight) then a start: the old thread must
+     *  exit when its lookup returns, never loop on beside the new one (two F2F consumers). */
+    @Test fun stopThenStartLeavesOneLoop() {
+        val inLookup = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        answer = { inLookup.countDown(); release.await(); F2fAnswer.NotListed }
+        file("Opt", "dom")
+        val w = PriceWorker(sweep, now = { System.nanoTime() / 1e9 }, pollS = 0.05)
+        w.start()
+        try {
+            inLookup.await(5, TimeUnit.SECONDS)
+            w.stop()                                                   // join times out: still in the lookup
+            w.start()
+            release.countDown()
+            Thread.sleep(300)
+            val loops = Thread.getAllStackTraces().keys.count { it.name == "price-worker" && it.isAlive }
+            assertEquals(1, loops)
+        } finally { release.countDown(); w.stop() }
     }
 }

@@ -2,14 +2,24 @@
 
 ## What this is
 
-A hands-free MTG card scanner: a phone (browser page) on a mount over a tray is
-the camera; a desktop browser page is the review/control surface; a local
-FastAPI server identifies cards by **perceptual-hash artwork matching** (no
-LLM, no cloud vision), confirms the exact printing by **OCR of the card's
-collector line**, prices against Face to Face Games, and exports to the
-user's Mana Exchange store.
+A hands-free MTG card scanner. **Since 1.1.0 (Stage 4, owner 2026-09-30) the
+Android app on a phone over a tray IS the scanner and its server**: it
+identifies cards by **perceptual-hash artwork matching** (no LLM, no cloud
+vision), confirms the exact printing by **OCR of the card's collector line**,
+prices against Face to Face Games, keeps the scans, and serves the review
+pages (its own review screen + an optional paired computer's browser). The
+**computer app is retired** — no longer shipped — but the Python FastAPI
+server stays in the repo as the **reference implementation**: every Kotlin
+port is differentially/golden-tested against it (`pytest tests/` and the
+`scripts/export_*_fixtures.py --check` steps in CI). Change behaviour in the
+Python reference first (with its fixture), then port. The invariants below
+were learned on it and bind the phone too.
 
 ## Run / develop
+
+The Python server below is the retired computer app, kept as the REFERENCE
+the phone is tested against — "deploy" means nothing for it any more; the
+shipped product is the APK (Android app section; the gradle line there).
 
 ```bash
 pip install -e ".[test]"
@@ -23,8 +33,9 @@ relaunch" (the browser's Update button). The rig runs with
 `SCAN_DB=scans.db SCAN_IMAGES_DIR=scan_images` env so data stays in the repo
 dir; fresh installs default to `~/.mtg-card-scanner`.
 
-**Deploy = restart.** Kill the listener on :8443 and relaunch; the version
-banner in both UIs (`d<N> · <git hash>`) is how you verify what's running.
+**Reference server only:** kill the listener on :8443 and relaunch; the
+version banner in both UIs (`d<N> · <git hash>`) shows what's running (the
+phone serves the same pages, bannered `d<N> · <version> (phone)`).
 **Bump `UI_VERSION`** in `phone.html` / `desktop.html` on every edit to them —
 stale-page debugging burned a full session before the banners existed.
 
@@ -222,9 +233,14 @@ ALL bug survived review in the first place.
 
 ## Android app (`android/`)
 
-A native capture app replacing the Chrome `/phone` page as the camera — not
-the server, and not the review UI (that is `/phone?panel=1` in a WebView).
-Details, build, sideload and the device checklist: `android/README.md`.
+The scanner itself (Stage 4): camera + on-phone identification + the phone's
+own server. The review UI is the Python server's own `phone.html` /
+`desktop.html`, copied into the APK at build and served by the phone
+(`PanelActivity` = a WebView on 127.0.0.1). Details, build, sideload and the
+device checklist: `android/README.md`. The phone's server (GatewayService,
+foreground) stops itself after 30 min with no app screen visible and no
+non-loopback request (`shouldIdleStop`); a Scryfall transport failure is
+retryable (`ScryfallUnreachableException`), never filed as "not identified".
 `./gradlew :core:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug`
 from `android/` (Node on PATH, JDK 17); CI job `android` runs it per push.
 
@@ -245,47 +261,50 @@ from `android/` (Node on PATH, JDK 17); CI job `android` runs it per push.
   stage against `resources/arthash/expected.json`, made by the SERVER's code
   via `scripts/export_hash_fixtures.py` (`--check` in CI). Never loosen it
   to "close enough": the 110/140+20/210 thresholds only transfer on equal bits.
-- **The server stays the judge.** The phone flattens WITH A MARGIN so the
-  server can re-detect; no_card / not identified → the 3 raw frames go up with
-  `replace_scan_id` (the server's multi-frame retry). No phone-side card gates.
-- **Pairing pins the cert from the desktop "Phone" QR** (`#pin=<sha256 DER>` —
-  browsers never send the fragment). Pin mismatch is never failed over: re-pair.
-  Address failover (`/api/addresses`: LAN → Tailscale) moves on connect-phase
-  failures ONLY, never after a request may have been sent (double filing).
-  OkHttp's silent retry is OFF for the same reason; a lost reply is re-sent
-  with the same `client_upload_id` and `/api/scan` answers with the row the
-  first copy filed (a Discarded row stays discarded). The dedupe key is the id
-  AND a hash of the uploaded bytes, and the id is a per-job random nonce —
-  1.0.6–1.0.8 keyed it on the job counter, which restarts at 1 each launch,
-  so a fresh scan got an OLD card's reply and filed nothing.
+- **The upload queue files into the phone.** `UploadQueue` (persistent,
+  retried with backoff) talks to `phoneserver/LocalScanUploader` — the phone's
+  `POST /api/scan`: `PhoneIdentifier.identifyFrames` (the ported pipeline,
+  `IdentifyParityTest`) then `PhoneApi.fileScan` (golden-tested). The phone
+  flattens WITH A MARGIN and the pipeline re-detects inside it; no_card / not
+  identified → the 3 raw frames with `replace_scan_id` (the server's
+  multi-frame retry, kept). No phone-side card gates. Idempotent per upload id
+  (the answer is saved right after filing); the id is a per-job random nonce —
+  1.0.6–1.0.8 keyed it on the job counter, which restarts at 1 each launch, so
+  a fresh scan got an OLD card's reply. No pack yet / Scryfall unreachable →
+  IOException (the job waits and retries); an undecodable capture → 422 (given
+  up, never retried forever).
 - **Handheld = walk-around PRICE CHECK** (the owner's words: scan a card, find
   out what it's worth): the outcome opens `detail=<id>&pricecheck=1`; the PAGE
   posts `/price-check` and offers Keep/Discard. Mount auto stays hands-free.
-- **Guests have FULL access** (delete/clear/export/update included) through the
-  computer's Share gateway — the owner's decision (the PHONE server's gateway
-  has roles instead: Phone-only direction → Stage 3e); don't add endpoint filtering without
-  asking, and keep the "only share with people you trust" warning. The
-  gateway answers LAN/hotspot peers only (socket address, not headers), locks
-  an IP after 7 bad codes, and rotates the code after 20 bad codes from
-  anywhere in 5 min.
+- **Roles (the phone's gateway, Stage 3e).** The paired computer is ADMIN; the
+  6-digit code makes a GUEST (review/pick/edit/flag — no delete, clear, export,
+  `included`, sweep or device settings; `ScanServer.adminOnly`, fail closed).
+  The phone's own review screen is admin via `AdminPairing.ownerToken` (in
+  memory, never counted or persisted, untouched by "Forget"). The gateway
+  answers LAN/hotspot peers only (socket address, not headers), locks an IP
+  after 7 bad codes, and rotates the code after 20 bad codes from anywhere in
+  5 min. `GatewayService` keeps it serving on :8090 while the app runs (its
+  notification's Stop ends it; Share's "New guest code" only ends guests).
+  The old "Guests have FULL access" rule belonged to the retired computer's
+  Share proxy.
 - **versionName/versionCode come from pyproject.toml** (1.2.3 → 10203): the
   version bump that releases the server releases the APK too.
 - **The release key lives ONLY in repo secrets** (`ANDROID_KEYSTORE_B64`,
   `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`; made once by
   `scripts/make_android_keystore.py`) — never committed (`*.p12`/`*.jks`/
-  `*.keystore` are gitignored). Without them `release.yml` falls back to a
-  debug key and says so in the job summary; such an APK can't update an
-  installed one. `auto-tag.yml` must keep `secrets: inherit` or the auto path
-  silently signs with the debug key.
+  `*.keystore` are gitignored). Stage 4: **no debug-key fallback** — without
+  them `release.yml` FAILS and publishes nothing (the phone holds the only copy
+  of the scans; a differently-signed APK installs only after an uninstall,
+  which wipes them). `auto-tag.yml` must keep `secrets: inherit`.
 
-## Phone-only direction (in progress)
+## Phone-only direction (Stage 4 shipped in 1.1.0)
 
-The project is moving to **the phone as the server** — see
-`docs/PHONE_ONLY_PLAN.md` (stages, roles, what is dropped). Until Stage 4
-ships, the Python server remains the live path AND the reference every
-Kotlin port is differentially tested against: port, never re-tune. When
-Stage 3 lands, guests lose delete/clear/export (they can flag for
-deletion) and the "Guests have FULL access" rule above is superseded.
+**The phone is the server** — see `docs/PHONE_ONLY_PLAN.md` (stages, roles,
+what was dropped). Stage 4 (1.1.0, owner 2026-09-30): full cutover, the
+computer app retired, Stage 5's clean-up folded in — the app has no server
+pairing, pinned TLS, Tailscale failover, Compare mode or preview switch any
+more. The Python server remains the reference every Kotlin port is tested
+against: port, never re-tune. The history below is how it got here.
 
 Where it stands (2026-09-29, after 1.0.13):
 - **Stage 1 done.** 1a: `art-pack.yml` builds the fingerprint pack weekly
@@ -301,7 +320,8 @@ Where it stands (2026-09-29, after 1.0.13):
   15%, median 1.34 s / p95 4.3 s per card (printing RANKING of heavily
   reprinted names is the slow part). Its one owner-verified wrong pick led
   to the whole-word set-code rule (Invariants → pHash limits).
-- **Stage 3 in progress** — the phone runs the server. Done (1.0.14): 3a store
+- **Stage 4 done (1.1.0)** — see the section intro above and the plan.
+- **Stage 3 done** — the phone runs the server. Done (1.0.14): 3a store
   (`core/server/ScanStore` + app `SqliteScanStore`, server/store.py's table
   verbatim) and 3b API (`core/server/PhoneApi`: scans list/detail/select/
   PATCH/DELETE/delete-all/photo + `fileScan` = /api/scan's filing), golden-
@@ -345,7 +365,7 @@ Where it stands (2026-09-29, after 1.0.13):
   guest's swipe flags instead of deleting; the admin gets "Delete flagged
   (n)". The rig's Share gateway (no AdminPairing) is unchanged — the
   "Guests have FULL access" rule still holds THERE. Stage 3 is feature-
-  complete; next is Stage 4 (switch over). 1.0.17: the phone's own settings
+  complete. 1.0.17: the phone's own settings
   from the browser (owner-approved) — `core/server/DeviceApi` (GET/PATCH
   `/api/device`: mode, auto, roi, torch, vibration, high_res, ae_lock;
   `/api/device/snapshot.jpg` = the current UPRIGHT analysis frame, the space
@@ -366,9 +386,9 @@ Where it stands (2026-09-29, after 1.0.13):
   several requests batched into one release and to "talk it through"
   before launching one.
 - The owner tests on the real rig (OnePlus Nord N200 on a mount over a
-  tray, Windows PC server) and reports by photo/paste. Settings →
-  Diagnostics → Copy diagnostics and the Compare report are the two pastes
-  worth asking for. Never claim a device behaviour works until they've
+  tray — since 1.1.0 the phone is the server; the Windows PC is only a
+  browser) and reports by photo/paste. Settings → Diagnostics → Copy
+  diagnostics is the paste worth asking for (Compare mode is gone). Never claim a device behaviour works until they've
   tried it — say "tested in code, not on the phone".
 - Measure, then change: when a rule is in doubt, score the candidates
   against ground truth (e.g. the OCR rule was chosen from a scored table
@@ -395,15 +415,13 @@ Open threads for whoever picks this up:
   screens), Handheld on a wood-grain table, the longer scan acknowledgement.
 - Proposed, not approved: "Fit to cards + zoom" (auto-fit the scan Area).
 - Ranking time for heavily reprinted names (cache candidate images) —
-  worth doing inside Stage 3.
+  still worth doing on the phone.
 
 ## Release / distribution
 
-- `git tag vX.Y.Z && git push --tags` → 4 binaries +
-  `mtg-card-scanner-android.apk` (workflow needs
-  `permissions: contents: write`; `macos-13` label is DEAD, use
-  `macos-15-intel`; publish runs `if: always()`; PyInstaller needs
-  `--paths . --copy-metadata mtg-card-scanner`).
+- A release is `mtg-card-scanner-android.apk` ONLY (Stage 4: the desktop
+  binaries job is gone; `publish` runs only when the release-signed APK
+  built). The workflow needs `permissions: contents: write`.
 - **The repo MUST stay PUBLIC — every distribution path is anonymous.**
   Found private on 2026-08-14: `install.sh`'s curl one-liner, the update
   tarball, and `releases/latest` all 404'd, so `/api/update-check` swallowed
@@ -421,9 +439,11 @@ Open threads for whoever picks this up:
   session; bump the version in a PR and merge it. A hand-pushed tag still
   works. Never bump without meaning to release: the merge IS the release.
 - **ALWAYS end a push session by bumping `version` in
-  pyproject.toml** (which, merged, tags the release) — script installs (uv/pipx)
-  identify as the package version and their update banner compares against
-  the latest RELEASE tag; master-only commits are invisible to them.
+  pyproject.toml** (which, merged, tags the release and builds the APK —
+  versionName/versionCode come from it; master-only commits reach nobody).
+  (History, retired computer app: script installs (uv/pipx) identified as the
+  package version and their update banner compared against the latest
+  RELEASE tag.)
   Bump BEFORE tagging: installs come from master, so an install made in the
   gap between bump and tag reports a version AHEAD of the latest release.
   `_is_newer_release` compares version tuples so that only means "no update"

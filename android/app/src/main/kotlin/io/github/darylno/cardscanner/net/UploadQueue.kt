@@ -303,12 +303,14 @@ class UploadQueue(
             val primaryOut = if (meta.stage == STAGE_FALLBACK) readPrimaryOutcome(jobDir) else null
             if (primaryOut != null && primaryOut.scanId != null) return Step.Done(primaryOut.withFallback())
             return Step.Done(ScanOutcome.Rejected(e.code, e.body, meta.stage == STAGE_FALLBACK))
-        } catch (e: PinMismatchException) {
-            return Step.Retry(e.message ?: "Server certificate changed — re-pair")
         } catch (e: IOException) {
             return Step.Retry(e.message ?: e.javaClass.simpleName)
         } catch (e: Exception) {
             // Malformed JSON etc.: keep the scan, try again later.
+            return Step.Retry(e.message ?: e.javaClass.simpleName)
+        } catch (e: Throwable) {
+            // Stage 4: identification runs on this thread — an Error (OOM, a missing native
+            // lib) must not kill the process, which would restart on the same job and loop.
             return Step.Retry(e.message ?: e.javaClass.simpleName)
         }
     }

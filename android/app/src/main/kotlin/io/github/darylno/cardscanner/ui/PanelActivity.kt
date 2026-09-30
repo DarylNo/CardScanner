@@ -3,11 +3,12 @@ package io.github.darylno.cardscanner.ui
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
-import android.net.http.SslError
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.view.ViewGroup
+import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
-import android.webkit.SslErrorHandler
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
@@ -16,28 +17,31 @@ import android.widget.FrameLayout
 import android.widget.TextView
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
-import io.github.darylno.cardscanner.net.Pin
+import io.github.darylno.cardscanner.App
+import io.github.darylno.cardscanner.gateway.GatewayService
 
 /**
  * The review UI is NOT re-implemented natively: this is a WebView of the
- * server's own `/phone?panel=1[&detail=<id>][&pricecheck=1]` (scans list,
- * filters, printing picker, walk-around price check with Keep/Discard).
+ * phone server's own `/phone?panel=1[&detail=<id>][&pricecheck=1]` (scans
+ * list, filters, printing picker, walk-around price check with Keep/Discard) —
+ * the same page a computer on the LAN gets.
  *
- * TLS: the server's cert is self-signed, so every load raises an SSL error.
- * We proceed ONLY when the presented leaf hashes to the paired pin — never on
- * the error type (an "untrusted" error from an impostor looks identical).
- * [WebView.clearSslPreferences] runs on every open so a proceed remembered
- * from before a re-pair can never carry over.
+ * Stage 4: served by the phone itself on loopback (`http://127.0.0.1:<port>`,
+ * cleartext allowed for loopback only — res/xml/network_security_config.xml),
+ * through the same gateway as the LAN, as the phone's OWNER: the gateway's
+ * in-memory owner token ([gateway.AdminPairing.ownerToken]) is set as the
+ * admin cookie before the first load. The server is (re)started here if the
+ * notification's Stop ended it.
  */
 class PanelActivity : AppCompatActivity() {
     private lateinit var web: WebView
     private lateinit var errorView: TextView
+    private val ui = Handler(Looper.getMainLooper())
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val base = intent.getStringExtra(EXTRA_BASE)
-        val pin = intent.getStringExtra(EXTRA_PIN)
+        val phone = App.of(this).phoneServer
         val root = FrameLayout(this)
         web = WebView(this)
         errorView = TextView(this).apply {
@@ -51,35 +55,14 @@ class PanelActivity : AppCompatActivity() {
         root.setBackgroundColor(0xff0f1115.toInt())
         setContentView(root)
 
-        if (base == null || !Pin.isValid(pin)) {
-            showError("Not paired with a scanner server — open Settings and pair first.")
-            return
-        }
-
-        web.clearSslPreferences()
         web.settings.javaScriptEnabled = true
         web.settings.domStorageEnabled = true
         web.setBackgroundColor(0xff0f1115.toInt())
         web.addJavascriptInterface(Bridge(), "CardScannerApp")
         web.webViewClient = object : WebViewClient() {
-            @SuppressLint("WebViewClientOnReceivedSslError")
-            override fun onReceivedSslError(view: WebView, handler: SslErrorHandler, error: SslError) {
-                val cert = error.certificate?.x509Certificate
-                if (cert != null && Pin.matches(cert, pin)) {
-                    handler.proceed()
-                } else {
-                    handler.cancel()
-                    showError(
-                        "The server's certificate does NOT match the paired fingerprint.\n\n" +
-                            "If the server was reinstalled, re-pair in Settings. Otherwise something " +
-                            "else is answering at ${error.url} — do not continue."
-                    )
-                }
-            }
-
             override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
                 if (request.isForMainFrame) {
-                    showError("Couldn't load the scans page: ${error.description}\n\n$base")
+                    showError("Couldn't load the scans page: ${error.description}")
                 }
             }
         }
@@ -89,7 +72,38 @@ class PanelActivity : AppCompatActivity() {
                 if (web.canGoBack()) web.goBack() else finish()
             }
         })
-        web.loadUrl(buildUrl(base, intent.getLongExtra(EXTRA_DETAIL, 0L), intent.getBooleanExtra(EXTRA_PRICE_CHECK, false)))
+        phone.start()                                   // idempotent; the server may have been stopped
+        val detail = intent.getLongExtra(EXTRA_DETAIL, 0L)
+        val priceCheck = intent.getBooleanExtra(EXTRA_PRICE_CHECK, false)
+        val deadline = System.currentTimeMillis() + START_WAIT_MS
+        val load = object : Runnable {
+            override fun run() {
+                if (isFinishing || isDestroyed) return
+                val st = GatewayService.status.value
+                when {
+                    st.running -> {
+                        val base = phone.localBase()
+                        CookieManager.getInstance().setCookie(base, phone.ownerCookie())
+                        CookieManager.getInstance().flush()
+                        web.loadUrl(buildUrl(base, detail, priceCheck))
+                    }
+                    st.error != null -> showError("The scanner's server couldn't start: ${st.error}")
+                    System.currentTimeMillis() > deadline -> showError("The scanner's server didn't start — try again.")
+                    else -> ui.postDelayed(this, 100)
+                }
+            }
+        }
+        ui.post(load)
+    }
+
+    override fun onStart() {
+        super.onStart()
+        GatewayService.screenVisible(true)
+    }
+
+    override fun onStop() {
+        GatewayService.screenVisible(false)
+        super.onStop()
     }
 
     private fun showError(msg: String) {
@@ -100,6 +114,7 @@ class PanelActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        ui.removeCallbacksAndMessages(null)
         if (::web.isInitialized) {
             web.removeJavascriptInterface("CardScannerApp")
             web.destroy()
@@ -116,10 +131,9 @@ class PanelActivity : AppCompatActivity() {
     }
 
     companion object {
-        const val EXTRA_BASE = "base"
-        const val EXTRA_PIN = "pin"
         const val EXTRA_DETAIL = "detail"
         const val EXTRA_PRICE_CHECK = "pricecheck"
+        private const val START_WAIT_MS = 8_000L
 
         fun buildUrl(base: String, detail: Long, priceCheck: Boolean): String {
             val sb = StringBuilder(base.trimEnd('/')).append("/phone?panel=1")
@@ -130,10 +144,8 @@ class PanelActivity : AppCompatActivity() {
             return sb.toString()
         }
 
-        fun intent(ctx: Context, base: String?, pin: String?, detail: Long = 0L, priceCheck: Boolean = false): Intent =
+        fun intent(ctx: Context, detail: Long = 0L, priceCheck: Boolean = false): Intent =
             Intent(ctx, PanelActivity::class.java)
-                .putExtra(EXTRA_BASE, base)
-                .putExtra(EXTRA_PIN, pin)
                 .putExtra(EXTRA_DETAIL, detail)
                 .putExtra(EXTRA_PRICE_CHECK, priceCheck)
     }

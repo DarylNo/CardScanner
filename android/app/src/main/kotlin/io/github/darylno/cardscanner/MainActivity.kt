@@ -25,6 +25,7 @@ import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import io.github.darylno.cardscanner.core.AutoScanner
+import io.github.darylno.cardscanner.gateway.GatewayService
 import io.github.darylno.cardscanner.ui.AppSettings
 import io.github.darylno.cardscanner.ui.BatteryEstimate
 import io.github.darylno.cardscanner.ui.CameraPort
@@ -35,7 +36,6 @@ import io.github.darylno.cardscanner.ui.PanelActivity
 import io.github.darylno.cardscanner.ui.ScanChrome
 import io.github.darylno.cardscanner.ui.ScanRate
 import io.github.darylno.cardscanner.ui.SettingsActivity
-import io.github.darylno.cardscanner.ui.SetupActivity
 import io.github.darylno.cardscanner.ui.ShareActivity
 import io.github.darylno.cardscanner.ui.StatusText
 import io.github.darylno.cardscanner.ui.UploadPort
@@ -77,6 +77,7 @@ class MainActivity : AppCompatActivity() {
     private val rateTick = object : Runnable {
         override fun run() {
             refreshRate()
+            refreshBanner()
             rateView.postDelayed(this, 5_000)
         }
     }
@@ -121,7 +122,17 @@ class MainActivity : AppCompatActivity() {
     private var permissionAsked = false
 
     private val permission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
-        if (ok) startCamera() else showCameraRationale(askedNow = true)
+        if (ok) { startCamera(); askNotificationsOnce() } else showCameraRationale(askedNow = true)
+    }
+
+    /** The server runs as a foreground service: its notification carries Stop. Asked once, ever. */
+    private val notifPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
+
+    private fun askNotificationsOnce() {
+        if (Build.VERSION.SDK_INT < 33 || settings.notifAsked) return
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) return
+        settings.notifAsked = true
+        notifPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -136,15 +147,12 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        if (!app.server.isPaired) {
-            startActivity(Intent(this, SetupActivity::class.java))
-            return
-        }
         refreshBanner()
         overlay.setDebugText(null)
         if (camera == null) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
                 startCamera()
+                askNotificationsOnce()
             } else if (!permissionAsked) {
                 permissionAsked = true
                 // Pre-ask rationale only when the system says so; the denial path is the callback's.
@@ -159,8 +167,8 @@ class MainActivity : AppCompatActivity() {
             camera?.setTorch(settings.torch)
             camera?.setAeLock(settings.aeLock)
             camera?.setHighRes(settings.highRes)
-            // Belt-and-braces: another screen (Setup's QR camera) may have unbound the shared
-            // CameraProvider while we were stopped; re-bind so the preview/scanning isn't dead.
+            // Belt-and-braces: another screen may have unbound the shared CameraProvider
+            // while we were stopped; re-bind so the preview/scanning isn't dead.
             camera?.rebind()
         }
         uploadListener.onState(app.uploads.pending, null, null)
@@ -170,11 +178,15 @@ class MainActivity : AppCompatActivity() {
         super.onStart()
         rateView.post(rateTick)
         app.phoneServer.device.screen = remoteScreen
+        app.phoneServer.start()          // the phone IS the server: keep it up while scanning
+        GatewayService.screenVisible(true)
+        app.identify.onScreen()          // a missing card database is fetched again; weekly check
     }
 
     override fun onStop() {
         rateView.removeCallbacks(rateTick)
         if (app.phoneServer.device.screen === remoteScreen) app.phoneServer.device.screen = null
+        GatewayService.screenVisible(false)
         super.onStop()
     }
 
@@ -400,18 +412,22 @@ class MainActivity : AppCompatActivity() {
         )
     }
 
+    /**
+     * The phone is the server: the banner says whether it can identify (the card
+     * database is in) and whether it is serving, and where a computer opens it.
+     */
     private fun refreshBanner() {
-        io.execute {
-            val v = try {
-                app.server.version()
-            } catch (e: Exception) {
-                null
-            }
-            runOnUiThread {
-                serverText.text = getString(R.string.banner_fmt, BuildConfig.VERSION_NAME, v ?: getString(R.string.server_offline))
-                connDot.background = chrome.dot(if (v != null) ScanChrome.Palette.OK else ScanChrome.Palette.ERR)
-            }
+        val st = GatewayService.status.value
+        val ident = app.identify
+        val state = when {
+            !ident.hasPack && ident.checking -> getString(R.string.banner_pack_downloading)
+            !ident.hasPack -> getString(R.string.banner_pack_missing)
+            !st.running -> getString(R.string.banner_not_serving)
+            else -> st.primaryUrl?.substringBefore("/join")?.removePrefix("http://")
+                ?.let { getString(R.string.banner_serving, it) } ?: getString(R.string.banner_serving_no_wifi)
         }
+        serverText.text = getString(R.string.banner_fmt, BuildConfig.VERSION_NAME, state)
+        connDot.background = chrome.dot(if (ident.hasPack && st.running) ScanChrome.Palette.OK else ScanChrome.Palette.ERR)
     }
 
     // ── modes / controls ────────────────────────────────────────────────────
@@ -552,7 +568,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun openPanel(detail: Long, priceCheck: Boolean) {
-        startActivity(PanelActivity.intent(this, app.server.bestBase(), app.server.pin(), detail, priceCheck))
+        startActivity(PanelActivity.intent(this, detail, priceCheck))
     }
 
     /**

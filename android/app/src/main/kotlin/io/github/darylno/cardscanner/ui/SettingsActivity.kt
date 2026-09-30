@@ -6,12 +6,7 @@ import android.content.Intent
 import android.graphics.Typeface
 import android.os.Build
 import android.os.Bundle
-import android.text.InputType
-import android.text.TextUtils
-import android.view.Gravity
 import android.view.ViewGroup
-import android.widget.EditText
-import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.Toast
@@ -57,7 +52,10 @@ class SettingsActivity : AppCompatActivity() {
         render()
     }
 
+    private var serverSection: ServerSection? = null
+
     override fun onDestroy() {
+        serverSection?.destroy()
         io.shutdown()
         super.onDestroy()
     }
@@ -70,67 +68,9 @@ class SettingsActivity : AppCompatActivity() {
         col.removeAllViews()
         val s = app.settings
 
-        // ── Server: the failover list, in order ──
-        col.addView(chrome.sectionHeader(getString(R.string.settings_server)).apply { setPadding(dp(4), dp(8), dp(4), dp(8)) })
-        val server = chrome.card(padDp = 8)
-        val urls = app.server.urls()
-        if (urls.isEmpty()) {
-            server.addView(chrome.text(getString(R.string.settings_not_paired), 15f, ScanChrome.Palette.TEXT_DIM)
-                .apply { setPadding(dp(8), dp(8), dp(8), dp(8)) })
-        }
-        urls.forEachIndexed { i, u ->
-            if (i > 0) server.addView(chrome.divider(), chrome.dividerParams().apply { marginStart = dp(8); marginEnd = dp(8) })
-            val row = LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
-                setPadding(dp(8), dp(6), dp(4), dp(6))
-            }
-            val texts = LinearLayout(this).apply {
-                orientation = LinearLayout.VERTICAL
-                addView(chrome.text(SetupActivity.label(u), 16f))
-                addView(chrome.text(u, 13f, ScanChrome.Palette.TEXT_DIM).apply {
-                    maxLines = 1
-                    ellipsize = TextUtils.TruncateAt.MIDDLE
-                    setPadding(0, dp(2), 0, 0)
-                })
-            }
-            row.addView(texts, LinearLayout.LayoutParams(0, wrap(), 1f).apply { marginEnd = dp(8) })
-            row.addView(chrome.smallButton(chrome.destructiveButton(getString(R.string.settings_remove)) {
-                if (urls.size <= 1) {
-                    Toast.makeText(this, getString(R.string.settings_keep_one), Toast.LENGTH_SHORT).show()
-                } else {
-                    app.server.setUrls(urls - u); render()
-                }
-            }), LinearLayout.LayoutParams(wrap(), wrap()))
-            server.addView(row, lp())
-        }
-        col.addView(server, lp())
-        col.addView(note(getString(R.string.settings_server_note)))
-        val actions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        actions.addView(chrome.secondaryButton(getString(R.string.settings_add)) { addAddress() },
-            LinearLayout.LayoutParams(0, wrap(), 1f).apply { marginEnd = dp(6) })
-        actions.addView(chrome.secondaryButton(getString(R.string.settings_refresh)) {
-            io.execute {
-                val msg = try {
-                    app.server.refreshAddresses(); getString(R.string.settings_refreshed)
-                } catch (e: Exception) {
-                    getString(R.string.settings_refresh_failed, e.message)
-                }
-                runOnUiThread { Toast.makeText(this, msg, Toast.LENGTH_SHORT).show(); render() }
-            }
-        }, LinearLayout.LayoutParams(0, wrap(), 1f).apply { marginStart = dp(6) })
-        col.addView(actions, lp(12))
-        col.addView(chrome.destructiveButton(getString(R.string.settings_repair)) {
-            AlertDialog.Builder(this)
-                .setMessage(R.string.settings_repair_confirm)
-                .setPositiveButton(R.string.settings_repair_ok) { _, _ ->
-                    app.server.unpair()
-                    startActivity(Intent(this, SetupActivity::class.java))
-                    finish()
-                }
-                .setNegativeButton(R.string.cancel, null)
-                .show()
-        }, lp(12))
+        // ── This phone's server (Stage 4: the phone IS the server) ──
+        serverSection?.destroy()
+        serverSection = ServerSection(this, chrome, app.phoneServer, app.identify).also { it.build(col) }
 
         // ── Camera ──
         col.addView(chrome.sectionHeader(getString(R.string.settings_camera)))
@@ -175,32 +115,13 @@ class SettingsActivity : AppCompatActivity() {
         append("app ").append(BuildConfig.VERSION_NAME).append(" (").append(BuildConfig.VERSION_CODE).append(")\n")
         append("device ").append(Build.MANUFACTURER).append(' ').append(Build.MODEL)
         append(" · Android ").append(Build.VERSION.RELEASE).append(" (API ").append(Build.VERSION.SDK_INT).append(")\n")
-        append("server ").append(app.server.bestBase() ?: "—").append('\n')
+        append("server ").append(if (app.phoneServer.running) "serving on :${app.phoneServer.port}" else "stopped")
+            .append(" · paired computers ").append(app.phoneServer.admins.count).append('\n')
+        append("card database ").append(app.identify.store.installedManifest()?.let { "${it.rows} rows · ${it.buildDate}" } ?: "none")
+            .append('\n')
         append("queue pending ").append(app.uploads.pending).append("\n\n")
         append(CameraDiagnostics.last ?: "camera: open the scanner screen once to collect camera details").append("\n\n")
         append("recent captures (ms):\n").append(app.settings.recentTimings.ifBlank { "—" })
-    }
-
-    private fun addAddress() {
-        val input = EditText(this).apply {
-            hint = getString(R.string.settings_add_hint)
-            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
-            isSingleLine = true
-        }
-        val box = FrameLayout(this).apply {
-            setPadding(dp(20), dp(8), dp(20), 0)
-            addView(input)
-        }
-        AlertDialog.Builder(this)
-            .setTitle(R.string.settings_add_title)
-            .setView(box)
-            .setPositiveButton(R.string.settings_add_ok) { _, _ ->
-                val n = app.server.normalize(input.text.toString())
-                if (n == null) Toast.makeText(this, getString(R.string.settings_not_address), Toast.LENGTH_SHORT).show()
-                else { app.server.setUrls(app.server.urls() + n); render() }
-            }
-            .setNegativeButton(R.string.cancel, null)
-            .show()
     }
 }
 

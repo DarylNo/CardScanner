@@ -288,4 +288,21 @@ class PhoneServerTest {
         client.newCall(Request.Builder().url("$base/api/device/snapshot.jpg").header("Cookie", admin).build())
             .execute().use { r -> assertEquals(503, r.code) }
     }
+
+    /** Stage 4: the phone's own review screen (a WebView on loopback) is admin through the owner token. */
+    @Test fun thePhonesOwnReviewScreenIsAdmin() {
+        val file = tmp.newFile("owner-admins.json").also { it.delete() }
+        val admins = AdminPairing(file)
+        val g = GatewayServer(LocalUpstream(backend), port = 0, hostname = "127.0.0.1", admins = admins).also { gateway = it }
+        g.startServing()
+        val base = "http://127.0.0.1:${g.listeningPort}"
+        fileTwo()
+        val owner = "${GatewayServer.ADMIN_COOKIE}=${admins.ownerToken}"
+        assertEquals(200, req(base, owner, "GET", "/api/export.csv"))
+        assertEquals(0, admins.count)                                   // not a "paired computer"
+        assertTrue(!file.exists() || !file.readText().contains(admins.ownerToken))
+        admins.revokeAll()                                             // "Forget paired computers"
+        assertEquals(200, req(base, owner, "DELETE", "/api/scans/1"))   // the phone itself is still the owner
+        assertTrue(page(base, "${GatewayServer.ADMIN_COOKIE}=${"0".repeat(64)}", "/api/scans").contains("Join the card scanner"))
+    }
 }

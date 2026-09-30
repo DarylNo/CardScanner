@@ -72,7 +72,18 @@ class AdminPairing(
         token
     }
 
-    fun isAdmin(token: String): Boolean = synchronized(lock) { sha256(token) in hashes }
+    fun isAdmin(token: String): Boolean =
+        MessageDigest.isEqual(token.toByteArray(), ownerToken.toByteArray()) ||
+            synchronized(lock) { sha256(token) in hashes }
+
+    /**
+     * The phone's OWN admin session (its review screen, a WebView on 127.0.0.1):
+     * random per process, memory only — never written, never counted as a paired
+     * computer, untouched by [revokeAll].
+     */
+    val ownerToken: String by lazy {
+        ByteArray(32).also(random::nextBytes).joinToString("") { "%02x".format(it.toInt() and 0xff) }
+    }
 
     /** How many computers are paired. */
     val count: Int get() = synchronized(lock) { hashes.size }

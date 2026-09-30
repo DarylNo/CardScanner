@@ -88,6 +88,10 @@ class GatewayServer(
         var lockedUntil = 0L
     }
 
+    /** When an authenticated request last came from ANOTHER device (not this phone). 0 = never. */
+    @Volatile var lastRemoteAt: Long = 0L
+        private set
+
     /** The code guests must enter right now. */
     val code: String get() = joinCode.current
 
@@ -142,6 +146,8 @@ class GatewayServer(
         val path = session.uri ?: "/"
         if (path == JOIN_PATH) return closing(session, join(session))
         val role = roleOf(session.headers["cookie"]) ?: return closing(session, codePage(session, null))
+        // Another device (a computer, a guest) is using the server: keeps it from idling out.
+        if (!isLoopback(session.remoteIpAddress.orEmpty())) lastRemoteAt = clock()
         return proxy(session, method, path, role)
     }
 
@@ -410,7 +416,8 @@ button{font-size:1.1rem;padding:.55em 1.2em;margin-left:.4em;border-radius:6px;b
     }
 
     companion object {
-        const val DEFAULT_PORT = 8080
+        /** The phone server's port (Stage 4: the one server; the Share screen shares it). */
+        const val DEFAULT_PORT = 8090
         const val COOKIE = "cs_guest"
         const val ADMIN_COOKIE = "cs_admin"
         /** Set by the gateway on every proxied request when [admins] is on; a client's own is dropped. */
@@ -453,6 +460,11 @@ button{font-size:1.1rem;padding:.55em 1.2em;margin-left:.4em;border-radius:6px;b
             if (u[0] == 0xfe && (u[1] and 0xc0) == 0x80) return true                    // fe80::/10
             if ((u[0] and 0xfe) == 0xfc) return true                                     // fc00::/7
             return false
+        }
+
+        internal fun isLoopback(ip: String): Boolean {
+            val s = ip.trim().removePrefix("[").removeSuffix("]").substringBefore('%')
+            return s.startsWith("127.") || s == "::1" || s == "0:0:0:0:0:0:0:1" || s.startsWith("::ffff:127.")
         }
 
         private fun isLocalV4(a: IntArray): Boolean =

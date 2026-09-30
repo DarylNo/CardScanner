@@ -10,24 +10,27 @@ import io.github.darylno.cardscanner.core.server.LayoutStore
 import io.github.darylno.cardscanner.f2f.OkHttpTransport
 import io.github.darylno.cardscanner.gateway.AdminPairing
 import io.github.darylno.cardscanner.gateway.GatewayServer
+import io.github.darylno.cardscanner.gateway.GatewayService
 import io.github.darylno.cardscanner.gateway.LocalAddresses
-import io.github.darylno.cardscanner.ident.ArtPackStore
+import io.github.darylno.cardscanner.ident.LocalIdentify
 import io.github.darylno.cardscanner.ident.TransportHttpJson
 import java.io.File
 import java.util.concurrent.Executors
 
 /**
- * Stage 3 preview (Diagnostics, hidden, default OFF): the phone runs its own
- * copy of the server beside the computer's. While ON, every capture the
- * phone identifies (Compare mode) is ALSO filed into the phone's own store,
- * and the review pages are served from the phone on the LAN — through the
- * existing gateway, so the same 6-digit code, lockouts and LAN-only rule
- * apply. The computer's server stays the real path; nothing here reaches it.
+ * Stage 4 (owner, 2026-09-30: full cutover, the computer app is retired): the
+ * phone IS the scanner's server. Every capture is identified on the phone and
+ * filed in this store ([uploader], behind the upload queue); the review pages
+ * — the app's own review screen and any computer on the LAN — are served from
+ * here through the gateway ([GatewayService] keeps it up while the app runs,
+ * screen off included): LAN only, the paired computer is admin, the 6-digit
+ * code makes a guest, lockouts as before.
  *
  * Storage: the owner's rule (2026-09-30) — at [WARN_AT] scans show the photo
  * size and free space as a warning, then keep going; nothing is pruned.
  */
-class PhoneServerPreview(private val ctx: Context, private val pack: ArtPackStore, val device: DeviceBridge) {
+class PhoneServer(private val ctx: Context, private val identify: LocalIdentify, val device: DeviceBridge) :
+    GatewayService.Host {
     private val root = File(ctx.filesDir, "phoneserver")
     val store: SqliteScanStore by lazy { SqliteScanStore(File(root, "scans.db")) }
     val photos = PhotoDir(File(root, "scan_images"))
@@ -40,7 +43,7 @@ class PhoneServerPreview(private val ctx: Context, private val pack: ArtPackStor
             version = "${BuildConfig.VERSION_NAME} (phone)",
             search = { q -> PrintingCandidates.searchCandidates(scryfall.getAllPrintings(q)) },
             lanIp = { LocalAddresses.list().firstOrNull() },
-            packRows = { pack.installedManifest()?.rows ?: 0 },
+            packRows = { identify.store.installedManifest()?.rows ?: 0 },
             f2f = f2f,
             launch = { sweepExec.execute(it) },
             now = { System.nanoTime() / 1e9 },
@@ -57,34 +60,45 @@ class PhoneServerPreview(private val ctx: Context, private val pack: ArtPackStor
     /** The paired computer(s): admin; everyone with the 6-digit code is a guest. */
     val admins = AdminPairing(File(root, "admins.json"))
 
-    @Volatile private var server: GatewayServer? = null
-    val running: Boolean get() = server != null
-    val code: String? get() = server?.code
-    val port: Int get() = server?.listeningPort ?: PORT
-
-    /** Start serving on the LAN; returns an error message, or null when it's up. */
-    @Synchronized
-    fun start(): String? {
-        if (server != null) return null
-        val s = GatewayServer(LocalUpstream(backend), PORT, admins = admins)
-        return try {
-            s.startServing()
-            server = s
-            backend.worker.start()           // price whatever is owed, then wait for scans
-            null
-        } catch (e: Exception) {
-            "could not start on port $PORT: ${e.message}"
-        }
+    /** The upload queue's door: identify on the phone, file here (see [LocalScanUploader]). */
+    val uploader: LocalScanUploader by lazy {
+        LocalScanUploader(
+            identify = { frames ->
+                identify.ensurePack()            // no card database yet → fetch it (rate-limited)
+                identify.identifier().identifyFrames(frames).result.json
+            },
+            file = { result, photo, replace -> backend.file(result, photo, replace) },
+            answers = File(root, "upload_answers"),
+        )
     }
 
-    @Synchronized
-    fun stop() {
-        server?.stop()
-        server = null
-        admins.cancelCode()                 // a code shown before the stop is not good after a restart
-        backend.worker.stop()
-        backend.sweep.cancel()
+    private val st get() = GatewayService.status.value
+    val running: Boolean get() = st.running
+    val code: String? get() = st.code.takeIf { st.running }
+    val port: Int get() = if (st.running) st.port else PORT
+
+    /** Keep the server up (idempotent): the scan and review screens call this. */
+    fun start() = GatewayService.start(ctx, PORT)
+
+    /** Stop serving (the notification's Stop does the same). */
+    fun stop() = GatewayService.stop(ctx)
+
+    // ── GatewayService.Host ───────────────────────────────────────────────────
+    override fun newServer(port: Int) = GatewayServer(LocalUpstream(backend), port, admins = admins)
+
+    override fun onServing() {
+        backend.worker.start()               // price whatever is owed, then wait for scans
     }
+
+    override fun onStopped() {
+        admins.cancelCode()                  // a code shown before the stop is not good after a restart
+        backend.sweep.cancel()               // first: a running sweep ends within one card…
+        backend.worker.stop()                // …so the worker's join doesn't time out on it
+    }
+
+    /** The phone's own review screen: the local address and the owner's admin cookie. */
+    fun localBase(): String = "http://127.0.0.1:$port"
+    fun ownerCookie(): String = "${GatewayServer.ADMIN_COOKIE}=${admins.ownerToken}"
 
     /** The address to open on the computer (join link with the code). */
     fun joinUrl(): String? {
@@ -100,10 +114,6 @@ class PhoneServerPreview(private val ctx: Context, private val pack: ArtPackStor
         val c = admins.newCode()
         return LocalAddresses.joinUrl(ip, port, c) to c
     }
-
-    /** File one identified capture ([result] = the pipeline's scan_candidates answer). */
-    fun file(result: Map<String, Any?>, photo: ByteArray?): Map<String, Any?> =
-        backend.file(result, photo)
 
     /** "N scans · X MB of photos · Y GB free" and whether it's past the warning line. */
     fun usage(): Usage {

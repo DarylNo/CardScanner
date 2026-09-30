@@ -99,26 +99,6 @@ interface UploadPort {
     val pending: Int
 }
 
-/** Paired server: config, failover client, pairing. */
-interface ServerPort {
-    val isPaired: Boolean
-    /** Best base URL right now (lastGood, else the first configured). */
-    fun bestBase(): String?
-    fun pin(): String?
-    fun urls(): List<String>
-    fun setUrls(urls: List<String>)
-    /** Blocking; network. */
-    fun version(): String
-    /** Blocking; refreshes the address list from /api/addresses and saves it. */
-    fun refreshAddresses(): List<String>
-    /** Blocking: probe [base] for its certificate fingerprint (hex), or throw. */
-    fun probe(base: String): String
-    /** Blocking: pair with [base] under [pin], save the config. Returns the learned URLs. */
-    fun pair(base: String, pin: String): List<String>
-    fun normalize(input: String): String?
-    fun unpair()
-}
-
 /** Guest gateway (Share screen). */
 interface GatewayPort {
     val running: Boolean
@@ -127,7 +107,8 @@ interface GatewayPort {
     val error: String?
     fun code(): String
     fun start()
-    fun stop()
+    /** A new guest code: every guest session ends; the server, this phone and the paired computer carry on. */
+    fun newGuestCode()
     fun localAddresses(): List<String>
     fun joinUrl(ip: String): String
     fun qr(text: String, sizePx: Int): android.graphics.Bitmap

@@ -11,6 +11,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.BeforeClass
+import org.junit.Assert.fail
 import org.junit.Test
 import org.opencv.core.Mat
 import org.opencv.imgcodecs.Imgcodecs
@@ -130,14 +131,44 @@ class PhoneIdentifierTest {
             id.identify(primary)
             assertEquals(before, images.loads.get())
 
-            // Summaries the compare row is built from.
-            val phone = CompareMode.phoneSummary(r)
-            assertEquals("Lightning Bolt", phone.name)
-            assertEquals("m10", phone.set)
-            assertTrue(phone.autoPick && phone.ocrConfirmed)
+            // What gets filed: the server's /api/scan shape, the OCR-confirmed printing first.
+            val top = (r.result.json["candidates"] as List<*>)[0] as Map<*, *>
+            assertEquals("Lightning Bolt", (r.result.json["card_read"] as Map<*, *>)["name"])
+            assertEquals("m10", top["set"])
+            assertEquals(true, top["ocr_confirmed"])
+
+            // The upload queue's fallback: several frames through the same pipeline.
+            val multi = id.identifyFrames(listOf(primary, primary))
+            assertEquals(true, multi.result.json["identified"])
         } finally {
             id.shutdown()
         }
+    }
+
+    /** Offline / 429 / 5xx: never filed as "identified, no printings" — the queue retries it. */
+    @Test
+    fun scryfallUnreachable_isRetryableNotFiled() {
+        for (fail in listOf<Exception>(IOException("no network"), HttpStatusException(429, "{}", "application/json", "u"),
+            HttpStatusException(503, "", "", "u"))) {
+            val offline = object : HttpJson { override fun get(url: String): String = throw fail }
+            try {
+                PhoneIdentifier({ matcher }, offline, FixtureImages(), null).identify(primary)
+                fail("$fail: filed a result without printings")
+            } catch (e: PhoneIdentifier.ScryfallUnreachableException) {
+                assertTrue(e is IOException)                 // the upload queue retries IOExceptions
+            }
+        }
+    }
+
+    /** A 404 IS an answer (no such card): the result is filed as the server would. */
+    @Test
+    fun scryfall404_isAnAnswer() {
+        val notFound = object : HttpJson {
+            override fun get(url: String): String =
+                throw HttpStatusException(404, """{"object":"error","details":"No cards found"}""", "application/json", url)
+        }
+        val r = PhoneIdentifier({ matcher }, notFound, FixtureImages(), null).identify(primary)
+        assertEquals(emptyList<Any?>(), r.result.json["candidates"])
     }
 
     @Test(expected = PhoneIdentifier.NoArtPackException::class)

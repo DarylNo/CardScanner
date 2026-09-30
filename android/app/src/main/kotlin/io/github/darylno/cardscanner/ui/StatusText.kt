@@ -56,14 +56,15 @@ object StatusText {
 
     fun priceCheckOpening(scan: JSONObject): String = "✓ ${name(scan)}${popTag(scan)} — checking price…"
 
-    /** Queue indicator: "2 uploading…" / "offline — 3 queued, retrying in 8s". */
+    /** Queue indicator: "2 identifying…" / "3 waiting (no connection?) — retrying in 8s". */
     fun queue(pending: Int, lastError: String?, nextRetryInMs: Long?): String = when {
         pending <= 0 -> ""
-        // A pin mismatch is not "offline": say it (the queue waits until the user re-pairs).
-        lastError != null && lastError.contains("re-pair", ignoreCase = true) -> "$pending queued — $lastError"
+        // Stage 4: the queue's "upload" is the phone identifying + filing the card itself.
+        lastError != null && lastError.contains("card database", ignoreCase = true) ->
+            "$pending waiting for the card database"
         lastError != null && nextRetryInMs != null ->
-            "offline — $pending queued, retrying in ${(nextRetryInMs + 999) / 1000}s"
-        lastError != null -> "offline — $pending queued"
-        else -> "$pending uploading…"
+            "$pending waiting (no connection?) — retrying in ${(nextRetryInMs + 999) / 1000}s"
+        lastError != null -> "$pending waiting (no connection?)"
+        else -> "$pending identifying…"
     }
 }

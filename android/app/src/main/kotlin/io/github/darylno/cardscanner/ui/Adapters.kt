@@ -1,9 +1,8 @@
 package io.github.darylno.cardscanner.ui
 
 import android.content.Context
-import io.github.darylno.cardscanner.net.PrefsConfigStore
-import io.github.darylno.cardscanner.net.ServerClient
 import io.github.darylno.cardscanner.net.UploadQueue
+import io.github.darylno.cardscanner.phoneserver.PhoneServer
 import java.io.File
 
 /**
@@ -11,20 +10,14 @@ import java.io.File
  * these once at process start.
  */
 object Adapters {
-    @Volatile private var serverAdapter: ServerAdapter? = null
+    /**
+     * Persistent queue in filesDir/queue; its uploader is the phone itself
+     * (identify + file into the phone's store). Started now.
+     */
+    fun uploads(ctx: Context, phone: PhoneServer): UploadPort =
+        UploadAdapter(UploadQueue(File(ctx.filesDir, "queue"), phone.uploader))
 
-    fun server(ctx: Context): ServerAdapter = serverAdapter ?: synchronized(this) {
-        serverAdapter ?: ServerAdapter(PrefsConfigStore(ctx), ServerClient(PrefsConfigStore(ctx))).also { serverAdapter = it }
-    }
-
-    /** Persistent queue in filesDir/queue, uploading through the failover client; started now. */
-    fun uploads(ctx: Context): UploadPort =
-        UploadAdapter(UploadQueue(File(ctx.filesDir, "queue"), server(ctx).client))
-
-    fun gateway(ctx: Context): GatewayPort {
-        val s = server(ctx)
-        return GatewayAdapter(ctx.applicationContext) { s.upstream() }
-    }
+    fun gateway(ctx: Context): GatewayPort = GatewayAdapter(ctx.applicationContext)
 
     fun camera(ctx: Context, settings: AppSettings): CameraPort = CameraAdapter(ctx, settings)
 }

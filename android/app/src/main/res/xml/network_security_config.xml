@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Stage 4: the app's review screen loads the phone's OWN server over loopback
+     (plain HTTP on 127.0.0.1). Cleartext is allowed for loopback only; every
+     other connection keeps the platform default (HTTPS only). -->
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">127.0.0.1</domain>
+        <domain includeSubdomains="false">localhost</domain>
+    </domain-config>
+</network-security-config>
