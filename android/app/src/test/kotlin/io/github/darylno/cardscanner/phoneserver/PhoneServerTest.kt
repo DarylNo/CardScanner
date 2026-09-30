@@ -122,6 +122,11 @@ class PhoneServerTest {
         }
         client.newCall(Request.Builder().url("$base/api/scans/1/image").header("Cookie", cookie).build())
             .execute().use { r -> assertEquals(200, r.code); assertEquals(1, r.body!!.bytes().size) }
+        // every answer names its type (pages, JSON, photos) — the browser must not have to sniff
+        client.newCall(Request.Builder().url("$base/").header("Cookie", cookie).build())
+            .execute().use { r -> assertEquals("text/html; charset=utf-8", r.header("Content-Type")) }
+        client.newCall(Request.Builder().url("$base/api/scans").header("Cookie", cookie).build())
+            .execute().use { r -> assertEquals("application/json", r.header("Content-Type")) }
         // the CSV download (admin: the paired computer) reaches the browser as a named attachment, BOM first
         val admin = joinCookie(base, admins.newCode(), GatewayServer.ADMIN_COOKIE)!!
         client.newCall(Request.Builder().url("$base/api/export.csv").header("Cookie", admin).build())
@@ -239,5 +244,48 @@ class PhoneServerTest {
         assertTrue(last is GatewayServer.JoinResult.Locked)
         // even the right code is refused while locked
         assertTrue(g.attemptJoin("10.0.0.9", admins.pendingCode!!, 1_001L) is GatewayServer.JoinResult.Locked)
+    }
+
+    // ── the phone's own settings from the browser ───────────────────────────
+
+    @Test fun thePairedComputerChangesThePhonesSettingsLive() {
+        val settings = io.github.darylno.cardscanner.ui.AppSettings(org.robolectric.RuntimeEnvironment.getApplication())
+        settings.mode = io.github.darylno.cardscanner.ui.AppSettings.Mode.MOUNT
+        settings.torch = false
+        settings.roi = null
+        val bridge = DeviceBridge(settings)
+        var applied = 0
+        bridge.screen = object : DeviceBridge.Screen {
+            override fun applyRemoteSettings() { applied++ }
+            override fun snapshotJpeg(): ByteArray? = byteArrayOf(-1, -40, -1)
+        }
+        val b = PhoneBackend(store, PhotoDir(tmp.newFolder("p2")), pages = { null }, version = "t",
+            search = { emptyList() }, lanIp = { null }, packRows = { 0 },
+            f2f = { _, _, _, _, _ -> F2fAnswer.NotListed }, launch = { it.run() }, now = { 0.0 },
+            device = io.github.darylno.cardscanner.core.server.DeviceApi(bridge))
+        val admins = AdminPairing(null)
+        val g = GatewayServer(LocalUpstream(b), port = 0, hostname = "127.0.0.1", admins = admins).also { gateway = it }
+        g.startServing()
+        val base = "http://127.0.0.1:${g.listeningPort}"
+        val guest = joinCookie(base, g.code, GatewayServer.COOKIE)!!
+        val admin = joinCookie(base, admins.newCode(), GatewayServer.ADMIN_COOKIE)!!
+
+        assertEquals(403, req(base, guest, "GET", "/api/device"))
+        assertEquals(403, req(base, guest, "PATCH", "/api/device", """{"torch":true}"""))
+        assertEquals(false, settings.torch)
+
+        assertEquals(200, req(base, admin, "PATCH", "/api/device",
+            """{"mode":"handheld","torch":true,"roi":{"x0":0.1,"y0":0.1,"x1":0.9,"y1":0.8}}"""))
+        assertEquals(io.github.darylno.cardscanner.ui.AppSettings.Mode.HANDHELD, settings.mode)
+        assertEquals(true, settings.torch)
+        assertEquals(io.github.darylno.cardscanner.core.RoiFrac(0.1, 0.1, 0.9, 0.8), settings.roi)
+        assertEquals(1, applied)                                         // the scan screen was told
+        val st = MiniJson.parse(page(base, admin, "/api/device")) as Map<*, *>
+        assertEquals("handheld", st["mode"]); assertEquals(true, st["camera_live"])
+        client.newCall(Request.Builder().url("$base/api/device/snapshot.jpg").header("Cookie", admin).build())
+            .execute().use { r -> assertEquals(200, r.code); assertEquals("image/jpeg", r.header("Content-Type")) }
+        bridge.screen = null                                            // scan screen closed
+        client.newCall(Request.Builder().url("$base/api/device/snapshot.jpg").header("Cookie", admin).build())
+            .execute().use { r -> assertEquals(503, r.code) }
     }
 }

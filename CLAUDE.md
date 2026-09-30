@@ -345,7 +345,15 @@ Where it stands (2026-09-29, after 1.0.13):
   guest's swipe flags instead of deleting; the admin gets "Delete flagged
   (n)". The rig's Share gateway (no AdminPairing) is unchanged — the
   "Guests have FULL access" rule still holds THERE. Stage 3 is feature-
-  complete; next is Stage 4 (switch over). Owner
+  complete; next is Stage 4 (switch over). 1.0.17: the phone's own settings
+  from the browser (owner-approved) — `core/server/DeviceApi` (GET/PATCH
+  `/api/device`: mode, auto, roi, torch, vibration, high_res, ae_lock;
+  `/api/device/snapshot.jpg` = the current UPRIGHT analysis frame, the space
+  the Area fractions live in), admin only; app `DeviceBridge` writes
+  `AppSettings` and MainActivity applies a change live (a new Area only
+  when it changed — it re-learns the tray). Desktop "📱 Scanner" panel
+  shows only when `/api/device` answers (never on the computer's server).
+  `AppSettings.focusLock` is read nowhere, so it is NOT exposed. Owner
   decisions (2026-09-30): START FRESH at switchover (no import of the PC's
   scans); the computer pairs once as admin via a one-time code; at 10,000
   scans show size + free space as a warning, then keep going (no pruning).

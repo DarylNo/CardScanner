@@ -43,7 +43,8 @@ class App : Application() {
         // The tap only observes: uploads go through the same queue as before.
         uploads = CompareUploadPort(Adapters.uploads(this), compare)
         gateway = Adapters.gateway(this)
-        phoneServer = io.github.darylno.cardscanner.phoneserver.PhoneServerPreview(this, compare.store)
+        phoneServer = io.github.darylno.cardscanner.phoneserver.PhoneServerPreview(this, compare.store,
+            io.github.darylno.cardscanner.phoneserver.DeviceBridge(settings))
         // While the preview runs, every capture the phone identifies is filed into its own store.
         compare.onPhoneIdentified = { ident, jpeg ->
             if (phoneServer.running) phoneServer.file(ident.result.json, jpeg)

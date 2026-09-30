@@ -45,6 +45,17 @@ class ScanAnalyzerTest {
         }
     }
 
+    @Test fun aSnapshotIsTheNextFrameAndOnlyOnce() {
+        val got = mutableListOf<io.github.darylno.cardscanner.core.Nv21Frame>()
+        analyzer.requestSnapshot { got += it }
+        feed(card, 1, rotation = 90)
+        feed(tray, 3)
+        assertEquals(1, got.size)                         // one request, one frame
+        val f = got[0]
+        assertEquals(w, f.width); assertEquals(h, f.height); assertEquals(90, f.rotation)
+        assertEquals(230, f.data[60 * w + 150].toInt() and 0xff)     // the card's frame, not a later tray
+    }
+
     @Test fun framesCloserThanTheGateAreSkipped() {
         feed(tray, 10, stepMs = 33)
         // 33 ms frames through a 90 ms gate → every 3rd frame (0, 99, 198, 297 ms) is processed;

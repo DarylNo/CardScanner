@@ -169,12 +169,42 @@ class MainActivity : AppCompatActivity() {
     override fun onStart() {
         super.onStart()
         rateView.post(rateTick)
+        app.phoneServer.device.screen = remoteScreen
     }
 
     override fun onStop() {
         rateView.removeCallbacks(rateTick)
+        if (app.phoneServer.device.screen === remoteScreen) app.phoneServer.device.screen = null
         super.onStop()
     }
+
+    /**
+     * The phone server's browser settings (DeviceApi): a change made on the computer is
+     * re-read from AppSettings and applied here at once, like the phone's own controls;
+     * the browser draws the scan Area on [snapshotJpeg]'s picture of the tray.
+     */
+    private val remoteScreen = object : io.github.darylno.cardscanner.phoneserver.DeviceBridge.Screen {
+        override fun applyRemoteSettings() = runOnUiThread {
+            if (isFinishing || isDestroyed) return@runOnUiThread
+            if (overlay.settingArea) cancelArea()
+            if (handheld != appliedHandheld) {  // what the Mount/Handheld toggle does
+                hideRetry()
+                forgetLastCapture()
+            }
+            if (settings.roi != appliedRoi) {   // a new Area re-learns the tray — only when it changed
+                appliedRoi = settings.roi
+                camera?.setRoi(if (handheld) null else settings.roi)
+            }
+            applyMode()
+            camera?.setTorch(settings.torch)
+            camera?.setAeLock(settings.aeLock)
+            camera?.setHighRes(settings.highRes)
+        }
+
+        override fun snapshotJpeg(): ByteArray? = camera?.snapshotJpeg()
+    }
+    private var appliedRoi: io.github.darylno.cardscanner.core.RoiFrac? = null
+    private var appliedHandheld = false
 
     /** Battery % and charging state from the sticky ACTION_BATTERY_CHANGED broadcast (no receiver kept). */
     private fun readBattery(now: Long) {
@@ -388,6 +418,7 @@ class MainActivity : AppCompatActivity() {
     private val handheld get() = settings.mode == AppSettings.Mode.HANDHELD
 
     private fun applyMode() {
+        appliedHandheld = handheld
         styleSegment(mountSeg, !handheld)
         styleSegment(handSeg, handheld)
         // INVISIBLE, not GONE: the shutter stays centred in both modes.
@@ -464,6 +495,7 @@ class MainActivity : AppCompatActivity() {
                 settings.roi = null
                 overlay.setRoi(null)
                 camera?.setRoi(null)
+                appliedRoi = null
                 updateAreaBtn()
                 setStatus(StatusText.AREA_CLEARED)
             }
@@ -486,6 +518,7 @@ class MainActivity : AppCompatActivity() {
         settings.roi = r
         overlay.setRoi(r)
         camera?.setRoi(r)          // the adapter resets detection (re-learn under the new area)
+        appliedRoi = r
         updateAreaBtn()
         setStatus(StatusText.AREA_SET)
     }
@@ -556,6 +589,7 @@ class MainActivity : AppCompatActivity() {
         camera = cam
         cam.setHandheld(handheld)
         cam.setRoi(if (handheld) null else settings.roi)
+        appliedRoi = settings.roi
         cam.setAuto(!handheld && settings.auto)
         cam.bind(this, preview, cameraListener)
     }

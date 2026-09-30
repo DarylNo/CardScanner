@@ -123,6 +123,12 @@ class ScanAnalyzer(
     private var nextId = 1L
 
     // --- stats (written on the analysis thread, read racily by diagnostics) ---
+    private val snapshotWaiter = java.util.concurrent.atomic.AtomicReference<((Nv21Frame) -> Unit)?>(null)
+    private val snapRing = FrameRing(1)
+
+    /** Hand the NEXT analyzed frame (a copy, NV21) to [give] on the analysis thread. */
+    fun requestSnapshot(give: (Nv21Frame) -> Unit) { snapshotWaiter.set(give) }
+
     @Volatile private var frames = 0L
     @Volatile private var gated = 0L
     @Volatile private var ticks = 0L
@@ -159,6 +165,11 @@ class ScanAnalyzer(
     /** One camera frame (the testable core of [analyze]). Analysis thread only. */
     fun process(p: YuvPlanes, rotation: Int, timestampNs: Long) {
         frames++
+        // A browser asked for a picture of the tray (scan-Area drawing): hand over this frame.
+        snapshotWaiter.getAndSet(null)?.let { give ->
+            snapRing.copyFrom(p, rotation, timestampNs)
+            runCatching { give(snapRing.snapshotLast(1).first()) }
+        }
         // A timestamp going backwards = a new camera session: accept it.
         if (lastFrameTs != NONE && timestampNs >= lastFrameTs && timestampNs - lastFrameTs < FRAME_GATE_NS) {
             gated++
