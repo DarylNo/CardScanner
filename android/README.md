@@ -264,9 +264,14 @@ identifies is also filed into the phone's own store (`files/phoneserver/`:
 server stays the real path; nothing here reaches it. Open the shown address on
 the computer and enter the code. Pricing (3c) runs on the phone from its own
 IP over Cronet: whatever is owed is priced, re-checked every 5 s while
-anything is, and the loop sleeps until the next scan when nothing is. Not
-yet on the phone: export (3d) and admin/guest roles (3e) — export answers
-501 for now. At 10,000
+anything is, and the loop sleeps until the next scan when nothing is.
+Export (3d) works from the served pages: Download TXT and Export to CSV
+(the column layout is saved on the phone). Roles (3e): **Pair a computer as
+admin** shows a QR + one-time 8-digit code (10 min, single use); that
+computer is remembered as admin (delete, clear, export, pricing) until
+**Forget paired computers**. Anyone with the 6-digit code is a guest: they
+review, pick and edit, and a swipe FLAGS a scan for deletion — the admin
+confirms with **Delete flagged (n)**. At 10,000
 scans the usage line turns into a warning (photo size + free space); nothing
 is pruned.
 

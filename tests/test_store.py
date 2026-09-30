@@ -89,3 +89,35 @@ def test_persists_across_reopen(tmp_path):
     s2 = ScanStore(path)
     assert s2.get_scan(scan["id"])["card_read"]["name"] == "Lightning Bolt"
     s2.close()
+
+
+def test_flag_defaults_off_and_round_trips(store):
+    scan = _mk(store)
+    assert scan["flagged"] is False
+    assert store.update_scan(scan["id"], flagged=1)["flagged"] is True
+    assert store.update_scan(scan["id"], flagged=False)["flagged"] is False
+
+
+def test_a_database_from_before_the_flag_gains_the_column(tmp_path):
+    import sqlite3
+    path = tmp_path / "old.db"
+    conn = sqlite3.connect(path)
+    conn.executescript("""
+        CREATE TABLE scans (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'candidates',
+            identified INTEGER NOT NULL DEFAULT 0, error TEXT,
+            card_read TEXT NOT NULL DEFAULT '{}', confidence TEXT NOT NULL DEFAULT '{}',
+            candidates TEXT NOT NULL DEFAULT '[]', selection TEXT, f2f TEXT,
+            included INTEGER NOT NULL DEFAULT 1);
+        INSERT INTO scans (created_at, updated_at) VALUES ('t', 't');
+    """)
+    conn.commit()
+    conn.close()
+    s = ScanStore(path)
+    try:
+        assert s.get_scan(1)["flagged"] is False          # old rows read as unflagged
+        assert s.update_scan(1, flagged=True)["flagged"] is True
+    finally:
+        s.close()
+    ScanStore(path).close()                               # re-opening doesn't re-add it

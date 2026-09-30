@@ -55,6 +55,13 @@ class GatewayServer(
     val joinCode: JoinCode = JoinCode(),
     private val clock: () -> Long = System::currentTimeMillis,
     private val random: SecureRandom = SecureRandom(),
+    /**
+     * Roles (the phone server): when set, the one-time admin code pairs a computer as
+     * ADMIN (a long-lived [ADMIN_COOKIE]); the 6-digit code makes a GUEST; and every
+     * proxied request carries [ROLE_HEADER] = admin|guest (a client's own is dropped).
+     * Null (the Share gateway to the computer): one role, today's behaviour.
+     */
+    val admins: AdminPairing? = null,
 ) : NanoHTTPD(hostname, port) {
 
     private val sessions: MutableSet<String> = ConcurrentHashMap.newKeySet()
@@ -71,6 +78,7 @@ class GatewayServer(
     /** Outcome of one join attempt; see [attemptJoin]. */
     internal sealed class JoinResult {
         object Joined : JoinResult()
+        class JoinedAdmin(val token: String) : JoinResult()
         object Wrong : JoinResult()
         class Locked(val remainingMs: Long) : JoinResult()
     }
@@ -133,8 +141,8 @@ class GatewayServer(
         val method = session.method ?: return closing(session, html(400, "Bad request", "<p>Unsupported method.</p>"))
         val path = session.uri ?: "/"
         if (path == JOIN_PATH) return closing(session, join(session))
-        if (!hasSession(session.headers["cookie"])) return closing(session, codePage(session, null))
-        return proxy(session, method, path)
+        val role = roleOf(session.headers["cookie"]) ?: return closing(session, codePage(session, null))
+        return proxy(session, method, path, role)
     }
 
     // ---- join / lockout --------------------------------------------------------------
@@ -147,20 +155,26 @@ class GatewayServer(
             val locked = synchronized(failures) { failures[ip]?.lockedUntil?.takeIf { it > now }?.minus(now) }
             return if (locked != null) tooMany(locked) else codePage(session, null)
         }
-        when (val result = attemptJoin(ip, given, now)) {
+        val result = attemptJoin(ip, given, now)
+        when (result) {
             is JoinResult.Locked -> return tooMany(result.remainingMs)
             JoinResult.Wrong ->
                 return codePage(session, "That code is not right — check the scanner phone and try again.", status = 403)
-            JoinResult.Joined -> Unit
+            is JoinResult.JoinedAdmin, JoinResult.Joined -> Unit
         }
-        val token = newToken()
-        sessions += token
         val ua = session.headers["user-agent"].orEmpty()
         val target = if (ua.contains("Mobi") || ua.contains("Android")) MOBILE_TARGET else DESKTOP_TARGET
         val r = newFixedLengthResponse(SimpleStatus(302, "Found"), "text/html; charset=utf-8",
             "<a href=\"$target\">Continue</a>")
         r.addHeader("Location", target)
-        r.addHeader("Set-Cookie", "$COOKIE=$token; Path=/; HttpOnly; SameSite=Lax")
+        if (result is JoinResult.JoinedAdmin) {
+            // Remembered until revoked on the phone (≈10 years; the phone forgets it on revoke).
+            r.addHeader("Set-Cookie", "$ADMIN_COOKIE=${result.token}; Path=/; Max-Age=315360000; HttpOnly; SameSite=Lax")
+        } else {
+            val token = newToken()
+            sessions += token
+            r.addHeader("Set-Cookie", "$COOKIE=$token; Path=/; HttpOnly; SameSite=Lax")
+        }
         r.addHeader("Cache-Control", "no-store")
         return r
     }
@@ -189,6 +203,11 @@ class GatewayServer(
                 globalFailures.removeLast()
                 return@synchronized JoinResult.Joined
             }
+            admins?.redeem(given, now)?.let { token ->
+                failures.remove(ip)
+                globalFailures.removeLast()
+                return@synchronized JoinResult.JoinedAdmin(token)
+            }
             val out: JoinResult = if (a.times.size >= MAX_FAILURES) {
                 a.times.clear()
                 a.lockedUntil = now + LOCKOUT_MS
@@ -198,6 +217,7 @@ class GatewayServer(
                 // A distributed search restarts against a new unknown code. Counters reset;
                 // lockouts in force stay (they are penalties, not counts); sessions stay.
                 rotatedTo = joinCode.rotate()
+                admins?.cancelCode()        // a distributed search must not keep aiming at the admin code
                 globalFailures.clear()
                 failures.values.forEach { it.times.clear() }
                 failures.entries.removeAll { (_, x) -> x.lockedUntil <= now }
@@ -218,8 +238,12 @@ class GatewayServer(
         return r
     }
 
-    private fun hasSession(cookieHeader: String?): Boolean =
-        cookieValues(cookieHeader).any { it in sessions }
+    /** [ROLE_ADMIN] for a paired computer's cookie, [ROLE_GUEST] for a live guest session, else null. */
+    private fun roleOf(cookieHeader: String?): String? {
+        val a = admins
+        if (a != null && cookieValues(cookieHeader, ADMIN_COOKIE).any { a.isAdmin(it) }) return ROLE_ADMIN
+        return if (cookieValues(cookieHeader).any { it in sessions }) ROLE_GUEST else null
+    }
 
     private fun newToken(): String {
         val b = ByteArray(16)
@@ -237,7 +261,7 @@ class GatewayServer(
 
     // ---- proxy -----------------------------------------------------------------------
 
-    private fun proxy(session: IHTTPSession, method: Method, path: String): Response {
+    private fun proxy(session: IHTTPSession, method: Method, path: String, role: String): Response {
         val h = session.headers
         if (h["transfer-encoding"] != null) {
             return closing(session, html(411, "Length required", "<p>Chunked uploads are not supported.</p>"))
@@ -258,6 +282,7 @@ class GatewayServer(
         val query = if (session.parameters.isEmpty()) null else session.queryParameterString
         val pathAndQuery = encodePath(path) + if (query.isNullOrEmpty()) "" else "?$query"
         val upHeaders = upstreamHeaders(h)
+        if (admins != null) upHeaders[ROLE_HEADER] = role
 
         val up = try {
             upstream.proxy(method.name, pathAndQuery, upHeaders, body)
@@ -308,7 +333,7 @@ class GatewayServer(
         return url.encodedPath + (url.encodedQuery?.let { "?$it" } ?: "") + (url.encodedFragment?.let { "#$it" } ?: "")
     }
 
-    private fun upstreamHeaders(h: Map<String, String>): Map<String, String> {
+    private fun upstreamHeaders(h: Map<String, String>): MutableMap<String, String> {
         val connectionListed = h["connection"].orEmpty().split(',').map { it.trim().lowercase() }.filter { it.isNotEmpty() }.toSet()
         val out = LinkedHashMap<String, String>()
         for ((k, v) in h) {
@@ -329,10 +354,10 @@ class GatewayServer(
         val err = error?.let { "<p class=\"err\">$it</p>" } ?: ""
         return html(st, "Join the card scanner", """
             <h1>Card scanner</h1>
-            <p>Enter the 6-digit code shown on the scanner phone.</p>
+            <p>Enter the ${if (admins != null) "code" else "6-digit code"} shown on the scanner phone.</p>
             $err
             <form method="get" action="$JOIN_PATH">
-              <input name="code" inputmode="numeric" pattern="[0-9 ]{6,7}" maxlength="7"
+              <input name="code" inputmode="numeric" pattern="${if (admins != null) "[0-9 ]{6,9}" else "[0-9 ]{6,7}"}" maxlength="${if (admins != null) 9 else 7}"
                      autocomplete="one-time-code" autofocus required placeholder="123456">
               <button type="submit">Join</button>
             </form>
@@ -387,6 +412,11 @@ button{font-size:1.1rem;padding:.55em 1.2em;margin-left:.4em;border-radius:6px;b
     companion object {
         const val DEFAULT_PORT = 8080
         const val COOKIE = "cs_guest"
+        const val ADMIN_COOKIE = "cs_admin"
+        /** Set by the gateway on every proxied request when [admins] is on; a client's own is dropped. */
+        const val ROLE_HEADER = "x-cardscanner-role"
+        const val ROLE_ADMIN = "admin"
+        const val ROLE_GUEST = "guest"
         const val JOIN_PATH = "/join"
         const val MOBILE_TARGET = "/phone?panel=1"
         const val DESKTOP_TARGET = "/"
@@ -398,7 +428,7 @@ button{font-size:1.1rem;padding:.55em 1.2em;margin-left:.4em;border-radius:6px;b
 
         private val LOG = Logger.getLogger("GatewayServer")
         private val HOP_BY_HOP = setOf("connection", "keep-alive", "te", "trailer", "trailers", "transfer-encoding", "upgrade")
-        private val DROP_UPSTREAM = setOf("host", "content-length", "expect", "remote-addr", "http-client-ip")
+        private val DROP_UPSTREAM = setOf("host", "content-length", "expect", "remote-addr", "http-client-ip", ROLE_HEADER)
         private val BODY_METHODS = setOf("POST", "PUT", "PATCH", "PROPPATCH")
 
         /**
@@ -476,17 +506,17 @@ button{font-size:1.1rem;padding:.55em 1.2em;margin-left:.4em;border-radius:6px;b
 
         internal fun isHopByHop(lowerName: String) = lowerName in HOP_BY_HOP || lowerName.startsWith("proxy-")
 
-        /** Every value of a cookie named [COOKIE] in a Cookie header. */
-        internal fun cookieValues(header: String?): List<String> =
+        /** Every value of a cookie named [name] in a Cookie header. */
+        internal fun cookieValues(header: String?, name: String = COOKIE): List<String> =
             header.orEmpty().split(';').mapNotNull {
                 val p = it.trim()
-                if (p.startsWith("$COOKIE=")) p.substring(COOKIE.length + 1).trim().trim('"') else null
+                if (p.startsWith("$name=")) p.substring(name.length + 1).trim().trim('"') else null
             }
 
-        /** The Cookie header minus our own cookie; null when nothing else remains. */
+        /** The Cookie header minus our own cookies; null when nothing else remains. */
         internal fun stripOurCookie(header: String): String? =
             header.split(';').map { it.trim() }
-                .filter { it.isNotEmpty() && it.substringBefore('=').trim() != COOKIE }
+                .filter { it.isNotEmpty() && it.substringBefore('=').trim() !in setOf(COOKIE, ADMIN_COOKIE) }
                 .joinToString("; ").ifEmpty { null }
 
         private fun isHeaderSafe(name: String, value: String): Boolean =

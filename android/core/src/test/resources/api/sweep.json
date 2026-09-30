@@ -511,7 +511,8 @@
       "NM": 1.5
      }
     },
-    "included": true
+    "included": true,
+    "flagged": false
    },
    "lookups": [
     "c21|263|0"
@@ -552,6 +553,7 @@
     "selection": null,
     "f2f": null,
     "included": true,
+    "flagged": false,
     "f2f_search": "unavailable"
    },
    "lookups": [
@@ -616,7 +618,8 @@
       "NM": 0.25
      }
     },
-    "included": true
+    "included": true,
+    "flagged": false
    },
    "lookups": [
     "dom|60|0"
@@ -700,7 +703,8 @@
      ],
      "selection": null,
      "f2f": null,
-     "included": true
+     "included": true,
+     "flagged": false
     },
     {
      "id": 6,
@@ -745,7 +749,8 @@
        "NM": 1.5
       }
      },
-     "included": true
+     "included": true,
+     "flagged": false
     },
     {
      "id": 5,
@@ -808,7 +813,8 @@
        "NM": 0.25
       }
      },
-     "included": true
+     "included": true,
+     "flagged": false
     },
     {
      "id": 4,
@@ -897,7 +903,8 @@
       "popularity": null
      },
      "f2f": null,
-     "included": true
+     "included": true,
+     "flagged": false
     },
     {
      "id": 3,
@@ -990,7 +997,8 @@
       "popularity": null
      },
      "f2f": null,
-     "included": true
+     "included": true,
+     "flagged": false
     },
     {
      "id": 2,
@@ -1022,7 +1030,8 @@
      ],
      "selection": null,
      "f2f": null,
-     "included": true
+     "included": true,
+     "flagged": false
     },
     {
      "id": 1,
@@ -1129,7 +1138,8 @@
      ],
      "selection": null,
      "f2f": null,
-     "included": true
+     "included": true,
+     "flagged": false
     }
    ],
    "lookups": []
@@ -1271,7 +1281,8 @@
       "NM": 9.99
      }
     },
-    "included": true
+    "included": true,
+    "flagged": false
    },
    "lookups": []
   },
@@ -1369,7 +1380,8 @@
      ],
      "selection": null,
      "f2f": null,
-     "included": true
+     "included": true,
+     "flagged": false
     },
     {
      "id": 6,
@@ -1414,7 +1426,8 @@
        "NM": 1.5
       }
      },
-     "included": true
+     "included": true,
+     "flagged": false
     },
     {
      "id": 5,
@@ -1477,7 +1490,8 @@
        "NM": 0.25
       }
      },
-     "included": true
+     "included": true,
+     "flagged": false
     },
     {
      "id": 4,
@@ -1577,7 +1591,8 @@
        "PL": 0.25
       }
      },
-     "included": true
+     "included": true,
+     "flagged": false
     },
     {
      "id": 3,
@@ -1680,7 +1695,8 @@
        "NM": 9.99
       }
      },
-     "included": true
+     "included": true,
+     "flagged": false
     },
     {
      "id": 2,
@@ -1712,7 +1728,8 @@
      ],
      "selection": null,
      "f2f": null,
-     "included": true
+     "included": true,
+     "flagged": false
     },
     {
      "id": 1,
@@ -1819,7 +1836,8 @@
      ],
      "selection": null,
      "f2f": null,
-     "included": true
+     "included": true,
+     "flagged": false
     }
    ],
    "lookups": []

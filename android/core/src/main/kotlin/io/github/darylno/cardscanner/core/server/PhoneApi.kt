@@ -10,9 +10,15 @@ class ApiRequest(
     val path: String,
     val query: Map<String, String> = emptyMap(),
     val body: ByteArray? = null,
+    /** [ROLE_ADMIN] or [ROLE_GUEST] — set by the gateway from the session, never by the client. */
+    val role: String = ROLE_ADMIN,
 )
 
-class ApiResponse(val status: Int, val contentType: String, val body: ByteArray) {
+const val ROLE_ADMIN = "admin"
+const val ROLE_GUEST = "guest"
+
+class ApiResponse(val status: Int, val contentType: String, val body: ByteArray,
+                  val headers: Map<String, String> = emptyMap()) {
     companion object {
         fun json(status: Int, value: Any?) =
             ApiResponse(status, "application/json", MiniJson.stringify(value).toByteArray(Charsets.UTF_8))
@@ -38,7 +44,7 @@ interface ScanImages {
  *  POST   /api/scans/{id}/select  pick a printing
  *  PATCH  /api/scans/{id}         included / condition / finish / quantity
  *  DELETE /api/scans/{id}         row + photo
- *  POST   /api/scans/delete-all   {"only":"unselected"} keeps picked rows
+ *  POST   /api/scans/delete-all   {"only":"unselected"} keeps picked rows; "flagged" = only flagged ones
  *
  * and [fileScan], `/api/scan`'s filing once the phone has identified a capture.
  *
@@ -49,12 +55,13 @@ interface ScanImages {
  * [handle] returns null for any path it doesn't own, so the HTTP layer can
  * serve pages / other endpoints.
  */
-class PhoneApi(private val store: ScanStore, private val images: ScanImages) {
+class PhoneApi(val store: ScanStore, private val images: ScanImages) {
     /** `select_lock`: every selection read-modify-write — picks, edits, the sweep's writes, retro picks. */
     val selectLock = Any()
 
     fun handle(req: ApiRequest): ApiResponse? {
         val p = req.path
+        if (p == "/api/me") return if (req.method == "GET") ApiResponse.json(200, mapOf("role" to req.role)) else null
         if (p == "/api/scans") return if (req.method == "GET") listScans() else null
         if (p == "/api/scans/delete-all") return if (req.method == "POST") deleteAll(req) else null
         val m = SCAN_PATH.matchEntire(p) ?: return null
@@ -130,6 +137,7 @@ class PhoneApi(private val store: ScanStore, private val images: ScanImages) {
             scan = store.get(id) ?: return notFound()
             val fields = LinkedHashMap<String, Any?>()
             if (body.containsKey("included")) fields["included"] = Py.truthy(body["included"])
+            if (body.containsKey("flagged")) fields["flagged"] = Py.truthy(body["flagged"])
             selection = LinkedHashMap(Py.map(scan!!["selection"]) ?: emptyMap())
             // Only an ALREADY-selected scan has a selection to edit: never invent one.
             for (key in listOf("condition", "finish", "quantity")) {
@@ -198,7 +206,13 @@ class PhoneApi(private val store: ScanStore, private val images: ScanImages) {
     private fun deleteAll(req: ApiRequest): ApiResponse {
         val body = if (req.body == null || req.body.isEmpty()) emptyMap() else bodyObject(req) ?: return unprocessable()
         val only = (if (Py.truthy(Py.get(body, "only"))) Py.str(body["only"]) else "").lowercase()
-        val targets = store.list().filter { only != "unselected" || it["status"] != "selected" }
+        val targets = if (only == "flagged") {
+            // "ids": only the flagged scans the admin was shown (Python: ints, and bool IS an int)
+            val keep = (body["ids"] as? List<*>)?.mapNotNull {
+                when (it) { is Long -> it; is Int -> it.toLong(); is Boolean -> if (it) 1L else 0L; else -> null }
+            }?.toSet()
+            store.list().filter { it["flagged"] == true && (keep == null || (it["id"] as Number).toLong() in keep) }
+        } else store.list().filter { only != "unselected" || it["status"] != "selected" }
         for (s in targets) {
             val id = (s["id"] as Number).toLong()
             images.delete(id)
