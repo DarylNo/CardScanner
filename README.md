@@ -1,342 +1,156 @@
 # MTG Card Scanner
 
-A hands-free, one-card-at-a-time Magic: The Gathering card scanner. A **local
-perceptual-hash art index** (built once from Scryfall bulk data) identifies each card by its
-artwork — no LLM, no GPU, no cloud vision — then Scryfall provides the canonical printings
-and price.
+An Android phone on a mount over a tray becomes a Magic: The Gathering card
+scanner. Put a card down: the phone photographs it, identifies it **on the
+phone** by its artwork (a perceptual-hash fingerprint — no LLM, no cloud
+vision, no API keys), confirms the exact printing by reading the card's
+collector line, prices it against **Face to Face Games**, and keeps it in its
+own scan list. A computer is optional: a bigger screen for reviewing and
+exporting, served by the phone itself.
 
 ---
 
-## The phone is the scanner (1.1.0 and later)
+## Install
 
-Everything runs on one Android phone: it photographs each card, identifies it
-on the phone (the same art-fingerprint + collector-line OCR pipeline, ported
-and parity-tested), prices it against Face to Face from the phone's own
-connection, and keeps your scans. A computer is **optional** — a bigger screen
-for reviewing and exporting.
-
-1. **Install** `mtg-card-scanner-android.apk` from the
+1. Download `mtg-card-scanner-android.apk` from the
    [latest release](https://github.com/DarylNo/CardScanner/releases/latest)
-   (allow installs from your browser when Android asks).
-2. **Open the app.** The first time, it downloads the card database (a few MB,
-   refreshed weekly on Wi-Fi). Put the phone on the mount and scan — each card
-   gets a blue ✓; **Scans** opens the review list on the phone.
-3. **Optional — review on a computer.** On the same Wi-Fi (or the phone's
-   hotspot): Settings → *This phone's server* → **Pair a computer as admin**, and
-   open the link (or scan the QR) on the computer. That computer can then
-   review, pick, delete, clear, export (CSV / TXT) and change the phone's
-   scanner settings (📱 Scanner). Others you give the 6-digit guest code (the
-   **Share** screen) can review and flag cards for deletion.
+   and open it on the phone. Allow installs from your browser when Android asks.
+2. Open **Card Scanner** and allow the camera, then notifications (the
+   server's notification carries its **Stop** button).
+3. The first launch downloads the **card database** (the art fingerprints of
+   every Magic artwork, a few MB). After that it re-checks weekly on Wi-Fi.
+   Scans taken before it arrives wait and are identified once it does.
 
-**No backups:** the scans live only on the phone — uninstalling deletes them.
-Export a CSV/TXT if you want a copy.
+Identifying needs internet for Scryfall (the list of a card's printings) and
+pricing needs it for Face to Face; offline scans wait in the queue and finish
+when the phone is back online.
 
----
+## Scanning
 
-## Retired: the computer server (1.0.x)
+The scan screen has two modes:
 
-Everything below describes the original computer server (FastAPI + the
-desktop/phone browser pages). It is **no longer shipped** — releases carry the
-Android app only — but the code stays in this repo: it is the reference
-implementation every phone port is tested against (`pytest tests/` and the
-`scripts/export_*_fixtures.py --check` steps in CI).
+- **Tray** — hands-free. The phone learns the empty tray, waits for a card,
+  waits for it to be still, captures, and waits for the next card. Double-tap
+  the preview to re-learn the empty tray.
+- **Tap to scan** — tap the shutter. Tap to scan always uses a scan **Area**;
+  if none is set the app draws one for you (a card-shaped box in the middle,
+  sized so the phone sits back far enough to keep its shadow off the card).
+  When the card is identified its scan **opens**, with prices appearing live;
+  Back returns to the camera.
 
-## Web app (phone camera + desktop control)
+**Area** — drag a box around the tray; detection and capture stay inside it.
+With a scan taken, the only signal is a **blue ✓** on the card (held for the
+**Check mark time**, 2.5 s by default) plus two short buzzes.
 
-The scanner runs as a **local web app** with two roles open at the same time:
+The top of the screen shows the version and the server state
+(`serving at <ip>:8090`), cards/min and a battery estimate.
 
-- **Phone** (`/phone`) is the **camera** — put it on a mount over a tray. Place a card and it
-  **scans automatically**; swap the card to scan the next one.
-- **Desktop** (`/`) is the **control surface** — it shows the card's printings **ranked by
-  artwork**, you **pick the exact printing**, it fetches **Face to Face Games** pricing for
-  that printing, and you **review/filter all scans** and **export** the ones you want.
+## Reviewing
 
-Because a card's art is shared across many printings, art-matching intentionally returns a
-*ranked set of candidates* rather than one guess — you choose the correct printing (set +
-collector number), which is what downstream pricing and export depend on.
+**Scans** opens the scan list on the phone: each scan's printings ranked by
+artwork, the printing picker, condition / finish / quantity, and live prices.
 
-### Install & run (one command)
+- A card is **auto-filed** (marked ⚠) when only one printing exists or when
+  the collector line read off the card confirms the printing. Everything else
+  waits for you to pick.
+- Every scan keeps its own row, in scan order; swipe a row to delete it (5 s
+  Undo).
+- **Filters:** a price band and a popularity floor, combined by *match any*
+  (default) or *match all*. They stay set when you leave and come back.
+- **Popularity** comes from EDHREC's Commander rank (free, from the same
+  Scryfall data); cards EDHREC doesn't rank (basic lands, Commander-banned
+  cards) show as *unranked*, not as unpopular. Format legality is shown too.
 
-**macOS / Linux** — no Python required (the script installs everything, plus a
-double-clickable launcher in ~/Applications / your app menu):
+**Pricing** runs by itself: whenever something is unpriced the phone checks
+Face to Face every few seconds, and sleeps when nothing is owed. Picked cards
+price their printing; unpicked ones price every printing that shares the
+scanned artwork.
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/DarylNo/CardScanner/master/install.sh | bash
-mtg-card-scanner
-```
+## Using a computer (optional)
 
-**Windows** — `mtg-card-scanner-windows.exe` was on the 1.0.x
-[releases](https://github.com/DarylNo/CardScanner/releases) (1.1.0+ ship the
-Android app only), or use the Python route below.
+On the same Wi-Fi, or the phone's hotspot:
 
-**Any platform with Python 3.11+** (or `uv`):
+- **Admin:** Settings → *This phone's server* → **Pair a computer as admin**
+  shows a QR and a one-time 8-digit code (10 minutes). Open the link on the
+  computer. That browser is remembered as admin until **Forget paired
+  computers**: it can review, pick, delete, clear, **export** (the CSV
+  column builder, or TXT in Mana Exchange's mass-entry format) and change the
+  phone's scanner settings (**📱 Scanner**: mode, scan Area drawn on a live
+  picture of the tray, torch, resolution, exposure lock, vibration, check
+  mark time).
+- **Guests:** the **Share** screen shows a 6-digit code. Guests can review,
+  pick, edit and **flag** cards for deletion; the admin sees "Delete flagged".
+  **New guest code** ends every guest session.
 
-```bash
-pipx install git+https://github.com/DarylNo/CardScanner   # or: uv tool install git+…
-mtg-card-scanner
-```
+The connection on your network is plain HTTP — pair on a network you trust.
+The phone's server stops by itself after 30 minutes with the app in the
+background and nobody connected; opening the app starts it again.
 
-Prebuilt macOS/Linux binaries were on the 1.0.x releases (macOS: unsigned —
-right-click → Open the first time); 1.1.0+ releases carry the Android app only.
+## Updates
 
-The launcher does everything `run_server.sh` used to require by hand:
+When a new release is published, the app shows **Update required** and stops
+scanning until the new APK is installed (**Download update** is on that
+screen). Your scans are never locked away: the scan list, export and the
+computer link keep working, and cards already scanned still finish
+identifying. Updates install over the app and keep your scans.
 
-- generates the HTTPS certificate automatically (phones only allow camera
-  access over HTTPS) — pure Python, no openssl needed;
-- opens the desktop UI in your browser;
-- prints the **phone URL with a QR code** — scan it with the phone camera
-  (or click the "Phone:" link on the desktop for an on-screen QR), accept the
-  one-time certificate warning, and mount the phone over a tray.
+## Your data
 
-**First run:** the desktop shows a **Build card database** banner (~1 hour,
-one-time, resumable — it downloads ~50k card artworks from Scryfall). Once it
-finishes, scanning works end to end: place a card in the tray → it identifies,
-auto-files single-printing cards, merges duplicates, and prices everything in
-the background → pick printings on the desktop → export.
-
-Data (scans, photos, certificates) lives in `~/.mtg-card-scanner/`; the art
-index cache in `~/.cache/mtg-card-scanner/`.
-
-Tips:
-- On the phone page tap **Area** and drag a box around your tray once —
-  detection and captures crop to it (couches and clutter stop mattering).
-- Windows asks to allow Python through the firewall on first launch — allow
-  it on private networks so the phone can reach the server.
-- `mtg-card-scanner --help` for port/data-dir options.
-- Linux: if launch fails with a `libGL` error, `sudo apt install libgl1`
-  (or swap in `opencv-python-headless`).
-- **Chromebook**: see the step-by-step below.
-- **Pricing needs no config** — each scanner queries the storefront's public
-  JSON from its own connection. `<data-dir>/config.env`
-  (`~/.mtg-card-scanner/config.env`) is still read at launch for optional
-  settings like `LAN_IP`, regardless of how the app is started (a GUI click
-  doesn't inherit shell env vars). Env vars still win over the file.
-
-### Chromebook install (Linux mode)
-
-1. **Enable Linux**: Settings → Advanced → Developers → Linux development
-   environment → Turn on (accept the default disk size). Opens the Terminal app.
-2. **Install** (in Terminal): `curl -fsSL https://raw.githubusercontent.com/DarylNo/CardScanner/master/install.sh | bash`
-   — installs uv + the scanner and drops an app-drawer launcher. ARM Chromebooks
-   use this script path (no ARM binary is built). If launch later errors on
-   `libGL`: `sudo apt install -y libgl1`.
-3. **Pin the Wi-Fi IP** (only on classic Crostini, where the container can't
-   see the host's Wi-Fi address — the desktop will tell you if it can't):
-   `mkdir -p ~/.mtg-card-scanner && nano ~/.mtg-card-scanner/config.env`, then add:
-   ```
-   LAN_IP=192.168.1.50
-   ```
-4. **Port forward** (so the phone can reach the NAT'd container): Settings →
-   Advanced → Developers → Linux → Port forwarding → Add → TCP **8443**, toggle on.
-5. **Run**: `mtg-card-scanner` (or the app-drawer icon → right-click → Pin to shelf).
-   The desktop UI opens; first run shows a one-click Build card database step.
-   Scan the QR with the phone, accept the cert warning, tap Area over the tray.
-
-A Chromebook can also be *just* the control screen or the camera with **no
-install** — both are plain browser pages: point Chrome at
-`https://<server-ip>:8443/` (or `/phone`) of a scanner running on any machine.
-
-### Updating
-
-- **install.sh / pipx / uv users:** re-run the install one-liner (or
-  `pipx upgrade mtg-card-scanner`) — it reinstalls the latest master.
-- **Binary users:** the last desktop binaries are in the 1.0.x releases; newer
-  releases carry only the Android app (the phone is the scanner since 1.1.0).
-- Your data (`~/.mtg-card-scanner/`, art index cache) is untouched by updates.
-
-<details>
-<summary>Manual / development run (the old way)</summary>
-
-```bash
-pip install -r requirements.txt                # includes fastapi/uvicorn
-python -m mtg_card_scanner.art_index build     # one-time art index build (see below)
-./run_server.sh                                # serves HTTPS on :8443 (generates a self-signed cert)
-```
-</details>
-
-Then open, on the same LAN:
-
-- Desktop: `https://<this-machine-ip>:8443/`
-- Phone:   `https://<this-machine-ip>:8443/phone`
-
-> **HTTPS is required for the phone camera.** Browsers only allow camera access
-> (`getUserMedia`) in a secure context — `https://` or `localhost`. The launcher generates a
-> self-signed certificate; accept the one-time security warning on the phone. (On the desktop
-> alone you could use plain `http://localhost`, but the phone needs HTTPS.)
-
-Config via env: `PORT`, `SCAN_DB`, `HOST`.
-
-### Auto-scan (hands-free)
-
-The phone page watches the camera at 5 fps. It fires when **something occupies the scan
-area and settles** (~half a second) — geometry doesn't matter; the server judges whether
-it's a card. The empty tray is learned at startup and re-learned automatically, so
-*removing* a card never triggers a scan, and a card is never rescanned until the scene
-changes. Tap **Area** once and drag a box around your tray — detection and captures crop
-to it, so clutter around the rig can't interfere. The page holds a screen wake-lock so a
-mounted phone doesn't sleep.
-
-Two modes: **Auto ON** is fully hands-free — cards identify, and a card auto-files
-(marked ⚠) when either only one printing exists **or the exact printing is confirmed by
-OCR of the card's own collector line** (`087/254 · MH1` — the only reliable way to
-separate same-art reprints; art hashing is measurably blind to them). Duplicates merge
-into quantity; anything ambiguous waits on the desktop, where the confirmed printing
-wears a "✓ matches card text" badge. **Auto OFF + Scan Card** opens the printing picker
-right on the phone.
-
-Start the page with the tray **empty** — the first steady second seeds the "empty" reference.
-
-### Face to Face pricing + price filter
-
-`mtg_card_scanner/facetoface.py` looks up live prices from Face to Face Games' public Shopify
-JSON endpoints (no API key), by condition and foil. A background **sweep** prices everything
-automatically (every 60s while work remains): selected scans get their exact printing priced;
-unpicked scans get **every** candidate printing priced so the price filter can hide them only
-on full knowledge. Fetching self-paces (slow start, speeds up on success, backs off on 429s,
-circuit-breaks and cools down if the storefront objects) and distinguishes "confirmed not
-listed" from "couldn't reach the store" — outages stay retryable and never break a scan.
-The header shows live sweep progress, pace, and a countdown to the next check; the 🐞 button
-opens a request-level log.
-
-The scan list has **Min $ / Max $** filters on the fetched F2F price. Cards outside the range
-are hidden from the list; **Exclude filtered** marks them all as not-included in the export in
-one click (reversible per card via its checkbox). Unpriced scans always stay visible.
-
-### Export to Mana Exchange
-
-The **Export** button downloads a text file in Mana Exchange's admin **mass-entry** format —
-one line per card, `Qty SetCode CollectorNumber Condition Finish` (e.g. `2 OTJ 200 NM Foil`).
-Paste it into Mana Exchange → Admin → Add Cards. Mana Exchange derives name, images, and its own
-pricing from Scryfall via set + collector number, so only these five columns are needed.
-
-### Testing without a phone
-
-The pipeline and API are covered by `pytest` (Face to Face matching, art-ranked candidates, the
-SQLite store, the export format, and the full API path via a fake pipeline). You can also
-`curl` an image straight at `POST /api/scan` to drive a real scan without the phone.
+The scans live **only on the phone** — there are no backups, and uninstalling
+the app deletes them. Export a CSV or TXT from the paired computer to keep a
+copy.
 
 ---
 
-## Architecture
+## How it works
 
 ```
-Phone camera → POST /api/scan → card_detect.py (find + warp card)
-                                       ↓
-                              art_index.py  (pHash art region → nearest of ~49k artworks → NAME)
-                                       ↓
-                              scryfall.py   (all printings of that name)
-                                       ↓
-                              visual_match.py (rank printings by art distance)
-                                       ↓
-                              desktop UI: pick printing → facetoface.py price → export.py
+camera (Tray or Tap to scan) → flatten the card, with a margin
+  → art fingerprint (pHash) → nearest of ~50k artworks → card NAME
+  → Scryfall: every paper printing of that name
+  → rank the printings against the photo (art + title + text box)
+  → OCR the collector line → confirm the exact printing
+  → file the scan → price it on Face to Face → review / export
 ```
 
-- **card_detect.py** — finds the card quad in the frame, perspective-warps to 630×880; frame
-  sharpness scoring for burst selection
-- **art_index.py** — the identifier: a local SQLite index of dual-scale pHashes (64-bit
-  coarse + 256-bit fine) of every unique Magic artwork (Scryfall `unique_artwork` bulk
-  data); nearest-neighbour query over jittered scan crops, scored `4·d64 + d256`
-- **scryfall.py** — Scryfall API client (printings by name, set+collector lookup, rate-limited)
-- **visual_match.py** — ranks a name's printings against the scan by multi-region pHash
-- **ocr_id.py** — reads the collector/set line (pip-only OCR) to confirm the exact
-  printing among same-art reprints — the layer pHash cannot be
-- **pipeline.py** — orchestrates identify → printings → rank; graceful "use manual search"
-  result when the art match isn't confident
-- **server/** — FastAPI app, SQLite scan store, F2F client, Mana Exchange export
+The card database (`art-pack` release) is rebuilt weekly by CI from
+Scryfall's bulk data.
 
----
+## Development
 
-## Prerequisites
-
-- Python 3.11+
-- ~2 GB free disk for the art index build (bulk JSON + cached images + index)
-- No GPU, no Ollama, no API keys
-
----
-
-## Setup
-
-### 1. Clone and install dependencies
+```
+android/            the app — :core (pure Kotlin: detection, fingerprints,
+                    identification, the phone server's API, pricing, export)
+                    and :app (Android: camera, OCR, storage, UI, the server)
+server/, mtg_card_scanner/
+                    the Python reference implementation (FastAPI server +
+                    identification pipeline). It is not shipped; every Kotlin
+                    port is tested against it with generated fixtures.
+server/static/      phone.html / desktop.html — the review pages, served by
+                    the phone (copied into the APK at build)
+scripts/            fixture exporters (--check runs in CI), keystore helper
+tests/              pytest suite for the reference implementation
+docs/index.html     the download page (GitHub Pages)
+```
 
 ```bash
-cd CardScanner
-python -m venv .venv
-# Windows
-.venv\Scripts\activate
-# macOS/Linux
-source .venv/bin/activate
+# Android (from android/; JDK 17 and Node on PATH)
+./gradlew :core:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
 
-pip install -r requirements.txt
+# Reference implementation + fixtures
+pip install -e ".[test]"
+pytest tests/ -q
+python scripts/export_api_fixtures.py --check      # and the other export_*_fixtures.py
 ```
 
-### 2. Build the art index (one-time)
+Change behaviour in the Python reference first, regenerate the fixtures, then
+port it. Details for the app — build, sideload, device checklist — are in
+[`android/README.md`](android/README.md).
 
-```bash
-python -m mtg_card_scanner.art_index build
-```
+**Releasing:** bump `version` in `pyproject.toml` (the APK's version comes
+from it) and merge to `master`; CI tags `v<version>` and publishes the signed
+APK. Releases need the signing secrets `ANDROID_KEYSTORE_B64`,
+`ANDROID_KEYSTORE_PASSWORD` and `ANDROID_KEY_ALIAS`; without them the release
+fails rather than ship an APK that can't update an installed one.
 
-This downloads Scryfall's `unique_artwork` bulk file (~265 MB) and a small image of every
-unique artwork (~49k images, ~0.5 GB), hashing each into
-`~/.cache/mtg-card-scanner/art_index/`. It is **throttled to Scryfall's rate limits**, takes
-**1–3 hours**, and is **safe to interrupt — re-running resumes** where it left off. Re-run it
-occasionally (e.g. after new set releases): only new artworks are fetched.
-
-Useful subcommands:
-
-```bash
-python -m mtg_card_scanner.art_index build --limit 200   # quick smoke build
-python -m mtg_card_scanner.art_index status              # row count / bulk revision
-python -m mtg_card_scanner.art_index query photo.jpg     # identify a saved photo (tuning/debug)
-```
-
-**Optional but recommended:** predownload every printing's ranking image so the first scan
-of a new card name is as fast as a repeat scan (otherwise that first scan waits up to ~5 s
-while the name's printing images download):
-
-```bash
-python -m mtg_card_scanner.art_index prefetch-printings   # ~100k paper images, ~2 GB, resumable
-```
-
-The server runs fine before the index is built — scans just return "Art index not built" until
-then.
-
-### 3. Launch
-
-```bash
-./run_server.sh
-```
-
----
-
-## CLI
-
-`main.py` is a demo/diagnostic entry point only (the web app is the scanner):
-
-```bash
-python main.py --demo                    # sample card → Scryfall → listing/CSV
-python main.py --demo --output out.json  # JSON output
-```
-
----
-
-## Running tests
-
-```bash
-pytest
-```
-
-Tests cover: the art index (hashing, dedupe, resume, filtering), the pipeline (confidence
-thresholds, multi-frame retry, error paths), Scryfall lookup + fallback, F2F price matching,
-the scan store, the export format, and the full API path — all without network or a camera.
-
----
-
-## Accuracy tuning
-
-Identification confidence is a combined-score threshold in `mtg_card_scanner/art_index.py`
-(`_MAX_CONFIDENT_DISTANCE`, default 140 on the `4·d64 + d256` scale; correct artworks measure
-~110–125 on real rig photos, the noise floor starts ~150). If too many scans come back "no
-confident match", raise it slightly; if wrong names are confidently matched, lower it. Use
-`python -m mtg_card_scanner.art_index query <photo.jpg>` against saved photos from your rig to
-see real scores. Foils, sleeves, and glare raise scores — the failure mode is always the
-graceful manual-search path, never a silent wrong export.
+License: MIT.
