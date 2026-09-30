@@ -427,7 +427,7 @@ function formatChipsHtml(scan){
 }
 
 /* ── version banner — proves which page+server combo is running ────────────── */
-const UI_VERSION = 'v40';
+const UI_VERSION = 'v41';
 
 // Who is asking: the phone server says "guest" for the 6-digit code (admin =
 // the paired computer); the computer's own server always says admin. Guests
@@ -1294,6 +1294,40 @@ $('#p-max').addEventListener('input', e => {
   priceMax = e.target.value === '' ? null : Number(e.target.value);
   lastListSig = ''; renderFilterHint(); renderScansPanel();
 });
+
+/* The list filters outlive the page (owner: "filters need to stay in memory
+   when I switch screens" — the app's review screen reloads the page each time
+   it opens). Per-viewer convenience only, so localStorage; every read and
+   write is guarded, and a missing/garbled entry just means the defaults. */
+const FILTER_KEY = 'listFilters';
+function saveFilters() {
+  try {
+    localStorage.setItem(FILTER_KEY, JSON.stringify(
+      { min: priceMin, max: priceMax, pop: popMin, mode: filterMode, view: scansView }));
+  } catch (e) { /* storage blocked: filters just won't persist */ }
+}
+(function restoreFilters() {
+  let f = null;
+  try { f = JSON.parse(localStorage.getItem(FILTER_KEY) || 'null'); } catch (e) { f = null; }
+  if (!f || typeof f !== 'object') return;
+  const num = v => (typeof v === 'number' && isFinite(v) ? v : null);
+  priceMin = num(f.min); priceMax = num(f.max);
+  $('#p-min').value = priceMin ?? ''; $('#p-max').value = priceMax ?? '';
+  const pop = $('#p-popmin');
+  if (f.pop && [...pop.options].some(o => o.value === f.pop)) { popMin = f.pop; pop.value = f.pop; }
+  if (f.mode === 'all' || f.mode === 'any') filterMode = f.mode;
+  $('#p-fmode').innerHTML = `match <b>${filterMode}</b>`;
+  const chip = [...document.querySelectorAll('.vchip')].find(c => c.dataset.view === f.view);
+  if (chip) {
+    document.querySelectorAll('.vchip').forEach(c => c.classList.remove('on'));
+    chip.classList.add('on'); scansView = f.view;
+  }
+  renderFilterHint();
+})();
+['#p-min', '#p-max'].forEach(id => $(id).addEventListener('input', saveFilters));
+$('#p-popmin').addEventListener('change', saveFilters);
+$('#p-fmode').addEventListener('click', saveFilters);
+document.querySelectorAll('.vchip').forEach(c => c.addEventListener('click', saveFilters));
 
 async function clearScans(only) {
   // Flagged = what the button counted: rows inside their swipe-Undo window are not in it.

@@ -6,7 +6,9 @@ import android.content.Intent
 import android.graphics.Typeface
 import android.os.Build
 import android.os.Bundle
+import android.text.InputType
 import android.view.ViewGroup
+import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.Toast
@@ -15,6 +17,7 @@ import androidx.appcompat.app.AppCompatActivity
 import io.github.darylno.cardscanner.App
 import io.github.darylno.cardscanner.BuildConfig
 import io.github.darylno.cardscanner.R
+import io.github.darylno.cardscanner.core.server.DeviceApi
 import java.util.concurrent.Executors
 
 /**
@@ -64,6 +67,30 @@ class SettingsActivity : AppCompatActivity() {
 
     private fun note(t: String) = chrome.text(t, 13f, ScanChrome.Palette.TEXT_FAINT).apply { setPadding(dp(4), dp(8), dp(4), 0) }
 
+    /** The blue ✓'s hold time: typed in ms, refused outside DeviceApi's range (same rule as the browser). */
+    private fun editCheckMs() {
+        val s = app.settings
+        val input = EditText(this).apply {
+            inputType = InputType.TYPE_CLASS_NUMBER
+            setText(s.checkMs.toString())
+            setSelectAllOnFocus(true)
+        }
+        val box = LinearLayout(this).apply { setPadding(dp(20), dp(8), dp(20), 0); addView(input, LinearLayout.LayoutParams(match(), wrap())) }
+        AlertDialog.Builder(this)
+            .setTitle(R.string.settings_check_ms)
+            .setMessage(getString(R.string.settings_check_ms_range, DeviceApi.CHECK_MS_MIN, DeviceApi.CHECK_MS_MAX))
+            .setView(box)
+            .setPositiveButton(R.string.settings_check_ms_save) { _, _ ->
+                val v = input.text.toString().trim().toIntOrNull()
+                if (v == null || v < DeviceApi.CHECK_MS_MIN || v > DeviceApi.CHECK_MS_MAX) {
+                    Toast.makeText(this, getString(R.string.settings_check_ms_range, DeviceApi.CHECK_MS_MIN, DeviceApi.CHECK_MS_MAX), Toast.LENGTH_LONG).show()
+                } else { s.checkMs = v; render() }
+            }
+            .setNeutralButton(R.string.settings_check_ms_reset) { _, _ -> s.checkMs = DeviceApi.CHECK_MS_DEFAULT; render() }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
     private fun render() {
         col.removeAllViews()
         val s = app.settings
@@ -85,6 +112,9 @@ class SettingsActivity : AppCompatActivity() {
         cam.addView(chrome.switchRow(getString(R.string.settings_torch), getString(R.string.settings_torch_desc), s.torch) { s.torch = it })
         cam.addView(chrome.divider(), chrome.dividerParams())
         cam.addView(chrome.switchRow(getString(R.string.settings_vibration), getString(R.string.settings_vibration_desc), s.vibration) { s.vibration = it })
+        cam.addView(chrome.divider(), chrome.dividerParams())
+        cam.addView(chrome.valueRow(getString(R.string.settings_check_ms), getString(R.string.settings_check_ms_desc),
+            getString(R.string.settings_check_ms_value, s.checkMs)) { editCheckMs() })
         cam.addView(chrome.divider(), chrome.dividerParams())
         cam.addView(chrome.switchRow(getString(R.string.settings_debug), getString(R.string.settings_debug_desc), s.debugOverlay) { s.debugOverlay = it })
         col.addView(cam, lp())

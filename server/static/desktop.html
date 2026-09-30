@@ -215,6 +215,7 @@
   #devCtl .seg { display: flex; gap: 6px; }
   #devCtl .seg .btn { flex: 1; }
   #devCtl label { display: flex; align-items: center; gap: 10px; font-size: 14px; cursor: pointer; }
+  #devCtl label.num input { width: 84px; }
   #devCtl label small { display: block; color: var(--muted); font-size: 12px; }
   #devCtl .h { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-top: 4px; }
   #devArea { padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
@@ -279,6 +280,7 @@
         <label><input type="checkbox" data-k="ae_lock"><span>Exposure lock<small>Hold exposure + white balance</small></span></label>
         <div class="h">Phone</div>
         <label><input type="checkbox" data-k="vibration"><span>Vibration<small>Buzz on each confirmed scan</small></span></label>
+        <label class="num"><input type="number" id="devCheckMs" min="250" max="10000" step="50"><span>Check mark time (ms)<small>How long the blue ✓ stays up after each scan · 250–10000, default 2500</small></span></label>
         <div id="devMsg"></div>
       </div>
       <div id="devArea">
@@ -1064,7 +1066,7 @@ function sigOf(scan){
 
 // Version banner — page version · server git hash. Same rationale as the
 // phone: without it, "is this the old page?" is undebuggable.
-const UI_VERSION = "d34";
+const UI_VERSION = "d36";
 
 // Who is asking: the phone server says "guest" for the 6-digit code (admin =
 // the paired computer); the computer's own server always says admin. Guests
@@ -1183,6 +1185,40 @@ document.querySelectorAll(".fchip").forEach(chip =>
     document.querySelectorAll(".fchip").forEach(c => c.classList.remove("on"));
     chip.classList.add("on"); view = chip.dataset.view; listSig=""; renderList();
   }));
+
+/* The list filters outlive the page (owner: "filters need to stay in memory
+   when I switch screens"). Per-viewer convenience only, so localStorage, every
+   access guarded; a missing/garbled entry just means the defaults. The name
+   search box is deliberately not kept — it's a quick lookup, not a filter. */
+const FILTER_KEY = "listFilters";
+function saveFilters(){
+  try {
+    localStorage.setItem(FILTER_KEY, JSON.stringify(
+      { min: priceMin, max: priceMax, pop: popMin, mode: filterMode, view }));
+  } catch (e) { /* storage blocked: filters just won't persist */ }
+}
+(function restoreFilters(){
+  let f = null;
+  try { f = JSON.parse(localStorage.getItem(FILTER_KEY) || "null"); } catch (e) { f = null; }
+  if (!f || typeof f !== "object") return;
+  const num = v => (typeof v === "number" && isFinite(v) ? v : null);
+  priceMin = num(f.min); priceMax = num(f.max);
+  $("#pmin").value = priceMin ?? ""; $("#pmax").value = priceMax ?? "";
+  const pop = $("#popmin");
+  if (f.pop && [...pop.options].some(o => o.value === f.pop)) { popMin = f.pop; pop.value = f.pop; }
+  if (f.mode === "all" || f.mode === "any") filterMode = f.mode;
+  $("#fmode").innerHTML = `match <b>${filterMode}</b>`;
+  const chip = [...document.querySelectorAll(".fchip")].find(c => c.dataset.view === f.view);
+  if (chip) {
+    document.querySelectorAll(".fchip").forEach(c => c.classList.remove("on"));
+    chip.classList.add("on"); view = f.view;
+  }
+  listSig = ""; renderFilterHint();
+})();
+["#pmin", "#pmax"].forEach(id => $(id).addEventListener("input", saveFilters));
+$("#popmin").addEventListener("change", saveFilters);
+$("#fmode").addEventListener("click", saveFilters);
+document.querySelectorAll(".fchip").forEach(c => c.addEventListener("click", saveFilters));
 
 $("#exclBtn").addEventListener("click", async () => {
   // Bulk-exclude everything the filter hides (priced, still included).
@@ -1510,6 +1546,9 @@ function devRender(){
     b.classList.toggle("ghost", !on);
   });
   $("#devCtl").querySelectorAll("input[data-k]").forEach(cb => { cb.checked = !!dev[cb.dataset.k]; });
+  const cm = $("#devCheckMs");
+  cm.closest("label").style.display = dev.check_ms == null ? "none" : "";   // an older phone app has no setting
+  if (document.activeElement !== cm && dev.check_ms != null) cm.value = dev.check_ms;
   $("#devCtl").querySelector("input[data-k=auto]").disabled = dev.mode === "handheld";
   devDrawRoi();
 }
@@ -1564,6 +1603,11 @@ $("#devCtl").querySelectorAll("[data-mode]").forEach(b =>
   b.addEventListener("click", () => { if (dev && dev.mode !== b.dataset.mode) devPatch({ mode: b.dataset.mode }); }));
 $("#devCtl").querySelectorAll("input[data-k]").forEach(cb =>
   cb.addEventListener("change", () => devPatch({ [cb.dataset.k]: cb.checked })));
+$("#devCheckMs").addEventListener("change", async e => {
+  const v = Number(e.target.value);
+  if (!Number.isInteger(v) || v < 250 || v > 10000) { devMsg("Check mark time: a whole number of ms from 250 to 10000.", true); e.target.value = dev?.check_ms ?? ""; return; }
+  if (!(await devPatch({ check_ms: v }))) e.target.value = dev?.check_ms ?? "";
+});
 $("#devShot").addEventListener("click", devSnapshot);
 $("#devRoiClear").addEventListener("click", async () => {
   if (devDraft) { devDraft = null; devDrawRoi(); }

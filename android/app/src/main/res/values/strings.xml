@@ -89,6 +89,12 @@
     <string name="scan_rate_desc">Cards scanned per minute, and cards this session</string>
     <string name="settings_vibration">Vibration</string>
     <string name="settings_vibration_desc">Buzz when a card is captured</string>
+    <string name="settings_check_ms">Check mark time</string>
+    <string name="settings_check_ms_desc">How long the blue ✓ stays up after each scan</string>
+    <string name="settings_check_ms_value">%1$d ms</string>
+    <string name="settings_check_ms_range">Milliseconds, %1$d to %2$d (default 2500).</string>
+    <string name="settings_check_ms_save">Save</string>
+    <string name="settings_check_ms_reset">Default</string>
     <!-- Diagnostics → On-phone identify (Stage 2 Compare mode, ui/CompareSection) -->
     <string name="diag_title">Diagnostics</string>
     <!-- Diagnostics → Phone server (preview), Stage 3 -->

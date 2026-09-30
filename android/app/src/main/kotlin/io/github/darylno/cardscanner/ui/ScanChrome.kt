@@ -230,6 +230,24 @@ class ScanChrome(private val ctx: Context) {
         }
     }
 
+    /** A tappable setting that shows its current [value] on the right (the tap edits it). */
+    fun valueRow(title: String, desc: String, value: String, onClick: () -> Unit): LinearLayout = LinearLayout(ctx).apply {
+        orientation = LinearLayout.HORIZONTAL
+        isBaselineAligned = false
+        gravity = Gravity.CENTER_VERTICAL
+        minimumHeight = dp(56)
+        setPadding(0, dp(8), 0, dp(8))
+        val texts = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(text(title, 16f))
+            addView(text(desc, 13f, Palette.TEXT_DIM).apply { setPadding(0, dp(2), 0, 0) })
+        }
+        addView(texts, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = dp(12) })
+        addView(text(value, 15f, Palette.TEXT, bold = true))
+        isClickable = true
+        setOnClickListener { onClick() }
+    }
+
     /** Top bar: round back chip + screen title. */
     fun topBar(title: String, backLabel: String, onBack: () -> Unit): LinearLayout = LinearLayout(ctx).apply {
         orientation = LinearLayout.HORIZONTAL

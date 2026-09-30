@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import androidx.core.content.edit
 import io.github.darylno.cardscanner.core.RoiFrac
+import io.github.darylno.cardscanner.core.server.DeviceApi
 
 /**
  * The app's own UI preferences (not the server config — that lives in the NET
@@ -59,6 +60,11 @@ class AppSettings(context: Context) {
         get() = prefs.getBoolean(K_VIBRATION, true)
         set(v) = prefs.edit().putBoolean(K_VIBRATION, v).apply()
 
+    /** How long the blue ✓ stays up after each scan (ms), clamped to DeviceApi's range. */
+    var checkMs: Int
+        get() = prefs.getInt(K_CHECK_MS, DeviceApi.CHECK_MS_DEFAULT).coerceIn(DeviceApi.CHECK_MS_MIN, DeviceApi.CHECK_MS_MAX)
+        set(v) = prefs.edit().putInt(K_CHECK_MS, v.coerceIn(DeviceApi.CHECK_MS_MIN, DeviceApi.CHECK_MS_MAX)).apply()
+
     /** The scan screen asked for the notification permission once (the server's Stop lives there). */
     var notifAsked: Boolean
         get() = prefs.getBoolean(K_NOTIF_ASKED, false)
@@ -88,6 +94,7 @@ class AppSettings(context: Context) {
         const val K_TORCH = "torch"
         const val K_VIBRATION = "vibration"
         const val K_NOTIF_ASKED = "notif_asked"
+        const val K_CHECK_MS = "check_ms"
         const val K_DEBUG = "debug_overlay"
         const val K_TIMINGS = "recent_timings"
     }

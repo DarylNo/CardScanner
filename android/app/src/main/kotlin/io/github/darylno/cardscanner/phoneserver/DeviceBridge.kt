@@ -24,7 +24,7 @@ class DeviceBridge(private val settings: AppSettings) : DeviceApi.DeviceControl 
     override fun read() = DeviceApi.DeviceState(
         handheld = settings.mode == AppSettings.Mode.HANDHELD, auto = settings.auto, roi = settings.roi,
         torch = settings.torch, vibration = settings.vibration, highRes = settings.highRes,
-        aeLock = settings.aeLock,
+        aeLock = settings.aeLock, checkMs = settings.checkMs,
     )
 
     override fun write(s: DeviceApi.DeviceState) {
@@ -35,6 +35,7 @@ class DeviceBridge(private val settings: AppSettings) : DeviceApi.DeviceControl 
         settings.vibration = s.vibration
         settings.highRes = s.highRes
         settings.aeLock = s.aeLock
+        settings.checkMs = s.checkMs
         screen?.applyRemoteSettings()
     }
 
