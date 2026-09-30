@@ -34,6 +34,7 @@ class PhoneServer(
     private val identify: LocalIdentify,
     val device: DeviceBridge,
     private val updates: io.github.darylno.cardscanner.update.UpdateLock? = null,
+    private val debugHeader: () -> String = { "" },
 ) :
     GatewayService.Host {
     private val root = File(ctx.filesDir, "phoneserver")
@@ -57,6 +58,7 @@ class PhoneServer(
             f2fEvents = { f2f.recentEvents() },
             layouts = LayoutStore(File(root, "export_layout.json")),
             device = DeviceApi(device),
+            debug = io.github.darylno.cardscanner.core.server.DebugApi(io.github.darylno.cardscanner.core.DebugLog.global, debugHeader),
             update = { updates?.let { u -> Triple(u.latest?.version, u.locked, u.latest?.apkUrl) } ?: Triple(null, false, null) },
         )
     }
@@ -71,7 +73,15 @@ class PhoneServer(
         LocalScanUploader(
             identify = { frames ->
                 identify.ensurePack()            // no card database yet → fetch it (rate-limited)
-                identify.identifier().identifyFrames(frames).result.json
+                val log = io.github.darylno.cardscanner.core.DebugLog.global
+                try {
+                    val r = identify.identifier().identifyFrames(frames)
+                    log.i("identify", describeIdentified(frames.size, r.result.json, r.timingsMs))
+                    r.result.json
+                } catch (e: Exception) {
+                    log.w("identify", "${frames.size} frame(s): not identified now, will retry — ${e.javaClass.simpleName}: ${e.message}")
+                    throw e
+                }
             },
             file = { result, photo, replace -> backend.file(result, photo, replace) },
             answers = File(root, "upload_answers"),
@@ -120,6 +130,24 @@ class PhoneServer(
             done()
         }
         try { deleteExec.execute(work) } catch (_: java.util.concurrent.RejectedExecutionException) { work.run() }
+    }
+
+    /** One log line per identification: what it read, how sure, how many printings, OCR, timings. */
+    internal fun describeIdentified(frames: Int, json: Map<String, Any?>, timings: Map<String, Long>): String {
+        val read = json["card_read"] as? Map<*, *>
+        val name = read?.get("name") ?: "?"
+        val cands = json["candidates"] as? List<*> ?: emptyList<Any?>()
+        val top = cands.firstOrNull() as? Map<*, *>
+        val t = timings.entries.joinToString(" ") { "${it.key} ${it.value}" }
+        val what = when {
+            json["no_card"] == true -> "no card — ${json["error"]}"
+            json["identified"] == true -> "$name · ${cands.size} printing(s)" +
+                (top?.let { " · top ${it["set"]} ${it["collector_number"]}" } ?: "") +
+                (if (top?.get("ocr_confirmed") == true) " · OCR ✓" else "") +
+                ((json["confidence"] as? Map<*, *>)?.get("name")?.let { " · $it" } ?: "")
+            else -> "not identified — ${json["error"]}"
+        }
+        return "${frames} frame(s): $what · ms: $t"
     }
 
     fun localBase(): String = "http://127.0.0.1:$port"

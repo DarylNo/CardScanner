@@ -162,6 +162,12 @@ class GatewayServer(
             return if (locked != null) tooMany(locked) else codePage(session, null)
         }
         val result = attemptJoin(ip, given, now)
+        when (result) {       // never log the code itself
+            is JoinResult.Locked -> io.github.darylno.cardscanner.core.DebugLog.global.w("server", "join from $ip refused — locked out")
+            JoinResult.Wrong -> io.github.darylno.cardscanner.core.DebugLog.global.w("server", "wrong join code from $ip")
+            is JoinResult.JoinedAdmin -> io.github.darylno.cardscanner.core.DebugLog.global.i("server", "computer at $ip paired as admin")
+            JoinResult.Joined -> io.github.darylno.cardscanner.core.DebugLog.global.i("server", "guest joined from $ip")
+        }
         when (result) {
             is JoinResult.Locked -> return tooMany(result.remainingMs)
             JoinResult.Wrong ->
@@ -232,6 +238,7 @@ class GatewayServer(
         }
         rotatedTo?.let { code ->
             LOG.log(Level.WARNING, "gateway: $GLOBAL_MAX_FAILURES wrong join codes within the window — code rotated")
+            io.github.darylno.cardscanner.core.DebugLog.global.w("server", "$GLOBAL_MAX_FAILURES wrong join codes within 5 min — guest code rotated")
             try { onCodeRotated?.invoke(code) } catch (e: Exception) { LOG.log(Level.WARNING, "onCodeRotated failed", e) }
         }
         return result

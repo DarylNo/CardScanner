@@ -3,6 +3,7 @@ package io.github.darylno.cardscanner
 import android.app.Application
 import android.content.Context
 import android.util.Log
+import io.github.darylno.cardscanner.core.DebugLog
 import io.github.darylno.cardscanner.gateway.GatewayService
 import io.github.darylno.cardscanner.ident.LocalIdentify
 import io.github.darylno.cardscanner.phoneserver.DeviceBridge
@@ -41,6 +42,7 @@ class App : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        startDebugLog()
         if (!OpenCVLoader.initLocal()) Log.e(TAG, "OpenCV native init failed — capture will not work")
         settings = AppSettings(this)
         updates = io.github.darylno.cardscanner.update.UpdateLock(this, BuildConfig.VERSION_NAME,
@@ -48,7 +50,7 @@ class App : Application() {
             fetch = if (android.os.Build.FINGERPRINT == "robolectric") { { null } }
                 else io.github.darylno.cardscanner.update.UpdateLock::fetchLatest)
         identify = LocalIdentify(this)
-        phoneServer = PhoneServer(this, identify, DeviceBridge(settings), updates)
+        phoneServer = PhoneServer(this, identify, DeviceBridge(settings), updates, debugHeader = { debugHeader() })
         GatewayService.hostProvider = { phoneServer }
         uploads = Adapters.uploads(this, phoneServer)
         gateway = Adapters.gateway(this)
@@ -58,6 +60,47 @@ class App : Application() {
     }
 
     fun newCamera(): CameraPort = Adapters.camera(this, settings)
+
+    // ── the live log ────────────────────────────────────────────────────────
+    private val crashFile get() = java.io.File(filesDir, "last-crash.txt")
+
+    /**
+     * Mirror the live log to logcat (`adb logcat -s CardScanner`), and keep it past a
+     * crash: the log is in memory, so an uncaught exception writes it to
+     * [crashFile] first; the next launch notes it and the debug report carries it.
+     */
+    private fun startDebugLog() {
+        val log = DebugLog.global
+        log.sink = { e ->
+            when (e.level) {
+                'E' -> Log.e(TAG, "${e.tag}: ${e.msg}")
+                'W' -> Log.w(TAG, "${e.tag}: ${e.msg}")
+                else -> Log.i(TAG, "${e.tag}: ${e.msg}")
+            }
+        }
+        log.i("app", "start ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE}) on ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}")
+        if (crashFile.isFile) log.w("app", "the previous run crashed — its last log is in the debug report")
+        val previous = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { t, err ->
+            runCatching {
+                log.e("crash", "uncaught on ${t.name}: ${err.stackTraceToString().take(1500)}")
+                crashFile.writeText(io.github.darylno.cardscanner.core.server.DebugApi.report(log) { "crash at ${DebugLog.iso(System.currentTimeMillis())}" })
+            }
+            previous?.uncaughtException(t, err)
+        }
+    }
+
+    /** The report's head: the Settings diagnostics, plus the previous crash's log if there was one. */
+    private fun debugHeader(): String = buildString {
+        append(runCatching { io.github.darylno.cardscanner.ui.DiagnosticsText.build(this@App) }.getOrElse { "diagnostics failed: ${it.message}" })
+        if (crashFile.isFile) {
+            append("\n\n── the previous run CRASHED; its log: ──\n")
+            append(runCatching { crashFile.readText().takeLast(60_000) }.getOrDefault("(unreadable)"))
+        }
+    }
+
+    /** Diagnostics + the whole live log — Settings → Share debug report, and GET /api/debug/report.txt. */
+    fun debugReport(): String = io.github.darylno.cardscanner.core.server.DebugApi.report(DebugLog.global) { debugHeader() }
 
     companion object {
         private const val TAG = "CardScanner"

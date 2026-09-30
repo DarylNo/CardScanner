@@ -3,11 +3,12 @@ package io.github.darylno.cardscanner.update
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
+import io.github.darylno.cardscanner.core.DebugLog
 import io.github.darylno.cardscanner.ident.ArtPackStore
-import okhttp3.Request
-import org.json.JSONObject
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.Executors
+import okhttp3.Request
+import org.json.JSONObject
 
 /**
  * The update lock (owner, 2026-09-30): "builds stop working if the repo has a
@@ -69,6 +70,7 @@ class UpdateLock(
         val body = try { fetch() } catch (_: Exception) { null } ?: return false   // offline: keep what we know
         val l = parse(body) ?: return false
         val before = latest to locked
+        DebugLog.global.i("update", "latest release ${l.version} · this build $current" + if (isNewer(l.version, current)) " — UPDATE REQUIRED" else "")
         prefs.edit().putString(K_VERSION, l.version).putString(K_URL, l.apkUrl).putLong(K_CHECKED, now()).apply()
         return before != (latest to locked)
     }

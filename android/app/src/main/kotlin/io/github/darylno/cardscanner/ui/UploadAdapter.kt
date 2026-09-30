@@ -13,16 +13,26 @@ import java.util.concurrent.CopyOnWriteArrayList
  */
 class UploadAdapter(private val queue: UploadQueue) : UploadPort {
     private val listeners = CopyOnWriteArrayList<UploadPort.Listener>()
+    @Volatile private var lastLoggedError: String? = null
 
     init {
         queue.listener = object : UploadQueue.Listener {
             override fun onOutcome(job: UploadJob, outcome: ScanOutcome) {
                 val o = map(outcome)
                 val open = job.tag == TAG_OPEN || job.tag == TAG_LEGACY_PRICE_CHECK
+                io.github.darylno.cardscanner.core.DebugLog.global.i("queue",
+                    "job ${job.id.take(8)} ${if (job.manual) "manual" else "auto"}" +
+                        (job.replaceScanId?.let { " (retry of #$it)" } ?: "") + " → " + describe(o))
                 listeners.forEach { it.onOutcome(job.id, job.manual, open, job.replaceScanId, o) }
             }
 
             override fun onState(pending: Int, lastError: String?, nextRetryInMs: Long?) {
+                if (lastError != lastLoggedError) {
+                    lastLoggedError = lastError
+                    if (lastError != null) io.github.darylno.cardscanner.core.DebugLog.global.w("queue",
+                        "$pending waiting — $lastError" + (nextRetryInMs?.let { " (retry in ${it / 1000}s)" } ?: ""))
+                    else io.github.darylno.cardscanner.core.DebugLog.global.i("queue", "connection back; $pending pending")
+                }
                 listeners.forEach { it.onState(pending, lastError, nextRetryInMs) }
             }
         }
@@ -44,6 +54,15 @@ class UploadAdapter(private val queue: UploadQueue) : UploadPort {
         const val TAG_OPEN = "open"
         /** A Handheld price check still queued from 1.1.1 or older: opens like [TAG_OPEN]. */
         const val TAG_LEGACY_PRICE_CHECK = "pricecheck"
+
+        fun describe(o: Outcome): String = when (o) {
+            is Outcome.NoCard -> "no card" + if (o.usedFallback) " (after the raw-frame retry)" else ""
+            is Outcome.AutoFiled -> "#${o.scanId} auto-filed"
+            is Outcome.NeedsPick -> "#${o.scanId} filed, needs a pick"
+            is Outcome.BestGuess -> "#${o.scanId} best guess"
+            is Outcome.NoMatch -> "#${o.scanId} no match"
+            is Outcome.Rejected -> "rejected ${o.code}: ${o.body.take(200)}"
+        } + if (o.usedFallback && o !is Outcome.NoCard) " (via the raw frames)" else ""
 
         fun map(o: ScanOutcome): Outcome = when (o) {
             is ScanOutcome.NoCard -> Outcome.NoCard(o.error, o.usedFallback)

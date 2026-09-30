@@ -26,6 +26,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import io.github.darylno.cardscanner.camera.HandheldGuide
 import io.github.darylno.cardscanner.core.AutoScanner
+import io.github.darylno.cardscanner.core.DebugLog
 import io.github.darylno.cardscanner.gateway.GatewayService
 import io.github.darylno.cardscanner.ui.AppSettings
 import io.github.darylno.cardscanner.ui.BatteryEstimate
@@ -58,6 +59,7 @@ import java.util.concurrent.RejectedExecutionException
  */
 class MainActivity : AppCompatActivity() {
     private lateinit var app: App
+    private val dlog = DebugLog.global
     private lateinit var settings: AppSettings
     private var camera: CameraPort? = null
     private val io = Executors.newSingleThreadExecutor()
@@ -483,6 +485,7 @@ class MainActivity : AppCompatActivity() {
     private fun ensureArea(): Boolean {
         if (overlay.settingArea) return false
         val r = HandheldGuide.areaToDraw(settings.auto, settings.roi, frameW, frameH) ?: return false
+        dlog.i("ui", "no scan area in Tap to scan — drew the default ${r.encode()} (frame ${frameW}×${frameH})")
         settings.roi = r
         overlay.setRoi(r)
         camera?.setRoi(r)
@@ -501,6 +504,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun setAutoMode(auto: Boolean) {
         if (settings.auto == auto) return
+        dlog.i("ui", "mode → ${if (auto) "Tray" else "Tap to scan"}")
         if (overlay.settingArea) cancelArea()
         settings.auto = auto
         styleAuto()
@@ -545,6 +549,7 @@ class MainActivity : AppCompatActivity() {
             // Auto on: tap clears to the full frame. Auto off always has an Area, so the
             // tap draws a new one instead (clearing would only redraw the default).
             settings.roi != null && settings.auto -> {
+                dlog.i("ui", "scan area cleared — full frame")
                 settings.roi = null
                 overlay.setRoi(null)
                 camera?.setRoi(null)
@@ -563,6 +568,7 @@ class MainActivity : AppCompatActivity() {
             setStatus(StatusText.AREA_TOO_SMALL, Tone.ERR)
             return
         }
+        dlog.i("ui", "scan area set ${r.encode()}")
         settings.roi = r
         overlay.setRoi(r)
         camera?.setRoi(r)          // the adapter resets detection (re-learn under the new area)
@@ -573,6 +579,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun onScanTap() {
         if (camera == null || app.updates.locked) return
+        dlog.i("ui", "shutter tapped")
         hideRetry()
         forgetLastCapture()   // a new capture supersedes the previous card
         pendingReplace = null
@@ -660,6 +667,7 @@ class MainActivity : AppCompatActivity() {
             setStatus(getString(R.string.update_required_status), Tone.ERR)
         }
         val was = lockView.visibility == View.VISIBLE
+        if (was != locked) dlog.w("update", if (locked) "a newer release (${latest?.version}) is out — scanning stopped" else "update lock lifted")
         lockView.visibility = if (locked) View.VISIBLE else View.GONE
         syncPause()
         if (was && !locked) applyMode()   // (only a rolled-back release unlocks a running build)
@@ -731,18 +739,23 @@ class MainActivity : AppCompatActivity() {
         }
 
         override fun onCaptureStarted(manual: Boolean) {
+            dlog.i("capture", if (manual) "shutter — capturing" else "trigger — capturing")
             runOnUiThread { vibrateTick() }
         }
 
         override fun onCaptured(capture: Captured, manual: Boolean) {
+            dlog.i("capture", "done (${if (manual) "manual" else "auto"}, ${if (capture.flattened) "card flattened" else "no card quad — raw area"}, " +
+                "${capture.primary.size / 1024} KB + ${capture.fallbacks.size} fallback frames) · ${capture.timings}")
             runOnUiThread { handleCaptured(capture, manual) }
         }
 
         override fun onCaptureFailed(message: String) {
+            dlog.e("capture", "failed: $message")
             runOnUiThread { setStatus(getString(R.string.capture_failed, message), Tone.ERR) }
         }
 
         override fun onCameraError(message: String) {
+            dlog.e("camera", message)
             runOnUiThread { setStatus(getString(R.string.camera_error, message), Tone.ERR) }
         }
     }
@@ -762,6 +775,9 @@ class MainActivity : AppCompatActivity() {
                 if (event.occupied && event.stableCount > 0) setStatus(StatusText.HOLD_STILL)
             }
             is AutoScanner.Event.Trigger -> {
+                val b = event.box
+                dlog.i("detect", "TRIGGER box ${b.x},${b.y} ${b.w}×${b.h} of ${sw}×${sh} · mask %.1f%%".format(b.maskFrac * 100) +
+                    (debug?.let { " · " + it.replace('\n', ' ') } ?: ""))
                 overlay.setBox(event.box, sw, sh, OverlayView.BoxState.CAPTURED)
                 hideRetry()
                 forgetLastCapture()
@@ -770,6 +786,7 @@ class MainActivity : AppCompatActivity() {
             is AutoScanner.Event.AwaitingNext ->
                 overlay.setBox(event.box, sw, sh, OverlayView.BoxState.AWAIT_NEXT)
             is AutoScanner.Event.NextCard -> {
+                dlog.i("detect", if (event.removed) "card removed — watching" else "a different card settled — next")
                 overlay.setBox(event.box, sw, sh, OverlayView.BoxState.SETTLING)
                 // The failed card left the tray — a retry now would replace the old row with the WRONG card.
                 hideRetry()

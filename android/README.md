@@ -257,6 +257,16 @@ then on updates install in place. Secrets reach both release
 paths — a hand-pushed tag, and `auto-tag.yml` (it calls `release.yml` with
 `secrets: inherit`).
 
+## Debugging
+
+- **Live log:** every trigger, capture, identification (name, printings, OCR,
+  stage timings), queue outcome, F2F request, server event and error goes to
+  an in-memory log mirrored to logcat: `adb logcat -s CardScanner`.
+- **On the paired computer:** 🐞 → **App log** tails it live (filter, pause);
+  **Copy report** / **Download** = diagnostics + the whole log.
+- **On the phone:** Settings → Diagnostics → **Share debug report**.
+- **After a crash** the log is saved and the next report includes it.
+
 ## F2F network test
 
 A hidden screen that answers "does Face to Face Games throttle the phone?".

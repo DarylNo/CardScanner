@@ -325,6 +325,19 @@ OnePlus Nord N200 5G (camera id 0 only), minSdk 29, arm64-v8a.
   the page reports its pending ids to `CardScannerApp.pendingDeletes` and
   `PanelActivity.onPause` deletes them itself (`PhoneServer.deleteScansAsOwner`)
   — without that, swiped scans came back.
+- **The live log** (`core/DebugLog.global`, a 3000-line ring, mirrored to
+  logcat as `CardScanner`): triggers (box, mask %), captures (flattened or
+  not, timings), each identification (name, printings, top, OCR ✓, stage
+  ms), queue outcomes and retry errors, F2F requests, server start/stop/idle
+  and joins, card-database and update checks, remote setting changes, crashes
+  (an uncaught exception writes the log to `last-crash.txt`; the next report
+  carries it). Read it live on the paired computer (🐞 → App log, admin-only
+  `GET /api/debug/log?since=`), as a report (`/api/debug/report.txt`, 🐞 →
+  Copy report / Download; Settings → Diagnostics → Share debug report), or
+  with `adb logcat -s CardScanner`. **Never log a secret** — no join/admin
+  codes, cookies or tokens (`joinsAreLoggedWithoutTheCode`). The page's copy
+  falls back to a textarea: the LAN page is plain HTTP, where browsers give no
+  `navigator.clipboard`.
 - **The scan signal** is ONLY the blue box ✓ (a centre ✓ badge with no box),
   held for Settings/📱 Scanner "Check mark time" (250–10000 ms, default 2500,
   `check_ms`), plus two short buzzes (Vibration switch).
@@ -409,6 +422,10 @@ Open threads:
   (shadows vs collector-line OCR).
 - Proposed, not approved: "Fit to cards + zoom" (auto-fit the scan Area).
 - Ranking time for heavily reprinted names (cache candidate images).
+- Proposed, awaiting the owner: a measured card-detection goal — score the
+  current detector from real debug reports (phantom triggers, captures with no
+  card quad, first-try identification) before changing anything; the trigger
+  stays occupancy + stillness, improvements go to the card judge.
 
 ## Release / distribution
 

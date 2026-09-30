@@ -63,11 +63,13 @@ class PhoneBackend(
     private val device: DeviceApi? = null,
     /** The update lock's view: (latest seen, a newer one is out, its APK link) — null = never checked. */
     private val update: () -> Triple<String?, Boolean, String?> = { Triple(null, false, null) },
+    /** The live log + debug report (admin only). */
+    private val debug: io.github.darylno.cardscanner.core.server.DebugApi? = null,
 ) {
     val api = PhoneApi(store, photos)
     val sweep = PriceSweep(store, api, f2f, launch, now, interrupt, paceS)
     val server = ScanServer(api, sweep, layouts)
-    val worker = PriceWorker(sweep, now)
+    val worker = PriceWorker(sweep, now, onError = { io.github.darylno.cardscanner.core.DebugLog.global.e("price", "sweep tick failed", it) })
 
     /**
      * A capture the phone identified: file it (a Retry replaces the row it retries,
@@ -88,6 +90,7 @@ class PhoneBackend(
             return res
         }
         device?.handle(req)?.let { return it }
+        debug?.handle(req)?.let { return it }
         val get = req.method == "GET" || req.method == "HEAD"
         return when {
             get && req.path == "/" -> page("desktop.html")

@@ -28,6 +28,17 @@ class DeviceBridge(private val settings: AppSettings) : DeviceApi.DeviceControl 
     )
 
     override fun write(s: DeviceApi.DeviceState) {
+        val before = read()
+        if (before != s) io.github.darylno.cardscanner.core.DebugLog.global.i("device", "settings changed from the computer: " +
+            listOfNotNull(
+                ("mode → " + if (s.auto) "Tray" else "Tap to scan").takeIf { before.auto != s.auto },
+                "area → ${s.roi?.encode() ?: "full frame"}".takeIf { before.roi != s.roi },
+                "torch → ${s.torch}".takeIf { before.torch != s.torch },
+                "high res → ${s.highRes}".takeIf { before.highRes != s.highRes },
+                "exposure lock → ${s.aeLock}".takeIf { before.aeLock != s.aeLock },
+                "vibration → ${s.vibration}".takeIf { before.vibration != s.vibration },
+                "check → ${s.checkMs} ms".takeIf { before.checkMs != s.checkMs },
+            ).joinToString(", "))
         settings.auto = s.auto
         settings.roi = s.roi
         settings.torch = s.torch

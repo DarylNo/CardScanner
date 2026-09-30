@@ -51,6 +51,7 @@
     <string name="settings_debug_desc">Mask coverage, steadiness, timings</string>
     <string name="settings_diagnostics">Diagnostics</string>
     <string name="settings_copy_diag">Copy diagnostics</string>
+    <string name="settings_share_report">Share debug report</string>
 
     <!-- Share -->
     <string name="share_title">Share</string>

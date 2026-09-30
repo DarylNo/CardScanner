@@ -127,7 +127,7 @@ class SettingsActivity : AppCompatActivity() {
                 startActivity(Intent(this@SettingsActivity, DiagnosticsActivity::class.java)); true
             }
         })
-        val diag = diagnostics()
+        val diag = DiagnosticsText.build(app)
         val diagCard = chrome.card()
         diagCard.addView(chrome.text(diag, 12f, ScanChrome.Palette.TEXT_DIM).apply {
             typeface = Typeface.MONOSPACE
@@ -138,20 +138,22 @@ class SettingsActivity : AppCompatActivity() {
             cm?.setPrimaryClip(ClipData.newPlainText("Card Scanner diagnostics", diag))
             Toast.makeText(this, getString(R.string.copied), Toast.LENGTH_SHORT).show()
         }, lp(14))
+        diagCard.addView(chrome.secondaryButton(getString(R.string.settings_share_report)) { shareDebugReport() }, lp(10))
         col.addView(diagCard, lp())
     }
 
-    private fun diagnostics(): String = buildString {
-        append("app ").append(BuildConfig.VERSION_NAME).append(" (").append(BuildConfig.VERSION_CODE).append(")\n")
-        append("device ").append(Build.MANUFACTURER).append(' ').append(Build.MODEL)
-        append(" · Android ").append(Build.VERSION.RELEASE).append(" (API ").append(Build.VERSION.SDK_INT).append(")\n")
-        append("server ").append(if (app.phoneServer.running) "serving on :${app.phoneServer.port}" else "stopped")
-            .append(" · paired computers ").append(app.phoneServer.admins.count).append('\n')
-        append("card database ").append(app.identify.store.installedManifest()?.let { "${it.rows} rows · ${it.buildDate}" } ?: "none")
-            .append('\n')
-        append("queue pending ").append(app.uploads.pending).append("\n\n")
-        append(CameraDiagnostics.last ?: "camera: open the scanner screen once to collect camera details").append("\n\n")
-        append("recent captures (ms):\n").append(app.settings.recentTimings.ifBlank { "—" })
+    /** The debug report (diagnostics + the live log) through the share sheet — paste it anywhere. */
+    private fun shareDebugReport() {
+        val text = app.debugReport()
+        val send = Intent(Intent.ACTION_SEND).setType("text/plain")
+            .putExtra(Intent.EXTRA_SUBJECT, "Card Scanner debug report")
+            .putExtra(Intent.EXTRA_TEXT, text)
+        try {
+            startActivity(Intent.createChooser(send, getString(R.string.settings_share_report)))
+        } catch (_: Exception) {
+            getSystemService(ClipboardManager::class.java)?.setPrimaryClip(ClipData.newPlainText("Card Scanner debug report", text))
+            Toast.makeText(this, getString(R.string.copied), Toast.LENGTH_SHORT).show()
+        }
     }
 }
 

@@ -3,6 +3,7 @@ package io.github.darylno.cardscanner.ident
 import android.content.Context
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
+import io.github.darylno.cardscanner.core.DebugLog
 import io.github.darylno.cardscanner.f2f.CronetTransport
 import io.github.darylno.cardscanner.f2f.F2fTransport
 import io.github.darylno.cardscanner.f2f.OkHttpTransport
@@ -77,6 +78,7 @@ class LocalIdentify(private val ctx: Context) {
                 checking = true
                 val c = try { store.check(force, unmetered(ctx)) } finally { checking = false }
                 lastCheck = c
+                DebugLog.global.i("pack", "card database check (${if (force) "now" else "weekly"}): $c")
                 runCatching { store.matcher() }            // load it off the main thread
                 runCatching { done(c) }
             }

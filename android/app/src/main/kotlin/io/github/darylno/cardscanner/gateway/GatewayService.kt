@@ -107,6 +107,7 @@ class GatewayService : Service() {
         override fun run() {
             val s = server ?: return
             if (shouldIdleStop(System.currentTimeMillis(), maxOf(s.lastRemoteAt, startedAt), lastVisibleAt, visibleScreens)) {
+                io.github.darylno.cardscanner.core.DebugLog.global.i("server", "idle 30 min with the app in the background — stopping")
                 shutdown()
                 stopSelf()
                 return
@@ -144,6 +145,7 @@ class GatewayService : Service() {
 
     private fun shutdown() {
         main.removeCallbacks(idleCheck)
+        if (server != null) io.github.darylno.cardscanner.core.DebugLog.global.i("server", "stopped")
         server?.let {
             it.stopSharing()
             it.stop()
@@ -156,6 +158,7 @@ class GatewayService : Service() {
     }
 
     private fun fail(message: String) {
+        io.github.darylno.cardscanner.core.DebugLog.global.e("server", "couldn't start: $message")
         server?.stop()
         server = null
         _status.value = Status(running = false, error = message)
@@ -165,6 +168,7 @@ class GatewayService : Service() {
     private fun publish(s: GatewayServer) {
         val port = s.listeningPort
         val urls = LocalAddresses.list().map { LocalAddresses.joinUrl(it, port, s.code) }
+        io.github.darylno.cardscanner.core.DebugLog.global.i("server", "serving on :$port at ${LocalAddresses.list().joinToString().ifEmpty { "no Wi-Fi address" }}")
         _status.value = Status(running = true, port = port, code = s.code, urls = urls)
         val nm = getSystemService(NotificationManager::class.java)
         nm?.notify(NOTIFICATION_ID, buildNotification(urls.firstOrNull(), s.code))

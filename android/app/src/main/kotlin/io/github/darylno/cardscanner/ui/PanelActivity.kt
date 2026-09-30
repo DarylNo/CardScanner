@@ -114,6 +114,7 @@ class PanelActivity : AppCompatActivity() {
         val ids = pendingDeletes
         if (ids.isNotEmpty()) {
             pendingDeletes = emptyList()
+            io.github.darylno.cardscanner.core.DebugLog.global.i("review", "screen closed inside the Undo window — deleting ${ids.joinToString { "#$it" }}")
             App.of(this).phoneServer.deleteScansAsOwner(ids)
             // Let the page drop its Undo bar too (its own DELETE then just answers 404).
             if (::web.isInitialized) web.evaluateJavascript("window.commitDeletes && commitDeletes(true)", null)

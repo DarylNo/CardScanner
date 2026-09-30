@@ -95,6 +95,16 @@ screen). Your scans are never locked away: the scan list, export and the
 computer link keep working, and cards already scanned still finish
 identifying. Updates install over the app and keep your scans.
 
+## When something looks wrong
+
+The phone keeps a live log of what it's doing — each trigger, capture,
+identification (with its timings), price lookup and error. On the paired
+computer, **🐞 → App log** shows it as it happens; **Copy report** /
+**Download** give the whole thing plus the phone's diagnostics, ready to
+paste into a bug report. On the phone: Settings → Diagnostics → **Share debug
+report**. With USB or wireless debugging on, `adb logcat -s CardScanner` shows
+the same lines.
+
 ## Your data
 
 The scans live **only on the phone** — there are no backups, and uninstalling

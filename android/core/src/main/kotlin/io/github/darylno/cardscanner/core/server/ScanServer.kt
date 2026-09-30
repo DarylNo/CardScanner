@@ -47,7 +47,8 @@ class ScanServer(val api: PhoneApi, val sweep: PriceSweep, val layouts: LayoutSt
                 p == "/api/scans/delete-all" ||
                 p == "/api/export" || p == "/api/export.csv" || p.startsWith("/api/export/") ||
                 p == "/api/price-sweep/stop" || p == "/api/scans/price-missing" ||
-                p == "/api/device" || p.startsWith("/api/device/")          // the phone's own settings
+                p == "/api/device" || p.startsWith("/api/device/") ||       // the phone's own settings
+                p.startsWith("/api/debug/")                                 // the live log + debug report
         }
 
         private val SCAN_ID = Regex("/api/scans/[^/]+")
