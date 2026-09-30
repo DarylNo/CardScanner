@@ -1,0 +1,101 @@
+package io.github.darylno.cardscanner.phoneserver
+
+import android.content.Context
+import android.os.StatFs
+import io.github.darylno.cardscanner.BuildConfig
+import io.github.darylno.cardscanner.core.PrintingCandidates
+import io.github.darylno.cardscanner.core.ScryfallPrintings
+import io.github.darylno.cardscanner.f2f.OkHttpTransport
+import io.github.darylno.cardscanner.gateway.GatewayServer
+import io.github.darylno.cardscanner.gateway.LocalAddresses
+import io.github.darylno.cardscanner.ident.ArtPackStore
+import io.github.darylno.cardscanner.ident.TransportHttpJson
+import java.io.File
+
+/**
+ * Stage 3 preview (Diagnostics, hidden, default OFF): the phone runs its own
+ * copy of the server beside the computer's. While ON, every capture the
+ * phone identifies (Compare mode) is ALSO filed into the phone's own store,
+ * and the review pages are served from the phone on the LAN — through the
+ * existing gateway, so the same 6-digit code, lockouts and LAN-only rule
+ * apply. The computer's server stays the real path; nothing here reaches it.
+ *
+ * Storage: the owner's rule (2026-09-30) — at [WARN_AT] scans show the photo
+ * size and free space as a warning, then keep going; nothing is pruned.
+ */
+class PhoneServerPreview(private val ctx: Context, private val pack: ArtPackStore) {
+    private val root = File(ctx.filesDir, "phoneserver")
+    val store: SqliteScanStore by lazy { SqliteScanStore(File(root, "scans.db")) }
+    val photos = PhotoDir(File(root, "scan_images"))
+    private val scryfall by lazy { ScryfallPrintings(TransportHttpJson(OkHttpTransport())) }
+
+    val backend: PhoneBackend by lazy {
+        PhoneBackend(
+            store, photos,
+            pages = { name -> runCatching { ctx.assets.open("phoneserver/$name").use { it.readBytes() } }.getOrNull() },
+            version = "${BuildConfig.VERSION_NAME} (phone)",
+            search = { q -> PrintingCandidates.searchCandidates(scryfall.getAllPrintings(q)) },
+            lanIp = { LocalAddresses.list().firstOrNull() },
+            packRows = { pack.installedManifest()?.rows ?: 0 },
+        )
+    }
+
+    @Volatile private var server: GatewayServer? = null
+    val running: Boolean get() = server != null
+    val code: String? get() = server?.code
+    val port: Int get() = server?.listeningPort ?: PORT
+
+    /** Start serving on the LAN; returns an error message, or null when it's up. */
+    @Synchronized
+    fun start(): String? {
+        if (server != null) return null
+        val s = GatewayServer(LocalUpstream(backend), PORT)
+        return try {
+            s.startServing()
+            server = s
+            null
+        } catch (e: Exception) {
+            "could not start on port $PORT: ${e.message}"
+        }
+    }
+
+    @Synchronized
+    fun stop() {
+        server?.stop()
+        server = null
+    }
+
+    /** The address to open on the computer (join link with the code). */
+    fun joinUrl(): String? {
+        val c = code ?: return null
+        val ip = LocalAddresses.list().firstOrNull() ?: return null
+        return LocalAddresses.joinUrl(ip, port, c)
+    }
+
+    /** File one identified capture ([result] = the pipeline's scan_candidates answer). */
+    fun file(result: Map<String, Any?>, photo: ByteArray?): Map<String, Any?> =
+        backend.api.fileScan(result, photo)
+
+    /** "N scans · X MB of photos · Y GB free" and whether it's past the warning line. */
+    fun usage(): Usage {
+        val n = runCatching { store.count() }.getOrDefault(0)
+        val bytes = photos.sizeBytes()
+        val free = runCatching { StatFs(ctx.filesDir.path).availableBytes }.getOrDefault(-1L)
+        return Usage(n, bytes, free)
+    }
+
+    data class Usage(val scans: Int, val photoBytes: Long, val freeBytes: Long) {
+        val warn: Boolean get() = scans >= WARN_AT
+        fun label(): String {
+            val mb = photoBytes / (1024.0 * 1024.0)
+            val base = "$scans scans · ${"%.1f".format(mb)} MB of photos" +
+                if (freeBytes >= 0) " · ${"%.1f".format(freeBytes / (1024.0 * 1024 * 1024))} GB free" else ""
+            return if (warn) "⚠ $base — past $WARN_AT scans; clear old scans if space runs low" else base
+        }
+    }
+
+    companion object {
+        const val PORT = 8090
+        const val WARN_AT = 10_000
+    }
+}

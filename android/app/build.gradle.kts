@@ -68,6 +68,16 @@ android {
     sourceSets.getByName("test").java.srcDir("../core/src/testShared/kotlin")
 }
 
+// Stage 3 preview: the phone serves the SAME review pages the computer does —
+// server/static/{phone,desktop}.html are copied into the APK's assets at build
+// time (never hand-copied, so they can't drift).
+val copyReviewPages by tasks.registering(Copy::class) {
+    from(rootProject.file("../server/static")) { include("phone.html", "desktop.html") }
+    into(layout.buildDirectory.dir("generated/reviewPages/phoneserver"))
+}
+android.sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("generated/reviewPages"))
+tasks.named("preBuild") { dependsOn(copyReviewPages) }
+
 dependencies {
     implementation(project(":core"))
     implementation(libs.opencv.android)

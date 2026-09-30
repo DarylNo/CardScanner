@@ -30,6 +30,9 @@ class App : Application() {
     /** Stage 2 Compare mode (hidden, default off): shadow on-phone identification. */
     lateinit var compare: CompareMode
         private set
+    /** Stage 3 preview (hidden, default off): the phone's own server beside the computer's. */
+    lateinit var phoneServer: io.github.darylno.cardscanner.phoneserver.PhoneServerPreview
+        private set
 
     override fun onCreate() {
         super.onCreate()
@@ -40,6 +43,11 @@ class App : Application() {
         // The tap only observes: uploads go through the same queue as before.
         uploads = CompareUploadPort(Adapters.uploads(this), compare)
         gateway = Adapters.gateway(this)
+        phoneServer = io.github.darylno.cardscanner.phoneserver.PhoneServerPreview(this, compare.store)
+        // While the preview runs, every capture the phone identifies is filed into its own store.
+        compare.onPhoneIdentified = { ident, jpeg ->
+            if (phoneServer.running) phoneServer.file(ident.result.json, jpeg)
+        }
         compare.onAppStart()
     }
 

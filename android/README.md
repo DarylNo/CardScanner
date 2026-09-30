@@ -252,6 +252,21 @@ uninstall; from then on updates install in place. Secrets reach both release
 paths — a hand-pushed tag, and `auto-tag.yml` (it calls `release.yml` with
 `secrets: inherit`).
 
+## Phone server preview (Stage 3)
+
+Settings → long-press "Diagnostics" → **Phone server (preview)** → *Serve from
+this phone*. It turns Compare on (on-phone identification) and serves the SAME
+review pages (server/static/phone.html + desktop.html, copied into the APK at
+build) from the phone on port **8090**, through the Share gateway's join-code
+security (LAN only, 6-digit code, lockouts). Every capture the phone
+identifies is also filed into the phone's own store (`files/phoneserver/`:
+`scans.db` — server/store.py's table — plus `scan_images/`). The computer's
+server stays the real path; nothing here reaches it. Open the shown address on
+the computer and enter the code. Not yet on the phone: pricing (3c), export
+(3d), admin/guest roles (3e) — those endpoints answer 501 for now. At 10,000
+scans the usage line turns into a warning (photo size + free space); nothing
+is pruned.
+
 ## Compare mode (Stage 2)
 
 The phone can now identify cards itself — the server's pipeline ported to

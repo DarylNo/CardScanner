@@ -62,6 +62,14 @@ code, compound collectors, art agreement). A differential harness replays
 real scans through phone and Python and reports every disagreement.
 
 ### Stage 3 — the phone server
+Owner decisions (2026-09-30): start fresh at switchover (the computer's
+scans are not imported); the computer pairs once as admin via a one-time
+code, everyone else is a guest; storage — at 10,000 scans warn with the
+photo size and free space, then keep going.
+Progress: 3a store + 3b API done in 1.0.14 (golden-tested against the real
+server; Diagnostics → "Phone server (preview)"). 3c pricing, 3d export,
+3e roles next.
+
 SQLite store with the Python schema, the API with identical JSON (golden
 request/response fixtures recorded from the Python server and replayed
 against the Kotlin server in tests), the pricing sweep with every

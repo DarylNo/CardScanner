@@ -68,6 +68,7 @@ class DiagnosticsActivity : AppCompatActivity() {
     private lateinit var stopBtn: Button
     private lateinit var cooldownBtn: Button
     private var compareSection: CompareSection? = null
+    private var previewSection: PreviewSection? = null
 
     private val worker = Executors.newSingleThreadExecutor { r -> Thread(r, "f2f-probe") }
     private val ui = Handler(Looper.getMainLooper())
@@ -116,6 +117,7 @@ class DiagnosticsActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         compareSection?.destroy()
+        previewSection?.destroy()
         stop?.set()
         worker.shutdown()      // no interrupt: the StopSignal already ends every wait
         ui.removeCallbacksAndMessages(null)
@@ -124,6 +126,8 @@ class DiagnosticsActivity : AppCompatActivity() {
 
     private fun build() {
         compareSection = CompareSection(this, chrome, App.of(this).compare).also { it.build(col) }
+        previewSection = PreviewSection(this, chrome, App.of(this).phoneServer, App.of(this).compare)
+            .also { it.build(col) }
 
         col.addView(chrome.sectionHeader(getString(R.string.nettest_title)))
         val intro = chrome.card()

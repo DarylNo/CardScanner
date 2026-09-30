@@ -43,6 +43,13 @@ class CompareMode(private val ctx: Context, private val flag: Flag) {
     @Volatile private var lastBytes: ByteArray? = null
     @Volatile private var lastServer: Pair<Outcome, String>? = null   // outcome, job id
 
+    /**
+     * Stage 3 preview hook: every AUTO capture the phone identifies (not
+     * "Test on last capture"), with its photo — the preview files it into the
+     * phone's own store. Called on the identifier thread.
+     */
+    @Volatile var onPhoneIdentified: ((ident: PhoneIdentifier.Identified, jpeg: ByteArray) -> Unit)? = null
+
     /** One line for Diagnostics: what compare mode is doing now. */
     @Volatile var status: String = ""
         private set
@@ -97,6 +104,7 @@ class CompareMode(private val ctx: Context, private val flag: Flag) {
         val job = id.submit(bytes) { r ->
             val msg = r.fold(
                 onSuccess = { ident ->
+                    if (source == "auto") runCatching { onPhoneIdentified?.invoke(ident, bytes) }
                     val row = server?.let { buildRow(jobId, source, it, ident) }
                     if (row != null) log.add(row)
                     val phone = phoneSummary(ident)
