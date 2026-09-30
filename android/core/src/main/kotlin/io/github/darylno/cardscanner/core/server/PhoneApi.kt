@@ -10,7 +10,12 @@ class ApiRequest(
     val path: String,
     val query: Map<String, String> = emptyMap(),
     val body: ByteArray? = null,
+    /** [ROLE_ADMIN] or [ROLE_GUEST] — set by the gateway from the session, never by the client. */
+    val role: String = ROLE_ADMIN,
 )
+
+const val ROLE_ADMIN = "admin"
+const val ROLE_GUEST = "guest"
 
 class ApiResponse(val status: Int, val contentType: String, val body: ByteArray,
                   val headers: Map<String, String> = emptyMap()) {
@@ -39,7 +44,7 @@ interface ScanImages {
  *  POST   /api/scans/{id}/select  pick a printing
  *  PATCH  /api/scans/{id}         included / condition / finish / quantity
  *  DELETE /api/scans/{id}         row + photo
- *  POST   /api/scans/delete-all   {"only":"unselected"} keeps picked rows
+ *  POST   /api/scans/delete-all   {"only":"unselected"} keeps picked rows; "flagged" = only flagged ones
  *
  * and [fileScan], `/api/scan`'s filing once the phone has identified a capture.
  *
@@ -56,6 +61,7 @@ class PhoneApi(val store: ScanStore, private val images: ScanImages) {
 
     fun handle(req: ApiRequest): ApiResponse? {
         val p = req.path
+        if (p == "/api/me") return if (req.method == "GET") ApiResponse.json(200, mapOf("role" to req.role)) else null
         if (p == "/api/scans") return if (req.method == "GET") listScans() else null
         if (p == "/api/scans/delete-all") return if (req.method == "POST") deleteAll(req) else null
         val m = SCAN_PATH.matchEntire(p) ?: return null
@@ -131,6 +137,7 @@ class PhoneApi(val store: ScanStore, private val images: ScanImages) {
             scan = store.get(id) ?: return notFound()
             val fields = LinkedHashMap<String, Any?>()
             if (body.containsKey("included")) fields["included"] = Py.truthy(body["included"])
+            if (body.containsKey("flagged")) fields["flagged"] = Py.truthy(body["flagged"])
             selection = LinkedHashMap(Py.map(scan!!["selection"]) ?: emptyMap())
             // Only an ALREADY-selected scan has a selection to edit: never invent one.
             for (key in listOf("condition", "finish", "quantity")) {
@@ -199,7 +206,8 @@ class PhoneApi(val store: ScanStore, private val images: ScanImages) {
     private fun deleteAll(req: ApiRequest): ApiResponse {
         val body = if (req.body == null || req.body.isEmpty()) emptyMap() else bodyObject(req) ?: return unprocessable()
         val only = (if (Py.truthy(Py.get(body, "only"))) Py.str(body["only"]) else "").lowercase()
-        val targets = store.list().filter { only != "unselected" || it["status"] != "selected" }
+        val targets = if (only == "flagged") store.list().filter { it["flagged"] == true }
+            else store.list().filter { only != "unselected" || it["status"] != "selected" }
         for (s in targets) {
             val id = (s["id"] as Number).toLong()
             images.delete(id)

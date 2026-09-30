@@ -4,6 +4,7 @@ import io.github.darylno.cardscanner.core.MiniJson
 import io.github.darylno.cardscanner.core.server.ApiRequest
 import io.github.darylno.cardscanner.core.server.F2fAnswer
 import io.github.darylno.cardscanner.core.server.GoldenApi
+import io.github.darylno.cardscanner.gateway.AdminPairing
 import io.github.darylno.cardscanner.gateway.GatewayServer
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -130,5 +131,78 @@ class PhoneServerTest {
             }
         client.newCall(Request.Builder().url("$base/api/export").header("Cookie", cookie).build())
             .execute().use { r -> assertEquals("1 XLN 65 NM Non-Foil\n", r.body!!.string()) }
+    }
+
+    // ── roles (3e) ──────────────────────────────────────────────────────────
+
+    private fun fileTwo() = repeat(2) {
+        backend.api.fileScan(mapOf("identified" to true, "card_read" to mapOf("name" to "Opt"),
+            "candidates" to listOf(mapOf("id" to "o$it", "name" to "Opt", "set" to "dom", "collector_number" to "60"),
+                mapOf("id" to "x$it", "name" to "Opt", "set" to "xln", "collector_number" to "65"))), null)
+    }
+
+    private fun joinCookie(base: String, code: String, name: String): String? =
+        client.newCall(Request.Builder().url("$base/join?code=$code").build()).execute().use { r ->
+            r.headers("Set-Cookie").firstOrNull { it.startsWith("$name=") }?.substringBefore(';')
+        }
+
+    private fun req(base: String, cookie: String, method: String, path: String, body: String? = null,
+                    extra: Pair<String, String>? = null): Int {
+        val b = Request.Builder().url("$base$path").header("Cookie", cookie)
+        extra?.let { b.header(it.first, it.second) }
+        b.method(method, body?.toRequestBody("application/json".toMediaType()))
+        return client.newCall(b.build()).execute().use { it.code }
+    }
+
+    private fun page(base: String, cookie: String, path: String): String =
+        client.newCall(Request.Builder().url("$base$path").header("Cookie", cookie).build()).execute().use { it.body!!.string() }
+
+    @Test fun guestsFlagButOnlyThePairedComputerDeletesAndExports() {
+        val admins = AdminPairing(tmp.newFile("admins.json").also { it.delete() })
+        val g = GatewayServer(LocalUpstream(backend), port = 0, hostname = "127.0.0.1", admins = admins)
+            .also { gateway = it }
+        g.startServing()
+        val base = "http://127.0.0.1:${g.listeningPort}"
+        fileTwo()
+        val guest = joinCookie(base, g.code, GatewayServer.COOKIE)!!
+        assertEquals(403, req(base, guest, "DELETE", "/api/scans/1"))
+        assertEquals(403, req(base, guest, "GET", "/api/export.csv"))
+        // a guest can't claim to be admin: the gateway drops the client's role header
+        assertEquals(403, req(base, guest, "DELETE", "/api/scans/1", extra = GatewayServer.ROLE_HEADER to "admin"))
+        assertEquals(200, req(base, guest, "PATCH", "/api/scans/1", """{"flagged":true}"""))
+        assertEquals(true, store.get(1)!!["flagged"])
+        val me = client.newCall(Request.Builder().url("$base/api/me").header("Cookie", guest).build())
+            .execute().use { MiniJson.parse(it.body!!.string()) }
+        assertEquals(mapOf("role" to "guest"), me)
+
+        // pair the computer with the one-time code: admin, remembered
+        val code = admins.newCode()
+        val admin = joinCookie(base, code, GatewayServer.ADMIN_COOKIE)!!
+        assertEquals(null, joinCookie(base, code, GatewayServer.ADMIN_COOKIE))     // used up
+        assertEquals(200, req(base, admin, "GET", "/api/export.csv"))
+        assertEquals(200, req(base, admin, "POST", "/api/scans/delete-all", """{"only":"flagged"}"""))
+        assertEquals(listOf(2L), store.list().map { it["id"] })
+        // pairing survives a restart (only the hash is on disk), and ends on revoke
+        val reloaded = AdminPairing(java.io.File(tmp.root, "admins.json"))
+        assertTrue(reloaded.isAdmin(admin.substringAfter('=')))
+        assertTrue(!java.io.File(tmp.root, "admins.json").readText().contains(admin.substringAfter('=')))
+        // guest sessions end when sharing stops; the paired computer stays admin
+        g.stopSharing()
+        assertTrue(page(base, guest, "/api/scans").contains("Join the card scanner"))
+        assertTrue(page(base, admin, "/api/scans").startsWith("["))
+        // revoking on the phone ends the pairing at once
+        admins.revokeAll()
+        assertTrue(page(base, admin, "/api/scans").contains("Join the card scanner"))
+    }
+
+    @Test fun wrongAdminCodesCountTowardTheLockout() {
+        val admins = AdminPairing(null)
+        val g = GatewayServer(LocalUpstream(backend), port = 0, hostname = "127.0.0.1", admins = admins)
+        admins.newCode()
+        var last: Any? = null
+        repeat(GatewayServer.MAX_FAILURES) { last = g.attemptJoin("10.0.0.9", "00000000", 1_000L) }
+        assertTrue(last is GatewayServer.JoinResult.Locked)
+        // even the right code is refused while locked
+        assertTrue(g.attemptJoin("10.0.0.9", admins.pendingCode!!, 1_001L) is GatewayServer.JoinResult.Locked)
     }
 }

@@ -7,6 +7,7 @@ import io.github.darylno.cardscanner.core.PrintingCandidates
 import io.github.darylno.cardscanner.core.ScryfallPrintings
 import io.github.darylno.cardscanner.core.server.LayoutStore
 import io.github.darylno.cardscanner.f2f.OkHttpTransport
+import io.github.darylno.cardscanner.gateway.AdminPairing
 import io.github.darylno.cardscanner.gateway.GatewayServer
 import io.github.darylno.cardscanner.gateway.LocalAddresses
 import io.github.darylno.cardscanner.ident.ArtPackStore
@@ -51,6 +52,9 @@ class PhoneServerPreview(private val ctx: Context, private val pack: ArtPackStor
     private val f2f by lazy { PhoneF2f(ctx, File(ctx.cacheDir, "facetoface")) }
     private val sweepExec = Executors.newSingleThreadExecutor { r -> Thread(r, "price-sweep").apply { isDaemon = true } }
 
+    /** The paired computer(s): admin; everyone with the 6-digit code is a guest. */
+    val admins = AdminPairing(File(root, "admins.json"))
+
     @Volatile private var server: GatewayServer? = null
     val running: Boolean get() = server != null
     val code: String? get() = server?.code
@@ -60,7 +64,7 @@ class PhoneServerPreview(private val ctx: Context, private val pack: ArtPackStor
     @Synchronized
     fun start(): String? {
         if (server != null) return null
-        val s = GatewayServer(LocalUpstream(backend), PORT)
+        val s = GatewayServer(LocalUpstream(backend), PORT, admins = admins)
         return try {
             s.startServing()
             server = s
@@ -84,6 +88,14 @@ class PhoneServerPreview(private val ctx: Context, private val pack: ArtPackStor
         val c = code ?: return null
         val ip = LocalAddresses.list().firstOrNull() ?: return null
         return LocalAddresses.joinUrl(ip, port, c)
+    }
+
+    /** A fresh one-time ADMIN pairing link (the code is also typed-in-able), or null without Wi-Fi. */
+    fun adminPairUrl(): Pair<String, String>? {
+        if (!running) return null
+        val ip = LocalAddresses.list().firstOrNull() ?: return null
+        val c = admins.newCode()
+        return LocalAddresses.joinUrl(ip, port, c) to c
     }
 
     /** File one identified capture ([result] = the pipeline's scan_candidates answer). */

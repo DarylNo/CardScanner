@@ -72,7 +72,11 @@ server; Diagnostics → "Phone server (preview)"). 3c pricing done in
 for the phone: no timed sweep — price whatever is owed, re-check every 5 s
 while anything is, and sleep until the next scan when nothing is. 3d
 export done in 1.0.16 (TXT + CSV builder, byte-for-byte golden). 3e roles
-next.
+done in 1.0.16: the computer pairs once with a one-time 8-digit code
+(QR in Diagnostics) and is remembered until "Forget paired computers";
+6-digit-code guests review, pick and flag for deletion (a swipe flags);
+the admin sees "Delete flagged (n)". Stage 3 is feature-complete behind
+the preview switch; Stage 4 switches over.
 
 SQLite store with the Python schema, the API with identical JSON (golden
 request/response fixtures recorded from the Python server and replayed

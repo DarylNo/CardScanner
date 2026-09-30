@@ -262,7 +262,8 @@ from `android/` (Node on PATH, JDK 17); CI job `android` runs it per push.
   out what it's worth): the outcome opens `detail=<id>&pricecheck=1`; the PAGE
   posts `/price-check` and offers Keep/Discard. Mount auto stays hands-free.
 - **Guests have FULL access** (delete/clear/export/update included) through the
-  Share gateway — the owner's decision; don't add endpoint filtering without
+  computer's Share gateway — the owner's decision (the PHONE server's gateway
+  has roles instead: Phone-only direction → Stage 3e); don't add endpoint filtering without
   asking, and keep the "only share with people you trust" warning. The
   gateway answers LAN/hotspot peers only (socket address, not headers), locks
   an IP after 7 bad codes, and rotates the code after 20 bad codes from
@@ -323,8 +324,22 @@ Where it stands (2026-09-29, after 1.0.13):
   builder's layout/preview/download, `LayoutStore` → `export_layout.json`
   beside the phone's DB), golden-tested (`api/export.json`: every status,
   content type, Content-Disposition and the TXT/CSV text byte for byte —
-  Python's exact-binary money rounding, csv quoting, formula guard). Next:
-  3e roles. Owner
+  Python's exact-binary money rounding, csv quoting, formula guard). 3e
+  (1.0.16): roles — the preview gateway takes an `AdminPairing`: a one-time
+  8-digit code (Diagnostics → "Pair a computer as admin", QR + digits, 10
+  min, single use, wrong tries count toward the same lockouts) pairs the
+  computer as ADMIN (long-lived `cs_admin` cookie, only its SHA-256 on disk,
+  "Forget paired computers" revokes); the 6-digit code makes a GUEST. The
+  gateway sets `x-cardscanner-role` on every proxied request and DROPS a
+  client's own; `ScanServer.adminOnly` refuses a guest delete, clear,
+  export and the sweep controls (403). Guests FLAG for deletion — a
+  `flagged` column added to store.py too (migration on both), PATCH
+  `{"flagged"}`, delete-all `{"only":"flagged"}`, `GET /api/me` (the rig's
+  server always says admin). Pages: `body.guest` hides `.admin-only`; a
+  guest's swipe flags instead of deleting; the admin gets "Delete flagged
+  (n)". The rig's Share gateway (no AdminPairing) is unchanged — the
+  "Guests have FULL access" rule still holds THERE. Stage 3 is feature-
+  complete; next is Stage 4 (switch over). Owner
   decisions (2026-09-30): START FRESH at switchover (no import of the PC's
   scans); the computer pairs once as admin via a one-time code; at 10,000
   scans show size + free space as a warning, then keep going (no pruning).

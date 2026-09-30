@@ -9,6 +9,9 @@ package io.github.darylno.cardscanner.core.server
 class ScanServer(val api: PhoneApi, val sweep: PriceSweep, val layouts: LayoutStore = LayoutStore(null)) {
     fun handle(req: ApiRequest): ApiResponse? {
         val p = req.path
+        if (req.role != ROLE_ADMIN && adminOnly(req)) {
+            return ApiResponse.json(403, mapOf("error" to "only the scanner's owner can do that — flag it for deletion instead"))
+        }
         if (p == "/api/export" || p.startsWith("/api/export/") || p == "/api/export.csv") {
             return Export.handle(req, api.store, layouts)
         }
@@ -26,7 +29,22 @@ class ScanServer(val api: PhoneApi, val sweep: PriceSweep, val layouts: LayoutSt
         return api.handle(req)
     }
 
-    private companion object {
-        val PRICE_PATH = Regex("/api/scans/([^/]+)/(price|price-check)")
+    companion object {
+        /**
+         * What a guest may NOT do (docs/PHONE_ONLY_PLAN.md → Roles): delete a scan,
+         * clear the list, export (TXT, CSV, the saved layout), or run/stop the
+         * pricing sweep. Guests browse, search, pick, edit condition/finish/qty,
+         * price one scan, and flag scans for deletion (PATCH {"flagged": true}).
+         */
+        fun adminOnly(req: ApiRequest): Boolean {
+            val p = req.path
+            return (req.method == "DELETE" && SCAN_ID.matches(p)) ||
+                p == "/api/scans/delete-all" ||
+                p == "/api/export" || p == "/api/export.csv" || p.startsWith("/api/export/") ||
+                p == "/api/price-sweep/stop" || p == "/api/scans/price-missing"
+        }
+
+        private val SCAN_ID = Regex("/api/scans/[^/]+")
+        private val PRICE_PATH = Regex("/api/scans/([^/]+)/(price|price-check)")
     }
 }

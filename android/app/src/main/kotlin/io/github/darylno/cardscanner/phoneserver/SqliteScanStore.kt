@@ -23,6 +23,11 @@ class SqliteScanStore(file: File, private val clock: () -> String = ::isoNow) : 
         file.parentFile?.mkdirs()
         db = SQLiteDatabase.openOrCreateDatabase(file, null)
         db.execSQL(SCHEMA)
+        // Databases made before the flag existed (the Stage 3 preview): add it, as store.py does.
+        val cols = db.rawQuery("PRAGMA table_info(scans)", null).use { c ->
+            val out = HashSet<String>(); while (c.moveToNext()) out += c.getString(1); out
+        }
+        if ("flagged" !in cols) db.execSQL("ALTER TABLE scans ADD COLUMN flagged INTEGER NOT NULL DEFAULT 0")
     }
 
     override fun create(identified: Boolean, cardRead: Map<String, Any?>?, confidence: Map<String, Any?>?,
@@ -111,7 +116,8 @@ CREATE TABLE IF NOT EXISTS scans (
     candidates  TEXT NOT NULL DEFAULT '[]',
     selection   TEXT,
     f2f         TEXT,
-    included    INTEGER NOT NULL DEFAULT 1
+    included    INTEGER NOT NULL DEFAULT 1,
+    flagged     INTEGER NOT NULL DEFAULT 0
 )"""
     }
 }

@@ -916,3 +916,17 @@ def test_a_reused_upload_id_with_a_new_photo_is_a_new_scan(tmp_path):
     fresh = post(200)                                  # app restarted: id reused, new card
     assert fresh.get("id") and fresh["id"] != first["id"]
     assert [s["id"] for s in store.list_scans()] == [fresh["id"]]
+
+
+def test_flag_for_deletion_and_delete_only_flagged(client):
+    c = client
+    ids = []
+    for _ in range(3):
+        r = c.post("/api/scan", files=[("files", ("c.jpg", _jpeg_bytes(), "image/jpeg"))])
+        ids.append(r.json()["id"])
+    assert c.patch(f"/api/scans/{ids[0]}", json={"flagged": True}).json()["flagged"] is True
+    assert c.patch(f"/api/scans/{ids[2]}", json={"flagged": True}).json()["flagged"] is True
+    assert c.patch(f"/api/scans/{ids[2]}", json={"flagged": False}).json()["flagged"] is False
+    assert c.post("/api/scans/delete-all", json={"only": "flagged"}).json() == {"deleted": 1}
+    assert sorted(s["id"] for s in c.get("/api/scans").json()) == sorted(ids[1:])
+    assert c.get("/api/me").json() == {"role": "admin"}

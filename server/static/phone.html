@@ -142,6 +142,11 @@
            color:var(--warn); white-space:nowrap; }
   .spill.sel { background:#14532d; color:#86efac; }
   .spill.chk { background:#3a1c1c; color:#fca5a5; }
+  .spill.flag { background:#4a1d1d; color:#fca5a5; }
+  /* Roles (the phone server): a guest reviews, picks and FLAGS; deleting,
+     clearing, exporting and the sweep are the paired computer's (admin). */
+  body.guest .admin-only { display:none !important; }
+  body:not(.guest) .guest-only { display:none !important; }
   /* Popularity tiers (mtg_card_scanner/popularity.py) — only the top three
      get a colour, so "played" never competes with the pending/check pills. */
   .spill.pop { background:var(--line); color:#aeb4bf; }
@@ -266,7 +271,7 @@
       <div class="bar">
         <input id="p-min" type="number" min="0" step="0.25" placeholder="Min $" inputmode="decimal">
         <input id="p-max" type="number" min="0" step="0.25" placeholder="Max $" inputmode="decimal">
-        <button id="p-excl">Exclude filtered</button>
+        <button id="p-excl" class="admin-only">Exclude filtered</button>
       </div>
       <div class="fcap">Popularity</div>
       <div class="bar">
@@ -281,9 +286,11 @@
       </div>
       <div class="fcap">Bulk actions</div>
       <div class="bar">
-        <button id="p-fill">Price missing</button>
-        <button id="clr-junk">Clear unpicked</button>
-        <button id="clr-all" class="danger">Clear all</button>
+        <button id="p-fill" class="admin-only">Price missing</button>
+        <button id="clr-flag" class="danger admin-only" style="display:none"></button>
+        <button id="clr-junk" class="admin-only">Clear unpicked</button>
+        <button id="clr-all" class="danger admin-only">Clear all</button>
+        <span class="guest-only" style="font-size:12px;color:var(--muted)">Guest: swipe a scan to flag it for deletion — the scanner's owner confirms.</span>
       </div>
     </div>
     <!-- Outside the fold: the ⚠ hint must stay visible while filters are active. -->
@@ -420,7 +427,19 @@ function formatChipsHtml(scan){
 }
 
 /* ── version banner — proves which page+server combo is running ────────────── */
-const UI_VERSION = 'v38';
+const UI_VERSION = 'v39';
+
+// Who is asking: the phone server says "guest" for the 6-digit code (admin =
+// the paired computer); the computer's own server always says admin. Guests
+// get the list without delete/clear/sweep — a swipe FLAGS the scan instead —
+// and the server refuses the admin-only routes anyway.
+let role = 'admin';
+fetch('/api/me').then(r => r.ok ? r.json() : null).then(d => {
+  if (!d) return;
+  role = d.role === 'guest' ? 'guest' : 'admin';
+  document.body.classList.toggle('guest', role === 'guest');
+  lastListSig = ''; if (typeof renderScansPanel === 'function') renderScansPanel();
+}).catch(() => {});
 fetch('/api/version').then(r => r.json())
   .then(d => { $('#ver').textContent = `${UI_VERSION} · ${d.version}`; })
   .catch(() => { $('#ver').textContent = UI_VERSION; });
@@ -1058,6 +1077,9 @@ function renderScansPanel() {
       `<b>${scans.length}</b> scans · <b>${scans.length - sel.length}</b> to pick · ` +
       `<span class="money">$${total.toFixed(2)}</span> to export`;
   }
+  const nf = scans.filter(s => s.flagged).length;
+  $('#clr-flag').style.display = nf ? '' : 'none';
+  $('#clr-flag').textContent = `Delete flagged (${nf})`;
 
   const rows = scans.filter(s => passesFilters(s) && (
     scansView === 'all' ? true :
@@ -1076,7 +1098,7 @@ function renderScansPanel() {
                    s.card_read?.name, s.error ? 'e' : '',
                    (s.candidates||[]).length, (s.candidates||[])[0]?.id,
                    JSON.stringify(s.f2f?.conditions||0),
-                   printInfo(s).vals.join(';'), popSig(s)].join(',')).join('|');
+                   printInfo(s).vals.join(';'), popSig(s), s.flagged ? 'f' : '', role].join(',')).join('|');
   if (listSig === lastListSig || swipeDragging) return;
   lastListSig = listSig;
 
@@ -1092,8 +1114,10 @@ function renderScansPanel() {
     const pill = (isSel
       ? `<span class="spill sel">${s.selection?.auto_picked ? '⚠ auto' : 'selected'}</span>`
       : isProblem(s) ? `<span class="spill chk">check</span>`
-      : `<span class="spill">pending</span>`) + popPill(s);
-    return `<div class="sitem"><div class="sdel" aria-hidden="true"><span>Delete</span><span>Delete</span></div><div class="srow" data-sid="${s.id}" role="button">
+      : `<span class="spill">pending</span>`) + popPill(s) +
+      (s.flagged ? `<span class="spill flag" title="flagged for deletion">🚩</span>` : '');
+    const swipeWord = role === 'guest' ? (s.flagged ? 'Unflag' : '🚩 Flag') : 'Delete';
+    return `<div class="sitem"><div class="sdel" aria-hidden="true"><span>${swipeWord}</span><span>${swipeWord}</span></div><div class="srow" data-sid="${s.id}" role="button">
       <span class="sthumb"><img src="${escHtml(thumb)}" alt="" loading="lazy" onerror="this.style.visibility='hidden'"></span>
       <div class="meta">
         <div class="nm">${escHtml(name)}</div>
@@ -1175,7 +1199,15 @@ function attachSwipe(row) {
     swipeEatClick = true; setTimeout(() => { swipeEatClick = false; }, 350);
     const w = row.offsetWidth || 1;
     const fast = Math.abs(dx) > 40 && Math.abs(dx) / Math.max(1, e.timeStamp - t0) > 0.6;
-    if (e.type === 'pointerup' && (Math.abs(dx) > w * 0.35 || fast)) {
+    if (e.type === 'pointerup' && (Math.abs(dx) > w * 0.35 || fast) && role === 'guest') {
+      // A guest can't delete: the swipe flags (or unflags) it for the owner.
+      row.style.transform = '';
+      const id = Number(row.dataset.sid);
+      const on = !scans.find(s => s.id === id)?.flagged;
+      jsend(`/api/scans/${id}`, 'PATCH', { flagged: on })
+        .then(() => { setStatus(on ? 'Flagged for deletion — the scanner\'s owner confirms.' : 'Unflagged.', 'ok'); refreshScans(); })
+        .catch(() => setStatus('Could not flag that scan.'));
+    } else if (e.type === 'pointerup' && (Math.abs(dx) > w * 0.35 || fast)) {
       row.style.transform = `translateX(${dx > 0 ? w : -w}px)`;
       item.style.maxHeight = item.offsetHeight + 'px';
       requestAnimationFrame(() => item.classList.add('gone'));
@@ -1261,10 +1293,11 @@ $('#p-max').addEventListener('input', e => {
 });
 
 async function clearScans(only) {
-  const n = only === 'unselected'
-    ? scans.filter(s => s.status !== 'selected').length : scans.length;
+  const n = only === 'unselected' ? scans.filter(s => s.status !== 'selected').length
+    : only === 'flagged' ? scans.filter(s => s.flagged).length : scans.length;
   if (!n) { setStatus('Nothing to delete.'); return; }
-  const what = only === 'unselected' ? `${n} unpicked scan${n>1?'s':''}` : `ALL ${n} scans`;
+  const what = only === 'unselected' ? `${n} unpicked scan${n>1?'s':''}`
+    : only === 'flagged' ? `${n} flagged scan${n>1?'s':''}` : `ALL ${n} scans`;
   if (!confirm(`Delete ${what}? This cannot be undone.`)) return;
   const r = await jsend('/api/scans/delete-all', 'POST', only ? { only } : {});
   refreshScans();
@@ -1272,6 +1305,7 @@ async function clearScans(only) {
 }
 $('#clr-junk').addEventListener('click', () => clearScans('unselected'));
 $('#clr-all').addEventListener('click', () => clearScans(null));
+$('#clr-flag').addEventListener('click', () => clearScans('flagged'));
 
 $('#p-fill').addEventListener('click', async () => {
   if (sweepActive) {
@@ -1440,15 +1474,28 @@ async function renderScanDetail() {
     <div class="pgrid" id="psearchResults" style="margin-top:10px"></div>`;
   // Price check has Discard in its bottom bar — the same DELETE — so the
   // second, differently-worded delete button is left out there only.
-  if (!PRICE_CHECK) html += `<button class="dangerbtn" id="p-delete">Delete this scan</button>`;
+  if (scan.flagged) {
+    html += `<p style="margin:14px 0 0"><span class="spill flag">🚩 flagged for deletion</span></p>
+      <button class="dangerbtn" id="p-flag" data-flag="0" style="background:none;color:var(--muted);border-color:var(--muted)">${role === 'guest' ? 'Unflag' : 'Keep (unflag)'}</button>`;
+  } else if (role === 'guest') {
+    html += `<button class="dangerbtn" id="p-flag" data-flag="1">🚩 Flag for deletion</button>`;
+  }
+  if (!PRICE_CHECK && role !== 'guest') html += `<button class="dangerbtn" id="p-delete">Delete this scan</button>`;
   detailBody.innerHTML = html;
   $('#detailFoot').innerHTML = PRICE_CHECK
     ? `<div id="pcBar"><button id="pcDiscard">Discard</button><button id="pcKeep">Keep</button></div>` : '';
   $('#pfold')?.addEventListener('click', () => { detailShowAllArt = !detailShowAllArt; renderScanDetail(); });
   $('#pcKeep')?.addEventListener('click', closePanelApp);
   $('#pcDiscard')?.addEventListener('click', async () => {
-    await fetch(`/api/scans/${scan.id}`, { method: 'DELETE' });
+    if (role === 'guest') await jsend(`/api/scans/${scan.id}`, 'PATCH', { flagged: true });
+    else await fetch(`/api/scans/${scan.id}`, { method: 'DELETE' });
     closePanelApp();
+  });
+  $('#p-flag')?.addEventListener('click', async e => {
+    const on = e.currentTarget.dataset.flag === '1';
+    await jsend(`/api/scans/${scan.id}`, 'PATCH', { flagged: on });
+    setStatus(on ? 'Flagged for deletion — the scanner\'s owner confirms.' : 'Unflagged.', 'ok');
+    await renderScanDetail(); refreshScans();
   });
 
   const scanImg = detailBody.querySelector('.prow > img');

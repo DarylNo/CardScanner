@@ -196,6 +196,11 @@
   #csvBox > footer .sp { flex: 1; }
   #csvMsg { font-size: 12px; color: var(--muted); }
   #csvMsg.err { color: var(--bad); }
+  /* Roles (the phone server): a guest reviews, picks and FLAGS; deleting,
+     clearing, exporting and the sweep are the paired computer's (admin). */
+  body.guest .admin-only { display: none !important; }
+  body:not(.guest) .guest-only { display: none !important; }
+  .pill.flag { background: #4a1d1d; color: #fca5a5; }
 </style>
 </head>
 <body>
@@ -208,17 +213,19 @@
   </span>
   <span class="pill" id="phoneLink" style="cursor:pointer" title="Click for a QR code to open the scanner on your phone"></span>
   <span class="pill" id="ocrWarn" style="display:none;background:#3f2d10;color:var(--warn)"></span>
+  <span class="pill guest-only" title="You joined with the guest code: review, pick and flag cards for deletion. Deleting, clearing and export are for the scanner's owner.">guest</span>
   <span class="sp"></span>
   <span class="stat" id="sweepStat" style="color:var(--warn)"></span>
   <button class="btn ghost sm" id="f2fLogBtn" title="F2F request log — every request's outcome and the adaptive pace">🐞</button>
-  <button class="btn ghost sm" id="sweepStartBtn" style="display:none" title="Start a pricing sweep now (also overrides a throttling cooldown)">▶ Sweep</button>
-  <button class="btn ghost sm" id="sweepStopBtn" style="display:none" title="Stop the price sweep (auto-sweep pauses 10 min; it restarts within a minute of pressing the phone's Price missing)">■ Stop</button>
+  <button class="btn ghost sm admin-only" id="sweepStartBtn" style="display:none" title="Start a pricing sweep now (also overrides a throttling cooldown)">▶ Sweep</button>
+  <button class="btn ghost sm admin-only" id="sweepStopBtn" style="display:none" title="Stop the price sweep (auto-sweep pauses 10 min; it restarts within a minute of pressing the phone's Price missing)">■ Stop</button>
   <span class="stat" id="stats">—</span>
   <button class="btn ghost" id="dlBtn" title="Card database & image downloads">⬇</button>
   <button class="btn ghost" id="refreshBtn" title="Reload now">↻</button>
-  <button class="btn ghost" id="clearJunkBtn" title="Delete every scan that has no chosen printing">Clear unpicked</button>
-  <button class="btn danger" id="clearAllBtn" title="Delete every scan">Clear all</button>
-  <button class="btn" id="exportBtn">Export to CSV</button>
+  <button class="btn danger admin-only" id="clearFlagBtn" style="display:none" title="Delete every scan a guest flagged for deletion"></button>
+  <button class="btn ghost admin-only" id="clearJunkBtn" title="Delete every scan that has no chosen printing">Clear unpicked</button>
+  <button class="btn danger admin-only" id="clearAllBtn" title="Delete every scan">Clear all</button>
+  <button class="btn admin-only" id="exportBtn">Export to CSV</button>
 </header>
 <div id="csvModal" role="dialog" aria-modal="true" aria-labelledby="csvTitle">
   <div id="csvBox">
@@ -284,7 +291,7 @@
       <div class="frow">
         <input id="pmin" class="price" type="number" min="0" step="0.25" placeholder="Min $">
         <input id="pmax" class="price" type="number" min="0" step="0.25" placeholder="Max $">
-        <button class="btn ghost sm" id="exclBtn" title="Exclude every priced card the filter hides from the export (reversible per card)">Exclude filtered</button>
+        <button class="btn ghost sm admin-only" id="exclBtn" title="Exclude every priced card the filter hides from the export (reversible per card)">Exclude filtered</button>
       </div>
       <div class="frow">
         <select id="popmin" title="Hide cards played less than this in Commander (EDHREC)">
@@ -321,6 +328,7 @@ let filterText = "", priceMin = null, priceMax = null, view = "all";
 // card (Black Lotus is Commander-banned, so EDHREC never ranks it) visible
 // when a popularity floor would otherwise drop it.
 let popMin = null, filterMode = "any";
+let role = "admin";          // "guest" on the phone server's 6-digit code — see /api/me below
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -555,7 +563,7 @@ function renderList(){
     s.selection?.scryfall_id,s.selection?.condition,s.selection?.finish,
     s.card_read?.name,s.error?'e':'',
     s.selection?.auto_picked?'a':'',JSON.stringify(s.f2f?.conditions||{}),
-    printInfo(s).vals.join(";"),popSig(s),s.id===focusedId].join("~")).join("|");
+    printInfo(s).vals.join(";"),popSig(s),s.id===focusedId,s.flagged?'f':''].join("~")).join("|");
   if (sig === listSig) { updateStats(); return; }
   listSig = sig;
 
@@ -574,7 +582,7 @@ function renderList(){
       <div class="meta">
         <div class="nm">${esc(titleFor(s))}</div>
         <div class="sub">${esc(sub)}</div>
-        <div style="margin-top:4px">${pill}${sel?`<span class="pill">×${s.selection.quantity}</span>`:''}${popPill(s)}</div>
+        <div style="margin-top:4px">${s.flagged?`<span class="pill flag" title="a guest flagged this scan for deletion">🚩 flagged</span>`:''}${pill}${sel?`<span class="pill">×${s.selection.quantity}</span>`:''}${popPill(s)}</div>
       </div>
       <div class="right">
         ${pr?`<span class="price">${pr}</span>`:''}
@@ -605,6 +613,9 @@ function updateStats(){
     `<b>${scans.length}</b> scans · <b>${scans.length-sel.length}</b> to pick · ` +
     `<b>${inc.length}</b> to export · <span class="money">$${total.toFixed(2)}</span>`;
   $("#exportBtn").disabled = inc.length === 0;
+  const nf = scans.filter(s => s.flagged).length;
+  $("#clearFlagBtn").style.display = nf ? "" : "none";
+  $("#clearFlagBtn").textContent = `Delete flagged (${nf})`;
 }
 
 function focusScan(id){ focusedId = id; detailSig = ""; renderDetail(); listSig=""; renderList(); }
@@ -774,7 +785,12 @@ function renderDetail(){
     <div class="grid" id="msearchResults" style="margin-top:12px"></div>
   </div>`;
 
-  html += `<div class="sec"><button class="btn danger" id="delBtn">Delete this scan</button></div>`;
+  html += scan.flagged
+    ? `<div class="sec"><span class="pill flag">🚩 flagged for deletion</span>
+        <button class="btn danger admin-only" id="delBtn" style="margin-left:8px">Delete this scan</button>
+        <button class="btn ghost" id="flagBtn" data-flag="0" style="margin-left:8px">${role === "guest" ? "Unflag" : "Keep (unflag)"}</button></div>`
+    : `<div class="sec"><button class="btn danger admin-only" id="delBtn">Delete this scan</button>
+        <button class="btn ghost guest-only" id="flagBtn" data-flag="1">🚩 Flag for deletion</button></div>`;
 
   right.innerHTML = html;
   right.scrollTop = 0;
@@ -920,6 +936,12 @@ function wireDetail(scan){
     focusedId = null; await poll(); renderDetail();
     toast("Scan deleted");
   });
+  $("#flagBtn")?.addEventListener("click", async e => {
+    const on = e.currentTarget.dataset.flag === "1";
+    await jsend(`/api/scans/${scan.id}`, "PATCH", { flagged: on });
+    listSig = ""; detailSig = ""; await poll(); renderDetail();
+    toast(on ? "Flagged — the scanner's owner will confirm the delete" : "Unflagged");
+  });
 }
 
 /* ── lightbox ──────────────────────────────────────────────────────────── */
@@ -968,12 +990,22 @@ function sigOf(scan){
           scan.selection?.scryfall_id, scan.selection?.condition, scan.selection?.finish,
           scan.selection?.quantity, scan.selection?.auto_picked, scan.error,
           scan.f2f ? JSON.stringify(scan.f2f.conditions||{}) : "null",
-          printInfo(scan).vals.join(";"), popSig(scan), scan.included].join("|");
+          printInfo(scan).vals.join(";"), popSig(scan), scan.included, scan.flagged, role].join("|");
 }
 
 // Version banner — page version · server git hash. Same rationale as the
 // phone: without it, "is this the old page?" is undebuggable.
-const UI_VERSION = "d30";
+const UI_VERSION = "d31";
+
+// Who is asking: the phone server says "guest" for the 6-digit code (admin =
+// the paired computer); the computer's own server always says admin. Guests
+// get the review page without delete/clear/export/sweep (body.guest hides the
+// .admin-only controls; the server refuses them anyway).
+jget("/api/me").then(d => {
+  role = d.role === "guest" ? "guest" : "admin";
+  document.body.classList.toggle("guest", role === "guest");
+  listSig = ""; detailSig = ""; renderList(); renderDetail();
+}).catch(() => {});
 $("#sweepStopBtn").addEventListener("click", async () => {
   await jsend("/api/price-sweep/stop", "POST", {});
   toast("Sweep stopping — auto-sweep paused 10 min");
@@ -1096,11 +1128,12 @@ $("#exclBtn").addEventListener("click", async () => {
 $("#refreshBtn").addEventListener("click", () => { listSig=""; detailSig=""; poll(); });
 
 async function clearScans(only){
-  const n = only === "unselected"
-    ? scans.filter(s => s.status !== "selected").length
+  const n = only === "unselected" ? scans.filter(s => s.status !== "selected").length
+    : only === "flagged" ? scans.filter(s => s.flagged).length
     : scans.length;
   if (!n) { toast("Nothing to delete"); return; }
-  const what = only === "unselected" ? `${n} unpicked scan${n>1?'s':''}` : `ALL ${n} scans`;
+  const what = only === "unselected" ? `${n} unpicked scan${n>1?'s':''}`
+    : only === "flagged" ? `${n} flagged scan${n>1?'s':''}` : `ALL ${n} scans`;
   if (!confirm(`Delete ${what}? This cannot be undone.`)) return;
   const r = await jsend("/api/scans/delete-all", "POST", only ? { only } : {});
   focusedId = null; listSig = ""; detailSig = "";
@@ -1109,6 +1142,7 @@ async function clearScans(only){
 }
 $("#clearJunkBtn").addEventListener("click", () => clearScans("unselected"));
 $("#clearAllBtn").addEventListener("click", () => clearScans(null));
+$("#clearFlagBtn").addEventListener("click", () => clearScans("flagged"));
 $("#exportBtn").addEventListener("click", openCsvBuilder);
 
 /* ── Export to CSV builder ──────────────────────────────────────────────────

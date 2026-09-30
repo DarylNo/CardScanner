@@ -32,7 +32,8 @@ CREATE TABLE IF NOT EXISTS scans (
     candidates  TEXT NOT NULL DEFAULT '[]',
     selection   TEXT,                                 -- JSON or NULL
     f2f         TEXT,                                 -- JSON or NULL
-    included    INTEGER NOT NULL DEFAULT 1
+    included    INTEGER NOT NULL DEFAULT 1,
+    flagged     INTEGER NOT NULL DEFAULT 0            -- a guest asked for deletion
 );
 """
 
@@ -51,6 +52,12 @@ class ScanStore:
         self._lock = threading.Lock()
         with self._lock:
             self._conn.executescript(_SCHEMA)
+            # Databases made before the flag existed: add the column (NOT NULL
+            # DEFAULT 0 fills every existing row as unflagged).
+            cols = {r[1] for r in self._conn.execute("PRAGMA table_info(scans)")}
+            if "flagged" not in cols:
+                self._conn.execute(
+                    "ALTER TABLE scans ADD COLUMN flagged INTEGER NOT NULL DEFAULT 0")
             self._conn.commit()
 
     # ── serialization helpers ──────────────────────────────────────────────────
@@ -63,13 +70,14 @@ class ScanStore:
             d[f] = json.loads(raw) if raw not in (None, "") else None
         d["identified"] = bool(d["identified"])
         d["included"] = bool(d["included"])
+        d["flagged"] = bool(d["flagged"])
         return d
 
     @staticmethod
     def _encode(field: str, value: Any) -> Any:
         if field in _JSON_FIELDS:
             return None if value is None else json.dumps(value)
-        if field in ("identified", "included"):
+        if field in ("identified", "included", "flagged"):
             return int(bool(value))
         return value
 
@@ -120,7 +128,7 @@ class ScanStore:
         """Update whitelisted columns; dict/list fields are JSON-encoded."""
         allowed = {
             "status", "identified", "error", "card_read", "confidence",
-            "candidates", "selection", "f2f", "included",
+            "candidates", "selection", "f2f", "included", "flagged",
         }
         sets, values = [], []
         for key, val in fields.items():

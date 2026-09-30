@@ -10,6 +10,9 @@ import io.github.darylno.cardscanner.core.server.PriceSweep
 import io.github.darylno.cardscanner.core.server.PriceWorker
 import io.github.darylno.cardscanner.core.server.ScanServer
 import io.github.darylno.cardscanner.core.server.ScanStore
+import io.github.darylno.cardscanner.core.server.ROLE_ADMIN
+import io.github.darylno.cardscanner.core.server.ROLE_GUEST
+import io.github.darylno.cardscanner.gateway.GatewayServer
 import io.github.darylno.cardscanner.gateway.Upstream
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Protocol
@@ -35,8 +38,10 @@ import java.net.URLDecoder
  *  - export (3d): TXT + the CSV column builder (layout, preview, download),
  *    server/export.py ported and golden-tested, layout saved beside the DB.
  *
- * Access control is NOT here: [LocalUpstream] plugs this into the existing
- * GatewayServer (LAN only, 6-digit code, lockouts, session cookie).
+ * Access control: [LocalUpstream] plugs this into the existing GatewayServer
+ * (LAN only, codes, lockouts, cookies), which says who is asking — the paired
+ * computer (admin) or a guest — and [ScanServer] refuses a guest the
+ * admin-only routes (delete, clear, export, sweep controls).
  */
 class PhoneBackend(
     val store: ScanStore,
@@ -148,7 +153,9 @@ class LocalUpstream(private val backend: PhoneBackend) : Upstream {
         val path = pathAndQuery.substringBefore('?').let { URLDecoder.decode(it.replace("+", "%2B"), "UTF-8") }
         val query = if ('?' in pathAndQuery) pathAndQuery.substringAfter('?') else null
         val res = try {
-            backend.handle(ApiRequest(method, path, PhoneBackend.parseQuery(query), body))
+            // The role comes ONLY from the gateway (it drops any a client sends); no header = the owner.
+            val role = if (headers[GatewayServer.ROLE_HEADER] == GatewayServer.ROLE_GUEST) ROLE_GUEST else ROLE_ADMIN
+            backend.handle(ApiRequest(method, path, PhoneBackend.parseQuery(query), body, role))
         } catch (e: Exception) {
             ApiResponse.json(500, mapOf("error" to "${e.javaClass.simpleName}: ${e.message}"))
         }

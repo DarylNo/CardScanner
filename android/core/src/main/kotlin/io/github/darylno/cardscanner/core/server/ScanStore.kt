@@ -46,24 +46,24 @@ interface ScanStore {
     companion object {
         val JSON_FIELDS = listOf("card_read", "confidence", "candidates", "selection", "f2f")
         val UPDATABLE = setOf("status", "identified", "error", "card_read", "confidence",
-            "candidates", "selection", "f2f", "included")
+            "candidates", "selection", "f2f", "included", "flagged")
 
         /** `_encode`: JSON fields to text (null stays null), booleans to 0/1. */
         fun encode(field: String, value: Any?): Any? = when (field) {
             in JSON_FIELDS -> value?.let { MiniJson.stringify(it) }
-            "identified", "included" -> if (isTruthy(value)) 1L else 0L
+            "identified", "included", "flagged" -> if (isTruthy(value)) 1L else 0L
             else -> value
         }
 
         /** `_row_to_dict` for one stored column value. */
         fun decode(field: String, raw: Any?): Any? = when (field) {
             in JSON_FIELDS -> if (raw == null || raw == "") null else MiniJson.parse(raw as String)
-            "identified", "included" -> (raw as Number).toLong() != 0L
+            "identified", "included", "flagged" -> (raw as Number).toLong() != 0L
             else -> raw
         }
 
         val COLUMNS = listOf("id", "created_at", "updated_at", "status", "identified", "error",
-            "card_read", "confidence", "candidates", "selection", "f2f", "included")
+            "card_read", "confidence", "candidates", "selection", "f2f", "included", "flagged")
 
         internal fun isTruthy(v: Any?): Boolean = when (v) {
             null -> false
@@ -97,7 +97,7 @@ class MemoryScanStore(private val clock: () -> String = ::isoNow) : ScanStore {
             "card_read" to MiniJson.stringify(cardRead ?: emptyMap<String, Any?>()),
             "confidence" to MiniJson.stringify(confidence ?: emptyMap<String, Any?>()),
             "candidates" to MiniJson.stringify(candidates ?: emptyList<Any?>()),
-            "selection" to null, "f2f" to null, "included" to 1L,
+            "selection" to null, "f2f" to null, "included" to 1L, "flagged" to 0L,
         )
         return get(id)!!
     }

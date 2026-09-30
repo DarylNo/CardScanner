@@ -151,7 +151,7 @@
     <string name="cmp_no_disagreements">No disagreements.</string>
     <!-- Diagnostics → Phone server (preview), Stage 3 -->
     <string name="pv_header">Phone server (preview)</string>
-    <string name="pv_intro">Runs the phone\'s own copy of the server beside the computer\'s. While on, each card the phone identifies is also filed on the phone, and the scan list is served from the phone: open the address below on the computer. The computer stays the real server — nothing here reaches it. Prices come from Face to Face straight from the phone, and TXT/CSV export works from the served pages.</string>
+    <string name="pv_intro">Runs the phone\'s own copy of the server beside the computer\'s. While on, each card the phone identifies is also filed on the phone, and the scan list is served from the phone: open the address below on the computer. The computer stays the real server — nothing here reaches it. Prices come from Face to Face straight from the phone, and TXT/CSV export works from the served pages. Pair your computer as admin below; anyone using the 6-digit code is a guest who can review and flag cards for deletion.</string>
     <string name="pv_switch">Serve from this phone</string>
     <string name="pv_switch_desc">Also turns on Compare (on-phone identify)</string>
     <string name="pv_off">Off.</string>
@@ -159,6 +159,14 @@
     <string name="pv_no_wifi">Running, but the phone has no Wi-Fi address — join Wi-Fi or turn on the hotspot.</string>
     <string name="pv_error">Could not start: %1$s</string>
     <string name="pv_clear">Clear the phone\'s scans</string>
+    <string name="pv_pair">Pair a computer as admin</string>
+    <string name="pv_pair_title">Pair this computer</string>
+    <string name="pv_pair_msg">On the computer, open this address (or scan the code with its camera):\n\n%1$s\n\nor type this one-time code on the join page: %2$s\n\nIt works once, for 10 minutes. The computer is then remembered as the admin: it can delete, clear, export and run pricing. Anyone using the 6-digit code is a guest: they can review, pick and flag cards for deletion.</string>
+    <string name="pv_pair_off">Turn the phone server on first (and join Wi-Fi).</string>
+    <string name="pv_paired">Paired computers (admin): %1$d</string>
+    <string name="pv_forget">Forget paired computers</string>
+    <string name="pv_forget_confirm">Stop treating every paired computer as admin? They will need a new one-time code.</string>
+    <string name="pv_done">Done</string>
     <string name="pv_clear_confirm">Delete every scan and photo stored on the phone? (The computer\'s scans are not touched.)</string>
     <string name="pv_clear_ok">Delete</string>
 </resources>

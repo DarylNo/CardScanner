@@ -158,6 +158,14 @@ STEPS = [
     # filing (POST /api/scan with the canned identification FILED[i])
     *[("FILE", "/api/scan", {"filed": i}) for i in range(len(FILED))],
     ("GET", "/api/scans", None),
+    # flag for deletion (a guest's ask; the admin confirms with delete-all "flagged")
+    ("PATCH", "/api/scans/2", {"flagged": True}),
+    ("PATCH", "/api/scans/3", {"flagged": 1, "condition": "HP"}),   # pending: flag only
+    ("PATCH", "/api/scans/6", {"flagged": True}),
+    ("PATCH", "/api/scans/6", {"flagged": False}),                  # un-flagged
+    ("GET", "/api/me", None),
+    ("POST", "/api/scans/delete-all", {"only": "Flagged"}),
+    ("GET", "/api/scans", None),
     # deletes
     ("DELETE", "/api/scans/5", None),
     ("DELETE", "/api/scans/5", None),

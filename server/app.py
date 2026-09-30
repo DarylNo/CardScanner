@@ -162,6 +162,15 @@ def create_app(
         from mtg_card_scanner.ocr_id import ocr_status
         return {"ok": True, "version": APP_VERSION, "ocr": ocr_status()}
 
+    # ── who is asking: the pages hide admin-only controls for a guest ─────────
+    # This server has one user (its Share gateway gives guests full access, the
+    # owner's rule for the rig), so it always answers admin. The PHONE server
+    # answers from the gateway's session: its paired computer is admin, anyone
+    # with the 6-digit code is a guest (docs/PHONE_ONLY_PLAN.md → Roles).
+    @app.get("/api/me")
+    def me():
+        return {"role": "admin"}
+
     @app.get("/api/version")
     def version():
         # lan_ip: the phone-reachable address the desktop should advertise —
@@ -1227,6 +1236,8 @@ def create_app(
             fields: dict[str, Any] = {}
             if "included" in body:
                 fields["included"] = bool(body["included"])
+            if "flagged" in body:
+                fields["flagged"] = bool(body["flagged"])
             selection = dict(scan.get("selection") or {})
             changed = False
             # Only an ALREADY-selected scan has a selection to edit. Without
@@ -1278,12 +1289,17 @@ def create_app(
 
         ``{"only": "unselected"}`` keeps everything that already has a chosen
         printing — the usual way to sweep junk without losing real work.
+        ``{"only": "flagged"}`` deletes just the scans a guest flagged for
+        deletion (the phone server's admin confirming them in one go).
         """
         only = str(body.get("only") or "").lower()
-        targets = [
-            s for s in store.list_scans()
-            if only != "unselected" or s.get("status") != "selected"
-        ]
+        if only == "flagged":
+            targets = [s for s in store.list_scans() if s.get("flagged")]
+        else:
+            targets = [
+                s for s in store.list_scans()
+                if only != "unselected" or s.get("status") != "selected"
+            ]
         for s in targets:
             (scan_images_dir / f"{s['id']}.jpg").unlink(missing_ok=True)
             store.delete_scan(s["id"])
