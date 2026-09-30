@@ -67,8 +67,11 @@ scans are not imported); the computer pairs once as admin via a one-time
 code, everyone else is a guest; storage — at 10,000 scans warn with the
 photo size and free space, then keep going.
 Progress: 3a store + 3b API done in 1.0.14 (golden-tested against the real
-server; Diagnostics → "Phone server (preview)"). 3c pricing, 3d export,
-3e roles next.
+server; Diagnostics → "Phone server (preview)"). 3c pricing done in
+1.0.15 (golden-tested incl. the exact F2F lookup sequence). Owner change
+for the phone: no timed sweep — price whatever is owed, re-check every 5 s
+while anything is, and sleep until the next scan when nothing is. 3d
+export, 3e roles next.
 
 SQLite store with the Python schema, the API with identical JSON (golden
 request/response fixtures recorded from the Python server and replayed

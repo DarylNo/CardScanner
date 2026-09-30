@@ -50,8 +50,8 @@ interface ScanImages {
  * serve pages / other endpoints.
  */
 class PhoneApi(private val store: ScanStore, private val images: ScanImages) {
-    /** `select_lock`: every selection read-modify-write, picks vs edits. */
-    private val selectLock = Any()
+    /** `select_lock`: every selection read-modify-write — picks, edits, the sweep's writes, retro picks. */
+    val selectLock = Any()
 
     fun handle(req: ApiRequest): ApiResponse? {
         val p = req.path
@@ -92,6 +92,10 @@ class PhoneApi(private val store: ScanStore, private val images: ScanImages) {
         val quantity = maxOf(1L, pyInt(or(Py.get(body, "quantity"), 1L)) ?: return serverError())
         return ApiResponse.json(200, applySelection(id, printing, condition, finish, quantity))
     }
+
+    /** `_apply_selection_core(…, "NM", "Non-Foil", 1, auto=True)` — the retro auto-pick. */
+    fun autoPick(id: Long, printing: Map<String, Any?>): MutableMap<String, Any?>? =
+        applySelection(id, printing, "NM", "Non-Foil", 1L, auto = true)
 
     /** `_apply_selection_core`: pick [printing]; auto picks carry `auto_picked`. */
     private fun applySelection(id: Long, printing: Map<String, Any?>, condition: String, finish: Any?,

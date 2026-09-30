@@ -2,7 +2,12 @@ package io.github.darylno.cardscanner.phoneserver
 
 import io.github.darylno.cardscanner.core.server.ApiRequest
 import io.github.darylno.cardscanner.core.server.ApiResponse
+import io.github.darylno.cardscanner.core.MiniJson
+import io.github.darylno.cardscanner.core.server.F2fLookup
 import io.github.darylno.cardscanner.core.server.PhoneApi
+import io.github.darylno.cardscanner.core.server.PriceSweep
+import io.github.darylno.cardscanner.core.server.PriceWorker
+import io.github.darylno.cardscanner.core.server.ScanServer
 import io.github.darylno.cardscanner.core.server.ScanStore
 import io.github.darylno.cardscanner.gateway.Upstream
 import okhttp3.MediaType.Companion.toMediaType
@@ -17,11 +22,16 @@ import java.net.URLDecoder
  * computer serves (server/static/phone.html + desktop.html, packaged into the
  * app's assets at build time) over the phone's [ScanStore].
  *
- *  - the scan API → [PhoneApi] (golden-tested against server/app.py);
+ *  - the scan API + pricing → [ScanServer] ([PhoneApi] + [PriceSweep], both
+ *    golden-tested against server/app.py);
+ *  - pricing is a loop, not a timed sweep ([worker], owner 2026-09-30): it
+ *    checks every 5 s while anything is owed and sleeps until the next
+ *    scan/pick/edit when nothing is; a pick, a finish change or a filed scan
+ *    also gets a price check so THAT scan jumps the queue;
  *  - `/api/search` → the ported search_candidates over Scryfall ([search]);
  *  - the pages' startup reads (version, health, setup, update-check,
- *    price-status/-debug) answered in the Python shapes, so the pages load;
- *  - pricing (3c) and export (3d) are not here yet: 501 with a clear error.
+ *    price-debug) answered in the Python shapes, so the pages load;
+ *  - export (3d) is not here yet: 501 with a clear error.
  *
  * Access control is NOT here: [LocalUpstream] plugs this into the existing
  * GatewayServer (LAN only, 6-digit code, lockouts, session cookie).
@@ -34,11 +44,32 @@ class PhoneBackend(
     private val search: (String) -> List<Map<String, Any?>>,
     private val lanIp: () -> String?,
     private val packRows: () -> Int,
+    f2f: F2fLookup,
+    launch: (Runnable) -> Unit,
+    now: () -> Double,
+    interrupt: (Boolean) -> Unit = {},
+    private val paceS: () -> Double? = { null },
+    private val f2fEvents: () -> List<Map<String, Any?>> = { emptyList() },
 ) {
     val api = PhoneApi(store, photos)
+    val sweep = PriceSweep(store, api, f2f, launch, now, interrupt, paceS)
+    val server = ScanServer(api, sweep)
+    val worker = PriceWorker(sweep, now)
+
+    /** A capture the phone identified: file it, then price it (scan-time pricing). */
+    fun file(result: Map<String, Any?>, photo: ByteArray?): Map<String, Any?> {
+        val row = api.fileScan(result, photo)
+        (row["id"] as? Number)?.let { sweep.priceCheck(it.toLong()) }
+        worker.wake()
+        return row
+    }
 
     fun handle(req: ApiRequest): ApiResponse {
-        api.handle(req)?.let { return it }
+        server.handle(req)?.let { res ->
+            kickPriceCheck(req, res)
+            if (req.method != "GET" && req.method != "HEAD" && res.status < 300) worker.wake()
+            return res
+        }
         val get = req.method == "GET" || req.method == "HEAD"
         return when {
             get && req.path == "/" -> page("desktop.html")
@@ -59,21 +90,28 @@ class PhoneBackend(
                 ApiResponse.json(200, linkedMapOf("current" to version, "latest" to null,
                     "update_available" to null, "can_self_update" to false,
                     "download_url" to "https://github.com/DarylNo/CardScanner/releases/latest"))
-            get && req.path == "/api/price-status" ->
-                ApiResponse.json(200, linkedMapOf("active" to false, "total" to 0L, "done" to 0L,
-                    "current" to null, "cancelling" to false, "cooldown_s" to 0L, "pace_s" to null,
-                    "next_check_s" to null, "rate_per_s" to null, "eta_s" to null))
             get && req.path == "/api/price-debug" ->
-                ApiResponse.json(200, linkedMapOf("pace_s" to null, "next_check_s" to null, "events" to emptyList<Any>()))
+                ApiResponse.json(200, linkedMapOf("pace_s" to paceS()?.let { Math.round(it * 100) / 100.0 },
+                    "next_check_s" to sweep.status()["next_check_s"], "events" to f2fEvents()))
             get && req.path == "/api/search" -> {
                 val q = req.query["q"].orEmpty()
                 val cands = if (q.isBlank()) emptyList() else runCatching { search(q) }.getOrDefault(emptyList())
                 ApiResponse.json(200, mapOf("candidates" to cands))
             }
-            req.path.startsWith("/api/export") || req.path.contains("price") ->
-                ApiResponse.json(501, mapOf("error" to "not on the phone yet (pricing and export arrive in the next preview)"))
+            req.path.startsWith("/api/export") ->
+                ApiResponse.json(501, mapOf("error" to "not on the phone yet (export arrives in the next preview)"))
             else -> ApiResponse.json(404, mapOf("detail" to "Not Found"))
         }
+    }
+
+    /** A pick or a finish change left f2f cleared: price that scan now (one consumer). */
+    private fun kickPriceCheck(req: ApiRequest, res: ApiResponse) {
+        if (res.status != 200) return
+        val m = SCAN_ID.matchEntire(req.path) ?: return
+        val isSelect = req.method == "POST" && m.groupValues[2] == "/select"
+        val isFinish = req.method == "PATCH" && m.groupValues[2].isEmpty() &&
+            req.body?.let { runCatching { (MiniJson.parse(String(it)) as? Map<*, *>)?.containsKey("finish") }.getOrNull() } == true
+        if (isSelect || isFinish) m.groupValues[1].toLongOrNull()?.let { sweep.priceCheck(it) }
     }
 
     private fun page(name: String): ApiResponse {
@@ -82,6 +120,8 @@ class PhoneBackend(
     }
 
     companion object {
+        private val SCAN_ID = Regex("/api/scans/(\\d+)(/select)?")
+
         /** `a=1&b=x%20y` → map (last value wins, like FastAPI's scalar query params). */
         fun parseQuery(raw: String?): Map<String, String> {
             if (raw.isNullOrEmpty()) return emptyMap()

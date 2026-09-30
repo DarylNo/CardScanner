@@ -1,0 +1,1828 @@
+{
+ "clock": "T%04d",
+ "prices": {
+  "m10|146|0": {
+   "conditions": {
+    "NM": 3.49,
+    "PL": 2.79
+   },
+   "handle": "lightning-bolt-m10"
+  },
+  "2x2|117|1": {
+   "conditions": {
+    "NM": 9.99
+   },
+   "handle": "lightning-bolt-2x2-foil"
+  },
+  "akh|132|0": {
+   "conditions": {
+    "NM": 0.35,
+    "PL": 0.25
+   },
+   "handle": "fling-akh"
+  },
+  "m20|140|0": "none",
+  "dom|60|0": {
+   "conditions": {
+    "NM": 0.25
+   },
+   "handle": "opt-dom"
+  },
+  "xln|65|0": {
+   "conditions": {
+    "NM": 0.3
+   },
+   "handle": "opt-xln"
+  },
+  "c21|263|0": {
+   "conditions": {
+    "NM": 1.5
+   },
+   "handle": "sol-ring-c21"
+  },
+  "sta|10|0": "unavailable",
+  "brk|0|0": "unavailable",
+  "brk|1|0": "unavailable",
+  "brk|2|0": "unavailable",
+  "brk|3|0": "unavailable",
+  "brk|4|0": "unavailable",
+  "brk|5|0": "unavailable"
+ },
+ "hooks": {
+  "akh|132|0": {
+   "scan": 4,
+   "fields": {
+    "status": "selected",
+    "selection": {
+     "scryfall_id": "f1",
+     "name": "Fling",
+     "set": "akh",
+     "set_name": "AKH set",
+     "collector_number": "132",
+     "condition": "NM",
+     "finish": "Non-Foil",
+     "quantity": 1,
+     "foil": false,
+     "image_normal": "",
+     "popularity": null
+    }
+   }
+  },
+  "m10|146|0": {
+   "scan": 3,
+   "fields": {
+    "selection": {
+     "scryfall_id": "b2",
+     "name": "Lightning Bolt",
+     "set": "2x2",
+     "set_name": "2X2 set",
+     "collector_number": "117",
+     "condition": "NM",
+     "finish": "Foil",
+     "quantity": 1,
+     "foil": true,
+     "image_normal": "",
+     "popularity": null
+    }
+   }
+  }
+ },
+ "seeds": [
+  {
+   "create": {
+    "identified": true,
+    "card_read": {
+     "name": "Breaker"
+    },
+    "confidence": {},
+    "candidates": [
+     {
+      "id": "k0",
+      "name": "Breaker",
+      "set": "brk",
+      "set_name": "BRK set",
+      "collector_number": "0",
+      "finishes": [
+       "nonfoil",
+       "foil"
+      ],
+      "image_small": "https://img/k0-s.jpg",
+      "image_normal": "https://img/k0-n.jpg",
+      "multi_distance": 60
+     },
+     {
+      "id": "k1",
+      "name": "Breaker",
+      "set": "brk",
+      "set_name": "BRK set",
+      "collector_number": "1",
+      "finishes": [
+       "nonfoil",
+       "foil"
+      ],
+      "image_small": "https://img/k1-s.jpg",
+      "image_normal": "https://img/k1-n.jpg",
+      "multi_distance": 61
+     },
+     {
+      "id": "k2",
+      "name": "Breaker",
+      "set": "brk",
+      "set_name": "BRK set",
+      "collector_number": "2",
+      "finishes": [
+       "nonfoil",
+       "foil"
+      ],
+      "image_small": "https://img/k2-s.jpg",
+      "image_normal": "https://img/k2-n.jpg",
+      "multi_distance": 62
+     },
+     {
+      "id": "k3",
+      "name": "Breaker",
+      "set": "brk",
+      "set_name": "BRK set",
+      "collector_number": "3",
+      "finishes": [
+       "nonfoil",
+       "foil"
+      ],
+      "image_small": "https://img/k3-s.jpg",
+      "image_normal": "https://img/k3-n.jpg",
+      "multi_distance": 63
+     },
+     {
+      "id": "k4",
+      "name": "Breaker",
+      "set": "brk",
+      "set_name": "BRK set",
+      "collector_number": "4",
+      "finishes": [
+       "nonfoil",
+       "foil"
+      ],
+      "image_small": "https://img/k4-s.jpg",
+      "image_normal": "https://img/k4-n.jpg",
+      "multi_distance": 64
+     },
+     {
+      "id": "k5",
+      "name": "Breaker",
+      "set": "brk",
+      "set_name": "BRK set",
+      "collector_number": "5",
+      "finishes": [
+       "nonfoil",
+       "foil"
+      ],
+      "image_small": "https://img/k5-s.jpg",
+      "image_normal": "https://img/k5-n.jpg",
+      "multi_distance": 65
+     }
+    ]
+   },
+   "selection": null
+  },
+  {
+   "create": {
+    "identified": true,
+    "card_read": {
+     "name": "Swords"
+    },
+    "confidence": {},
+    "candidates": [
+     {
+      "id": "w1",
+      "name": "Swords to Plowshares",
+      "set": "sta",
+      "set_name": "STA set",
+      "collector_number": "10",
+      "finishes": [
+       "nonfoil",
+       "foil"
+      ],
+      "image_small": "https://img/w1-s.jpg",
+      "image_normal": "https://img/w1-n.jpg",
+      "multi_distance": 60
+     }
+    ]
+   },
+   "selection": null
+  },
+  {
+   "create": {
+    "identified": true,
+    "card_read": {
+     "name": "Lightning Bolt"
+    },
+    "confidence": {},
+    "candidates": [
+     {
+      "id": "b1",
+      "name": "Lightning Bolt",
+      "set": "m10",
+      "set_name": "M10 set",
+      "collector_number": "146",
+      "finishes": [
+       "nonfoil",
+       "foil"
+      ],
+      "image_small": "https://img/b1-s.jpg",
+      "image_normal": "https://img/b1-n.jpg",
+      "multi_distance": 70,
+      "ocr_confirmed": true,
+      "popularity": {
+       "tier": "staple",
+       "label": "Staple",
+       "rank": 158,
+       "percentile": 0.5
+      }
+     },
+     {
+      "id": "b2",
+      "name": "Lightning Bolt",
+      "set": "2x2",
+      "set_name": "2X2 set",
+      "collector_number": "117",
+      "finishes": [
+       "nonfoil",
+       "foil"
+      ],
+      "image_small": "https://img/b2-s.jpg",
+      "image_normal": "https://img/b2-n.jpg",
+      "multi_distance": 82,
+      "popularity": {
+       "tier": "staple",
+       "label": "Staple",
+       "rank": 158,
+       "percentile": 0.5
+      }
+     },
+     {
+      "id": "b3",
+      "name": "Lightning Bolt",
+      "set": "sta",
+      "set_name": "STA set",
+      "collector_number": "42",
+      "finishes": [
+       "nonfoil",
+       "foil"
+      ],
+      "image_small": "https://img/b3-s.jpg",
+      "image_normal": "https://img/b3-n.jpg",
+      "multi_distance": 150,
+      "popularity": {
+       "tier": "staple",
+       "label": "Staple",
+       "rank": 158,
+       "percentile": 0.5
+      }
+     }
+    ]
+   },
+   "selection": {
+    "scryfall_id": "b1",
+    "name": "Lightning Bolt",
+    "set": "m10",
+    "set_name": "M10 set",
+    "collector_number": "146",
+    "condition": "NM",
+    "finish": "Non-Foil",
+    "quantity": 1,
+    "foil": false,
+    "image_normal": "https://img/b1-n.jpg",
+    "popularity": null
+   }
+  },
+  {
+   "create": {
+    "identified": true,
+    "card_read": {
+     "name": "Fling"
+    },
+    "confidence": {},
+    "candidates": [
+     {
+      "id": "f1",
+      "name": "Fling",
+      "set": "akh",
+      "set_name": "AKH set",
+      "collector_number": "132",
+      "finishes": [
+       "nonfoil",
+       "foil"
+      ],
+      "image_small": "https://img/f1-s.jpg",
+      "image_normal": "https://img/f1-n.jpg",
+      "multi_distance": 78
+     },
+     {
+      "id": "f2",
+      "name": "Fling",
+      "set": "m20",
+      "set_name": "M20 set",
+      "collector_number": "140",
+      "finishes": [
+       "nonfoil",
+       "foil"
+      ],
+      "image_small": "https://img/f2-s.jpg",
+      "image_normal": "https://img/f2-n.jpg",
+      "multi_distance": 84
+     },
+     {
+      "id": "f3",
+      "name": "Fling",
+      "set": "sld",
+      "set_name": "SLD set",
+      "collector_number": "999",
+      "finishes": [
+       "nonfoil",
+       "foil"
+      ],
+      "image_small": "https://img/f3-s.jpg",
+      "image_normal": "https://img/f3-n.jpg",
+      "multi_distance": 146
+     },
+     {
+      "id": "f4",
+      "name": "Fling",
+      "set": "ptk",
+      "set_name": "PTK set",
+      "collector_number": "1",
+      "finishes": [
+       "nonfoil",
+       "foil"
+      ],
+      "image_small": "https://img/f4-s.jpg",
+      "image_normal": "https://img/f4-n.jpg",
+      "multi_distance": 190
+     }
+    ]
+   },
+   "selection": null
+  },
+  {
+   "create": {
+    "identified": true,
+    "card_read": {
+     "name": "Opt"
+    },
+    "confidence": {},
+    "candidates": [
+     {
+      "id": "o1",
+      "name": "Opt",
+      "set": "dom",
+      "set_name": "DOM set",
+      "collector_number": "60",
+      "finishes": [
+       "nonfoil",
+       "foil"
+      ],
+      "image_small": "https://img/o1-s.jpg",
+      "image_normal": "https://img/o1-n.jpg",
+      "multi_distance": 60
+     },
+     {
+      "id": "o2",
+      "name": "Opt",
+      "set": "xln",
+      "set_name": "XLN set",
+      "collector_number": "65",
+      "finishes": [
+       "nonfoil",
+       "foil"
+      ],
+      "image_small": "https://img/o2-s.jpg",
+      "image_normal": "https://img/o2-n.jpg",
+      "multi_distance": 64
+     }
+    ]
+   },
+   "selection": null
+  },
+  {
+   "create": {
+    "identified": true,
+    "card_read": {
+     "name": "Sol Ring"
+    },
+    "confidence": {},
+    "candidates": [
+     {
+      "id": "r1",
+      "name": "Sol Ring",
+      "set": "c21",
+      "set_name": "C21 set",
+      "collector_number": "263",
+      "finishes": [
+       "nonfoil",
+       "foil"
+      ],
+      "image_small": "https://img/r1-s.jpg",
+      "image_normal": "https://img/r1-n.jpg",
+      "multi_distance": 55
+     }
+    ]
+   },
+   "selection": null
+  },
+  {
+   "create": {
+    "identified": true,
+    "card_read": {
+     "name": "Nameless"
+    },
+    "confidence": {},
+    "candidates": [
+     {
+      "id": "n1",
+      "set": "x",
+      "collector_number": "1"
+     }
+    ]
+   },
+   "selection": null
+  }
+ ],
+ "steps": [
+  {
+   "method": "GET",
+   "path": "/api/price-status",
+   "body": null,
+   "status": 200,
+   "response": {
+    "active": false,
+    "total": 0,
+    "done": 0,
+    "current": "",
+    "cancelling": false,
+    "cooldown_s": 0,
+    "pace_s": null,
+    "next_check_s": null,
+    "rate_per_s": null,
+    "eta_s": null
+   },
+   "lookups": []
+  },
+  {
+   "method": "POST",
+   "path": "/api/scans/6/price",
+   "body": null,
+   "status": 200,
+   "response": {
+    "id": 6,
+    "created_at": "T0007",
+    "updated_at": "T0009",
+    "status": "candidates",
+    "identified": true,
+    "error": null,
+    "card_read": {
+     "name": "Sol Ring"
+    },
+    "confidence": {},
+    "candidates": [
+     {
+      "id": "r1",
+      "name": "Sol Ring",
+      "set": "c21",
+      "set_name": "C21 set",
+      "collector_number": "263",
+      "finishes": [
+       "nonfoil",
+       "foil"
+      ],
+      "image_small": "https://img/r1-s.jpg",
+      "image_normal": "https://img/r1-n.jpg",
+      "multi_distance": 55
+     }
+    ],
+    "selection": null,
+    "f2f": {
+     "name": "Sol Ring",
+     "set_code": "c21",
+     "collector_number": "263",
+     "foil": false,
+     "handle": "sol-ring-c21",
+     "url": "https://facetofacegames.com/products/sol-ring-c21",
+     "conditions": {
+      "NM": 1.5
+     }
+    },
+    "included": true
+   },
+   "lookups": [
+    "c21|263|0"
+   ]
+  },
+  {
+   "method": "POST",
+   "path": "/api/scans/2/price",
+   "body": null,
+   "status": 200,
+   "response": {
+    "id": 2,
+    "created_at": "T0002",
+    "updated_at": "T0002",
+    "status": "candidates",
+    "identified": true,
+    "error": null,
+    "card_read": {
+     "name": "Swords"
+    },
+    "confidence": {},
+    "candidates": [
+     {
+      "id": "w1",
+      "name": "Swords to Plowshares",
+      "set": "sta",
+      "set_name": "STA set",
+      "collector_number": "10",
+      "finishes": [
+       "nonfoil",
+       "foil"
+      ],
+      "image_small": "https://img/w1-s.jpg",
+      "image_normal": "https://img/w1-n.jpg",
+      "multi_distance": 60
+     }
+    ],
+    "selection": null,
+    "f2f": null,
+    "included": true,
+    "f2f_search": "unavailable"
+   },
+   "lookups": [
+    "sta|10|0"
+   ]
+  },
+  {
+   "method": "POST",
+   "path": "/api/scans/5/price",
+   "body": null,
+   "status": 200,
+   "response": {
+    "id": 5,
+    "created_at": "T0006",
+    "updated_at": "T0010",
+    "status": "candidates",
+    "identified": true,
+    "error": null,
+    "card_read": {
+     "name": "Opt"
+    },
+    "confidence": {},
+    "candidates": [
+     {
+      "id": "o1",
+      "name": "Opt",
+      "set": "dom",
+      "set_name": "DOM set",
+      "collector_number": "60",
+      "finishes": [
+       "nonfoil",
+       "foil"
+      ],
+      "image_small": "https://img/o1-s.jpg",
+      "image_normal": "https://img/o1-n.jpg",
+      "multi_distance": 60
+     },
+     {
+      "id": "o2",
+      "name": "Opt",
+      "set": "xln",
+      "set_name": "XLN set",
+      "collector_number": "65",
+      "finishes": [
+       "nonfoil",
+       "foil"
+      ],
+      "image_small": "https://img/o2-s.jpg",
+      "image_normal": "https://img/o2-n.jpg",
+      "multi_distance": 64
+     }
+    ],
+    "selection": null,
+    "f2f": {
+     "name": "Opt",
+     "set_code": "dom",
+     "collector_number": "60",
+     "foil": false,
+     "handle": "opt-dom",
+     "url": "https://facetofacegames.com/products/opt-dom",
+     "conditions": {
+      "NM": 0.25
+     }
+    },
+    "included": true
+   },
+   "lookups": [
+    "dom|60|0"
+   ]
+  },
+  {
+   "method": "POST",
+   "path": "/api/scans/7/price",
+   "body": null,
+   "status": 400,
+   "response": {
+    "error": "nothing to price — no selection or candidates"
+   },
+   "lookups": []
+  },
+  {
+   "method": "POST",
+   "path": "/api/scans/99/price",
+   "body": null,
+   "status": 404,
+   "response": {
+    "error": "not found"
+   },
+   "lookups": []
+  },
+  {
+   "method": "POST",
+   "path": "/api/price-sweep/stop",
+   "body": null,
+   "status": 200,
+   "response": {
+    "stopping": false
+   },
+   "lookups": []
+  },
+  {
+   "method": "POST",
+   "path": "/api/scans/price-missing",
+   "body": null,
+   "status": 200,
+   "response": {
+    "queued": 13
+   },
+   "lookups": [
+    "c21|263|0",
+    "dom|60|0",
+    "xln|65|0",
+    "akh|132|0",
+    "m10|146|0",
+    "sta|10|0",
+    "brk|0|0",
+    "brk|1|0",
+    "brk|2|0",
+    "brk|3|0"
+   ]
+  },
+  {
+   "method": "GET",
+   "path": "/api/scans",
+   "body": null,
+   "status": 200,
+   "response": [
+    {
+     "id": 7,
+     "created_at": "T0008",
+     "updated_at": "T0008",
+     "status": "candidates",
+     "identified": true,
+     "error": null,
+     "card_read": {
+      "name": "Nameless"
+     },
+     "confidence": {},
+     "candidates": [
+      {
+       "id": "n1",
+       "set": "x",
+       "collector_number": "1",
+       "other_art": false
+      }
+     ],
+     "selection": null,
+     "f2f": null,
+     "included": true
+    },
+    {
+     "id": 6,
+     "created_at": "T0007",
+     "updated_at": "T0011",
+     "status": "candidates",
+     "identified": true,
+     "error": null,
+     "card_read": {
+      "name": "Sol Ring"
+     },
+     "confidence": {},
+     "candidates": [
+      {
+       "id": "r1",
+       "name": "Sol Ring",
+       "set": "c21",
+       "set_name": "C21 set",
+       "collector_number": "263",
+       "finishes": [
+        "nonfoil",
+        "foil"
+       ],
+       "image_small": "https://img/r1-s.jpg",
+       "image_normal": "https://img/r1-n.jpg",
+       "multi_distance": 55,
+       "f2f_conditions": {
+        "NM": 1.5
+       },
+       "other_art": false
+      }
+     ],
+     "selection": null,
+     "f2f": {
+      "name": "Sol Ring",
+      "set_code": "c21",
+      "collector_number": "263",
+      "foil": false,
+      "handle": "sol-ring-c21",
+      "url": "https://facetofacegames.com/products/sol-ring-c21",
+      "conditions": {
+       "NM": 1.5
+      }
+     },
+     "included": true
+    },
+    {
+     "id": 5,
+     "created_at": "T0006",
+     "updated_at": "T0013",
+     "status": "candidates",
+     "identified": true,
+     "error": null,
+     "card_read": {
+      "name": "Opt"
+     },
+     "confidence": {},
+     "candidates": [
+      {
+       "id": "o1",
+       "name": "Opt",
+       "set": "dom",
+       "set_name": "DOM set",
+       "collector_number": "60",
+       "finishes": [
+        "nonfoil",
+        "foil"
+       ],
+       "image_small": "https://img/o1-s.jpg",
+       "image_normal": "https://img/o1-n.jpg",
+       "multi_distance": 60,
+       "f2f_conditions": {
+        "NM": 0.25
+       },
+       "other_art": false
+      },
+      {
+       "id": "o2",
+       "name": "Opt",
+       "set": "xln",
+       "set_name": "XLN set",
+       "collector_number": "65",
+       "finishes": [
+        "nonfoil",
+        "foil"
+       ],
+       "image_small": "https://img/o2-s.jpg",
+       "image_normal": "https://img/o2-n.jpg",
+       "multi_distance": 64,
+       "f2f_conditions": {
+        "NM": 0.3
+       },
+       "other_art": false
+      }
+     ],
+     "selection": null,
+     "f2f": {
+      "name": "Opt",
+      "set_code": "dom",
+      "collector_number": "60",
+      "foil": false,
+      "handle": "opt-dom",
+      "url": "https://facetofacegames.com/products/opt-dom",
+      "conditions": {
+       "NM": 0.25
+      }
+     },
+     "included": true
+    },
+    {
+     "id": 4,
+     "created_at": "T0005",
+     "updated_at": "T0014",
+     "status": "selected",
+     "identified": true,
+     "error": null,
+     "card_read": {
+      "name": "Fling"
+     },
+     "confidence": {},
+     "candidates": [
+      {
+       "id": "f1",
+       "name": "Fling",
+       "set": "akh",
+       "set_name": "AKH set",
+       "collector_number": "132",
+       "finishes": [
+        "nonfoil",
+        "foil"
+       ],
+       "image_small": "https://img/f1-s.jpg",
+       "image_normal": "https://img/f1-n.jpg",
+       "multi_distance": 78,
+       "other_art": false
+      },
+      {
+       "id": "f2",
+       "name": "Fling",
+       "set": "m20",
+       "set_name": "M20 set",
+       "collector_number": "140",
+       "finishes": [
+        "nonfoil",
+        "foil"
+       ],
+       "image_small": "https://img/f2-s.jpg",
+       "image_normal": "https://img/f2-n.jpg",
+       "multi_distance": 84,
+       "other_art": false
+      },
+      {
+       "id": "f3",
+       "name": "Fling",
+       "set": "sld",
+       "set_name": "SLD set",
+       "collector_number": "999",
+       "finishes": [
+        "nonfoil",
+        "foil"
+       ],
+       "image_small": "https://img/f3-s.jpg",
+       "image_normal": "https://img/f3-n.jpg",
+       "multi_distance": 146,
+       "other_art": true
+      },
+      {
+       "id": "f4",
+       "name": "Fling",
+       "set": "ptk",
+       "set_name": "PTK set",
+       "collector_number": "1",
+       "finishes": [
+        "nonfoil",
+        "foil"
+       ],
+       "image_small": "https://img/f4-s.jpg",
+       "image_normal": "https://img/f4-n.jpg",
+       "multi_distance": 190,
+       "other_art": true
+      }
+     ],
+     "selection": {
+      "scryfall_id": "f1",
+      "name": "Fling",
+      "set": "akh",
+      "set_name": "AKH set",
+      "collector_number": "132",
+      "condition": "NM",
+      "finish": "Non-Foil",
+      "quantity": 1,
+      "foil": false,
+      "image_normal": "",
+      "popularity": null
+     },
+     "f2f": null,
+     "included": true
+    },
+    {
+     "id": 3,
+     "created_at": "T0003",
+     "updated_at": "T0015",
+     "status": "selected",
+     "identified": true,
+     "error": null,
+     "card_read": {
+      "name": "Lightning Bolt"
+     },
+     "confidence": {},
+     "candidates": [
+      {
+       "id": "b1",
+       "name": "Lightning Bolt",
+       "set": "m10",
+       "set_name": "M10 set",
+       "collector_number": "146",
+       "finishes": [
+        "nonfoil",
+        "foil"
+       ],
+       "image_small": "https://img/b1-s.jpg",
+       "image_normal": "https://img/b1-n.jpg",
+       "multi_distance": 70,
+       "ocr_confirmed": true,
+       "popularity": {
+        "tier": "staple",
+        "label": "Staple",
+        "rank": 158,
+        "percentile": 0.5
+       },
+       "other_art": false
+      },
+      {
+       "id": "b2",
+       "name": "Lightning Bolt",
+       "set": "2x2",
+       "set_name": "2X2 set",
+       "collector_number": "117",
+       "finishes": [
+        "nonfoil",
+        "foil"
+       ],
+       "image_small": "https://img/b2-s.jpg",
+       "image_normal": "https://img/b2-n.jpg",
+       "multi_distance": 82,
+       "popularity": {
+        "tier": "staple",
+        "label": "Staple",
+        "rank": 158,
+        "percentile": 0.5
+       },
+       "other_art": false
+      },
+      {
+       "id": "b3",
+       "name": "Lightning Bolt",
+       "set": "sta",
+       "set_name": "STA set",
+       "collector_number": "42",
+       "finishes": [
+        "nonfoil",
+        "foil"
+       ],
+       "image_small": "https://img/b3-s.jpg",
+       "image_normal": "https://img/b3-n.jpg",
+       "multi_distance": 150,
+       "popularity": {
+        "tier": "staple",
+        "label": "Staple",
+        "rank": 158,
+        "percentile": 0.5
+       },
+       "other_art": true
+      }
+     ],
+     "selection": {
+      "scryfall_id": "b2",
+      "name": "Lightning Bolt",
+      "set": "2x2",
+      "set_name": "2X2 set",
+      "collector_number": "117",
+      "condition": "NM",
+      "finish": "Foil",
+      "quantity": 1,
+      "foil": true,
+      "image_normal": "",
+      "popularity": null
+     },
+     "f2f": null,
+     "included": true
+    },
+    {
+     "id": 2,
+     "created_at": "T0002",
+     "updated_at": "T0002",
+     "status": "candidates",
+     "identified": true,
+     "error": null,
+     "card_read": {
+      "name": "Swords"
+     },
+     "confidence": {},
+     "candidates": [
+      {
+       "id": "w1",
+       "name": "Swords to Plowshares",
+       "set": "sta",
+       "set_name": "STA set",
+       "collector_number": "10",
+       "finishes": [
+        "nonfoil",
+        "foil"
+       ],
+       "image_small": "https://img/w1-s.jpg",
+       "image_normal": "https://img/w1-n.jpg",
+       "multi_distance": 60,
+       "other_art": false
+      }
+     ],
+     "selection": null,
+     "f2f": null,
+     "included": true
+    },
+    {
+     "id": 1,
+     "created_at": "T0001",
+     "updated_at": "T0001",
+     "status": "candidates",
+     "identified": true,
+     "error": null,
+     "card_read": {
+      "name": "Breaker"
+     },
+     "confidence": {},
+     "candidates": [
+      {
+       "id": "k0",
+       "name": "Breaker",
+       "set": "brk",
+       "set_name": "BRK set",
+       "collector_number": "0",
+       "finishes": [
+        "nonfoil",
+        "foil"
+       ],
+       "image_small": "https://img/k0-s.jpg",
+       "image_normal": "https://img/k0-n.jpg",
+       "multi_distance": 60,
+       "other_art": false
+      },
+      {
+       "id": "k1",
+       "name": "Breaker",
+       "set": "brk",
+       "set_name": "BRK set",
+       "collector_number": "1",
+       "finishes": [
+        "nonfoil",
+        "foil"
+       ],
+       "image_small": "https://img/k1-s.jpg",
+       "image_normal": "https://img/k1-n.jpg",
+       "multi_distance": 61,
+       "other_art": false
+      },
+      {
+       "id": "k2",
+       "name": "Breaker",
+       "set": "brk",
+       "set_name": "BRK set",
+       "collector_number": "2",
+       "finishes": [
+        "nonfoil",
+        "foil"
+       ],
+       "image_small": "https://img/k2-s.jpg",
+       "image_normal": "https://img/k2-n.jpg",
+       "multi_distance": 62,
+       "other_art": false
+      },
+      {
+       "id": "k3",
+       "name": "Breaker",
+       "set": "brk",
+       "set_name": "BRK set",
+       "collector_number": "3",
+       "finishes": [
+        "nonfoil",
+        "foil"
+       ],
+       "image_small": "https://img/k3-s.jpg",
+       "image_normal": "https://img/k3-n.jpg",
+       "multi_distance": 63,
+       "other_art": false
+      },
+      {
+       "id": "k4",
+       "name": "Breaker",
+       "set": "brk",
+       "set_name": "BRK set",
+       "collector_number": "4",
+       "finishes": [
+        "nonfoil",
+        "foil"
+       ],
+       "image_small": "https://img/k4-s.jpg",
+       "image_normal": "https://img/k4-n.jpg",
+       "multi_distance": 64,
+       "other_art": false
+      },
+      {
+       "id": "k5",
+       "name": "Breaker",
+       "set": "brk",
+       "set_name": "BRK set",
+       "collector_number": "5",
+       "finishes": [
+        "nonfoil",
+        "foil"
+       ],
+       "image_small": "https://img/k5-s.jpg",
+       "image_normal": "https://img/k5-n.jpg",
+       "multi_distance": 65,
+       "other_art": false
+      }
+     ],
+     "selection": null,
+     "f2f": null,
+     "included": true
+    }
+   ],
+   "lookups": []
+  },
+  {
+   "method": "GET",
+   "path": "/api/price-status",
+   "body": null,
+   "status": 200,
+   "response": {
+    "active": false,
+    "total": 13,
+    "done": 11,
+    "current": "",
+    "cancelling": false,
+    "cooldown_s": 600,
+    "pace_s": null,
+    "next_check_s": null,
+    "rate_per_s": null,
+    "eta_s": null
+   },
+   "lookups": []
+  },
+  {
+   "method": "POST",
+   "path": "/api/scans/3/price-check",
+   "body": null,
+   "status": 200,
+   "response": {
+    "queued": 1
+   },
+   "lookups": [
+    "2x2|117|1"
+   ]
+  },
+  {
+   "method": "GET",
+   "path": "/api/scans/3",
+   "body": null,
+   "status": 200,
+   "response": {
+    "id": 3,
+    "created_at": "T0003",
+    "updated_at": "T0016",
+    "status": "selected",
+    "identified": true,
+    "error": null,
+    "card_read": {
+     "name": "Lightning Bolt"
+    },
+    "confidence": {},
+    "candidates": [
+     {
+      "id": "b1",
+      "name": "Lightning Bolt",
+      "set": "m10",
+      "set_name": "M10 set",
+      "collector_number": "146",
+      "finishes": [
+       "nonfoil",
+       "foil"
+      ],
+      "image_small": "https://img/b1-s.jpg",
+      "image_normal": "https://img/b1-n.jpg",
+      "multi_distance": 70,
+      "ocr_confirmed": true,
+      "popularity": {
+       "tier": "staple",
+       "label": "Staple",
+       "rank": 158,
+       "percentile": 0.5
+      },
+      "other_art": false
+     },
+     {
+      "id": "b2",
+      "name": "Lightning Bolt",
+      "set": "2x2",
+      "set_name": "2X2 set",
+      "collector_number": "117",
+      "finishes": [
+       "nonfoil",
+       "foil"
+      ],
+      "image_small": "https://img/b2-s.jpg",
+      "image_normal": "https://img/b2-n.jpg",
+      "multi_distance": 82,
+      "popularity": {
+       "tier": "staple",
+       "label": "Staple",
+       "rank": 158,
+       "percentile": 0.5
+      },
+      "other_art": false
+     },
+     {
+      "id": "b3",
+      "name": "Lightning Bolt",
+      "set": "sta",
+      "set_name": "STA set",
+      "collector_number": "42",
+      "finishes": [
+       "nonfoil",
+       "foil"
+      ],
+      "image_small": "https://img/b3-s.jpg",
+      "image_normal": "https://img/b3-n.jpg",
+      "multi_distance": 150,
+      "popularity": {
+       "tier": "staple",
+       "label": "Staple",
+       "rank": 158,
+       "percentile": 0.5
+      },
+      "other_art": true
+     }
+    ],
+    "selection": {
+     "scryfall_id": "b2",
+     "name": "Lightning Bolt",
+     "set": "2x2",
+     "set_name": "2X2 set",
+     "collector_number": "117",
+     "condition": "NM",
+     "finish": "Foil",
+     "quantity": 1,
+     "foil": true,
+     "image_normal": "",
+     "popularity": null
+    },
+    "f2f": {
+     "name": "Lightning Bolt",
+     "set_code": "2x2",
+     "collector_number": "117",
+     "foil": true,
+     "handle": "lightning-bolt-2x2-foil",
+     "url": "https://facetofacegames.com/products/lightning-bolt-2x2-foil",
+     "conditions": {
+      "NM": 9.99
+     }
+    },
+    "included": true
+   },
+   "lookups": []
+  },
+  {
+   "method": "POST",
+   "path": "/api/scans/4/price-check",
+   "body": null,
+   "status": 200,
+   "response": {
+    "queued": 1
+   },
+   "lookups": [
+    "akh|132|0"
+   ]
+  },
+  {
+   "method": "POST",
+   "path": "/api/scans/6/price-check",
+   "body": null,
+   "status": 200,
+   "response": {
+    "queued": 0
+   },
+   "lookups": []
+  },
+  {
+   "method": "POST",
+   "path": "/api/scans/99/price-check",
+   "body": null,
+   "status": 404,
+   "response": {
+    "error": "not found"
+   },
+   "lookups": []
+  },
+  {
+   "method": "POST",
+   "path": "/api/scans/price-missing",
+   "body": null,
+   "status": 200,
+   "response": {
+    "queued": 7
+   },
+   "lookups": [
+    "sta|10|0",
+    "brk|0|0",
+    "brk|1|0",
+    "brk|2|0",
+    "brk|3|0"
+   ]
+  },
+  {
+   "method": "GET",
+   "path": "/api/price-status",
+   "body": null,
+   "status": 200,
+   "response": {
+    "active": false,
+    "total": 7,
+    "done": 5,
+    "current": "",
+    "cancelling": false,
+    "cooldown_s": 600,
+    "pace_s": null,
+    "next_check_s": null,
+    "rate_per_s": null,
+    "eta_s": null
+   },
+   "lookups": []
+  },
+  {
+   "method": "GET",
+   "path": "/api/scans",
+   "body": null,
+   "status": 200,
+   "response": [
+    {
+     "id": 7,
+     "created_at": "T0008",
+     "updated_at": "T0008",
+     "status": "candidates",
+     "identified": true,
+     "error": null,
+     "card_read": {
+      "name": "Nameless"
+     },
+     "confidence": {},
+     "candidates": [
+      {
+       "id": "n1",
+       "set": "x",
+       "collector_number": "1",
+       "other_art": false
+      }
+     ],
+     "selection": null,
+     "f2f": null,
+     "included": true
+    },
+    {
+     "id": 6,
+     "created_at": "T0007",
+     "updated_at": "T0011",
+     "status": "candidates",
+     "identified": true,
+     "error": null,
+     "card_read": {
+      "name": "Sol Ring"
+     },
+     "confidence": {},
+     "candidates": [
+      {
+       "id": "r1",
+       "name": "Sol Ring",
+       "set": "c21",
+       "set_name": "C21 set",
+       "collector_number": "263",
+       "finishes": [
+        "nonfoil",
+        "foil"
+       ],
+       "image_small": "https://img/r1-s.jpg",
+       "image_normal": "https://img/r1-n.jpg",
+       "multi_distance": 55,
+       "f2f_conditions": {
+        "NM": 1.5
+       },
+       "other_art": false
+      }
+     ],
+     "selection": null,
+     "f2f": {
+      "name": "Sol Ring",
+      "set_code": "c21",
+      "collector_number": "263",
+      "foil": false,
+      "handle": "sol-ring-c21",
+      "url": "https://facetofacegames.com/products/sol-ring-c21",
+      "conditions": {
+       "NM": 1.5
+      }
+     },
+     "included": true
+    },
+    {
+     "id": 5,
+     "created_at": "T0006",
+     "updated_at": "T0013",
+     "status": "candidates",
+     "identified": true,
+     "error": null,
+     "card_read": {
+      "name": "Opt"
+     },
+     "confidence": {},
+     "candidates": [
+      {
+       "id": "o1",
+       "name": "Opt",
+       "set": "dom",
+       "set_name": "DOM set",
+       "collector_number": "60",
+       "finishes": [
+        "nonfoil",
+        "foil"
+       ],
+       "image_small": "https://img/o1-s.jpg",
+       "image_normal": "https://img/o1-n.jpg",
+       "multi_distance": 60,
+       "f2f_conditions": {
+        "NM": 0.25
+       },
+       "other_art": false
+      },
+      {
+       "id": "o2",
+       "name": "Opt",
+       "set": "xln",
+       "set_name": "XLN set",
+       "collector_number": "65",
+       "finishes": [
+        "nonfoil",
+        "foil"
+       ],
+       "image_small": "https://img/o2-s.jpg",
+       "image_normal": "https://img/o2-n.jpg",
+       "multi_distance": 64,
+       "f2f_conditions": {
+        "NM": 0.3
+       },
+       "other_art": false
+      }
+     ],
+     "selection": null,
+     "f2f": {
+      "name": "Opt",
+      "set_code": "dom",
+      "collector_number": "60",
+      "foil": false,
+      "handle": "opt-dom",
+      "url": "https://facetofacegames.com/products/opt-dom",
+      "conditions": {
+       "NM": 0.25
+      }
+     },
+     "included": true
+    },
+    {
+     "id": 4,
+     "created_at": "T0005",
+     "updated_at": "T0018",
+     "status": "selected",
+     "identified": true,
+     "error": null,
+     "card_read": {
+      "name": "Fling"
+     },
+     "confidence": {},
+     "candidates": [
+      {
+       "id": "f1",
+       "name": "Fling",
+       "set": "akh",
+       "set_name": "AKH set",
+       "collector_number": "132",
+       "finishes": [
+        "nonfoil",
+        "foil"
+       ],
+       "image_small": "https://img/f1-s.jpg",
+       "image_normal": "https://img/f1-n.jpg",
+       "multi_distance": 78,
+       "other_art": false
+      },
+      {
+       "id": "f2",
+       "name": "Fling",
+       "set": "m20",
+       "set_name": "M20 set",
+       "collector_number": "140",
+       "finishes": [
+        "nonfoil",
+        "foil"
+       ],
+       "image_small": "https://img/f2-s.jpg",
+       "image_normal": "https://img/f2-n.jpg",
+       "multi_distance": 84,
+       "other_art": false
+      },
+      {
+       "id": "f3",
+       "name": "Fling",
+       "set": "sld",
+       "set_name": "SLD set",
+       "collector_number": "999",
+       "finishes": [
+        "nonfoil",
+        "foil"
+       ],
+       "image_small": "https://img/f3-s.jpg",
+       "image_normal": "https://img/f3-n.jpg",
+       "multi_distance": 146,
+       "other_art": true
+      },
+      {
+       "id": "f4",
+       "name": "Fling",
+       "set": "ptk",
+       "set_name": "PTK set",
+       "collector_number": "1",
+       "finishes": [
+        "nonfoil",
+        "foil"
+       ],
+       "image_small": "https://img/f4-s.jpg",
+       "image_normal": "https://img/f4-n.jpg",
+       "multi_distance": 190,
+       "other_art": true
+      }
+     ],
+     "selection": {
+      "scryfall_id": "f1",
+      "name": "Fling",
+      "set": "akh",
+      "set_name": "AKH set",
+      "collector_number": "132",
+      "condition": "NM",
+      "finish": "Non-Foil",
+      "quantity": 1,
+      "foil": false,
+      "image_normal": "",
+      "popularity": null
+     },
+     "f2f": {
+      "name": "Fling",
+      "set_code": "akh",
+      "collector_number": "132",
+      "foil": false,
+      "handle": "fling-akh",
+      "url": "https://facetofacegames.com/products/fling-akh",
+      "conditions": {
+       "NM": 0.35,
+       "PL": 0.25
+      }
+     },
+     "included": true
+    },
+    {
+     "id": 3,
+     "created_at": "T0003",
+     "updated_at": "T0016",
+     "status": "selected",
+     "identified": true,
+     "error": null,
+     "card_read": {
+      "name": "Lightning Bolt"
+     },
+     "confidence": {},
+     "candidates": [
+      {
+       "id": "b1",
+       "name": "Lightning Bolt",
+       "set": "m10",
+       "set_name": "M10 set",
+       "collector_number": "146",
+       "finishes": [
+        "nonfoil",
+        "foil"
+       ],
+       "image_small": "https://img/b1-s.jpg",
+       "image_normal": "https://img/b1-n.jpg",
+       "multi_distance": 70,
+       "ocr_confirmed": true,
+       "popularity": {
+        "tier": "staple",
+        "label": "Staple",
+        "rank": 158,
+        "percentile": 0.5
+       },
+       "other_art": false
+      },
+      {
+       "id": "b2",
+       "name": "Lightning Bolt",
+       "set": "2x2",
+       "set_name": "2X2 set",
+       "collector_number": "117",
+       "finishes": [
+        "nonfoil",
+        "foil"
+       ],
+       "image_small": "https://img/b2-s.jpg",
+       "image_normal": "https://img/b2-n.jpg",
+       "multi_distance": 82,
+       "popularity": {
+        "tier": "staple",
+        "label": "Staple",
+        "rank": 158,
+        "percentile": 0.5
+       },
+       "other_art": false
+      },
+      {
+       "id": "b3",
+       "name": "Lightning Bolt",
+       "set": "sta",
+       "set_name": "STA set",
+       "collector_number": "42",
+       "finishes": [
+        "nonfoil",
+        "foil"
+       ],
+       "image_small": "https://img/b3-s.jpg",
+       "image_normal": "https://img/b3-n.jpg",
+       "multi_distance": 150,
+       "popularity": {
+        "tier": "staple",
+        "label": "Staple",
+        "rank": 158,
+        "percentile": 0.5
+       },
+       "other_art": true
+      }
+     ],
+     "selection": {
+      "scryfall_id": "b2",
+      "name": "Lightning Bolt",
+      "set": "2x2",
+      "set_name": "2X2 set",
+      "collector_number": "117",
+      "condition": "NM",
+      "finish": "Foil",
+      "quantity": 1,
+      "foil": true,
+      "image_normal": "",
+      "popularity": null
+     },
+     "f2f": {
+      "name": "Lightning Bolt",
+      "set_code": "2x2",
+      "collector_number": "117",
+      "foil": true,
+      "handle": "lightning-bolt-2x2-foil",
+      "url": "https://facetofacegames.com/products/lightning-bolt-2x2-foil",
+      "conditions": {
+       "NM": 9.99
+      }
+     },
+     "included": true
+    },
+    {
+     "id": 2,
+     "created_at": "T0002",
+     "updated_at": "T0002",
+     "status": "candidates",
+     "identified": true,
+     "error": null,
+     "card_read": {
+      "name": "Swords"
+     },
+     "confidence": {},
+     "candidates": [
+      {
+       "id": "w1",
+       "name": "Swords to Plowshares",
+       "set": "sta",
+       "set_name": "STA set",
+       "collector_number": "10",
+       "finishes": [
+        "nonfoil",
+        "foil"
+       ],
+       "image_small": "https://img/w1-s.jpg",
+       "image_normal": "https://img/w1-n.jpg",
+       "multi_distance": 60,
+       "other_art": false
+      }
+     ],
+     "selection": null,
+     "f2f": null,
+     "included": true
+    },
+    {
+     "id": 1,
+     "created_at": "T0001",
+     "updated_at": "T0001",
+     "status": "candidates",
+     "identified": true,
+     "error": null,
+     "card_read": {
+      "name": "Breaker"
+     },
+     "confidence": {},
+     "candidates": [
+      {
+       "id": "k0",
+       "name": "Breaker",
+       "set": "brk",
+       "set_name": "BRK set",
+       "collector_number": "0",
+       "finishes": [
+        "nonfoil",
+        "foil"
+       ],
+       "image_small": "https://img/k0-s.jpg",
+       "image_normal": "https://img/k0-n.jpg",
+       "multi_distance": 60,
+       "other_art": false
+      },
+      {
+       "id": "k1",
+       "name": "Breaker",
+       "set": "brk",
+       "set_name": "BRK set",
+       "collector_number": "1",
+       "finishes": [
+        "nonfoil",
+        "foil"
+       ],
+       "image_small": "https://img/k1-s.jpg",
+       "image_normal": "https://img/k1-n.jpg",
+       "multi_distance": 61,
+       "other_art": false
+      },
+      {
+       "id": "k2",
+       "name": "Breaker",
+       "set": "brk",
+       "set_name": "BRK set",
+       "collector_number": "2",
+       "finishes": [
+        "nonfoil",
+        "foil"
+       ],
+       "image_small": "https://img/k2-s.jpg",
+       "image_normal": "https://img/k2-n.jpg",
+       "multi_distance": 62,
+       "other_art": false
+      },
+      {
+       "id": "k3",
+       "name": "Breaker",
+       "set": "brk",
+       "set_name": "BRK set",
+       "collector_number": "3",
+       "finishes": [
+        "nonfoil",
+        "foil"
+       ],
+       "image_small": "https://img/k3-s.jpg",
+       "image_normal": "https://img/k3-n.jpg",
+       "multi_distance": 63,
+       "other_art": false
+      },
+      {
+       "id": "k4",
+       "name": "Breaker",
+       "set": "brk",
+       "set_name": "BRK set",
+       "collector_number": "4",
+       "finishes": [
+        "nonfoil",
+        "foil"
+       ],
+       "image_small": "https://img/k4-s.jpg",
+       "image_normal": "https://img/k4-n.jpg",
+       "multi_distance": 64,
+       "other_art": false
+      },
+      {
+       "id": "k5",
+       "name": "Breaker",
+       "set": "brk",
+       "set_name": "BRK set",
+       "collector_number": "5",
+       "finishes": [
+        "nonfoil",
+        "foil"
+       ],
+       "image_small": "https://img/k5-s.jpg",
+       "image_normal": "https://img/k5-n.jpg",
+       "multi_distance": 65,
+       "other_art": false
+      }
+     ],
+     "selection": null,
+     "f2f": null,
+     "included": true
+    }
+   ],
+   "lookups": []
+  }
+ ]
+}

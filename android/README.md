@@ -262,8 +262,11 @@ security (LAN only, 6-digit code, lockouts). Every capture the phone
 identifies is also filed into the phone's own store (`files/phoneserver/`:
 `scans.db` — server/store.py's table — plus `scan_images/`). The computer's
 server stays the real path; nothing here reaches it. Open the shown address on
-the computer and enter the code. Not yet on the phone: pricing (3c), export
-(3d), admin/guest roles (3e) — those endpoints answer 501 for now. At 10,000
+the computer and enter the code. Pricing (3c) runs on the phone from its own
+IP over Cronet: whatever is owed is priced, re-checked every 5 s while
+anything is, and the loop sleeps until the next scan when nothing is. Not
+yet on the phone: export (3d) and admin/guest roles (3e) — export answers
+501 for now. At 10,000
 scans the usage line turns into a warning (photo size + free space); nothing
 is pruned.
 

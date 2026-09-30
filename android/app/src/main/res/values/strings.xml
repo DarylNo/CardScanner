@@ -151,7 +151,7 @@
     <string name="cmp_no_disagreements">No disagreements.</string>
     <!-- Diagnostics → Phone server (preview), Stage 3 -->
     <string name="pv_header">Phone server (preview)</string>
-    <string name="pv_intro">Runs the phone\'s own copy of the server beside the computer\'s. While on, each card the phone identifies is also filed on the phone, and the scan list is served from the phone: open the address below on the computer. The computer stays the real server — nothing here reaches it. Pricing and export come in the next preview.</string>
+    <string name="pv_intro">Runs the phone\'s own copy of the server beside the computer\'s. While on, each card the phone identifies is also filed on the phone, and the scan list is served from the phone: open the address below on the computer. The computer stays the real server — nothing here reaches it. Prices come from Face to Face straight from the phone. Export comes in the next preview.</string>
     <string name="pv_switch">Serve from this phone</string>
     <string name="pv_switch_desc">Also turns on Compare (on-phone identify)</string>
     <string name="pv_off">Off.</string>

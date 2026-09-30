@@ -161,7 +161,40 @@ data class RequestRecord(
 )
 
 /**
- * facetoface._default_get_json minus the disk cache: throttle, GET, then
+ * facetoface's 24 h disk cache: one file per URL (`sha1(url).json`), written
+ * atomically (temp + rename); a torn/corrupt entry is a miss, never an error.
+ */
+class F2fCache(private val dir: java.io.File, private val ttlMs: Long = 24 * 3600 * 1000L,
+               private val nowMs: () -> Long = System::currentTimeMillis) {
+    private fun file(url: String): java.io.File {
+        val h = java.security.MessageDigest.getInstance("SHA-1").digest(url.toByteArray(Charsets.UTF_8))
+        return java.io.File(dir, h.joinToString("") { "%02x".format(it.toInt() and 0xff) } + ".json")
+    }
+
+    fun get(url: String): JSONObject? {
+        val f = file(url)
+        return try {
+            if (f.isFile && nowMs() - f.lastModified() < ttlMs) JSONObject(f.readText(Charsets.UTF_8)) else null
+        } catch (e: Exception) {
+            null                                   // torn/corrupt → refetch
+        }
+    }
+
+    fun put(url: String, data: JSONObject) {
+        try {
+            dir.mkdirs()
+            val f = file(url)
+            val tmp = java.io.File(dir, f.name + "." + Thread.currentThread().id + ".tmp")
+            tmp.writeText(data.toString(), Charsets.UTF_8)
+            if (!tmp.renameTo(f)) { f.delete(); if (!tmp.renameTo(f)) tmp.delete() }
+        } catch (e: Exception) {
+            // best-effort, like the Python cache
+        }
+    }
+}
+
+/**
+ * facetoface._default_get_json: [cache] (24 h, when given), throttle, GET, then
  * 429 → pace down + wait min(max(Retry-After, 2×attempt), 15) and retry once;
  * other failure → wait 0.8 s and retry once; success → pace up. Two attempts,
  * then null ("unavailable", never "not listed").
@@ -173,6 +206,7 @@ class F2fFetcher(
     private val isStopped: () -> Boolean,
     private val onRequest: (RequestRecord) -> Unit = {},
     private val timeoutMs: Long = F2f.TIMEOUT_S * 1000,
+    private val cache: F2fCache? = null,
 ) {
     val pacer = Pacer(clock, waiter)
     private var seq = 0
@@ -180,6 +214,10 @@ class F2fFetcher(
     private class HttpStatusError(val status: Int) : IOException("HTTP $status")
 
     fun getJson(url: String, kind: String): JSONObject? {
+        cache?.get(url)?.let {
+            record(kind, 0, null, "cache", 0L, 0.0, null)
+            return it
+        }
         for (attempt in 1..2) {
             if (isStopped()) return null
             if (pacer.throttle()) return null
@@ -207,6 +245,7 @@ class F2fFetcher(
                 }
                 pacer.feedback(true)
                 record(kind, attempt, resp.status, resp.status.toString(), ms, 0.0, protocol)
+                cache?.put(url, data)
                 return data
             } catch (e: Exception) {
                 val ms = ((clock.nowS() - t0) * 1000).toLong()

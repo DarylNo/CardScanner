@@ -45,6 +45,7 @@ from server.store import ScanStore  # noqa: E402
 
 OUT = ROOT / "android" / "core" / "src" / "test" / "resources" / "api"
 EXPECTED = OUT / "expected.json"
+SWEEP_EXPECTED = OUT / "sweep.json"
 
 
 def _cand(cid, name, set_code, cn, dist, *, ocr=False, pop=None, set_name=None):
@@ -216,22 +217,169 @@ def build() -> dict:
     return {"clock": "T%04d", "seeds": SEEDS, "steps": steps}
 
 
+# ── session 2: pricing (Stage 3c) ────────────────────────────────────────────
+# A fake F2F answers from PRICES by (set, collector, foil): conditions →
+# F2FPrice, "none" → None (a confirmed miss), "unavailable" → F2FUnavailable
+# Error. HOOKS apply a store write WHILE a given lookup runs — a pick landing
+# mid-sweep — so the before-fetch recheck and write-if-current are exercised.
+
+def _p(conds, handle):
+    return {"conditions": conds, "handle": handle}
+
+
+PRICES = {
+    "m10|146|0": _p({"NM": 3.49, "PL": 2.79}, "lightning-bolt-m10"),
+    "2x2|117|1": _p({"NM": 9.99}, "lightning-bolt-2x2-foil"),
+    "akh|132|0": _p({"NM": 0.35, "PL": 0.25}, "fling-akh"),
+    "m20|140|0": "none",
+    "dom|60|0": _p({"NM": 0.25}, "opt-dom"),
+    "xln|65|0": _p({"NM": 0.3}, "opt-xln"),
+    "c21|263|0": _p({"NM": 1.5}, "sol-ring-c21"),
+    "sta|10|0": "unavailable",
+}
+for _i in range(6):
+    PRICES[f"brk|{_i}|0"] = "unavailable"
+HOOKS = {
+    # while Fling AKH (scan 4's first print) is priced, scan 4 gets PICKED →
+    # its remaining print target (M20) is skipped without a fetch, and the
+    # AKH answer is not written onto the now-selected scan's candidates
+    "akh|132|0": {"scan": 4, "fields": {"status": "selected", "selection": {
+        "scryfall_id": "f1", "name": "Fling", "set": "akh", "set_name": "AKH set",
+        "collector_number": "132", "condition": "NM", "finish": "Non-Foil", "quantity": 1,
+        "foil": False, "image_normal": "", "popularity": None}}},
+    # while Bolt M10 (scan 3's selection) is priced, scan 3 is RE-PICKED to 2X2
+    # foil → the stale M10 price must not be written; 2X2 foil gets priced later
+    "m10|146|0": {"scan": 3, "fields": {"selection": {
+        "scryfall_id": "b2", "name": "Lightning Bolt", "set": "2x2", "set_name": "2X2 set",
+        "collector_number": "117", "condition": "NM", "finish": "Foil", "quantity": 1,
+        "foil": True, "image_normal": "", "popularity": None}}},
+}
+
+
+def _sel(c, finish="Non-Foil"):
+    return {"scryfall_id": c["id"], "name": c["name"], "set": c["set"], "set_name": c["set_name"],
+            "collector_number": c["collector_number"], "condition": "NM", "finish": finish,
+            "quantity": 1, "foil": finish != "Non-Foil", "image_normal": c["image_normal"],
+            "popularity": None}
+
+
+_BRK = [_cand(f"k{i}", "Breaker", "brk", str(i), 60 + i) for i in range(6)]
+_BOLT = SEEDS[0]["candidates"]
+_OPT = [_cand("o1", "Opt", "dom", "60", 60), _cand("o2", "Opt", "xln", "65", 64)]
+# Seeds: (create_scan kwargs, selection or None). Ids 1.. in order. The sweep
+# walks newest first, so the breaker scan (6 unavailable prints) is scan 1 —
+# processed LAST, after everything else has been priced.
+SWEEP_SEEDS = [
+    (dict(identified=True, card_read={"name": "Breaker"}, confidence={}, candidates=_BRK), None),
+    (dict(identified=True, card_read={"name": "Swords"}, confidence={},
+          candidates=[_cand("w1", "Swords to Plowshares", "sta", "10", 60)]), None),
+    (dict(identified=True, card_read={"name": "Lightning Bolt"}, confidence={}, candidates=_BOLT),
+     _sel(_BOLT[0])),
+    (dict(identified=True, card_read={"name": "Fling"}, confidence={},
+          candidates=SEEDS[1]["candidates"]), None),
+    (dict(identified=True, card_read={"name": "Opt"}, confidence={}, candidates=_OPT), None),
+    (dict(identified=True, card_read={"name": "Sol Ring"}, confidence={},
+          candidates=[_cand("r1", "Sol Ring", "c21", "263", 55)]), None),
+    (dict(identified=True, card_read={"name": "Nameless"}, confidence={},
+          candidates=[{"id": "n1", "set": "x", "collector_number": "1"}]), None),
+]
+SWEEP_STEPS = [
+    ("GET", "/api/price-status", None),
+    ("POST", "/api/scans/6/price", None),            # pending, top candidate found
+    ("POST", "/api/scans/2/price", None),            # unavailable → f2f_search, nothing written
+    ("POST", "/api/scans/5/price", None),            # pending: top print found, written to f2f
+    ("POST", "/api/scans/7/price", None),            # nothing to price → 400
+    ("POST", "/api/scans/99/price", None),           # 404
+    ("POST", "/api/price-sweep/stop", None),         # idle → not stopping (sets the pause)
+    ("POST", "/api/scans/price-missing", None),      # clears the pause; runs; breaker at the end
+    ("GET", "/api/scans", None),
+    ("GET", "/api/price-status", None),
+    ("POST", "/api/scans/3/price-check", None),      # 2X2 foil selection, unpriced after the re-pick
+    ("GET", "/api/scans/3", None),
+    ("POST", "/api/scans/4/price-check", None),      # Fling, picked mid-sweep: its selection
+    ("POST", "/api/scans/6/price-check", None),      # Sol Ring: nothing left to search
+    ("POST", "/api/scans/99/price-check", None),     # 404
+    ("POST", "/api/scans/price-missing", None),      # overrides the cooldown; breaker again
+    ("GET", "/api/price-status", None),
+    ("GET", "/api/scans", None),
+]
+
+
+def build_sweep() -> dict:
+    from mtg_card_scanner.facetoface import F2FPrice, F2FUnavailableError
+    ticks = [0]
+
+    def clock() -> str:
+        ticks[0] += 1
+        return f"T{ticks[0]:04d}"
+
+    real_now = store_mod._now
+    store_mod._now = clock
+    lookups: list = []
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            store = ScanStore(Path(tmp) / "s.db")
+
+            class FakeF2F:
+                def get_price(self, name, set_code, collector_number, foil=False, set_name=""):
+                    key = f"{set_code}|{collector_number}|{int(bool(foil))}"
+                    lookups.append(key)
+                    hook = HOOKS.get(key)
+                    if hook:
+                        store.update_scan(hook["scan"], **copy.deepcopy(hook["fields"]))
+                    ans = PRICES.get(key, "none")
+                    if ans == "unavailable":
+                        raise F2FUnavailableError(key)
+                    if ans == "none":
+                        return None
+                    return F2FPrice(name=name, set_code=set_code, collector_number=collector_number,
+                                    foil=bool(foil), handle=ans["handle"],
+                                    url=f"https://facetofacegames.com/products/{ans['handle']}",
+                                    conditions=dict(ans["conditions"]))
+
+            try:
+                app = create_app(pipeline_factory=lambda: None, store=store, f2f=FakeF2F(),
+                                 scan_images_dir=Path(tmp) / "img", auto_sweep_interval=None)
+                client = TestClient(app)
+                for kwargs, sel in SWEEP_SEEDS:
+                    row = store.create_scan(**copy.deepcopy(kwargs))
+                    if sel:
+                        store.update_scan(row["id"], status="selected", selection=copy.deepcopy(sel))
+                steps = []
+                for method, path, body in SWEEP_STEPS:
+                    before = len(lookups)
+                    kw = {} if body is None else {"json": body}
+                    r = client.request(method, path, **kw)
+                    steps.append({"method": method, "path": path, "body": body,
+                                  "status": r.status_code, "response": r.json(),
+                                  "lookups": lookups[before:]})
+            finally:
+                store.close()
+    finally:
+        store_mod._now = real_now
+    return {"clock": "T%04d", "prices": PRICES, "hooks": HOOKS,
+            "seeds": [{"create": k, "selection": s} for k, s in SWEEP_SEEDS], "steps": steps}
+
+
 def _dumps(obj) -> str:
     return json.dumps(obj, indent=1, ensure_ascii=False) + "\n"
 
 
 def main() -> int:
-    text = _dumps(build())
+    outputs = {EXPECTED: _dumps(build()), SWEEP_EXPECTED: _dumps(build_sweep())}
     if "--check" in sys.argv:
-        current = EXPECTED.read_text(encoding="utf-8") if EXPECTED.exists() else None
-        if current != text:
-            print("api fixtures are stale — run: python scripts/export_api_fixtures.py")
-            return 1
-        print(f"api fixtures up to date ({len(STEPS)} steps)")
+        for path, text in outputs.items():
+            current = path.read_text(encoding="utf-8") if path.exists() else None
+            if current != text:
+                print(f"api fixtures are stale ({path.name}) — run: python scripts/export_api_fixtures.py")
+                return 1
+        print(f"api fixtures up to date ({len(STEPS)} + {len(SWEEP_STEPS)} steps)")
         return 0
     OUT.mkdir(parents=True, exist_ok=True)
-    EXPECTED.write_text(text, encoding="utf-8")
-    print(f"wrote {EXPECTED.relative_to(ROOT)} ({len(STEPS)} steps)")
+    for path, text in outputs.items():
+        path.write_text(text, encoding="utf-8")
+    print(f"wrote {EXPECTED.relative_to(ROOT)} ({len(STEPS)} steps), "
+          f"{SWEEP_EXPECTED.relative_to(ROOT)} ({len(SWEEP_STEPS)} steps)")
     return 0
 
 
