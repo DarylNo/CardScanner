@@ -96,7 +96,10 @@ class PhoneBackend(
                     "ocr" to linkedMapOf("available" to true, "error" to null)))
             get && req.path == "/api/setup/status" -> {
                 val n = packRows().toLong()
-                ApiResponse.json(200, linkedMapOf("index_built" to (n > 1000), "indexed" to n, "total" to n,
+                // Always "built": the phone's card database is its art pack, fetched by the app
+                // (its banner + Settings show that state). The page's "Build (~1 hr)" and
+                // "Download all images" are the retired computer's and would 404 here.
+                ApiResponse.json(200, linkedMapOf("index_built" to true, "indexed" to n, "total" to n,
                     "building" to false, "error" to null, "images" to 0L, "images_total" to 0L,
                     "prefetching" to false, "prefetch_error" to null, "build_progress" to null,
                     "prefetch_progress" to null))

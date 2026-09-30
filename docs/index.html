@@ -43,95 +43,54 @@
 <body>
 <main>
   <h1>🃏 MTG Card Scanner</h1>
-  <p class="tag">Turn a phone and a tray into a hands-free card scanner.
-    <b>Local artwork identification</b> — no cloud AI, no API keys — with live
-    pricing and one-click export.</p>
+  <p class="tag">Turn an Android phone and a tray into a hands-free card scanner.
+    <b>Artwork identification on the phone</b> — no cloud AI, no API keys — with
+    live Face to Face pricing and CSV / TXT export.</p>
 
   <a id="primary" href="#" style="display:none"></a>
   <div id="ver"></div>
 
   <div id="fallback" style="display:none">
-    <p class="note">No packaged release is published yet — install from the
-    command line instead (everything below still applies).</p>
+    <p class="note">Couldn't read the latest release —
+    <a href="https://github.com/DarylNo/CardScanner/releases/latest">open the releases page</a>
+    and download <code>mtg-card-scanner-android.apk</code>.</p>
   </div>
-
-  <h2>All downloads</h2>
-  <div class="plats" id="plats">
-    <span class="note">Loading latest release…</span>
-  </div>
-
-  <h2>Or install from the command line</h2>
-  <p class="note"><b>macOS / Linux</b> — no prerequisites (installs Python if needed):</p>
-  <pre>curl -fsSL https://raw.githubusercontent.com/DarylNo/CardScanner/master/install.sh | bash
-mtg-card-scanner</pre>
-  <p class="note"><b>Any platform</b> with Python 3.11+ or <code>uv</code>:</p>
-  <pre>pipx install git+https://github.com/DarylNo/CardScanner
-mtg-card-scanner</pre>
 
   <h2>Then</h2>
   <ol class="steps">
-    <li>The desktop UI opens itself; first run shows a one-click
-        <b>Build card database</b> step (~1 hour, once).</li>
-    <li>Scan the QR code with your phone, accept the one-time certificate
-        warning, and mount the phone over a tray.</li>
-    <li>Tap <b>Area</b> on the phone, drag a box around the tray — done.
-        Drop cards in; they identify, price, and file themselves.</li>
+    <li>Open the APK on your Android phone (allow installs from your browser when
+        Android asks).</li>
+    <li>Open the app — the first time it downloads the card database (a few MB).</li>
+    <li>Mount the phone over a tray, tap <b>Area</b> and drag a box around it.
+        Drop cards in; they identify, price and file themselves on the phone.</li>
+    <li>Optional: review and export on a computer — in the app, Settings →
+        <b>This phone's server</b> → <b>Pair a computer as admin</b>, and open the
+        link on the computer (same Wi-Fi or the phone's hotspot).</li>
   </ol>
-  <p class="note">macOS/Linux downloads are .tar.gz — extract, then run
-  <code>mtg-card-scanner</code> (the executable bit is preserved). macOS
-  binaries are unsigned — right-click → Open the first time. Windows will ask
-  to allow the app through the firewall so the phone can connect. Source
-  &amp; issues on
+  <p class="note">Your scans live only on the phone — uninstalling the app
+  deletes them; export a CSV if you want a copy. Source &amp; issues on
   <a href="https://github.com/DarylNo/CardScanner">GitHub</a>.</p>
 </main>
-<footer>MIT licensed · identification runs entirely on your machine</footer>
+<footer>MIT licensed · identification runs entirely on your phone</footer>
 
 <script>
 const REPO = "DarylNo/CardScanner";
-const ASSETS = [
-  { match: /windows/,          label: "Windows",              file: "mtg-card-scanner-windows.exe" },
-  { match: /mac|darwin/,       label: "macOS (Apple Silicon)", file: "mtg-card-scanner-macos-arm64.tar.gz" },
-  { match: /mac|darwin/,       label: "macOS (Intel)",        file: "mtg-card-scanner-macos-x86_64.tar.gz" },
-  { match: /linux/,            label: "Linux (x86_64)",       file: "mtg-card-scanner-linux-x86_64.tar.gz" },
-];
-function detectOS() {
-  const ua = navigator.userAgent.toLowerCase();
-  if (ua.includes("windows")) return "Windows";
-  // Browsers report Intel even on Apple Silicon — offer arm64 as primary,
-  // Intel stays one click away in the grid.
-  if (ua.includes("mac")) return "macOS (Apple Silicon)";
-  if (ua.includes("linux")) return "Linux (x86_64)";
-  return null;
-}
+const APK = "mtg-card-scanner-android.apk";
 (async () => {
-  const plats = document.getElementById("plats");
   const primary = document.getElementById("primary");
   try {
     const r = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`);
     if (!r.ok) throw new Error(r.status);
     const rel = await r.json();
-    const byName = Object.fromEntries((rel.assets || []).map(a => [a.name, a]));
-    const rows = ASSETS.filter(a => byName[a.file]);
-    if (!rows.length) throw new Error("no assets");
+    const asset = (rel.assets || []).find(a => a.name === APK);
+    if (!asset) throw new Error("no apk");
     document.getElementById("ver").textContent =
       `${rel.tag_name} · released ${new Date(rel.published_at).toLocaleDateString()}`;
-    plats.innerHTML = rows.map(a => {
-      const asset = byName[a.file];
-      const mb = (asset.size / 1048576).toFixed(0);
-      return `<a class="plat" href="${asset.browser_download_url}">${a.label}
-        <small>${a.file} · ${mb} MB</small></a>`;
-    }).join("");
-    const os = detectOS();
-    const hit = rows.find(a => a.label === os);
-    if (hit) {
-      const asset = byName[hit.file];
-      primary.href = asset.browser_download_url;
-      primary.innerHTML = `⬇ Download for ${hit.label}
-        <small>${rel.tag_name} · ${(asset.size/1048576).toFixed(0)} MB · free &amp; open source</small>`;
-      primary.style.display = "block";
-    }
+    primary.href = asset.browser_download_url;
+    primary.innerHTML = `⬇ Download for Android
+      <small>${rel.tag_name} · ${(asset.size/1048576).toFixed(0)} MB · free &amp; open source</small>`;
+    primary.style.display = "block";
   } catch (e) {
-    plats.innerHTML = "";
     document.getElementById("fallback").style.display = "block";
   }
 })();

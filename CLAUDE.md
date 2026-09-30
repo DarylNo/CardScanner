@@ -17,6 +17,10 @@ were learned on it and bind the phone too.
 
 ## Run / develop
 
+The Python server below is the retired computer app, kept as the REFERENCE
+the phone is tested against — "deploy" means nothing for it any more; the
+shipped product is the APK (Android app section; the gradle line there).
+
 ```bash
 pip install -e ".[test]"
 pytest tests/ -q                # the correctness gate — keep it green
@@ -29,8 +33,9 @@ relaunch" (the browser's Update button). The rig runs with
 `SCAN_DB=scans.db SCAN_IMAGES_DIR=scan_images` env so data stays in the repo
 dir; fresh installs default to `~/.mtg-card-scanner`.
 
-**Deploy = restart.** Kill the listener on :8443 and relaunch; the version
-banner in both UIs (`d<N> · <git hash>`) is how you verify what's running.
+**Reference server only:** kill the listener on :8443 and relaunch; the
+version banner in both UIs (`d<N> · <git hash>`) shows what's running (the
+phone serves the same pages, bannered `d<N> · <version> (phone)`).
 **Bump `UI_VERSION`** in `phone.html` / `desktop.html` on every edit to them —
 stale-page debugging burned a full session before the banners existed.
 
@@ -378,9 +383,9 @@ Where it stands (2026-09-29, after 1.0.13):
   several requests batched into one release and to "talk it through"
   before launching one.
 - The owner tests on the real rig (OnePlus Nord N200 on a mount over a
-  tray, Windows PC server) and reports by photo/paste. Settings →
-  Diagnostics → Copy diagnostics and the Compare report are the two pastes
-  worth asking for. Never claim a device behaviour works until they've
+  tray — since 1.1.0 the phone is the server; the Windows PC is only a
+  browser) and reports by photo/paste. Settings → Diagnostics → Copy
+  diagnostics is the paste worth asking for (Compare mode is gone). Never claim a device behaviour works until they've
   tried it — say "tested in code, not on the phone".
 - Measure, then change: when a rule is in doubt, score the candidates
   against ground truth (e.g. the OCR rule was chosen from a scored table
@@ -407,7 +412,7 @@ Open threads for whoever picks this up:
   screens), Handheld on a wood-grain table, the longer scan acknowledgement.
 - Proposed, not approved: "Fit to cards + zoom" (auto-fit the scan Area).
 - Ranking time for heavily reprinted names (cache candidate images) —
-  worth doing inside Stage 3.
+  still worth doing on the phone.
 
 ## Release / distribution
 
@@ -431,9 +436,11 @@ Open threads for whoever picks this up:
   session; bump the version in a PR and merge it. A hand-pushed tag still
   works. Never bump without meaning to release: the merge IS the release.
 - **ALWAYS end a push session by bumping `version` in
-  pyproject.toml** (which, merged, tags the release) — script installs (uv/pipx)
-  identify as the package version and their update banner compares against
-  the latest RELEASE tag; master-only commits are invisible to them.
+  pyproject.toml** (which, merged, tags the release and builds the APK —
+  versionName/versionCode come from it; master-only commits reach nobody).
+  (History, retired computer app: script installs (uv/pipx) identified as the
+  package version and their update banner compared against the latest
+  RELEASE tag.)
   Bump BEFORE tagging: installs come from master, so an install made in the
   gap between bump and tag reports a version AHEAD of the latest release.
   `_is_newer_release` compares version tuples so that only means "no update"

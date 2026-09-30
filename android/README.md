@@ -100,8 +100,8 @@ pytest tests/ -q                                   # server + flatten spec
 CI (`.github/workflows/ci.yml`, job `android`) runs exactly these on every push
 and PR and uploads the debug APK as the `mtg-card-scanner-android-debug`
 artifact. The release build (`release.yml`, job `apk`) publishes
-`mtg-card-scanner-android.apk` on the GitHub Release next to the desktop
-binaries.
+`mtg-card-scanner-android.apk` on the GitHub Release — the only asset since
+1.1.0, and only when signed with the release key.
 
 A locally built **release** APK uses the release key only if these are set,
 otherwise it falls back to the debug key:
@@ -314,7 +314,8 @@ Run on the Nord N200 after installing a new build:
   unverified developer may then be blocked; **installing over ADB (`adb
   install`) stays possible**, and registering as a developer is the other way
   out.
-- The review UI needs the server reachable — the app queues captures offline,
-  but prices and picks come from the server.
-- The guest gateway is plain HTTP on the local network and gives full access
-  (see above).
+- Identifying needs internet for Scryfall's printing list (and pricing for Face
+  to Face): offline captures wait in the queue and are identified when the
+  phone is back online.
+- The local network leg (a computer, guests) is plain HTTP: pair a computer only
+  on a network you trust. Guests can review and flag, not delete (see above).

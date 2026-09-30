@@ -65,9 +65,9 @@ curl -fsSL https://raw.githubusercontent.com/DarylNo/CardScanner/master/install.
 mtg-card-scanner
 ```
 
-**Windows** — grab `mtg-card-scanner-windows.exe` from
-[Releases](https://github.com/DarylNo/CardScanner/releases) and double-click it,
-or use the Python route below.
+**Windows** — `mtg-card-scanner-windows.exe` was on the 1.0.x
+[releases](https://github.com/DarylNo/CardScanner/releases) (1.1.0+ ship the
+Android app only), or use the Python route below.
 
 **Any platform with Python 3.11+** (or `uv`):
 
@@ -76,8 +76,8 @@ pipx install git+https://github.com/DarylNo/CardScanner   # or: uv tool install 
 mtg-card-scanner
 ```
 
-Prebuilt macOS/Linux binaries are also on the Releases page (macOS: the
-binaries are unsigned — right-click → Open the first time).
+Prebuilt macOS/Linux binaries were on the 1.0.x releases (macOS: unsigned —
+right-click → Open the first time); 1.1.0+ releases carry the Android app only.
 
 The launcher does everything `run_server.sh` used to require by hand:
 
@@ -140,7 +140,8 @@ install** — both are plain browser pages: point Chrome at
 
 - **install.sh / pipx / uv users:** re-run the install one-liner (or
   `pipx upgrade mtg-card-scanner`) — it reinstalls the latest master.
-- **Binary users:** download the newest release and replace the old file.
+- **Binary users:** the last desktop binaries are in the 1.0.x releases; newer
+  releases carry only the Android app (the phone is the scanner since 1.1.0).
 - Your data (`~/.mtg-card-scanner/`, art index cache) is untouched by updates.
 
 <details>

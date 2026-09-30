@@ -15,6 +15,14 @@ name: release
 on:
   push:
     tags: ["v*"]
+  # Manual: build and publish an EXISTING tag — the way back when a release
+  # failed (e.g. the signing secrets were added after the tag was cut).
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "existing tag to build and publish, e.g. v1.1.0"
+        required: true
+        type: string
   workflow_call:
     inputs:
       tag:
@@ -64,7 +72,10 @@ jobs:
               echo
               echo "Fix once: run \`python scripts/make_android_keystore.py\` and add the"
               echo "ANDROID_KEYSTORE_B64, ANDROID_KEYSTORE_PASSWORD and ANDROID_KEY_ALIAS"
-              echo "repository secrets (android/README.md → Signing), then re-run this workflow."
+              echo "repository secrets (android/README.md → Signing). Then EITHER press"
+              echo "**Re-run failed jobs** on this run (not \"Re-run all jobs\" — that finds the"
+              echo "tag already cut and skips the build), OR Actions → release → Run workflow"
+              echo "with the tag (e.g. v1.1.0)."
             } >> "$GITHUB_STEP_SUMMARY"
             exit 1
           fi
