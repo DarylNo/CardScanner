@@ -2,6 +2,7 @@ package io.github.darylno.cardscanner.phoneserver
 
 import io.github.darylno.cardscanner.core.MiniJson
 import io.github.darylno.cardscanner.core.server.ApiRequest
+import io.github.darylno.cardscanner.core.server.F2fAnswer
 import io.github.darylno.cardscanner.core.server.GoldenApi
 import io.github.darylno.cardscanner.gateway.GatewayServer
 import okhttp3.MediaType.Companion.toMediaType
@@ -41,6 +42,9 @@ class PhoneServerTest {
             search = { q -> listOf(mapOf("id" to "x", "name" to q)) },
             lanIp = { "192.168.1.20" },
             packRows = { 50498 },
+            f2f = { _, _, _, _, _ -> F2fAnswer.NotListed },
+            launch = { it.run() },
+            now = { System.nanoTime() / 1e9 },
         )
     }
 

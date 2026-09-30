@@ -102,6 +102,11 @@ class PriceSweep(
         return mapOf("stopping" to false)
     }
 
+    /** Server shutdown: cancel a running sweep within one card, WITHOUT the manual-stop pause. */
+    fun cancel() {
+        if (active) { cancel = true; interrupt(true) }
+    }
+
     /** POST /api/scans/price-missing. */
     fun priceMissing(): Map<String, Any?> {
         manualStopAt = null
@@ -172,20 +177,30 @@ class PriceSweep(
         return 200 to row
     }
 
+    /** What one [tick] found: it priced, work is owed but held back, or nothing is owed. */
+    enum class Tick { RAN, OWED, IDLE }
+
     /**
-     * The auto-sweep tick (every 60 s on the phone): skip while a sweep runs;
+     * One auto check (the Python daemon's loop body): skip while a sweep runs;
      * retro auto-picks; honour a manual-stop pause and the breaker cooldown;
-     * then sweep whatever is still owed. Runs the sweep in the CALLER's thread,
-     * as the Python daemon does.
+     * then price whatever is still owed. Runs the sweep in the CALLER's
+     * thread. On the phone [PriceWorker] calls this every 5 s while anything
+     * is owed and sleeps until the next scan when nothing is.
      */
+    fun tick(): Tick {
+        if (active) return Tick.OWED
+        retroFixScans()
+        val items = collectTargets()
+        if (items.isEmpty()) return Tick.IDLE
+        manualStopAt?.let { if (now() - it < 600) return Tick.OWED }
+        backoffUntil?.let { if (now() < it) return Tick.OWED }
+        return if (claim(items)) { run(items); Tick.RAN } else Tick.OWED
+    }
+
+    /** The rig's fixed-interval form of [tick] (`_auto_sweep_loop`). */
     fun autoTick(intervalS: Double) {
         nextCheckAt = now() + intervalS
-        if (active) return
-        retroFixScans()
-        manualStopAt?.let { if (now() - it < 600) return }
-        backoffUntil?.let { if (now() < it) return }
-        val items = collectTargets()
-        if (items.isNotEmpty() && claim(items)) run(items)
+        tick()
     }
 
     // ── the sweep ────────────────────────────────────────────────────────────

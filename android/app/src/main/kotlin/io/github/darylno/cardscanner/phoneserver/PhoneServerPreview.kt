@@ -11,6 +11,7 @@ import io.github.darylno.cardscanner.gateway.LocalAddresses
 import io.github.darylno.cardscanner.ident.ArtPackStore
 import io.github.darylno.cardscanner.ident.TransportHttpJson
 import java.io.File
+import java.util.concurrent.Executors
 
 /**
  * Stage 3 preview (Diagnostics, hidden, default OFF): the phone runs its own
@@ -37,8 +38,16 @@ class PhoneServerPreview(private val ctx: Context, private val pack: ArtPackStor
             search = { q -> PrintingCandidates.searchCandidates(scryfall.getAllPrintings(q)) },
             lanIp = { LocalAddresses.list().firstOrNull() },
             packRows = { pack.installedManifest()?.rows ?: 0 },
+            f2f = f2f,
+            launch = { sweepExec.execute(it) },
+            now = { System.nanoTime() / 1e9 },
+            interrupt = { if (it) f2f.stop.set() else f2f.stop.clear() },
+            paceS = { f2f.paceS() },
+            f2fEvents = { f2f.recentEvents() },
         )
     }
+    private val f2f by lazy { PhoneF2f(ctx, File(ctx.cacheDir, "facetoface")) }
+    private val sweepExec = Executors.newSingleThreadExecutor { r -> Thread(r, "price-sweep").apply { isDaemon = true } }
 
     @Volatile private var server: GatewayServer? = null
     val running: Boolean get() = server != null
@@ -53,6 +62,7 @@ class PhoneServerPreview(private val ctx: Context, private val pack: ArtPackStor
         return try {
             s.startServing()
             server = s
+            backend.worker.start()           // price whatever is owed, then wait for scans
             null
         } catch (e: Exception) {
             "could not start on port $PORT: ${e.message}"
@@ -63,6 +73,8 @@ class PhoneServerPreview(private val ctx: Context, private val pack: ArtPackStor
     fun stop() {
         server?.stop()
         server = null
+        backend.worker.stop()
+        backend.sweep.cancel()
     }
 
     /** The address to open on the computer (join link with the code). */
@@ -74,7 +86,7 @@ class PhoneServerPreview(private val ctx: Context, private val pack: ArtPackStor
 
     /** File one identified capture ([result] = the pipeline's scan_candidates answer). */
     fun file(result: Map<String, Any?>, photo: ByteArray?): Map<String, Any?> =
-        backend.api.fileScan(result, photo)
+        backend.file(result, photo)
 
     /** "N scans · X MB of photos · Y GB free" and whether it's past the warning line. */
     fun usage(): Usage {

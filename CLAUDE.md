@@ -310,7 +310,16 @@ Where it stands (2026-09-29, after 1.0.13):
   match every step. Diagnostics → "Phone server (preview)" serves the real
   pages (copied into the APK at build) through the existing GatewayServer
   (`LocalUpstream`) on :8090 and files each Compare-mode identification into
-  the phone's store. Next: 3c pricing sweep, 3d export, 3e roles. Owner
+  the phone's store. 3c (1.0.15): pricing — `core/server/PriceSweep` ports
+  app.py's sweep/price-check/price/stop/price-missing + retro auto-picks,
+  golden-tested (`api/sweep.json`: fake F2F table + mid-lookup hooks; the
+  Kotlin replay must match every body AND the exact F2F lookup sequence);
+  app `PhoneF2f` = F2fPricer over F2fFetcher (Cronet, AIMD, 24 h
+  `F2fCache`). The phone does NOT run the rig's 60 s timed sweep: owner
+  (2026-09-30) — `PriceWorker` checks every 5 s while anything is owed and
+  sleeps until the next scan/pick/edit wakes it when nothing is (same
+  pause/cooldown/one-consumer rules via `PriceSweep.tick()`). Next: 3d
+  export, 3e roles. Owner
   decisions (2026-09-30): START FRESH at switchover (no import of the PC's
   scans); the computer pairs once as admin via a one-time code; at 10,000
   scans show size + free space as a warning, then keep going (no pruning).
