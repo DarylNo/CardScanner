@@ -76,6 +76,10 @@ jobs:
       # on committed scans, printings pages and images.
       - name: Identify fixtures match the server pipeline
         run: python scripts/export_identify_fixtures.py --check
+      # Stage 3 (PhoneApiParityTest): the phone's scan API answers the golden
+      # session recorded from the real server/app.py.
+      - name: Phone API fixtures match the server
+        run: python scripts/export_api_fixtures.py --check
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
