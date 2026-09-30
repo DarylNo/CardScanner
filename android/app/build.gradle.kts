@@ -64,6 +64,8 @@ android {
     // server fixtures — the art pack, the arthash index, recorded Scryfall pages,
     // ranker scans/images — instead of copying them.
     sourceSets.getByName("test").resources.srcDir("../core/src/test/resources")
+    // …and the golden API replay (core/src/testShared), run against the SQLite store.
+    sourceSets.getByName("test").java.srcDir("../core/src/testShared/kotlin")
 }
 
 dependencies {

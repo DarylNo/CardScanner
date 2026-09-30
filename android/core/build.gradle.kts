@@ -19,6 +19,10 @@ dependencies {
     testImplementation(libs.json)
 }
 
+// Test helpers shared with :app's tests (the golden API replay runs against
+// both the in-memory and the SQLite scan store).
+sourceSets.getByName("test").kotlin.srcDir("src/testShared/kotlin")
+
 tasks.test {
     // The differential test runs the REAL phone.html detection code under Node.
     systemProperty("phoneHtml", rootProject.file("../server/static/phone.html").absolutePath)

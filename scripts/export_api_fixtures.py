@@ -12,6 +12,9 @@ and must produce equal JSON (android/core/src/test/.../PhoneApiParityTest.kt).
 Two things are pinned so the run is deterministic:
   * the store's clock: every created_at / updated_at is "T0001", "T0002", …
     in call order (the Kotlin store takes the same counter);
+  * FILE steps POST /api/scan with a canned identification (a fake pipeline
+    returns it) — the server's real filing: no_card, retry replacement and the
+    scan-time auto-pick; the phone files the same result via PhoneApi.fileScan;
   * the pricing sweep is marked ACTIVE for the whole run: the phone is always
     the ONE F2F consumer (CLAUDE.md "Pricing sweep"), so a pick or a finish
     change never prices inline — it clears f2f and leaves it to the sweep,
@@ -32,6 +35,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
+import cv2  # noqa: E402
+import numpy as np  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
 import server.store as store_mod  # noqa: E402
@@ -85,6 +90,36 @@ SEEDS = [
                      _cand("s3", "Bone Splinters", "jmp", "207", 190)]),
 ]
 
+def _result(identified, name, cands, *, error=None, no_card=False):
+    r = {"identified": identified, "card_read": {"name": name} if name else {},
+         "confidence": {"name": "high" if identified else "low"}, "candidates": cands}
+    if error:
+        r["error"] = error
+    if no_card:
+        r["no_card"] = True
+    return r
+
+
+# What the identifier hands /api/scan (pipeline.scan_candidates), one per FILE
+# step. Filing: no_card → no row; a retry replaces a still-unpicked row; the
+# auto-pick grounds (one printing / OCR-confirmed / art-decisive top).
+_decisive = _cand("d1", "Counterspell", "7ed", "67", 40)
+_decisive["art_decisive"] = True
+FILED = [
+    (_result(False, None, [], error="No card detected.", no_card=True), 0),
+    (_result(True, "Sol Ring", [_cand("r1", "Sol Ring", "c21", "263", 55)]), 0),
+    (_result(True, "Swords", [_cand("w1", "Swords to Plowshares", "sta", "10", 60, ocr=True),
+                              _cand("w2", "Swords to Plowshares", "ema", "27", 64)]), 0),
+    (_result(True, "Counterspell", [_decisive, _cand("d2", "Counterspell", "tmp", "57", 120)]), 0),
+    (_result(True, "Murder", [_cand("u1", "Murder", "m20", "109", 70),
+                              _cand("u2", "Murder", "tsr", "123", 72)]), 0),
+    (_result(False, "Shock", [_cand("h1", "Shock", "m19", "156", 150),
+                              _cand("h2", "Shock", "sta", "44", 152)],
+             error="No confident art match (best: 'Shock' d=150). Use manual search."), 0),
+    (_result(True, "Shock", [_cand("h1", "Shock", "m19", "156", 90, ocr=True)]), 11),   # retry → replaces 11
+    (_result(True, "Opt", [_cand("o1", "Opt", "dom", "60", 60)]), 7),                  # 7 is picked → kept
+]
+
 B2 = SEEDS[0]["candidates"][1]
 F1 = SEEDS[1]["candidates"][0]
 
@@ -118,6 +153,9 @@ STEPS = [
     # re-pick
     ("POST", "/api/scans/1/select", {"printing": SEEDS[0]["candidates"][0], "condition": "nm"}),
     ("GET", "/api/scans/1", None),
+    # filing (POST /api/scan with the canned identification FILED[i])
+    *[("FILE", "/api/scan", {"filed": i}) for i in range(len(FILED))],
+    ("GET", "/api/scans", None),
     # deletes
     ("DELETE", "/api/scans/5", None),
     ("DELETE", "/api/scans/5", None),
@@ -141,8 +179,16 @@ def build() -> dict:
     try:
         with tempfile.TemporaryDirectory() as tmp:
             store = ScanStore(Path(tmp) / "s.db")
+            queue: list = []
+
+            class CannedPipeline:
+                def scan_candidates(self, frames):
+                    return copy.deepcopy(queue.pop(0))
+
+            ok, jpg = cv2.imencode(".jpg", np.full((88, 63, 3), 128, np.uint8))
+            assert ok
             try:
-                app = create_app(pipeline_factory=lambda: None, store=store, f2f=object(),
+                app = create_app(pipeline_factory=lambda: CannedPipeline(), store=store, f2f=object(),
                                  scan_images_dir=Path(tmp) / "img", auto_sweep_interval=None)
                 app.state.sweep["active"] = True      # the phone: always the ONE F2F consumer
                 client = TestClient(app)
@@ -150,6 +196,15 @@ def build() -> dict:
                     store.create_scan(**copy.deepcopy(s))
                 steps = []
                 for method, path, body in STEPS:
+                    if method == "FILE":
+                        result, replace = FILED[body["filed"]]
+                        queue.append(result)
+                        r = client.post(path, files=[("files", ("c.jpg", jpg.tobytes(), "image/jpeg"))],
+                                        data={"replace_scan_id": str(replace)})
+                        steps.append({"method": method, "path": path, "result": result,
+                                      "replace_scan_id": replace,
+                                      "status": r.status_code, "response": r.json()})
+                        continue
                     kw = {} if body is None else {"json": body}
                     r = client.request(method, path, **kw)
                     steps.append({"method": method, "path": path, "body": body,

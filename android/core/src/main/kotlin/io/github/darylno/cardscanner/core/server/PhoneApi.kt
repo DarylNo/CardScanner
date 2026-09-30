@@ -22,6 +22,7 @@ class ApiResponse(val status: Int, val contentType: String, val body: ByteArray)
 /** Where scan photos live (`scan_images/<id>.jpg` on the rig). */
 interface ScanImages {
     fun read(id: Long): ByteArray?
+    fun write(id: Long, jpeg: ByteArray)
     fun delete(id: Long)
 }
 
@@ -38,6 +39,8 @@ interface ScanImages {
  *  PATCH  /api/scans/{id}         included / condition / finish / quantity
  *  DELETE /api/scans/{id}         row + photo
  *  POST   /api/scans/delete-all   {"only":"unselected"} keeps picked rows
+ *
+ * and [fileScan], `/api/scan`'s filing once the phone has identified a capture.
  *
  * The phone is ALWAYS the one F2F consumer (CLAUDE.md "Pricing sweep"): a
  * pick or a finish change never prices inline — it leaves f2f cleared for the
@@ -87,6 +90,12 @@ class PhoneApi(private val store: ScanStore, private val images: ScanImages) {
         val condition = Py.str(or(Py.get(body, "condition"), Py.get(cardRead, "condition_estimate"), "NM")).uppercase()
         val finish = or(Py.get(body, "finish"), "Non-Foil")
         val quantity = maxOf(1L, pyInt(or(Py.get(body, "quantity"), 1L)) ?: return serverError())
+        return ApiResponse.json(200, applySelection(id, printing, condition, finish, quantity))
+    }
+
+    /** `_apply_selection_core`: pick [printing]; auto picks carry `auto_picked`. */
+    private fun applySelection(id: Long, printing: Map<String, Any?>, condition: String, finish: Any?,
+                               quantity: Long, auto: Boolean = false): MutableMap<String, Any?>? {
         val selection = linkedMapOf<String, Any?>(
             "scryfall_id" to Py.get(printing, "id", ""),
             "name" to Py.get(printing, "name", ""),
@@ -100,12 +109,12 @@ class PhoneApi(private val store: ScanStore, private val images: ScanImages) {
             "image_normal" to Py.get(printing, "image_normal", ""),
             "popularity" to Py.get(printing, "popularity"),
         )
-        val row = synchronized(selectLock) {
+        if (auto) selection["auto_picked"] = true
+        return synchronized(selectLock) {
             // error=None: a best-guess scan the user then picks leaves the Problems view.
             store.update(id, linkedMapOf("status" to "selected", "selection" to selection,
                 "error" to null, "f2f" to null))
         }
-        return ApiResponse.json(200, row)
     }
 
     private fun patchScan(id: Long, req: ApiRequest): ApiResponse {
@@ -138,6 +147,43 @@ class PhoneApi(private val store: ScanStore, private val images: ScanImages) {
             return ApiResponse.json(200, store.update(id, mapOf("f2f" to null)))
         }
         return ApiResponse.json(200, scan)
+    }
+
+    /**
+     * `_scan_once` after identification: file [result] (the pipeline's
+     * scan_candidates answer) and return what `/api/scan` answers.
+     *  - no_card → nothing stored: {"no_card":true,"identified":false,"error":…};
+     *  - a retry ([replaceScanId] > 0) replaces the old row only while it is
+     *    still unpicked (a pick made meanwhile is kept);
+     *  - the photo is kept for review (a save failure never breaks the scan);
+     *  - auto-pick NM / Non-Foil / ×1 (auto_picked) when there is exactly one
+     *    printing or the top one is OCR-confirmed or art-decisive.
+     * Pricing is the sweep's job (the phone is the one F2F consumer).
+     */
+    fun fileScan(result: Map<String, Any?>, photo: ByteArray?, replaceScanId: Long = 0): Map<String, Any?> {
+        if (Py.truthy(Py.get(result, "no_card"))) {
+            return linkedMapOf("no_card" to true, "identified" to false,
+                "error" to Py.get(result, "error", "No card detected."))
+        }
+        if (replaceScanId != 0L) {
+            val old = store.get(replaceScanId)
+            if (old != null && old["status"] != "selected") {
+                images.delete(replaceScanId)
+                store.delete(replaceScanId)
+            }
+        }
+        val identified = Py.truthy(result["identified"])
+        var scan = store.create(identified, Py.map(result["card_read"]), Py.map(result["confidence"]),
+            result["candidates"] as List<Any?>?, Py.get(result, "error") as String?)
+        val id = (scan["id"] as Number).toLong()
+        if (photo != null) runCatching { images.write(id, photo) }
+        @Suppress("UNCHECKED_CAST")
+        val cands = (result["candidates"] as? List<Map<String, Any?>>).orEmpty()
+        if (identified && cands.isNotEmpty() && (cands.size == 1 ||
+                Py.truthy(Py.get(cands[0], "ocr_confirmed")) || Py.truthy(Py.get(cands[0], "art_decisive")))) {
+            scan = applySelection(id, cands[0], "NM", "Non-Foil", 1L, auto = true) ?: scan
+        }
+        return scan
     }
 
     private fun deleteScan(id: Long): ApiResponse {
