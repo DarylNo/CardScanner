@@ -18,6 +18,11 @@ class PhoneApiParityTest {
         if (result.isNotEmpty()) fail(result.joinToString("\n"))
     }
 
+    @Test fun thePricingSessionMatchesTheServer() {
+        val result = GoldenApi.replaySweep { clock -> MemoryScanStore(clock) }
+        if (result.isNotEmpty()) fail(result.joinToString("\n"))
+    }
+
     @Test fun theSessionCoversEveryRoute() {
         val steps = GoldenApi.fixture()["steps"] as List<*>
         val seen = steps.map { s -> (s as Map<*, *>).let { "${it["method"]} ${GoldenApi.route(it["path"] as String)}" } }.toSet()
