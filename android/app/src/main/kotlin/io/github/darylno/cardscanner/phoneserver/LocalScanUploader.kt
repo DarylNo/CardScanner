@@ -11,9 +11,10 @@ import java.util.concurrent.CancellationException
 /**
  * Stage 4: the upload queue's door is the phone itself. What the computer's
  * `POST /api/scan` did — identify the frames (the ported, parity-tested
- * pipeline: [identify]), then file the answer with the replace-a-Retry rule
- * ([file] = PhoneApi.fileScan, golden-tested against /api/scan) — happens
- * here, and the answer has the same JSON shape, so [UploadQueue] (persistence,
+ * pipeline: [identify]), then file the answer and its photo (the card
+ * straightened at 95%, or the frame as uploaded — [Answer]) with the
+ * replace-a-Retry rule ([file] = PhoneApi.fileScan, golden-tested against
+ * /api/scan) — happens here, and the answer has the same JSON shape, so [UploadQueue] (persistence,
  * the no-card / not-identified multi-frame fallback, `replace_scan_id`) and
  * every outcome the scan screen handles stay exactly as they were.
  *
@@ -27,10 +28,19 @@ import java.util.concurrent.CancellationException
  * retrying it forever).
  */
 class LocalScanUploader(
-    private val identify: (List<ByteArray>) -> Map<String, Any?>,
+    private val identify: (List<ByteArray>) -> Answer,
     private val file: (result: Map<String, Any?>, photo: ByteArray, replaceScanId: Long?) -> Map<String, Any?>,
     private val answers: File,
 ) : ScanUploader {
+
+    /**
+     * What [identify] answers: the server's /api/scan JSON plus the photo to
+     * file with it — [photo], the card straightened (the reference's photo
+     * step, `ScanPhoto`), or when null the uploaded frame [photoFrame] (the
+     * sharpest) exactly as it came (owner: keep the photo when the card's
+     * edges can't be found).
+     */
+    class Answer(val result: Map<String, Any?>, val photo: ByteArray? = null, val photoFrame: Int = 0)
 
     override fun scan(files: List<ByteArray>, replaceScanId: Long?, uploadId: String?): JSONObject {
         require(files.isNotEmpty()) { "no frames" }
@@ -38,7 +48,7 @@ class LocalScanUploader(
         if (saved != null && saved.isFile) {
             runCatching { return JSONObject(saved.readText(Charsets.UTF_8)) }
         }
-        val result = try {
+        val answer = try {
             identify(files)
         } catch (e: io.github.darylno.cardscanner.ident.PhoneIdentifier.UndecodableCaptureException) {
             throw HttpException(422, e.message ?: "bad capture")
@@ -51,7 +61,8 @@ class LocalScanUploader(
         } catch (e: IllegalArgumentException) {
             throw HttpException(422, e.message ?: "bad capture")
         }
-        val row = file(result, files[0], replaceScanId?.takeIf { it > 0 })
+        val photo = answer.photo ?: files[answer.photoFrame.coerceIn(files.indices)]
+        val row = file(answer.result, photo, replaceScanId?.takeIf { it > 0 })
         val text = MiniJson.stringify(row)
         if (saved != null) {
             // The row is filed: nothing after this may throw, or the queue would retry and

@@ -5,6 +5,7 @@ find_card_quad()  — locates the largest card-shaped quadrilateral in a frame
 warp_card()       — perspective-warps the detected quad to a standard 630×880 px upright card
 extract_card()    — convenience wrapper: detect + warp, with fallback to a centre crop
 frame_sharpness() / pick_sharpest() — Laplacian-variance blur scoring for burst frames
+scan_photo()      — the photo kept for review: the card straightened, filling 95% of it
 """
 
 import cv2
@@ -13,6 +14,17 @@ from typing import Optional
 
 # Standard card output size (63:88 aspect ratio)
 CARD_W, CARD_H = 630, 880
+
+# The scan PHOTO (the picture the review pages show): the card straightened,
+# spanning PHOTO_FILL of the photo's width and height, the rest a deliberate
+# buffer of whatever lay around it (owner, 2026-10-01: "tight on the card plus
+# some buffer — make it 95%"). The card itself is still the CARD_W×CARD_H warp;
+# the buffer is what that warp sees beyond the quad. 0.95 → 17 + 630 + 17 by
+# 23 + 880 + 23 = 664 × 926, card 94.9% × 95.0% of the photo.
+PHOTO_FILL = 0.95
+PHOTO_MARGIN_X = round(CARD_W * (1 / PHOTO_FILL - 1) / 2)
+PHOTO_MARGIN_Y = round(CARD_H * (1 / PHOTO_FILL - 1) / 2)
+PHOTO_W, PHOTO_H = CARD_W + 2 * PHOTO_MARGIN_X, CARD_H + 2 * PHOTO_MARGIN_Y
 
 
 # A real card is 63:88 → long/short ≈ 1.40. Quads outside this window are not
@@ -239,3 +251,49 @@ def frame_sharpness(frame: np.ndarray) -> float:
 def pick_sharpest(frames: list[np.ndarray]) -> np.ndarray:
     """Return the frame with the highest Laplacian variance."""
     return max(frames, key=frame_sharpness)
+
+
+# ── the scan photo ────────────────────────────────────────────────────────────
+
+def warp_photo(frame: np.ndarray, corners: np.ndarray) -> np.ndarray:
+    """
+    The card at *corners* straightened into a PHOTO_W×PHOTO_H photo with the
+    card filling PHOTO_FILL of it: the CARD_W×CARD_H warp, inset by the photo
+    margins, so the edge of the photo is tray (black where the buffer would
+    fall outside the frame — a card against the frame edge).
+    """
+    mx, my = PHOTO_MARGIN_X, PHOTO_MARGIN_Y
+    dst = np.array([[mx, my], [mx + CARD_W, my],
+                    [mx + CARD_W, my + CARD_H], [mx, my + CARD_H]], dtype=np.float32)
+    M = cv2.getPerspectiveTransform(corners, dst)
+    return cv2.warpPerspective(frame, M, (PHOTO_W, PHOTO_H))
+
+
+def scan_photo(frames: list[np.ndarray]) -> tuple[np.ndarray, bool]:
+    """
+    The photo to keep for a scan, from the frames that were uploaded for it.
+
+    Returns:
+        (photo, detected) — the sharpest frame's card as warp_photo makes it
+        (detected=True), or that frame exactly as uploaded when its edges
+        were not found (detected=False): the real picture, never a distorted
+        crop of it.
+    """
+    sharpest = pick_sharpest(frames)
+    corners = find_card_quad(sharpest)
+    if corners is None:
+        return sharpest, False
+    return warp_photo(sharpest, corners), True
+
+
+def photo_card(photo: np.ndarray) -> np.ndarray:
+    """
+    The card region of a stored scan photo, for reading it as a card (the
+    retro collector-line OCR): a scan_photo-sized photo is cut back to its
+    CARD_W×CARD_H card; any other photo (an older plain warp, a frame kept
+    as uploaded) is returned as it is.
+    """
+    h, w = photo.shape[:2]
+    if (w, h) != (PHOTO_W, PHOTO_H):
+        return photo
+    return photo[PHOTO_MARGIN_Y:PHOTO_MARGIN_Y + CARD_H, PHOTO_MARGIN_X:PHOTO_MARGIN_X + CARD_W]

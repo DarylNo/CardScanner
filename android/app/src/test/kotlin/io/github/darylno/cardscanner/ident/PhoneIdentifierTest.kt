@@ -6,6 +6,7 @@ import io.github.darylno.cardscanner.core.HttpStatusException
 import io.github.darylno.cardscanner.core.ImageSource
 import io.github.darylno.cardscanner.core.MiniJson
 import io.github.darylno.cardscanner.core.OcrEngine
+import io.github.darylno.cardscanner.core.ScanPhoto
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -14,6 +15,7 @@ import org.junit.BeforeClass
 import org.junit.Assert.fail
 import org.junit.Test
 import org.opencv.core.Mat
+import org.opencv.core.MatOfByte
 import org.opencv.imgcodecs.Imgcodecs
 import java.io.File
 import java.io.IOException
@@ -121,10 +123,24 @@ class PhoneIdentifierTest {
             assertTrue(r.result.wouldAutoPick)
             assertEquals(2, ocr.calls.get())
             assertEquals(1, http.calls.get())                   // one page of Lightning Bolt
-            assertEquals(listOf("decode", "blank", "identify", "printings", "ranking", "ocr", "total"),
+            assertEquals(listOf("decode", "blank", "identify", "printings", "ranking", "ocr", "photo", "total"),
                 r.timingsMs.keys.toList())
             assertTrue(r.timingsMs.values.all { it >= 0 })
             assertTrue(r.totalMs >= r.decodeMs)
+
+            // The photo to file (the reference's photo step): the card in the real scan,
+            // straightened at 95% of a 664×926 photo — not the upload as it came.
+            assertNotNull(r.photo)
+            val photo = r.photo!!
+            assertTrue(photo.detected)
+            assertEquals(0, photo.frame)
+            val decoded = Imgcodecs.imdecode(MatOfByte(*photo.jpeg!!), Imgcodecs.IMREAD_COLOR)
+            try {
+                assertEquals(ScanPhoto.PHOTO_W, decoded.cols())
+                assertEquals(ScanPhoto.PHOTO_H, decoded.rows())
+            } finally {
+                decoded.release()
+            }
 
             // The ranker's per-printing hash memo outlives a run, as the server's does.
             val before = images.loads.get()
@@ -140,6 +156,7 @@ class PhoneIdentifierTest {
             // The upload queue's fallback: several frames through the same pipeline.
             val multi = id.identifyFrames(listOf(primary, primary))
             assertEquals(true, multi.result.json["identified"])
+            assertEquals(0, multi.photo!!.frame)                               // the sharpest (a tie: the first)
         } finally {
             id.shutdown()
         }

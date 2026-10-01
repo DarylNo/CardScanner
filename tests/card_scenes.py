@@ -102,26 +102,51 @@ def _scene(W, H, tray, cards=(), holder=None, gradient=False):
     return img
 
 
+# The card in each scene that has one: (texture seed, border colour, quad
+# arguments for _card_quad) — the TRUE card geometry the parity measurements
+# (phone flatten, the scan photo's fill) are scored against.
+_CARDS = {
+    "white_tray_black_border": (11, (18, 18, 18), (480, 360, 560, 8, 0.04)),
+    "dark_tray_white_border": (12, (235, 235, 235), (470, 370, 540, -6, 0.03)),
+    "sideways_card": (13, (18, 18, 18), (480, 360, 520, 88)),
+    "holder_decoy_beside_card": (14, (18, 18, 18), (690, 360, 420, 4)),
+    "small_card_full_frame": (15, (18, 18, 18), (300, 250, 170, 12)),
+    "card_near_frame_edge": (16, (18, 18, 18), (215, 330, 560, 3)),
+    "glare_gradient_tray": (17, (18, 18, 18), (480, 360, 540, -10, 0.05)),
+    "portrait_frame": (18, (18, 18, 18), (360, 480, 700, 2, 0.02)),
+}
+
+
+def true_card_quad(name: str) -> np.ndarray:
+    """The TRUE corners (TL,TR,BR,BL of the drawn face) of the card in scene *name*."""
+    return _card_quad(*_CARDS[name][2])
+
+
+def _card(name: str):
+    seed, border, args = _CARDS[name]
+    return (seed, _card_quad(*args), border)
+
+
 def scenes() -> dict[str, tuple[np.ndarray, bool]]:
     W, H = 960, 720
     return {
         "white_tray_black_border": (_scene(W, H, (225, 225, 220),
-            cards=[(11, _card_quad(480, 360, 560, 8, 0.04), (18, 18, 18))]), True),
+            cards=[_card("white_tray_black_border")]), True),
         "dark_tray_white_border": (_scene(W, H, (40, 42, 48),
-            cards=[(12, _card_quad(470, 370, 540, -6, 0.03), (235, 235, 235))]), True),
+            cards=[_card("dark_tray_white_border")]), True),
         "sideways_card": (_scene(W, H, (200, 205, 210),
-            cards=[(13, _card_quad(480, 360, 520, 88), (18, 18, 18))]), True),
+            cards=[_card("sideways_card")]), True),
         "holder_decoy_beside_card": (_scene(W, H, (215, 215, 210),
             holder=_card_quad(250, 360, 600, 0),
-            cards=[(14, _card_quad(690, 360, 420, 4), (18, 18, 18))]), True),
+            cards=[_card("holder_decoy_beside_card")]), True),
         "small_card_full_frame": (_scene(W, H, (210, 210, 205),
-            cards=[(15, _card_quad(300, 250, 170, 12), (18, 18, 18))]), True),
+            cards=[_card("small_card_full_frame")]), True),
         "card_near_frame_edge": (_scene(W, H, (220, 220, 215),
-            cards=[(16, _card_quad(215, 330, 560, 3), (18, 18, 18))]), True),
+            cards=[_card("card_near_frame_edge")]), True),
         "glare_gradient_tray": (_scene(W, H, (185, 190, 195), gradient=True,
-            cards=[(17, _card_quad(480, 360, 540, -10, 0.05), (18, 18, 18))]), True),
+            cards=[_card("glare_gradient_tray")]), True),
         "portrait_frame": (_scene(720, 960, (225, 225, 220),
-            cards=[(18, _card_quad(360, 480, 700, 2, 0.02), (18, 18, 18))]), True),
+            cards=[_card("portrait_frame")]), True),
         "empty_tray": (_scene(W, H, (225, 225, 220)), False),
         "black_holder_only": (_scene(W, H, (215, 215, 210),
             holder=_card_quad(480, 360, 560, 0)), False),

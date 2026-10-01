@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.StatFs
 import io.github.darylno.cardscanner.BuildConfig
 import io.github.darylno.cardscanner.core.PrintingCandidates
+import io.github.darylno.cardscanner.core.ScanPhoto
 import io.github.darylno.cardscanner.core.ScryfallPrintings
 import io.github.darylno.cardscanner.core.server.DeviceApi
 import io.github.darylno.cardscanner.core.server.LayoutStore
@@ -13,6 +14,7 @@ import io.github.darylno.cardscanner.gateway.GatewayServer
 import io.github.darylno.cardscanner.gateway.GatewayService
 import io.github.darylno.cardscanner.gateway.LocalAddresses
 import io.github.darylno.cardscanner.ident.LocalIdentify
+import io.github.darylno.cardscanner.ident.PhoneIdentifier
 import io.github.darylno.cardscanner.ident.TransportHttpJson
 import java.io.File
 import java.util.concurrent.Executors
@@ -77,7 +79,8 @@ class PhoneServer(
                 try {
                     val r = identify.identifier().identifyFrames(frames)
                     log.i("identify", describeIdentified(frames.size, r.result.json, r.timingsMs))
-                    r.result.json
+                    r.photo?.let { log.i("photo", describePhoto(it, frames.size)) }
+                    LocalScanUploader.Answer(r.result.json, r.photo?.jpeg, r.photo?.frame ?: 0)
                 } catch (e: Exception) {
                     log.w("identify", "${frames.size} frame(s): not identified now, will retry — ${e.javaClass.simpleName}: ${e.message}")
                     throw e
@@ -148,6 +151,16 @@ class PhoneServer(
             else -> "not identified — ${json["error"]}"
         }
         return "${frames} frame(s): $what · ms: $t"
+    }
+
+    /** The photo filed with a scan (the reference's photo step, [ScanPhoto]). */
+    internal fun describePhoto(p: PhoneIdentifier.Photo, frames: Int): String {
+        val jpeg = p.jpeg
+        return if (jpeg != null) {
+            "card straightened ${ScanPhoto.PHOTO_W}×${ScanPhoto.PHOTO_H} from frame ${p.frame + 1}/$frames · ${jpeg.size / 1024} KB · ${p.ms} ms"
+        } else {
+            "no card edges — frame ${p.frame + 1}/$frames kept as uploaded · ${p.ms} ms"
+        }
     }
 
     fun localBase(): String = "http://127.0.0.1:$port"
