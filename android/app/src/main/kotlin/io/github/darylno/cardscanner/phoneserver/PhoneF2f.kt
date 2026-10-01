@@ -35,6 +35,8 @@ class PhoneF2f(ctx: Context, cacheDir: File) : F2fLookup {
     private val events = ArrayDeque<Map<String, Any?>>()
     val fetcher = F2fFetcher(transport, ProbeClock.SYSTEM, stop, isStopped = { stop.isSet },
         onRequest = { r ->
+            io.github.darylno.cardscanner.core.DebugLog.global.i("f2f", "${r.kind} → ${r.outcome}" + (if (r.waitS > 0) " · waited ${r.waitS}s" else "") +
+                " · pace ${Math.round(r.paceS * 100) / 100.0}s")
             synchronized(events) {
                 events.addLast(linkedMapOf("t" to System.currentTimeMillis() / 1000.0, "url" to r.kind,
                     "status" to r.outcome, "wait_s" to r.waitS, "delay_s" to Math.round(r.paceS * 100) / 100.0))

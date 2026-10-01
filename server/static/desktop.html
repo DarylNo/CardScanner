@@ -212,9 +212,9 @@
   #devBox h2 { margin: 0; font-size: 16px; flex: 1; }
   #devBody { display: grid; grid-template-columns: 300px 1fr; gap: 0; min-height: 0; overflow: auto; }
   #devCtl { padding: 14px 16px; border-right: 1px solid var(--line); display: flex; flex-direction: column; gap: 12px; }
+  #devCtl label { display: flex; align-items: center; gap: 10px; font-size: 14px; cursor: pointer; }
   #devCtl .seg { display: flex; gap: 6px; }
   #devCtl .seg .btn { flex: 1; }
-  #devCtl label { display: flex; align-items: center; gap: 10px; font-size: 14px; cursor: pointer; }
   #devCtl label.num input { width: 84px; }
   #devCtl label small { display: block; color: var(--muted); font-size: 12px; }
   #devCtl .h { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-top: 4px; }
@@ -247,7 +247,7 @@
   <span class="pill guest-only" title="You joined with the guest code: review, pick and flag cards for deletion. Deleting, clearing and export are for the scanner's owner.">guest</span>
   <span class="sp"></span>
   <span class="stat" id="sweepStat" style="color:var(--warn)"></span>
-  <button class="btn ghost sm" id="f2fLogBtn" title="F2F request log — every request's outcome and the adaptive pace">🐞</button>
+  <button class="btn ghost sm" id="f2fLogBtn" title="Debug: the scanner phone's live log, and the F2F request log">🐞</button>
   <button class="btn ghost sm admin-only" id="sweepStartBtn" style="display:none" title="Start a pricing sweep now (also overrides a throttling cooldown)">▶ Sweep</button>
   <button class="btn ghost sm admin-only" id="sweepStopBtn" style="display:none" title="Stop the price sweep (auto-sweep pauses 10 min; it restarts within a minute of pressing the phone's Price missing)">■ Stop</button>
   <span class="stat" id="stats">—</span>
@@ -256,7 +256,7 @@
   <button class="btn danger admin-only" id="clearFlagBtn" style="display:none" title="Delete every scan a guest flagged for deletion"></button>
   <button class="btn ghost admin-only" id="clearJunkBtn" title="Delete every scan that has no chosen printing">Clear unpicked</button>
   <button class="btn danger admin-only" id="clearAllBtn" title="Delete every scan">Clear all</button>
-  <button class="btn ghost admin-only" id="devBtn" style="display:none" title="The scanner phone's own settings: mode, auto scan, scan area, torch…">📱 Scanner</button>
+  <button class="btn ghost admin-only" id="devBtn" style="display:none" title="The scanner phone's own settings: mode, scan area, torch…">📱 Scanner</button>
   <button class="btn admin-only" id="exportBtn">Export to CSV</button>
 </header>
 <div id="devModal" role="dialog" aria-modal="true" aria-labelledby="devTitle">
@@ -270,10 +270,9 @@
       <div id="devCtl">
         <div class="h">Mode</div>
         <div class="seg">
-          <button class="btn ghost" data-mode="mount">Mount</button>
-          <button class="btn ghost" data-mode="handheld">Handheld</button>
+          <button class="btn ghost" data-mode="tray" title="Hands-free: scans each card put on the tray">Tray</button>
+          <button class="btn ghost" data-mode="tap" title="Tap the shutter on the phone; each scan opens there. A scan area is drawn for you if none is set.">Tap to scan</button>
         </div>
-        <label><input type="checkbox" data-k="auto"><span>Auto scan<small>Mount: scans each card by itself</small></span></label>
         <div class="h">Camera</div>
         <label><input type="checkbox" data-k="torch"><span>Torch</span></label>
         <label><input type="checkbox" data-k="high_res"><span>High resolution<small>2048×1536 instead of 1600×1200</small></span></label>
@@ -341,9 +340,23 @@
     </footer>
   </div>
 </div>
-<div id="f2fLog" style="display:none;position:fixed;right:14px;bottom:14px;width:560px;
-     max-height:55vh;overflow:auto;background:var(--panel);border:1px solid var(--line);
-     border-radius:10px;padding:10px 12px;z-index:60;font:12px/1.6 ui-monospace,Consolas,monospace"></div>
+<div id="f2fLog" style="display:none;position:fixed;right:14px;bottom:14px;width:min(820px,calc(100vw - 28px));
+     background:var(--panel);border:1px solid var(--line);
+     border-radius:10px;padding:10px 12px;z-index:60;font:12px/1.6 ui-monospace,Consolas,monospace">
+  <div id="dbgHead" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:6px">
+    <button class="btn ghost sm" data-dbgtab="app" id="dbgTabApp" style="display:none">App log</button>
+    <button class="btn ghost sm" data-dbgtab="f2f">F2F requests</button>
+    <span style="flex:1"></span>
+    <span id="dbgAppTools" style="display:none;gap:6px;align-items:center">
+      <input id="dbgFilter" placeholder="filter (tag or text)" style="width:150px">
+      <button class="btn ghost sm" id="dbgPause" title="Stop following new lines">Pause</button>
+      <button class="btn ghost sm" id="dbgCopy" title="Copy the debug report (diagnostics + the whole log)">Copy report</button>
+      <button class="btn ghost sm" id="dbgSave" title="Download the debug report">Download</button>
+    </span>
+    <span style="cursor:pointer;padding:0 4px" id="f2fLogClose">✕</span>
+  </div>
+  <div id="dbgBody" style="height:52vh;overflow:auto;white-space:pre-wrap;word-break:break-word"></div>
+</div>
 <div id="dlBar" style="display:none;flex-direction:column;gap:8px;padding:12px 16px;
      background:var(--panel);border-bottom:1px solid var(--line);font-size:13px">
   <div><b>Card database</b> <span class="muted">(identifies cards — required)</span>
@@ -1066,7 +1079,7 @@ function sigOf(scan){
 
 // Version banner — page version · server git hash. Same rationale as the
 // phone: without it, "is this the old page?" is undebuggable.
-const UI_VERSION = "d36";
+const UI_VERSION = "d39";
 
 // Who is asking: the phone server says "guest" for the 6-digit code (admin =
 // the paired computer); the computer's own server always says admin. Guests
@@ -1490,12 +1503,15 @@ $("#dlImgBtn").addEventListener("click", async () => {
 });
 checkSetup();
 
-/* ── F2F request log (debug) ─────────────────────────────────────────────── */
-let f2fLogTimer = null;
+/* ── 🐞 Debug: the phone's live log (App) + the F2F request log ─────────────
+   App = GET /api/debug/log?since=<seq> — the scanner phone's live log (phone
+   server only, admin only: the reference server answers 404, a guest 403, and
+   then only the F2F tab shows). The report = /api/debug/report.txt. */
+let f2fLogTimer = null, dbgTab = null, dbgSeq = 0, dbgLines = [], dbgPaused = false, dbgHasApp = null;
+const DBG_MAX = 3000;
 async function renderF2fLog(){
   try {
     const d = await jget("/api/price-debug");
-    const el = $("#f2fLog");
     const rows = (d.events || []).slice(-45).reverse().map(e => {
       const age = Math.max(0, Math.round(Date.now()/1000 - e.t));
       const col = e.status === "200" ? "var(--good)"
@@ -1506,20 +1522,80 @@ async function renderF2fLog(){
         `<span style="color:var(--muted)">pace ${e.delay_s}s${e.wait_s ? ` · waited ${e.wait_s}s` : ""}</span> ` +
         `<span style="color:var(--muted)">${esc(e.url)}</span></div>`;
     }).join("");
-    el.innerHTML = `<div style="margin-bottom:6px"><b>F2F requests</b> (newest first) · pace 1/${d.pace_s ?? "—"}s` +
-      `<span style="float:right;cursor:pointer" id="f2fLogClose">✕</span></div>` +
+    $("#dbgBody").innerHTML = `<div style="margin-bottom:6px"><b>F2F requests</b> (newest first) · pace 1/${d.pace_s ?? "—"}s</div>` +
       (rows || `<span style="color:var(--muted)">no requests yet this session</span>`);
-    $("#f2fLogClose").addEventListener("click", toggleF2fLog);
   } catch(e){}
 }
-function toggleF2fLog(){
+function dbgTime(t){ const d = new Date(t); return d.toTimeString().slice(0, 8) + "." + String(d.getMilliseconds()).padStart(3, "0"); }
+function renderAppLog(){
+  const el = $("#dbgBody");
+  const q = $("#dbgFilter").value.trim().toLowerCase();
+  const stick = el.scrollTop + el.clientHeight >= el.scrollHeight - 8;
+  const rows = dbgLines.filter(e => !q || e.tag.toLowerCase().includes(q) || e.msg.toLowerCase().includes(q)).map(e => {
+    const col = e.level === "E" ? "var(--bad)" : e.level === "W" ? "var(--warn)" : "var(--muted)";
+    return `<div><span style="color:var(--dim)">${dbgTime(e.t)}</span> <b style="color:${col}">${esc(e.tag)}</b> ${esc(e.msg)}</div>`;
+  }).join("");
+  el.innerHTML = rows || `<span style="color:var(--muted)">${dbgLines.length ? "nothing matches the filter" : "no log lines yet"}</span>`;
+  if (stick && !dbgPaused) el.scrollTop = el.scrollHeight;
+}
+async function pollAppLog(){
+  let r;
+  try { r = await fetch(`/api/debug/log?since=${dbgSeq}`); } catch(e){ return; }
+  if (!r.ok) { if (dbgHasApp === null) { dbgHasApp = false; setDbgTab("f2f"); } return; }
+  const d = await r.json();
+  if (dbgHasApp !== true) { dbgHasApp = true; $("#dbgTabApp").style.display = ""; }
+  if (d.seq < dbgSeq) dbgLines = [];                  // the phone restarted: its log starts again
+  dbgSeq = d.seq;
+  if ((d.entries || []).length) {
+    dbgLines = dbgLines.concat(d.entries).slice(-DBG_MAX);
+    if (dbgTab === "app" && !dbgPaused) renderAppLog();
+  }
+}
+function setDbgTab(tab){
+  dbgTab = tab;
+  document.querySelectorAll("[data-dbgtab]").forEach(b => b.classList.toggle("ghost", b.dataset.dbgtab !== tab));
+  $("#dbgAppTools").style.display = tab === "app" ? "inline-flex" : "none";
+  clearInterval(f2fLogTimer); f2fLogTimer = null;
+  if (tab === "app") { renderAppLog(); f2fLogTimer = setInterval(pollAppLog, 1500); }
+  else { renderF2fLog(); f2fLogTimer = setInterval(renderF2fLog, 3000); }
+}
+async function toggleF2fLog(){
   const el = $("#f2fLog");
   const open = el.style.display === "none";
   el.style.display = open ? "block" : "none";
   clearInterval(f2fLogTimer); f2fLogTimer = null;
-  if (open){ renderF2fLog(); f2fLogTimer = setInterval(renderF2fLog, 3000); }
+  if (!open) return;
+  await pollAppLog();                                  // decides whether the App tab exists
+  setDbgTab(dbgHasApp ? "app" : "f2f");
 }
 $("#f2fLogBtn").addEventListener("click", toggleF2fLog);
+$("#f2fLogClose").addEventListener("click", toggleF2fLog);
+document.querySelectorAll("[data-dbgtab]").forEach(b => b.addEventListener("click", () => setDbgTab(b.dataset.dbgtab)));
+$("#dbgFilter").addEventListener("input", renderAppLog);
+$("#dbgPause").addEventListener("click", () => {
+  dbgPaused = !dbgPaused;
+  $("#dbgPause").textContent = dbgPaused ? "Follow" : "Pause";
+  if (!dbgPaused) renderAppLog();
+});
+// The phone serves this page over plain HTTP on the LAN, where browsers give no
+// navigator.clipboard (secure contexts only) — fall back to a selected textarea.
+async function copyText(t){
+  if (navigator.clipboard && window.isSecureContext) { await navigator.clipboard.writeText(t); return; }
+  const ta = document.createElement("textarea");
+  ta.value = t; ta.setAttribute("readonly", ""); ta.style.cssText = "position:fixed;left:-9999px;top:0";
+  document.body.appendChild(ta); ta.select();
+  const ok = document.execCommand("copy");
+  ta.remove();
+  if (!ok) throw new Error("copy refused");
+}
+$("#dbgCopy").addEventListener("click", async () => {
+  try {
+    const t = await (await fetch("/api/debug/report.txt")).text();
+    await copyText(t);
+    toast("Debug report copied — paste it to Claude");
+  } catch(e){ toast("Couldn't copy — use Download instead"); }
+});
+$("#dbgSave").addEventListener("click", () => { window.location = "/api/debug/report.txt"; });
 
 /* ── Scanner phone settings (phone server only; admin only) ──────────────────
    GET/PATCH /api/device + /api/device/snapshot.jpg. The computer's own server
@@ -1541,15 +1617,11 @@ function devMsg(t, err){ $("#devMsg").textContent = t || ""; $("#devMsg").classL
 function devRender(){
   if (!dev) return;
   $("#devLive").textContent = dev.camera_live ? "scan screen open" : "scan screen closed";
-  $("#devCtl").querySelectorAll("[data-mode]").forEach(b => {
-    const on = b.dataset.mode === dev.mode;
-    b.classList.toggle("ghost", !on);
-  });
+  $("#devCtl").querySelectorAll("[data-mode]").forEach(b => b.classList.toggle("ghost", b.dataset.mode !== dev.mode));
   $("#devCtl").querySelectorAll("input[data-k]").forEach(cb => { cb.checked = !!dev[cb.dataset.k]; });
   const cm = $("#devCheckMs");
   cm.closest("label").style.display = dev.check_ms == null ? "none" : "";   // an older phone app has no setting
   if (document.activeElement !== cm && dev.check_ms != null) cm.value = dev.check_ms;
-  $("#devCtl").querySelector("input[data-k=auto]").disabled = dev.mode === "handheld";
   devDrawRoi();
 }
 function devDrawRoi(){

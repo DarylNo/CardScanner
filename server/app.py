@@ -166,7 +166,7 @@ def create_app(
     # This server has one user (its Share gateway gives guests full access, the
     # owner's rule for the rig), so it always answers admin. The PHONE server
     # answers from the gateway's session: its paired computer is admin, anyone
-    # with the 6-digit code is a guest (docs/PHONE_ONLY_PLAN.md → Roles).
+    # with the 6-digit code is a guest.
     @app.get("/api/me")
     def me():
         return {"role": "admin"}

@@ -1,7 +1,7 @@
 """
 Export printing-ranker parity fixtures for the Android app's JVM tests.
 
-Stage 2B of docs/PHONE_ONLY_PLAN.md ports visual_match (the step that ranks a
+The phone ports visual_match (the step that ranks a
 card's candidate printings against the scan) to Kotlin
 (android/core/.../PrintingRanker.kt). PORT, never re-tune: the ranking is only
 the same if every distance is the same, so this script runs the SERVER's own

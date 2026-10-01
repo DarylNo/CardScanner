@@ -12,7 +12,6 @@ import android.view.GestureDetector
 import android.view.MotionEvent
 import android.view.View
 import io.github.darylno.cardscanner.core.Box
-import io.github.darylno.cardscanner.camera.HandheldGuide
 import io.github.darylno.cardscanner.core.RoiFrac
 import kotlin.math.abs
 import kotlin.math.max
@@ -45,7 +44,6 @@ class OverlayView @JvmOverloads constructor(
     private var sampleW = 176
     private var sampleH = 132
     private var boxState = BoxState.SETTLING
-    private var handheldGuide = false
     private var debugText: String? = null
 
     /** Area-drawing mode (phone.html `settingArea`): single-finger drag defines the ROI. */
@@ -76,10 +74,6 @@ class OverlayView @JvmOverloads constructor(
     private val boxPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE; strokeWidth = 3 * density
     }
-    private val guidePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE; strokeWidth = 2 * density; color = Color.argb(200, 255, 255, 255)
-        pathEffect = DashPathEffect(floatArrayOf(10 * density, 8 * density), 0f)
-    }
     private val checkPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.WHITE; textSize = 40 * density; textAlign = Paint.Align.CENTER
     }
@@ -107,10 +101,6 @@ class OverlayView @JvmOverloads constructor(
 
     fun setRoi(r: RoiFrac?) {
         roi = r; invalidate()
-    }
-
-    fun setHandheldGuide(on: Boolean) {
-        if (handheldGuide != on) { handheldGuide = on; invalidate() }
     }
 
     fun setDebugText(t: String?) {
@@ -165,12 +155,6 @@ class OverlayView @JvmOverloads constructor(
             canvas.drawRect(min(a.first, b.first), min(a.second, b.second),
                 max(a.first, b.first), max(a.second, b.second), dragPaint)
         } else roi?.let { canvas.drawRect(fracRect(it.x0, it.y0, it.x1, it.y1), roiPaint) }
-
-        if (handheldGuide) {
-            // The same guide the Handheld capture crops to (plus its pad).
-            val g = HandheldGuide.frac(frameW, frameH, pad = 0.0)
-            canvas.drawRoundRect(fracRect(g.x0, g.y0, g.x1, g.y1), 8 * density, 8 * density, guidePaint)
-        }
 
         box?.let { bx ->
             val r = roi ?: RoiFrac(0.0, 0.0, 1.0, 1.0)

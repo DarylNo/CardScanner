@@ -22,13 +22,23 @@ class DeviceBridge(private val settings: AppSettings) : DeviceApi.DeviceControl 
     @Volatile var screen: Screen? = null
 
     override fun read() = DeviceApi.DeviceState(
-        handheld = settings.mode == AppSettings.Mode.HANDHELD, auto = settings.auto, roi = settings.roi,
+        auto = settings.auto, roi = settings.roi,
         torch = settings.torch, vibration = settings.vibration, highRes = settings.highRes,
         aeLock = settings.aeLock, checkMs = settings.checkMs,
     )
 
     override fun write(s: DeviceApi.DeviceState) {
-        settings.mode = if (s.handheld) AppSettings.Mode.HANDHELD else AppSettings.Mode.MOUNT
+        val before = read()
+        if (before != s) io.github.darylno.cardscanner.core.DebugLog.global.i("device", "settings changed from the computer: " +
+            listOfNotNull(
+                ("mode → " + if (s.auto) "Tray" else "Tap to scan").takeIf { before.auto != s.auto },
+                "area → ${s.roi?.encode() ?: "full frame"}".takeIf { before.roi != s.roi },
+                "torch → ${s.torch}".takeIf { before.torch != s.torch },
+                "high res → ${s.highRes}".takeIf { before.highRes != s.highRes },
+                "exposure lock → ${s.aeLock}".takeIf { before.aeLock != s.aeLock },
+                "vibration → ${s.vibration}".takeIf { before.vibration != s.vibration },
+                "check → ${s.checkMs} ms".takeIf { before.checkMs != s.checkMs },
+            ).joinToString(", "))
         settings.auto = s.auto
         settings.roi = s.roi
         settings.torch = s.torch

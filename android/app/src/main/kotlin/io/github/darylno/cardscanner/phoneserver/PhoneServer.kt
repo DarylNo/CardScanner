@@ -29,7 +29,13 @@ import java.util.concurrent.Executors
  * Storage: the owner's rule (2026-09-30) — at [WARN_AT] scans show the photo
  * size and free space as a warning, then keep going; nothing is pruned.
  */
-class PhoneServer(private val ctx: Context, private val identify: LocalIdentify, val device: DeviceBridge) :
+class PhoneServer(
+    private val ctx: Context,
+    private val identify: LocalIdentify,
+    val device: DeviceBridge,
+    private val updates: io.github.darylno.cardscanner.update.UpdateLock? = null,
+    private val debugHeader: () -> String = { "" },
+) :
     GatewayService.Host {
     private val root = File(ctx.filesDir, "phoneserver")
     val store: SqliteScanStore by lazy { SqliteScanStore(File(root, "scans.db")) }
@@ -52,6 +58,8 @@ class PhoneServer(private val ctx: Context, private val identify: LocalIdentify,
             f2fEvents = { f2f.recentEvents() },
             layouts = LayoutStore(File(root, "export_layout.json")),
             device = DeviceApi(device),
+            debug = io.github.darylno.cardscanner.core.server.DebugApi(io.github.darylno.cardscanner.core.DebugLog.global, debugHeader),
+            update = { updates?.let { u -> Triple(u.latest?.version, u.locked, u.latest?.apkUrl) } ?: Triple(null, false, null) },
         )
     }
     private val f2f by lazy { PhoneF2f(ctx, File(ctx.cacheDir, "facetoface")) }
@@ -65,7 +73,15 @@ class PhoneServer(private val ctx: Context, private val identify: LocalIdentify,
         LocalScanUploader(
             identify = { frames ->
                 identify.ensurePack()            // no card database yet → fetch it (rate-limited)
-                identify.identifier().identifyFrames(frames).result.json
+                val log = io.github.darylno.cardscanner.core.DebugLog.global
+                try {
+                    val r = identify.identifier().identifyFrames(frames)
+                    log.i("identify", describeIdentified(frames.size, r.result.json, r.timingsMs))
+                    r.result.json
+                } catch (e: Exception) {
+                    log.w("identify", "${frames.size} frame(s): not identified now, will retry — ${e.javaClass.simpleName}: ${e.message}")
+                    throw e
+                }
             },
             file = { result, photo, replace -> backend.file(result, photo, replace) },
             answers = File(root, "upload_answers"),
@@ -97,6 +113,43 @@ class PhoneServer(private val ctx: Context, private val identify: LocalIdentify,
     }
 
     /** The phone's own review screen: the local address and the owner's admin cookie. */
+    private val deleteExec = Executors.newSingleThreadExecutor { r -> Thread(r, "owner-delete").apply { isDaemon = true } }
+
+    /**
+     * Delete scans as the owner, off the UI thread — the review screen's swipes whose
+     * Undo window hadn't run out when the screen closed (see PanelActivity.onPause).
+     * Goes through the API like the page's own DELETE, so the photo goes too and the
+     * pricing worker is told; an id already deleted just answers 404.
+     */
+    fun deleteScansAsOwner(ids: List<Long>, done: () -> Unit = {}) {
+        val work = Runnable {
+            for (id in ids) runCatching {
+                backend.handle(io.github.darylno.cardscanner.core.server.ApiRequest("DELETE", "/api/scans/$id",
+                    role = io.github.darylno.cardscanner.core.server.ROLE_ADMIN))
+            }
+            done()
+        }
+        try { deleteExec.execute(work) } catch (_: java.util.concurrent.RejectedExecutionException) { work.run() }
+    }
+
+    /** One log line per identification: what it read, how sure, how many printings, OCR, timings. */
+    internal fun describeIdentified(frames: Int, json: Map<String, Any?>, timings: Map<String, Long>): String {
+        val read = json["card_read"] as? Map<*, *>
+        val name = read?.get("name") ?: "?"
+        val cands = json["candidates"] as? List<*> ?: emptyList<Any?>()
+        val top = cands.firstOrNull() as? Map<*, *>
+        val t = timings.entries.joinToString(" ") { "${it.key} ${it.value}" }
+        val what = when {
+            json["no_card"] == true -> "no card — ${json["error"]}"
+            json["identified"] == true -> "$name · ${cands.size} printing(s)" +
+                (top?.let { " · top ${it["set"]} ${it["collector_number"]}" } ?: "") +
+                (if (top?.get("ocr_confirmed") == true) " · OCR ✓" else "") +
+                ((json["confidence"] as? Map<*, *>)?.get("name")?.let { " · $it" } ?: "")
+            else -> "not identified — ${json["error"]}"
+        }
+        return "${frames} frame(s): $what · ms: $t"
+    }
+
     fun localBase(): String = "http://127.0.0.1:$port"
     fun ownerCookie(): String = "${GatewayServer.ADMIN_COOKIE}=${admins.ownerToken}"
 

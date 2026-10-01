@@ -82,6 +82,19 @@ class GatewayServerTest {
 
     // ---- join flow -------------------------------------------------------------------
 
+    /** The live log records joins — never the code itself (a guest could read a report pasted anywhere). */
+    @Test
+    fun joinsAreLoggedWithoutTheCode() {
+        val log = io.github.darylno.cardscanner.core.DebugLog.global
+        val from = log.lastSeq
+        get("/join?code=000000".let { if (gateway.code == "000000") "/join?code=111111" else it }).close()
+        join()
+        val lines = log.since(from).map { it.msg }
+        assertTrue(lines.toString(), lines.any { it.startsWith("wrong join code from") })
+        assertTrue(lines.toString(), lines.any { it.startsWith("guest joined from") })
+        assertTrue(lines.toString(), lines.none { it.contains(gateway.code) })
+    }
+
     @Test
     fun noCookieGetsCodePageAndNothingIsProxied() {
         get("/").use { r ->

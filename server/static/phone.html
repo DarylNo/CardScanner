@@ -213,10 +213,6 @@
   #detailFoot { flex:0 0 auto; padding:10px 16px calc(10px + env(safe-area-inset-bottom));
                 background:var(--bg); border-top:1px solid var(--line); }
   #detailFoot:empty { display:none; }
-  #pcBar { display:flex; gap:10px; }
-  #pcBar button { flex:1; min-height:54px; border-radius:16px; font-size:17px; font-weight:700; }
-  #pcDiscard { background:transparent; color:#fca5a5; border:1.5px solid #8a3434; }
-  #pcBar #pcKeep { flex-grow:1.4; background:var(--accent); color:#fff; border:0; }
   #lightbox { position:fixed; inset:0; background:rgba(0,0,0,.92); z-index:40;
               display:none; align-items:center; justify-content:center; }
   #lightbox.open { display:flex; }
@@ -358,11 +354,10 @@ const DEBUG = new URLSearchParams(location.search).has('debug');
 // camera section runs differently; the detection loop simply never starts.
 const PANEL = new URLSearchParams(location.search).has('panel');
 const PANEL_DETAIL = Number(new URLSearchParams(location.search).get('detail')) || 0;
-// &pricecheck=1 — the app's walk-around "what's it worth?": price this card
-// NOW (jumps the sweep queue server-side), show prices as they land, then
-// Keep (it stays filed) or Discard (deleted). Backing out keeps it — a scan
-// is never deleted without the explicit tap.
-const PRICE_CHECK = PANEL && new URLSearchParams(location.search).has('pricecheck');
+// The scan the app opened (&detail=<id>, e.g. a shutter tap with Auto off) is
+// priced NOW (jumps the sweep queue server-side) and its prices show as they
+// land; Back from it returns to the camera. (1.1.2: Handheld's price check and
+// its Keep/Discard bar are gone — the scan is simply filed and shown.)
 
 let autoEnabled = true;
 let mode = 'watching';        // watching | scanning | awaitNext
@@ -427,7 +422,7 @@ function formatChipsHtml(scan){
 }
 
 /* ── version banner — proves which page+server combo is running ────────────── */
-const UI_VERSION = 'v41';
+const UI_VERSION = 'v43';
 
 // Who is asking: the phone server says "guest" for the 6-digit code (admin =
 // the paired computer); the computer's own server always says admin. Guests
@@ -1144,6 +1139,13 @@ function renderScansPanel() {
 const UNDO_MS = 5000;
 let undoTimer = null, swipeEatClick = false;
 function liveScans() { return pendingDel.size ? scans.filter(s => !pendingDel.has(s.id)) : scans; }
+// Inside the app the WebView is destroyed when its screen closes — no pagehide,
+// no timers — so a delete still inside its Undo window was lost (owner: "slide
+// to delete doesn't really delete"). The app is told what's pending and deletes
+// it itself when the screen goes away (PanelActivity.onPause).
+function tellAppPending() {
+  try { window.CardScannerApp?.pendingDeletes?.(JSON.stringify([...pendingDel])); } catch (e) {}
+}
 function commitDeletes(keepalive) {
   clearTimeout(undoTimer); undoTimer = null;
   const ids = [...pendingDel];
@@ -1151,10 +1153,11 @@ function commitDeletes(keepalive) {
   if (!ids.length) return;
   Promise.all(ids.map(id => fetch(`/api/scans/${id}`, { method: 'DELETE', keepalive })
       .catch(() => {})))
-    .finally(() => { ids.forEach(id => pendingDel.delete(id)); if (!keepalive) refreshScans(); });
+    .finally(() => { ids.forEach(id => pendingDel.delete(id)); tellAppPending(); if (!keepalive) refreshScans(); });
 }
 function queueDelete(id) {
   pendingDel.add(id);
+  tellAppPending();
   scansBtn.textContent = `Scans (${liveScans().length})`;
   $('#undoMsg').textContent = pendingDel.size > 1 ? `${pendingDel.size} scans deleted` : 'Scan deleted';
   $('#undoBar').classList.add('show');
@@ -1164,6 +1167,7 @@ function queueDelete(id) {
 $('#undoBtn').addEventListener('click', () => {
   clearTimeout(undoTimer); undoTimer = null;
   pendingDel.clear();
+  tellAppPending();
   $('#undoBar').classList.remove('show');
   scansBtn.textContent = `Scans (${liveScans().length})`;
   lastListSig = ''; lastStatSig = ''; renderScansPanel();
@@ -1451,10 +1455,10 @@ setInterval(async () => {
   let scan;
   try { scan = await (await fetch(`/api/scans/${detailScanId}`)).json(); } catch (e) { return; }
   if (!scan || !scan.id || scan.id !== detailScanId) return;
-  // Price check: re-request every ~10 s while prints are unsearched — the
-  // first request can be refused (a Stop under way) or dropped by a Stop; the
-  // server de-duplicates, so repeats are cheap.
-  if (PRICE_CHECK && !scan.selection && !printInfo(scan).searched && ++detailPollN % 4 === 0) {
+  // The scan the app opened: re-request its price every ~10 s while prints are
+  // unsearched — the first request can be refused (a Stop under way) or dropped
+  // by a Stop; the server de-duplicates, so repeats are cheap.
+  if (PANEL_DETAIL && scan.id === PANEL_DETAIL && !scan.selection && !printInfo(scan).searched && ++detailPollN % 4 === 0) {
     jsend(`/api/scans/${scan.id}/price-check`, 'POST', {}).catch(() => {});
   }
   const sig = JSON.stringify([scan.f2f?.conditions, (scan.candidates||[]).map(c => c.f2f_conditions)]);
@@ -1484,7 +1488,7 @@ async function renderScanDetail() {
   if (scan.error && !scan.id) { detailBody.innerHTML = `<p>${escHtml(scan.error)}</p>`; return; }
   const sel = scan.selection || null;
   const cr = scan.card_read || {};
-  detailTitle.textContent = (PRICE_CHECK ? 'Price check · ' : '') + (sel?.name || cr.name || '(unread)');
+  detailTitle.textContent = sel?.name || cr.name || '(unread)';
   detailPollSig = '';
 
   let html = `<div class="prow">
@@ -1521,17 +1525,10 @@ async function renderScanDetail() {
   } else if (role === 'guest') {
     html += `<button class="dangerbtn" id="p-flag" data-flag="1">🚩 Flag for deletion</button>`;
   }
-  if (!PRICE_CHECK && role === 'admin') html += `<button class="dangerbtn admin-only" id="p-delete">Delete this scan</button>`;
+  if (role === 'admin') html += `<button class="dangerbtn admin-only" id="p-delete">Delete this scan</button>`;
   detailBody.innerHTML = html;
-  $('#detailFoot').innerHTML = PRICE_CHECK
-    ? `<div id="pcBar"><button id="pcDiscard">Discard</button><button id="pcKeep">Keep</button></div>` : '';
+  $('#detailFoot').innerHTML = '';
   $('#pfold')?.addEventListener('click', () => { detailShowAllArt = !detailShowAllArt; renderScanDetail(); });
-  $('#pcKeep')?.addEventListener('click', closePanelApp);
-  $('#pcDiscard')?.addEventListener('click', async () => {
-    if (role === 'guest') await jsend(`/api/scans/${scan.id}`, 'PATCH', { flagged: true });
-    else await fetch(`/api/scans/${scan.id}`, { method: 'DELETE' });
-    closePanelApp();
-  });
   $('#p-flag')?.addEventListener('click', async e => {
     const on = e.currentTarget.dataset.flag === '1';
     await jsend(`/api/scans/${scan.id}`, 'PATCH', { flagged: on });
@@ -1587,7 +1584,8 @@ function closePanelApp() {
   if (window.CardScannerApp) window.CardScannerApp.close(); else history.back();
 }
 $('#detailBack').addEventListener('click', () => {
-  if (PRICE_CHECK) { closePanelApp(); return; }      // back = Keep
+  // Back from the scan the app opened goes straight back to the camera.
+  if (PANEL_DETAIL && detailScanId === PANEL_DETAIL && window.CardScannerApp) { closePanelApp(); return; }
   detailPanel.classList.remove('open');
   detailScanId = null;
   refreshScans();
@@ -1606,8 +1604,8 @@ if (PANEL) {
   $('#areaBtn').style.display = 'none';
   scansBtn.click();
   if (PANEL_DETAIL) {
-    // Price check: start pricing THIS card right away (it jumps the sweep).
-    if (PRICE_CHECK) jsend(`/api/scans/${PANEL_DETAIL}/price-check`, 'POST', {}).catch(() => {});
+    // Start pricing THIS card right away (it jumps the sweep).
+    jsend(`/api/scans/${PANEL_DETAIL}/price-check`, 'POST', {}).catch(() => {});
     openDetail(PANEL_DETAIL);
   }
 } else {

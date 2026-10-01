@@ -11,6 +11,7 @@ import io.github.darylno.cardscanner.core.RoiFrac
  *
  *   GET   /api/device               → [state]
  *   PATCH /api/device {…}           → apply what's given, answer the new state
+ *                                     (`mode`: "tray" | "tap")
  *   GET   /api/device/snapshot.jpg  → the camera's current upright frame, the
  *                                     space the scan Area fractions live in
  *
@@ -31,14 +32,17 @@ class DeviceApi(private val device: DeviceControl) {
         fun cameraLive(): Boolean
     }
 
+    /** [auto] = the mode: true = "tray" (hands-free), false = "tap" (tap to scan). */
     data class DeviceState(
-        val handheld: Boolean, val auto: Boolean, val roi: RoiFrac?, val torch: Boolean,
+        val auto: Boolean, val roi: RoiFrac?, val torch: Boolean,
         val vibration: Boolean, val highRes: Boolean, val aeLock: Boolean,
         /** How long the blue ✓ stays up after each scan, in ms ([CHECK_MS_MIN]..[CHECK_MS_MAX]). */
         val checkMs: Int = CHECK_MS_DEFAULT,
     )
 
     companion object {
+        const val MODE_TRAY = "tray"
+        const val MODE_TAP = "tap"
         const val CHECK_MS_DEFAULT = 2_500
         const val CHECK_MS_MIN = 250
         const val CHECK_MS_MAX = 10_000
@@ -56,8 +60,7 @@ class DeviceApi(private val device: DeviceControl) {
     fun state(): Map<String, Any?> {
         val s = device.read()
         return linkedMapOf(
-            "mode" to if (s.handheld) "handheld" else "mount",
-            "auto" to s.auto,
+            "mode" to if (s.auto) MODE_TRAY else MODE_TAP,
             "roi" to s.roi?.let { linkedMapOf("x0" to it.x0, "y0" to it.y0, "x1" to it.x1, "y1" to it.y1) },
             "torch" to s.torch, "vibration" to s.vibration, "high_res" to s.highRes,
             "ae_lock" to s.aeLock, "check_ms" to s.checkMs,
@@ -73,11 +76,10 @@ class DeviceApi(private val device: DeviceControl) {
         for ((k, v) in body) {
             s = when (k) {
                 "mode" -> when (v) {
-                    "mount" -> s.copy(handheld = false)
-                    "handheld" -> s.copy(handheld = true)
-                    else -> return bad("mode must be \"mount\" or \"handheld\"")
+                    MODE_TRAY -> s.copy(auto = true)
+                    MODE_TAP -> s.copy(auto = false)
+                    else -> return bad("mode must be \"$MODE_TRAY\" or \"$MODE_TAP\"")
                 }
-                "auto" -> s.copy(auto = v as? Boolean ?: return bad("auto must be true or false"))
                 "torch" -> s.copy(torch = v as? Boolean ?: return bad("torch must be true or false"))
                 "vibration" -> s.copy(vibration = v as? Boolean ?: return bad("vibration must be true or false"))
                 "high_res" -> s.copy(highRes = v as? Boolean ?: return bad("high_res must be true or false"))

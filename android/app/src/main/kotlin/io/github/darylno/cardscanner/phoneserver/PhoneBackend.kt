@@ -61,11 +61,15 @@ class PhoneBackend(
     layouts: LayoutStore = LayoutStore(null),
     /** The phone's own settings from the browser (admin only — [ScanServer.adminOnly]). */
     private val device: DeviceApi? = null,
+    /** The update lock's view: (latest seen, a newer one is out, its APK link) — null = never checked. */
+    private val update: () -> Triple<String?, Boolean, String?> = { Triple(null, false, null) },
+    /** The live log + debug report (admin only). */
+    private val debug: io.github.darylno.cardscanner.core.server.DebugApi? = null,
 ) {
     val api = PhoneApi(store, photos)
     val sweep = PriceSweep(store, api, f2f, launch, now, interrupt, paceS)
     val server = ScanServer(api, sweep, layouts)
-    val worker = PriceWorker(sweep, now)
+    val worker = PriceWorker(sweep, now, onError = { io.github.darylno.cardscanner.core.DebugLog.global.e("price", "sweep tick failed", it) })
 
     /**
      * A capture the phone identified: file it (a Retry replaces the row it retries,
@@ -86,6 +90,7 @@ class PhoneBackend(
             return res
         }
         device?.handle(req)?.let { return it }
+        debug?.handle(req)?.let { return it }
         val get = req.method == "GET" || req.method == "HEAD"
         return when {
             get && req.path == "/" -> page("desktop.html")
@@ -105,10 +110,13 @@ class PhoneBackend(
                     "prefetching" to false, "prefetch_error" to null, "build_progress" to null,
                     "prefetch_progress" to null))
             }
-            get && req.path == "/api/update-check" ->
-                ApiResponse.json(200, linkedMapOf("current" to version, "latest" to null,
-                    "update_available" to null, "can_self_update" to false,
-                    "download_url" to "https://github.com/DarylNo/CardScanner/releases/latest"))
+            get && req.path == "/api/update-check" -> {
+                // The desktop's update banner. A newer release also stops the phone scanning (UpdateLock).
+                val (latest, newer, apk) = update()
+                ApiResponse.json(200, linkedMapOf("current" to version, "latest" to latest,
+                    "update_available" to newer, "can_self_update" to false,
+                    "download_url" to (apk ?: "https://github.com/DarylNo/CardScanner/releases/latest")))
+            }
             get && req.path == "/api/price-debug" ->
                 ApiResponse.json(200, linkedMapOf("pace_s" to paceS()?.let { Math.round(it * 100) / 100.0 },
                     "next_check_s" to sweep.status()["next_check_s"], "events" to f2fEvents()))

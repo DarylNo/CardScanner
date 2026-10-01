@@ -95,6 +95,58 @@ class ScreensSmokeTest {
         assertEquals(GatewayService::class.java.name, svc!!.component?.className)
     }
 
+    /** The update lock: a newer release is out → "Update required" covers the scan screen. */
+    @Test
+    fun mainActivity_newerReleaseOut_stopsScanning() {
+        grantCamera(true)
+        app.getSharedPreferences("update_lock", android.content.Context.MODE_PRIVATE).edit()
+            .putString("version", "v99.0.0")
+            .putString("apk_url", "https://github.com/DarylNo/CardScanner/releases/download/v99.0.0/mtg-card-scanner-android.apk")
+            .putLong("checked_at", System.currentTimeMillis()).commit()
+        try {
+            val a = launch(MainActivity::class.java)
+            assertResumed(a)
+            val root = (a as android.app.Activity).window.decorView
+            assertTrue("the lock is shown", root.findViewWithText("Update required") != null)
+            assertTrue("Download update offered", root.findViewWithText("Download update") != null)
+        } finally {
+            app.getSharedPreferences("update_lock", android.content.Context.MODE_PRIVATE).edit().clear().commit()
+        }
+    }
+
+    /**
+     * Swipe-to-delete: a scan swiped away on the review page is deleted even when the
+     * screen closes inside its 5 s Undo window (the WebView dies with its timers) —
+     * the owner saw "deleted" scans come back.
+     */
+    @Test
+    fun panelActivity_leavingInsideTheUndoWindow_stillDeletes() {
+        val filed = app.phoneServer.backend.file(mapOf("identified" to true, "card_read" to mapOf("name" to "Opt"),
+            "confidence" to mapOf("name" to "high"), "candidates" to listOf(mapOf("id" to "o1", "name" to "Opt",
+                "set" to "dom", "collector_number" to "60"))), null)
+        val id = (filed["id"] as Number).toLong()
+        val kept = (app.phoneServer.backend.file(mapOf("identified" to true, "card_read" to mapOf("name" to "Shock"),
+            "confidence" to mapOf("name" to "high"), "candidates" to listOf(mapOf("id" to "s1", "name" to "Shock",
+                "set" to "m19", "collector_number" to "156"))), null)["id"] as Number).toLong()
+        val c = Robolectric.buildActivity(PanelActivity::class.java, PanelActivity.intent(app))
+        controllers += c
+        c.setup(); ShadowLooper.idleMainLooper()
+        c.get().pendingDeletes = listOf(id)                  // what the page reported after the swipe
+        c.pause()                                             // Back / Home before Undo ran out
+        val deadline = System.currentTimeMillis() + 5_000
+        while (app.phoneServer.store.get(id) != null && System.currentTimeMillis() < deadline) Thread.sleep(20)
+        assertEquals(null, app.phoneServer.store.get(id))
+        assertNotNull("only the swiped scan goes", app.phoneServer.store.get(kept))
+        assertTrue(c.get().pendingDeletes.isEmpty())
+    }
+
+    @Test
+    fun panelActivity_parsesThePagesPendingIds() {
+        assertEquals(listOf(3L, 7L), PanelActivity.parseIds("[3,7,7,-1,0]"))
+        assertEquals(emptyList<Long>(), PanelActivity.parseIds("[]"))
+        assertEquals(emptyList<Long>(), PanelActivity.parseIds("not json"))
+    }
+
     @Test
     fun mainActivity_cameraDenied_resumes() {
         grantCamera(false)
@@ -120,11 +172,12 @@ class ScreensSmokeTest {
 
     @Test
     fun panelActivity_forAScan_resumesAndStartsTheServer() {
-        val a = launch(PanelActivity::class.java, PanelActivity.intent(app, detail = 12, priceCheck = true))
+        val a = launch(PanelActivity::class.java, PanelActivity.intent(app, detail = 12))
         assertResumed(a)
         assertEquals(GatewayService::class.java.name, shadowOf(app).nextStartedService?.component?.className)
-        assertEquals("http://127.0.0.1:8090/phone?panel=1&detail=12&pricecheck=1",
-            PanelActivity.buildUrl(app.phoneServer.localBase(), 12, true))
+        // 1.1.2: the scan opens plainly — no price-check Keep/Discard any more
+        assertEquals("http://127.0.0.1:8090/phone?panel=1&detail=12",
+            PanelActivity.buildUrl(app.phoneServer.localBase(), 12))
     }
 
     @Test
@@ -188,5 +241,11 @@ class ScreensSmokeTest {
             assertNotNull("${cls.simpleName} missing from the manifest", ai)
             assertEquals("${cls.simpleName} exported", cls == MainActivity::class.java, ai!!.exported)
         }
+    }
+
+    private fun android.view.View.findViewWithText(t: String): android.view.View? {
+        if (this is android.widget.TextView && text?.toString() == t && isShown) return this
+        if (this is android.view.ViewGroup) for (i in 0 until childCount) getChildAt(i).findViewWithText(t)?.let { return it }
+        return null
     }
 }

@@ -6,8 +6,8 @@ import java.security.MessageDigest
 import java.security.SecureRandom
 
 /**
- * Admin pairing for the phone server (docs/PHONE_ONLY_PLAN.md → Roles, owner
- * decision 2026-09-30): the computer pairs ONCE with a one-time 8-digit code
+ * Admin pairing for the phone server (owner decision
+ * 2026-09-30): the computer pairs ONCE with a one-time 8-digit code
  * shown on the phone and is then remembered — a long-lived `cs_admin` cookie —
  * until revoked on the phone. Everyone else joins as a guest with the 6-digit
  * [JoinCode].

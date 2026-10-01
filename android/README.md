@@ -1,7 +1,6 @@
 # CardScanner Android app
 
-**The phone is the card scanner** (Stage 4, 1.1.0 — owner decision
-2026-09-30: full cutover, the computer app is retired). The app photographs
+**The phone is the card scanner.** The app photographs
 each card (the tuned detection, ported from phone.html), identifies it ON the
 phone (the server's art-fingerprint + collector-line OCR pipeline, ported to
 `:core` and parity-tested against the Python server), files it in the phone's
@@ -9,7 +8,7 @@ own store, prices it against Face to Face from the phone's own connection, and
 serves the review pages — to its own review screen and to any computer on the
 LAN. A computer is an optional workstation: pair it once as admin.
 
-The review screens (scan list, filters, printing picker, price check, the
+The review screens (scan list, filters, printing picker, the
 desktop page with Export to CSV) are the server's own `phone.html` /
 `desktop.html`, copied into the APK at build and served by the phone — one
 review UI, not two.
@@ -26,7 +25,7 @@ CameraX Preview + ImageAnalysis (camera 0, 4:3, 1600x1200 or 2048x1536, EIS off)
    │  every ~200 ms: GraySampler → 176×MH luma sample
    ▼
 AutoScanner.tick()          :core — phone.html's detection + state machine, ported
-   │  Trigger (Mount, auto)  or  Scan tap (Mount manual / Handheld)
+   │  Trigger (Tray)  or  shutter tap (Tap to scan, or any time)
    ▼
 CapturePipeline             last 3 ring frames → sharpest (Laplacian variance)
    │                        → CardQuad → Flatten with a margin → JPEG = PRIMARY
@@ -57,7 +56,7 @@ Modules and packages (`io.github.darylno.cardscanner`):
 | `app/ident` | `LocalIdentify` (the art pack — the phone's card database — and the one `PhoneIdentifier`), `ArtPackStore`, Scryfall over Cronet, `CachedImageSource`. |
 | `app/phoneserver` | `PhoneServer` (the phone's server: `SqliteScanStore`, `PhotoDir`, `PhoneBackend` over `:core`'s `PhoneApi`/`PriceSweep`/`Export`/`DeviceApi`), `LocalScanUploader`, `LocalUpstream`, `PhoneF2f`, `DeviceBridge`. |
 | `app/gateway` | `GatewayServer` (NanoHTTPD, roles: `AdminPairing`), `JoinCode`, `LocalAddresses`, `GatewayService` (foreground service that keeps the phone serving), `QrBitmap`. |
-| `app/f2f` | `F2fFetcher` (port of `facetoface._default_get_json` pacing/retry, parity-tested against `app/src/test/resources/f2f/pacing.json`), `F2fPricer` (query ladder + SKU confirmation), `F2fCache`, `OkHttpTransport` / `CronetTransport`, `F2fProbe` (Stage 1c test). |
+| `app/f2f` | `F2fFetcher` (port of `facetoface._default_get_json` pacing/retry, parity-tested against `app/src/test/resources/f2f/pacing.json`), `F2fPricer` (query ladder + SKU confirmation), `F2fCache`, `OkHttpTransport` / `CronetTransport`, `F2fProbe` (the network test). |
 | `app/ui` | `MainActivity`, `OverlayView`, `PanelActivity` (review WebView of the phone's own pages), `ShareActivity` (guest code), `SettingsActivity` + `ServerSection` (this phone's server: pair a computer, card database, storage), `AppSettings`. |
 
 Rules the app keeps (see also CLAUDE.md → "Android app"):
@@ -155,9 +154,11 @@ list; offline scans wait in the queue the same way. If that first download
 fails (no connection), the queue retries it at most once a minute — no need
 to restart the app.
 
-## Mount vs Handheld
+## Tray / Tap to scan
 
-**Mount** — the phone on the mount over the tray. Auto on: the tuned
+Two modes, switched at the bottom of the scan screen (a new install starts in
+Tap to scan). **Tray**: switching to it asks you to draw a box around where
+the card will sit (Cancel keeps the current Area). Then the tuned
 phone.html behaviour — learn the empty tray, wait for a card, wait for it to be
 still, capture, file, wait for the next card. Draw the scan **Area** to crop
 sampling and capture to the tray; double-tap the preview to re-learn the empty
@@ -168,22 +169,29 @@ lens has focused at the Area centre with the card under it — and every card
 after shoots instantly with focus held. It focuses again only when the Area
 changes, the camera reopens, you tap the preview (locks where you tapped), or
 a capture comes out far softer than the session's usual (bumped mount).
-Auto-mode
-scans are hands-free; a manual Scan (Auto off) that needs a pick opens the
-review panel on that scan, as phone.html does.
+Tray
+scans are hands-free.
 
-**Handheld** — the walk-around **price check**. Continuous autofocus, a card
-guide, no tray learning; fill the guide with the card and tap **Scan**. Only
-the guide plus 15% slack is sent (the guide is Handheld's scan Area): the
-whole frame let a busy background — wood grain — defeat card detection, so
-the art was hashed with the table in it. When the result arrives the app opens
-the review panel at `/phone?panel=1&detail=<id>&pricecheck=1`: the page asks
-the server to price that card at the FRONT of the pricing queue and shows each
-printing's price live as it lands. **Keep** leaves the scan in your list;
-**Discard** deletes it (Back = Keep). No match → "✗ No match — Retry?" with a
-Retry button. Offline (Scryfall unreachable) → the scan waits in the queue
-and the price check opens when it is identified (if the app is in the
-foreground; otherwise find it under Scans).
+**Tap to scan** — tap the shutter. It always scans inside a scan Area: if
+none is set, the app draws one for you — a card-shaped box in the middle of
+the picture, sized so the phone sits back from the card (close enough to read
+the collector line, far enough that its shadow stays off the card). Put the
+card in the box, or tap **Area** and drag your own (in Tap to scan, Area always
+draws; it never clears). When the scan is identified it OPENS: the phone
+prices it at the front of the queue and shows each printing's price live;
+Back returns to the camera. It is filed like any other scan (no Keep/Discard).
+No match → Retry. Offline → the scan waits in the queue and opens when it is
+identified (if the app is in the foreground; otherwise find it under Scans).
+
+## Updates required
+
+When the repo publishes a release newer than the installed app (with its
+APK), the scan screen shows **Update required** and stops scanning;
+**Download update** fetches the new APK. The Scans list, export, the computer
+link and cards already queued keep working. The check runs at app start and
+when the scan screen opens (at most every 30 minutes); offline it changes
+nothing, but once a newer release has been seen the lock holds until the
+update is installed.
 
 ## A computer (optional workstation)
 
@@ -249,10 +257,20 @@ then on updates install in place. Secrets reach both release
 paths — a hand-pushed tag, and `auto-tag.yml` (it calls `release.yml` with
 `secrets: inherit`).
 
-## F2F network test (Stage 1c)
+## Debugging
 
-A hidden screen that answers "does Face to Face Games throttle the phone?"
-(docs/PHONE_ONLY_PLAN.md). **Settings → long-press the DIAGNOSTICS header →
+- **Live log:** every trigger, capture, identification (name, printings, OCR,
+  stage timings), queue outcome, F2F request, server event and error goes to
+  an in-memory log mirrored to logcat: `adb logcat -s CardScanner`.
+- **On the paired computer:** 🐞 → **App log** tails it live (filter, pause);
+  **Copy report** / **Download** = diagnostics + the whole log.
+- **On the phone:** Settings → Diagnostics → **Share debug report**.
+- **After a crash** the log is saved and the next report includes it.
+
+## F2F network test
+
+A hidden screen that answers "does Face to Face Games throttle the phone?".
+**Settings → long-press the DIAGNOSTICS header →
 Network test**. It prices ~30 real cards on facetofacegames.com at the rig's
 exact pacing over **Cronet** (cronet-embedded: Chromium's stack, a real Chrome
 TLS handshake) and over **plain OkHttp**, and counts 429s. *Run both* goes
@@ -279,17 +297,18 @@ Run on the Nord N200 after installing a new build:
 
 - [ ] Fresh install: no pairing screen; the top bar says "downloading the card
       database…", then `<versionName> · serving at <ip>:8090`.
-- [ ] Mount, Auto on: "waiting for a steady view" → "watching for a card" →
+- [ ] Tray: "waiting for a steady view" → "watching for a card" →
       card in → "hold still" → capture (vibration) → filed; next card works.
 - [ ] Draw an Area; detection and capture stay inside it. Double-tap re-learns.
 - [ ] Sleeved card, dark card, foil under glare all trigger (no geometry
       rejections).
 - [ ] Empty tray / hand in frame → nothing filed as a card.
-- [ ] Mount, Auto off, manual Scan of a multi-printing card → panel opens on
-      that scan for a pick.
-- [ ] Handheld: Scan → price-check panel opens, prices appear live; Keep keeps
-      it, Discard removes it from the list; Back keeps it.
-- [ ] Handheld: a non-card → "✗ No match — Retry?"; Retry works.
+- [ ] Tap to scan with no Area → a card-shaped Area appears in the middle; the
+      card in it scans, reads its collector line, and no phone shadow on it
+      (if the box is too big/small, say so — its size is a guess).
+- [ ] Tap to scan: tap the shutter → the scan opens, prices appear live, Back
+      goes straight to the camera, the scan stays in the list.
+- [ ] Tap to scan: a non-card → "No match — Retry"; Retry works.
 - [ ] Airplane mode: scan 3 cards → "waiting (no connection?)"; reconnect →
       they are identified in order, each filed once.
 - [ ] Force-stop the app with jobs queued → relaunch → they are identified.

@@ -20,7 +20,6 @@ import io.github.darylno.cardscanner.core.RoiFrac
  */
 class CameraAdapter(private val context: Context, private val settings: AppSettings) : CameraPort {
     private var controller: CameraController? = null
-    private var handheld = false
     private var auto = true
     private var roi: RoiFrac? = null
     private var preview: PreviewView? = null
@@ -67,7 +66,7 @@ class CameraAdapter(private val context: Context, private val settings: AppSetti
         })
         controller = c
         this.preview = preview
-        c.setScanMode(if (handheld) ScanMode.HANDHELD else ScanMode.MOUNT)
+        c.setScanMode(ScanMode.MOUNT)   // the app's only mode since 1.1.2 (Auto off = tap to scan)
         c.setRoi(roi)
         c.setAuto(auto)
         c.setTorch(settings.torch)
@@ -93,11 +92,6 @@ class CameraAdapter(private val context: Context, private val settings: AppSetti
         preview = null
     }
 
-    override fun setHandheld(handheld: Boolean) {
-        this.handheld = handheld
-        controller?.setScanMode(if (handheld) ScanMode.HANDHELD else ScanMode.MOUNT)
-    }
-
     override fun setAuto(on: Boolean) {
         auto = on
         controller?.setAuto(on)
@@ -121,7 +115,7 @@ class CameraAdapter(private val context: Context, private val settings: AppSetti
      * exposes no switch to turn that off; "on" re-locks on the card in view now.
      */
     override fun setFocusLock(on: Boolean) {
-        if (on && !handheld) controller?.refocus()
+        if (on) controller?.refocus()
     }
 
     override fun setHighRes(high: Boolean) {

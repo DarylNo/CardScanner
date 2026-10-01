@@ -42,7 +42,7 @@ import java.util.concurrent.Executors
 /**
  * Hidden diagnostics (long-press DIAGNOSTICS in Settings).
  *
- * Stage 1c (docs/PHONE_ONLY_PLAN.md): does Face to Face Games' storefront
+ * The network test: does Face to Face Games' storefront
  * throttle the PHONE? Prices [ProbeCards.ALL] at the rig's pacing over Cronet
  * (a real Chrome TLS handshake) and over plain OkHttp, and reports 429s and
  * timings. A measurement tool only — reached by long-pressing the
