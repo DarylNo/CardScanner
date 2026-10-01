@@ -523,18 +523,15 @@ def create_app(
             candidates=result["candidates"],
             error=result.get("error"),
         )
-        # Keep the warped photo of the physical card for later review.  A save
-        # failure must never break the scan itself.
+        # Keep the photo of the physical card for later review: the card
+        # straightened and filling 95% of it when its edges were found, the
+        # sharpest frame exactly as uploaded when they were not (card_detect.
+        # scan_photo). A save failure must never break the scan itself.
         try:
-            from mtg_card_scanner.card_detect import extract_card, pick_sharpest
-            sharpest = pick_sharpest(frames)
-            card_img, detected = extract_card(sharpest)
-            # Only store the warped card when the edges were actually found —
-            # otherwise keep the untouched frame, so a failed detection shows
-            # the real photo instead of a distorted crop of it.
+            from mtg_card_scanner.card_detect import scan_photo
+            photo, _detected = scan_photo(frames)
             scan_images_dir.mkdir(parents=True, exist_ok=True)
-            cv2.imwrite(str(scan_images_dir / f"{scan['id']}.jpg"),
-                        card_img if detected else sharpest,
+            cv2.imwrite(str(scan_images_dir / f"{scan['id']}.jpg"), photo,
                         [cv2.IMWRITE_JPEG_QUALITY, 90])
         except Exception as exc:
             print(f"  [server] could not save scan image for #{scan['id']}: {exc}")
@@ -949,6 +946,7 @@ def create_app(
         """
         try:
             import cv2
+            from mtg_card_scanner.card_detect import photo_card
             from mtg_card_scanner.ocr_id import match_printing, ocr_status, read_bottom_strip
         except Exception:
             return
@@ -972,7 +970,10 @@ def create_app(
                 continue
             try:
                 img = cv2.imread(str(img_path))
-                sid = match_printing(read_bottom_strip(img), cands) if img is not None else None
+                # The strip is read off the CARD: a stored photo carries a buffer
+                # of tray around it (card_detect.scan_photo), cut back here.
+                sid = (match_printing(read_bottom_strip(photo_card(img)), cands)
+                       if img is not None else None)
             except Exception:
                 continue
             if not sid:

@@ -23,9 +23,12 @@ import cv2
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from mtg_card_scanner.card_detect import (_texture_metrics, extract_card,  # noqa: E402
-                                          find_card_quad, frame_sharpness,
-                                          is_blank_surface)
+from mtg_card_scanner.card_detect import (PHOTO_FILL, PHOTO_H,  # noqa: E402
+                                          PHOTO_MARGIN_X, PHOTO_MARGIN_Y,
+                                          PHOTO_W, _texture_metrics,
+                                          extract_card, find_card_quad,
+                                          frame_sharpness, is_blank_surface,
+                                          scan_photo)
 from tests import card_scenes  # noqa: E402
 from tests.phone_flatten_ref import (CARD_H, CARD_W, MARGINS, SCALE,  # noqa: E402
                                      choose_margin, phone_flatten)
@@ -37,8 +40,28 @@ THUMB = 4          # flattened outputs are stored at 1/4 size to keep the repo s
 def build() -> dict[str, bytes]:
     files: dict[str, bytes] = {}
     expected = {"margins": list(MARGINS), "scale": SCALE,
-                "card_w": CARD_W, "card_h": CARD_H, "thumb": THUMB, "scenes": {}}
-    for name, (img, has_card) in card_scenes.scenes().items():
+                "card_w": CARD_W, "card_h": CARD_H, "thumb": THUMB,
+                # The scan photo (card_detect.scan_photo): the card at PHOTO_FILL of
+                # a PHOTO_W×PHOTO_H photo, inset by the margins.
+                "photo_fill": PHOTO_FILL, "photo_margin": [PHOTO_MARGIN_X, PHOTO_MARGIN_Y],
+                "photo_size": [PHOTO_W, PHOTO_H], "scenes": {}}
+
+    def photo_entry(frame, stem):
+        """scan_photo([frame]) → {detected, size} + a thumbnail of the photo when detected."""
+        photo, detected = scan_photo([frame])
+        entry = {"detected": bool(detected), "size": [photo.shape[1], photo.shape[0]]}
+        if detected:
+            small = cv2.resize(photo, (photo.shape[1] // THUMB, photo.shape[0] // THUMB),
+                               interpolation=cv2.INTER_AREA)
+            ok, png = cv2.imencode(".png", small)
+            assert ok
+            files[f"{stem}.photo.png"] = png.tobytes()
+        return entry
+
+    all_scenes = card_scenes.scenes()
+    # pick_sharpest over every scene (the multi-frame fallback picks the photo's frame).
+    expected["sharpest_scene"] = max(all_scenes, key=lambda n: frame_sharpness(all_scenes[n][0]))
+    for name, (img, has_card) in all_scenes.items():
         ok, png = cv2.imencode(".png", img)
         assert ok
         files[f"{name}.png"] = png.tobytes()
@@ -55,6 +78,8 @@ def build() -> dict[str, bytes]:
         entry["extract_detected"] = bool(detected)
         entry["blank"] = bool(is_blank_surface(card, detected=detected))
         entry["blank_metrics"] = [round(std, 6), round(edge, 6)]
+        # The stored scan photo, from the frame as uploaded …
+        entry["photo"] = photo_entry(img, name)
         if q is not None:
             m = choose_margin(q, w, h)
             entry["margin"] = m
@@ -66,6 +91,8 @@ def build() -> dict[str, bytes]:
                 assert ok
                 files[f"{name}.flat.png"] = png.tobytes()
                 entry["flat_size"] = [flat.shape[1], flat.shape[0]]
+                # … and from the phone's flattened upload (what the phone files).
+                entry["flat_photo"] = photo_entry(flat, f"{name}.flat")
         expected["scenes"][name] = entry
     files["expected.json"] = (json.dumps(expected, indent=1, sort_keys=True) + "\n").encode()
     return files

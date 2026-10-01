@@ -76,6 +76,8 @@ scan screen (Tray trigger or shutter tap)
       re-detect → art pHash → nearest of ~50k artworks (the art pack) → NAME
       → Scryfall: all PAPER printings → PrintingRanker (art×4 + title + textbox)
       → collector-line OCR (ML Kit) → exact printing to #1 → auto-pick?
+  → ScanPhoto: the sharpest frame's card straightened at 95% of a 664×926
+    photo (no edges found → that frame exactly as uploaded)
   → PhoneApi.fileScan (store row + photo) → PriceSweep prices it
   → review: PanelActivity (phone.html) / paired computer (desktop.html)
 ```
@@ -274,6 +276,15 @@ OnePlus Nord N200 5G (camera id 0 only), minSdk 29, arm64-v8a.
   `DetectionDifferentialTest` runs phone.html's REAL detection code under Node
   (`core/src/test/resources/phone_harness.js`) against the Kotlin
   `Detection`/`AutoScanner`. Change detection in phone.html first, then port.
+- **The scan photo is the reference's** (`card_detect.scan_photo` → core
+  `ScanPhoto`, parity-tested on the detect fixtures): the sharpest frame's
+  card straightened so it fills 95% of a 664×926 photo — a deliberate
+  buffer of tray around it (owner, 2026-10-01: "tight on the card plus some
+  buffer — make it 95%"); no card edges → that frame exactly as uploaded
+  ("keep photo"). Photos already filed are never re-cropped. Before 1.1.3
+  the phone filed the upload itself (card ≈ 64–75% of a flattened upload,
+  ≈ 30% of a raw one). The retro-OCR pass reads the card out of the photo
+  (`photo_card`), so the strip bounds stay in card space.
 - **Flatten contract:** `tests/phone_flatten_ref.py` is the executable spec
   (margins 0.08/0.06/0.04, Python banker's rounding); the parity fixtures in
   `android/core/src/test/resources/detect/` come from the reference's own code

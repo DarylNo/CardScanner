@@ -933,3 +933,25 @@ def test_flag_for_deletion_and_delete_only_flagged(client):
     assert c.patch(f"/api/scans/{ids[1]}", json={"flagged": False}).json()["flagged"] is False
     assert sorted(s["id"] for s in c.get("/api/scans").json()) == sorted(ids[1:])
     assert c.get("/api/me").json() == {"role": "admin"}
+
+
+def _scene_jpeg(name):
+    from tests import card_scenes
+    ok, buf = cv2.imencode(".jpg", card_scenes.scenes()[name][0], [cv2.IMWRITE_JPEG_QUALITY, 95])
+    assert ok
+    return buf.tobytes()
+
+
+def test_scan_stores_the_card_photo_tight_with_a_buffer(client, tmp_path):
+    """The stored photo is card_detect.scan_photo's: the card straightened and
+    filling 95% of it (owner, 2026-10-01) — not the upload as it came."""
+    from mtg_card_scanner.card_detect import PHOTO_H, PHOTO_W
+    scan = client.post("/api/scan", files={"files": ("c.jpg", _scene_jpeg("white_tray_black_border"), "image/jpeg")}).json()
+    img = cv2.imread(str(tmp_path / "scan_images" / f"{scan['id']}.jpg"))
+    assert img.shape == (PHOTO_H, PHOTO_W, 3)
+
+
+def test_scan_without_card_edges_stores_the_frame_as_uploaded(client, tmp_path):
+    scan = client.post("/api/scan", files={"files": ("c.jpg", _scene_jpeg("empty_tray"), "image/jpeg")}).json()
+    img = cv2.imread(str(tmp_path / "scan_images" / f"{scan['id']}.jpg"))
+    assert img.shape == (720, 960, 3)

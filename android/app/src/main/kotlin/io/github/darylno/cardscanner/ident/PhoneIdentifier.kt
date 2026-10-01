@@ -6,6 +6,7 @@ import io.github.darylno.cardscanner.core.IdentifyPipeline
 import io.github.darylno.cardscanner.core.ImageSource
 import io.github.darylno.cardscanner.core.OcrEngine
 import io.github.darylno.cardscanner.core.PrintingRanker
+import io.github.darylno.cardscanner.core.ScanPhoto
 import io.github.darylno.cardscanner.core.ScryfallPrintings
 import java.util.concurrent.CancellationException
 import java.util.concurrent.ExecutorService
@@ -47,15 +48,31 @@ class PhoneIdentifier(
     private val runLock = Any()
     private val active = HashSet<Job>()
 
-    /** A result plus the decode time the pipeline doesn't see. */
-    class Identified(val result: IdentifyPipeline.Result, val decodeMs: Long, val totalMs: Long) {
-        /** Per-stage timings, decode first; `total` = decode + pipeline. */
+    /** A result plus the decode time the pipeline doesn't see, and the photo to file. */
+    class Identified(
+        val result: IdentifyPipeline.Result,
+        val decodeMs: Long,
+        val totalMs: Long,
+        /** The photo to file for this scan (null for a `no_card` answer, which files nothing). */
+        val photo: Photo? = null,
+    ) {
+        /** Per-stage timings, decode first; `total` = decode + pipeline + photo. */
         val timingsMs: LinkedHashMap<String, Long>
             get() = LinkedHashMap<String, Long>().also {
                 it["decode"] = decodeMs
                 for ((k, v) in result.timingsMs) if (k != "total") it[k] = v
+                photo?.let { p -> it["photo"] = p.ms }
                 it["total"] = totalMs
             }
+    }
+
+    /**
+     * The reference's photo step ([ScanPhoto], `card_detect.scan_photo`): [jpeg]
+     * is the sharpest frame's card straightened at 95% when its edges were
+     * found; null means file frame [frame] (the sharpest) exactly as uploaded.
+     */
+    class Photo(val jpeg: ByteArray?, val frame: Int, val ms: Long) {
+        val detected: Boolean get() = jpeg != null
     }
 
     class NoArtPackException : Exception("no art pack installed yet")
@@ -117,9 +134,27 @@ class PhoneIdentifier(
             val pipeline = IdentifyPipeline(m, printings, ranker, ocr, nanoClock)
             val r = pipeline.scan(frames, cancelled = cancelled)
             unreachable?.let { throw ScryfallUnreachableException(it) }
-            return Identified(r, decodeMs, (nanoClock() - t0) / 1_000_000L)
+            // The photo, after the answer as the reference does it; a no_card answer files nothing.
+            val photo = if (r.json["no_card"] == true) null else scanPhoto(frames)
+            return Identified(r, decodeMs, (nanoClock() - t0) / 1_000_000L, photo)
         } finally {
             frames.forEach { it.release() }
+        }
+    }
+
+    /** [ScanPhoto] over the decoded frames. Never fails the scan: on an error the sharpest-or-first frame is filed as uploaded. */
+    private fun scanPhoto(frames: List<org.opencv.core.Mat>): Photo {
+        val t0 = nanoClock()
+        fun ms() = (nanoClock() - t0) / 1_000_000L
+        return try {
+            val p = ScanPhoto.of(frames)
+            try {
+                Photo(p.photo?.let { ScanPhoto.jpeg(it) }, p.frame, ms())
+            } finally {
+                p.photo?.release()
+            }
+        } catch (e: Exception) {
+            Photo(null, runCatching { ScanPhoto.sharpestIndex(frames) }.getOrDefault(0), ms())
         }
     }
 

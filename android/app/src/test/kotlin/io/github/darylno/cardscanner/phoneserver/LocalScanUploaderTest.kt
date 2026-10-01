@@ -46,7 +46,8 @@ class LocalScanUploaderTest {
             identifyCalls += frames.map { String(it) }
             when (val n = script.poll() ?: error("script exhausted")) {
                 is Throwable -> throw n
-                else -> @Suppress("UNCHECKED_CAST") (n as Map<String, Any?>)
+                is LocalScanUploader.Answer -> n
+                else -> @Suppress("UNCHECKED_CAST") LocalScanUploader.Answer(n as Map<String, Any?>)
             }
         },
         file = { result, photo, replace -> api.fileScan(result, photo, replace ?: 0) },
@@ -75,7 +76,8 @@ class LocalScanUploaderTest {
     @After fun tearDown() { queues.forEach { it.stop() } }
 
     @Test fun aWeakPrimaryFallsBackToTheRawFramesAndReplacesItsRow() {
-        script.put(weak); script.put(strong)
+        // The fallback found no card edges in the raw frames: the sharpest of them (frame 1) is the photo.
+        script.put(weak); script.put(LocalScanUploader.Answer(strong, photo = null, photoFrame = 1))
         val rec = Rec()
         queue(rec).enqueue("P".toByteArray(), listOf("R0", "R1", "R2").map { it.toByteArray() }, manual = false)
         val (_, out) = rec.next()
@@ -85,7 +87,25 @@ class LocalScanUploaderTest {
         assertEquals(1, store.count())                                               // the fallback REPLACED the row
         val row = store.list().single()
         assertEquals(true, row["identified"])
-        assertEquals("R0", String(photos[row["id"] as Long]!!))                      // the photo of what identified it
+        assertEquals("R1", String(photos[row["id"] as Long]!!))                      // the sharpest frame, as uploaded
+    }
+
+    /** The reference's photo step: the card straightened at 95% is what gets filed, not the upload. */
+    @Test fun theStraightenedCardIsThePhoto() {
+        script.put(LocalScanUploader.Answer(strong, photo = "WARP".toByteArray(), photoFrame = 0))
+        val row = uploader().scan(listOf("P".toByteArray()), null, "job-p")
+        assertEquals("WARP", String(photos[row.getLong("id")]!!))
+    }
+
+    /** Owner: keep the photo when the edges can't be found — the frame as uploaded, never a crop. */
+    @Test fun withoutCardEdgesTheUploadedFrameIsThePhoto() {
+        script.put(LocalScanUploader.Answer(strong, photo = null, photoFrame = 0))
+        val row = uploader().scan(listOf("P".toByteArray()), null, "job-q")
+        assertEquals("P", String(photos[row.getLong("id")]!!))
+        // A frame index past the upload (never produced, but never a crash either): the first frame.
+        script.put(LocalScanUploader.Answer(strong, photo = null, photoFrame = 7))
+        val row2 = uploader().scan(listOf("Q".toByteArray()), null, "job-r")
+        assertEquals("Q", String(photos[row2.getLong("id")]!!))
     }
 
     @Test fun noCardFilesNothing() {

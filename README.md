@@ -54,7 +54,8 @@ artwork, the printing picker, condition / finish / quantity, and live prices.
 - A card is **auto-filed** (marked ⚠) when only one printing exists or when
   the collector line read off the card confirms the printing. Everything else
   waits for you to pick.
-- Every scan keeps its own row, in scan order; swipe a row to delete it (5 s
+- Every scan keeps its own row, in scan order, with a photo of the card
+  (straightened, filling 95% of the picture); swipe a row to delete it (5 s
   Undo).
 - **Filters:** a price band and a popularity floor, combined by *match any*
   (default) or *match all*. They stay set when you leave and come back.
@@ -121,7 +122,8 @@ camera (Tray or Tap to scan) → flatten the card, with a margin
   → Scryfall: every paper printing of that name
   → rank the printings against the photo (art + title + text box)
   → OCR the collector line → confirm the exact printing
-  → file the scan → price it on Face to Face → review / export
+  → file the scan with its photo (the card straightened, 95% of the frame)
+  → price it on Face to Face → review / export
 ```
 
 The card database (`art-pack` release) is rebuilt weekly by CI from
