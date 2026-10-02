@@ -341,6 +341,15 @@ OnePlus Nord N200 5G (camera id 0 only), minSdk 29, arm64-v8a.
   scaled 1.053 so just the card shows (ScanPhoto's 17/23 buffer); older
   photos show as they are. Mode and base layer persist in localStorage
   (`cmpMode`, `cmpTop`). Verified in headless Chromium (compare_ui.py).
+  **The compare block IS the head of the card (owner, 2026-10-02: "get rid of
+  the top area and rework this section now that I have the top print side by
+  side", phone.html v47):** no photo row above it; its title shows the
+  COMPARED printing — name, set name · SET #n, "✓ picked · ×q" when it is
+  the pick, Δ, k/N — its price (the pick's = the scan's own `#p-headprice`,
+  live-polled; another printing's = its sweep price, `data-price-for`, shown
+  on a picked scan only when one exists), the scan error, and ITS "plays in"
+  chips (`formatChipsHtml(scan, c.popularity)`). A scan with no candidates
+  gets a bare head (name, error, the photo alone; a price only when picked).
 - Tap to scan always has an Area: with none set the app draws
   `HandheldGuide.defaultArea` (a centred card at 60% of the limiting side +
   15% pad — back from the card so the phone's shadow stays off it; a starting
