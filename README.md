@@ -50,7 +50,11 @@ The top of the screen shows the version and the server state
 
 **Scans** opens the scan list on the phone: each scan's printings ranked by
 artwork, the printing picker, condition / finish / quantity, and live prices.
-Picking a printing takes you back to the list.
+Picking a printing takes you back to the list. On a card, **Compare** shows
+the scan photo beside the printing being considered, or overlaid — *Wipe*
+drags a divider across the two, *Blend* fades one over the other, and the
+base layer can be either; ‹ › step through the printings, *Pick* picks the
+one shown.
 
 - A card is **auto-filed** (marked ⚠) when only one printing exists or when
   the collector line read off the card confirms the printing. Everything else

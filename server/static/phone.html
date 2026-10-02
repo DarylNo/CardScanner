@@ -189,6 +189,34 @@
   .pctl .qty input { flex:1; min-width:0; width:100%; border:0; background:transparent; color:var(--text);
                      font-size:16px; padding:0; outline:none; }
   .subhead { font-size:13px; color:var(--muted); margin:18px 0 10px; font-weight:600; }
+  /* Compare the scan photo with a printing (owner, 2026-10-02): side by side, or
+     overlaid — "wipe" (a divider to drag) or "blend" (the top layer's opacity),
+     with either image as the base layer. The buttons step through the candidates. */
+  .cmp { margin-top:12px; border-radius:18px; background:var(--card); padding:10px 12px 12px; }
+  .cmphead { display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap;
+             font-size:13px; color:var(--muted); line-height:1.4; }
+  .cmphead b { color:var(--text); }
+  .cmp .pd { color:var(--muted); }
+  .cmpmodes { display:flex; gap:4px; }
+  .cmpmodes button { min-height:32px; padding:0 10px; border-radius:999px; border:1px solid var(--line);
+                     background:transparent; color:var(--muted); font-size:12px; font-weight:600; }
+  .cmpmodes button.on { background:var(--accent); color:#fff; border-color:var(--accent); }
+  .cmpbody { margin-top:10px; display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .cmpbody.overlay { grid-template-columns:minmax(0, 320px); justify-content:center; }
+  .cmpbox { position:relative; aspect-ratio:5/7; border-radius:8px; overflow:hidden; background:#000; }
+  .cmpbox img { position:absolute; inset:0; width:100%; height:100%; object-fit:contain; display:block; }
+  /* A 664×926 scan photo (ScanPhoto: the card inset 17/23) shows just the card, like the printing. */
+  .cmpbox img.fill { transform:scale(1.053); }
+  .cmpbody.overlay .cmpbox img.under { z-index:1; }
+  .cmpbody.overlay .cmpbox img.over { z-index:2; }
+  .cmpcap { position:absolute; left:6px; bottom:6px; z-index:3; font-size:11px; font-weight:700;
+            padding:2px 7px; border-radius:999px; background:#000a; color:#fff; pointer-events:none; }
+  .cmpctl { display:flex; align-items:center; gap:8px; margin-top:10px; }
+  .cmpctl button { min-height:40px; padding:0 14px; border-radius:999px; border:1px solid var(--line);
+                   background:transparent; color:var(--text); font-size:15px; font-weight:700; }
+  .cmpctl button.primary { background:var(--accent); border-color:var(--accent); color:#fff; flex:1 1 auto; }
+  .cmpctl input[type=range] { flex:1 1 auto; min-width:0; accent-color:var(--accent); }
+  .cmpctl .sp { flex:1 1 auto; }
   .pgrid { display:grid; grid-template-columns:repeat(auto-fill, minmax(104px, 1fr)); gap:10px; }
   .pcard { border:2px solid transparent; border-radius:14px; background:var(--card); padding:6px;
            cursor:pointer; -webkit-tap-highlight-color:transparent; }
@@ -428,7 +456,7 @@ function formatChipsHtml(scan){
 }
 
 /* ── version banner — proves which page+server combo is running ────────────── */
-const UI_VERSION = 'v44';
+const UI_VERSION = 'v45';
 
 // Who is asking: the phone server says "guest" for the 6-digit code (admin =
 // the paired computer); the computer's own server always says admin. Guests
@@ -1449,6 +1477,7 @@ function detailCtl() {
 async function openDetail(id) {
   detailScanId = id;
   detailShowAllArt = false;
+  cmpIndex = -1;
   detailPanel.classList.add('open');
   await renderScanDetail();
 }
@@ -1489,6 +1518,71 @@ function headPriceHtml(scan) {
   if (r) return `~${escHtml(r)}<span class="pnote">across same-art printings</span>`;
   return printInfo(scan).searched ? muted('no F2F listing') : muted('pricing…');
 }
+/* ── compare (owner, 2026-10-02): the scan photo beside / over a printing ──────
+   Side by side by default; "wipe" overlays them with a divider to drag (crisp
+   pixels of each on either side — a frame, set symbol or collector line that
+   differs jumps out); "blend" overlays with the top layer's opacity on the
+   slider; the base layer is either one. ‹ › step through the candidates
+   without picking; "Pick …" picks the one being compared. Mode and base layer
+   are remembered per viewer. */
+let cmpIndex = -1;                                             // -1: start at the picked printing, else the top match
+let cmpMode = localStorage.getItem('cmpMode') || 'side';       // side | wipe | blend
+let cmpTop = localStorage.getItem('cmpTop') || 'scan';         // the top layer when overlaid: scan | print
+let cmpPos = 50;                                               // the slider: wipe = divider %, blend = top opacity %
+function compareHtml(scan, cands, sel) {
+  if (!cands.length) return '';
+  if (cmpIndex < 0) cmpIndex = Math.max(0, cands.findIndex(c => c.id === sel?.scryfall_id));
+  cmpIndex = Math.min(cmpIndex, cands.length - 1);
+  const c = cands[cmpIndex];
+  const tag = `${escHtml((c.set||'').toUpperCase())} #${escHtml(c.collector_number)}`;
+  const scanImg = `<img class="cmpscan" src="/api/scans/${scan.id}/image" alt="Scan photo"
+      onload="if(this.naturalWidth===664&&this.naturalHeight===926)this.classList.add('fill')" onerror="this.style.visibility='hidden'">`;
+  const printImg = `<img class="cmpprint" src="${escHtml(c.image_normal||c.image_small)}" alt="Printing" onerror="this.style.visibility='hidden'">`;
+  const overlay = cmpMode !== 'side';
+  const body = overlay
+    ? `<div class="cmpbody overlay"><div class="cmpbox">${scanImg}${printImg}<span class="cmpcap" id="cmp-cap"></span></div></div>`
+    : `<div class="cmpbody side"><div class="cmpbox">${scanImg}<span class="cmpcap">scan</span></div>
+         <div class="cmpbox">${printImg}<span class="cmpcap">${tag}</span></div></div>`;
+  return `<div class="cmp" id="cmp">
+    <div class="cmphead"><span id="cmp-name">Compare with <b>${tag}</b>${c.multi_distance!=null?` <span class="pd">Δ${c.multi_distance}</span>`:''}${c.id===sel?.scryfall_id?' <span class="pd">✓ picked</span>':''} <span class="pd">${cmpIndex+1}/${cands.length}</span></span>
+      <div class="cmpmodes">${[['side','Side by side'],['wipe','Wipe'],['blend','Blend']].map(([m,t]) =>
+        `<button data-cmpmode="${m}" class="${m===cmpMode?'on':''}">${t}</button>`).join('')}</div></div>
+    ${body}
+    <div class="cmpctl"><button id="cmp-prev" aria-label="Previous printing">‹</button>
+      ${overlay ? `<input id="cmp-slider" type="range" min="0" max="100" value="${cmpPos}" aria-label="${cmpMode==='wipe'?'Wipe':'Blend'}">` : '<span class="sp"></span>'}
+      <button id="cmp-next" aria-label="Next printing">›</button></div>
+    <div class="cmpctl">${overlay ? `<button id="cmp-swap">${cmpTop==='scan'?'Scan on top':'Print on top'}</button>` : ''}
+      <button id="cmp-pick" class="primary" data-pick="${escHtml(c.id)}">${c.id===sel?.scryfall_id?'Keep':'Pick'} ${tag}</button></div>
+  </div>`;
+}
+function applyCompareLayers() {
+  const box = detailBody.querySelector('#cmp .cmpbody.overlay .cmpbox'); if (!box) return;
+  const scanEl = box.querySelector('.cmpscan'), printEl = box.querySelector('.cmpprint');
+  const top = cmpTop === 'scan' ? scanEl : printEl, under = top === scanEl ? printEl : scanEl;
+  under.classList.add('under'); under.classList.remove('over'); under.style.clipPath = ''; under.style.opacity = '';
+  top.classList.add('over'); top.classList.remove('under');
+  if (cmpMode === 'wipe') { top.style.opacity = ''; top.style.clipPath = `inset(0 ${100 - cmpPos}% 0 0)`; }
+  else { top.style.clipPath = ''; top.style.opacity = String(cmpPos / 100); }
+  const cap = box.querySelector('#cmp-cap');
+  if (cap) cap.textContent = cmpTop === 'scan' ? 'scan over print' : 'print over scan';
+}
+function wireCompare(cands, pick) {
+  const root = $('#cmp'); if (!root) return;
+  root.querySelectorAll('[data-cmpmode]').forEach(b => b.addEventListener('click', () => {
+    cmpMode = b.dataset.cmpmode; localStorage.setItem('cmpMode', cmpMode); renderScanDetail();
+  }));
+  $('#cmp-prev').addEventListener('click', () => { cmpIndex = (cmpIndex - 1 + cands.length) % cands.length; renderScanDetail(); });
+  $('#cmp-next').addEventListener('click', () => { cmpIndex = (cmpIndex + 1) % cands.length; renderScanDetail(); });
+  $('#cmp-slider')?.addEventListener('input', e => { cmpPos = Number(e.target.value); applyCompareLayers(); });
+  $('#cmp-swap')?.addEventListener('click', () => {
+    cmpTop = cmpTop === 'scan' ? 'print' : 'scan'; localStorage.setItem('cmpTop', cmpTop); renderScanDetail();
+  });
+  $('#cmp-pick').addEventListener('click', e => pick(e.currentTarget));
+  // Side by side: tap either picture for the full-size view.
+  root.querySelectorAll('.cmpbody.side .cmpbox img').forEach(img => img.addEventListener('click', () => openLightbox(img.src)));
+  applyCompareLayers();
+}
+
 async function renderScanDetail() {
   const scan = await (await fetch(`/api/scans/${detailScanId}`)).json();
   if (scan.error && !scan.id) { detailBody.innerHTML = `<p>${escHtml(scan.error)}</p>`; return; }
@@ -1510,11 +1604,12 @@ async function renderScanDetail() {
       ${formatChipsHtml(scan)}
     </div>
   </div>`;
-  html += detailControls(scan);
-  html += `<div class="subhead">${sel ? 'Re-pick printing' : 'Pick the printing'} — closest first</div>`;
   const cands = scan.candidates || [];
   const folded = cands.filter(c => c.other_art && c.id !== sel?.scryfall_id);
   const shown = detailShowAllArt ? cands : cands.filter(c => !folded.includes(c));
+  html += compareHtml(scan, shown, sel);
+  html += detailControls(scan);
+  html += `<div class="subhead">${sel ? 'Re-pick printing' : 'Pick the printing'} — closest first</div>`;
   const foldTile = folded.length
     ? `<div class="pfold" id="pfold">${detailShowAllArt ? 'Hide' : 'Show'} ${folded.length} other artwork${folded.length===1?'':'s'}</div>` : '';
   html += cands.length
@@ -1560,6 +1655,7 @@ async function renderScanDetail() {
   const candPick = pickFrom(scan.candidates);
   detailBody.querySelectorAll('#pcands .pcard[data-pick]').forEach(el =>
     el.addEventListener('click', () => candPick(el)));
+  wireCompare(shown, candPick);
 
   if (scan.status === 'selected') {
     ['p-cond','p-fin','p-qty'].forEach(cid => {
