@@ -208,7 +208,10 @@
   .cmpbox { position:relative; aspect-ratio:5/7; border-radius:8px; overflow:hidden; background:#000; }
   .cmpbox img { position:absolute; inset:0; width:100%; height:100%; object-fit:contain; display:block; }
   /* A 664×926 scan photo (ScanPhoto: the card inset 17/23) shows just the card, like the printing. */
-  .cmpbox img.fill { transform:scale(1.053); }
+  .cmpbox img.fill { transform:scale(1.053); }   /* applyScanScale() folds in the viewer's "Scan size" */
+  .cmpscale { margin-top:6px; }
+  .cmpscale .pd { font-size:12px; flex:0 0 auto; }
+  .cmpscale button { min-height:32px; padding:0 10px; font-size:12px; color:var(--muted); flex:0 0 auto; }
   .cmpbody.overlay .cmpbox img.under { z-index:1; }
   .cmpbody.overlay .cmpbox img.over { z-index:2; }
   .cmpcap { position:absolute; left:6px; bottom:6px; z-index:3; font-size:11px; font-weight:700;
@@ -458,7 +461,7 @@ function formatChipsHtml(scan, pop = popOf(scan)){
 }
 
 /* ── version banner — proves which page+server combo is running ────────────── */
-const UI_VERSION = 'v47';
+const UI_VERSION = 'v48';
 
 // Who is asking: the phone server says "guest" for the 6-digit code (admin =
 // the paired computer); the computer's own server always says admin. Guests
@@ -1531,6 +1534,18 @@ let cmpIndex = -1;                                             // -1: start at t
 let cmpMode = localStorage.getItem('cmpMode') || 'side';       // side | wipe | blend
 let cmpTop = localStorage.getItem('cmpTop') || 'scan';         // the top layer when overlaid: scan | print
 let cmpPos = 50;                                               // the slider: wipe = divider %, blend = top opacity %
+// "Scan size" (owner, 2026-10-02: "are we able to size either card to match the
+// size of the other?"): the scan photo's card is not always exactly the
+// printing's size (a sleeve edge, a quad a little off) — this scales the scan
+// layer, in every mode, around its centre; 100 = as filed. Remembered per viewer.
+let cmpScale = Math.min(130, Math.max(70, Number(localStorage.getItem('cmpScale')) || 100));
+function applyScanScale() {
+  for (const img of document.querySelectorAll('#cmp .cmpscan')) {
+    const base = img.classList.contains('fill') ? 1.053 : 1;        // the 664×926 photo's card inset (ScanPhoto)
+    img.style.transform = `scale(${(base * cmpScale / 100).toFixed(4)})`;
+  }
+  const b = $('#cmp-scale-reset'); if (b) b.textContent = `${cmpScale}%`;
+}
 function compareHtml(scan, cands, sel) {
   if (!cands.length) return '';
   if (cmpIndex < 0) cmpIndex = Math.max(0, cands.findIndex(c => c.id === sel?.scryfall_id));
@@ -1538,7 +1553,7 @@ function compareHtml(scan, cands, sel) {
   const c = cands[cmpIndex];
   const tag = `${escHtml((c.set||'').toUpperCase())} #${escHtml(c.collector_number)}`;
   const scanImg = `<img class="cmpscan" src="/api/scans/${scan.id}/image" alt="Scan photo"
-      onload="if(this.naturalWidth===664&&this.naturalHeight===926)this.classList.add('fill')" onerror="this.style.visibility='hidden'">`;
+      onload="if(this.naturalWidth===664&&this.naturalHeight===926)this.classList.add('fill');applyScanScale()" onerror="this.style.visibility='hidden'">`;
   const printImg = `<img class="cmpprint" src="${escHtml(c.image_normal||c.image_small)}" alt="Printing" onerror="this.style.visibility='hidden'">`;
   const overlay = cmpMode !== 'side';
   const body = overlay
@@ -1569,6 +1584,9 @@ function compareHtml(scan, cands, sel) {
     <div class="cmpctl"><button id="cmp-prev" aria-label="Previous printing">‹</button>
       ${overlay ? `<input id="cmp-slider" type="range" min="0" max="100" value="${cmpPos}" aria-label="${cmpMode==='wipe'?'Wipe':'Blend'}">` : '<span class="sp"></span>'}
       <button id="cmp-next" aria-label="Next printing">›</button></div>
+    <div class="cmpctl cmpscale"><span class="pd">Scan size</span>
+      <input id="cmp-scale" type="range" min="70" max="130" value="${cmpScale}" aria-label="Scan size">
+      <button id="cmp-scale-reset" title="Back to the filed size">${cmpScale}%</button></div>
     <div class="cmpctl">${overlay ? `<button id="cmp-swap">${cmpTop==='scan'?'Scan on top':'Print on top'}</button>` : ''}
       <button id="cmp-pick" class="primary" data-pick="${escHtml(c.id)}">${c.id===sel?.scryfall_id?'Keep':'Pick'} ${tag}</button></div>
   </div>`;
@@ -1592,6 +1610,8 @@ function wireCompare(cands, pick) {
   $('#cmp-prev').addEventListener('click', () => { cmpIndex = (cmpIndex - 1 + cands.length) % cands.length; renderScanDetail(); });
   $('#cmp-next').addEventListener('click', () => { cmpIndex = (cmpIndex + 1) % cands.length; renderScanDetail(); });
   $('#cmp-slider')?.addEventListener('input', e => { cmpPos = Number(e.target.value); applyCompareLayers(); });
+  $('#cmp-scale')?.addEventListener('input', e => { cmpScale = Number(e.target.value); localStorage.setItem('cmpScale', String(cmpScale)); applyScanScale(); });
+  $('#cmp-scale-reset')?.addEventListener('click', () => { cmpScale = 100; localStorage.setItem('cmpScale', '100'); const r = $('#cmp-scale'); if (r) r.value = '100'; applyScanScale(); });
   $('#cmp-swap')?.addEventListener('click', () => {
     cmpTop = cmpTop === 'scan' ? 'print' : 'scan'; localStorage.setItem('cmpTop', cmpTop); renderScanDetail();
   });
@@ -1617,6 +1637,7 @@ function wireCompare(cands, pick) {
     renderScanDetail();
   });
   applyCompareLayers();
+  applyScanScale();
 }
 const CMP_SWIPE_PX = 50;
 

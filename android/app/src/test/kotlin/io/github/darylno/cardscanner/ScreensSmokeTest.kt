@@ -105,11 +105,14 @@ class ScreensSmokeTest {
         val top = a.window.decorView.findViewWithTag<View>(TAG_TOP_BAR)
         val bottom = a.window.decorView.findViewWithTag<View>(TAG_BOTTOM_BAR)
         assertNotNull(top); assertNotNull(bottom)
-        for (label in listOf(a.getString(R.string.scans), a.getString(R.string.share), "⚙",
+        for (label in listOf(a.getString(R.string.scans), "⚙",
                 a.getString(R.string.mode_tray), a.getString(R.string.mode_tap))) {
             assertNotNull("$label is in the bottom bar", findText(bottom, label))
             assertEquals("$label is not in the top bar", null, findText(top, label))
         }
+        // Share is the standard share glyph, named for TalkBack.
+        assertNotNull("Share (icon) is in the bottom bar", findDesc(bottom, a.getString(R.string.share)))
+        assertEquals(null, findDesc(top, a.getString(R.string.share)))
         // Visible clickables only: the measurement session's prompt card also lives in the top
         // scrim, but it is GONE outside a session.
         fun clickables(v: View): Int = if (v.visibility != View.VISIBLE) 0 else (if (v.isClickable && v !is ViewGroup) 1 else 0) +
@@ -117,7 +120,8 @@ class ScreensSmokeTest {
         // Only the upload indicator (tap = retry now, shown while scans are queued) stays up there.
         assertTrue("no buttons left in the top bar", clickables(top) <= 1)
         // Share sits directly above Scans (owner, 2026-10-02): same vertical column, Share first.
-        val share = findText(bottom, a.getString(R.string.share))!!
+        val share = findDesc(bottom, a.getString(R.string.share))!!
+        assertNotNull("the chip carries the glyph", (share as TextView).compoundDrawables[0])
         val scans = findText(bottom, a.getString(R.string.scans))!!
         val column = share.parent as LinearLayout
         assertSame("Share and Scans share a column", column, scans.parent)
@@ -296,6 +300,12 @@ class ScreensSmokeTest {
         assertNotNull("DIAGNOSTICS header not found", header)
         assertTrue(header!!.performLongClick())
         assertEquals(DiagnosticsActivity::class.java.name, nextStarted()?.component?.className)
+    }
+
+    private fun findDesc(v: View, desc: String): View? {
+        if (v.contentDescription?.toString() == desc) return v
+        if (v is ViewGroup) for (i in 0 until v.childCount) findDesc(v.getChildAt(i), desc)?.let { return it }
+        return null
     }
 
     private fun findText(v: View, text: String): TextView? {

@@ -350,6 +350,14 @@ OnePlus Nord N200 5G (camera id 0 only), minSdk 29, arm64-v8a.
   on a picked scan only when one exists), the scan error, and ITS "plays in"
   chips (`formatChipsHtml(scan, c.popularity)`). A scan with no candidates
   gets a bare head (name, error, the photo alone; a price only when picked).
+  **"Scan size"** (owner: "size either card to match the size of the other",
+  v48): a 70–130 % slider scales the SCAN layer around its centre in every
+  mode (folded into the 1.053 fill scale by `applyScanScale()`), the % button
+  resets; persisted per viewer (`cmpScale`). Manual on purpose — the photo's
+  card is at a known 95 % only when the quad was right (a sleeve edge makes
+  it read larger).
+  Scan-screen Share is the standard share glyph (`drawable/ic_share`,
+  `ScanChrome.iconChip`, named "Share" for TalkBack).
 - Tap to scan always has an Area: with none set the app draws
   `HandheldGuide.defaultArea` (a centred card at 60% of the limiting side +
   15% pad — back from the card so the phone's shadow stays off it; a starting

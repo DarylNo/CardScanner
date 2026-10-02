@@ -407,7 +407,8 @@ class MainActivity : AppCompatActivity() {
         seg.addView(traySeg); seg.addView(tapSeg)
         // The mode switch · ⚙ Settings (right) — moved down from the top bar. Share sits
         // in the row below, above Scans (owner, 2026-10-02).
-        val shareBtn = chrome.chip(getString(R.string.share)) { startActivity(Intent(this, ShareActivity::class.java)) }
+        // The standard share glyph (owner, 2026-10-02: "just use the standard share icon").
+        val shareBtn = chrome.iconChip(R.drawable.ic_share, getString(R.string.share)) { startActivity(Intent(this, ShareActivity::class.java)) }
         val settingsBtn = chrome.chip("⚙") { startActivity(Intent(this, SettingsActivity::class.java)) }.apply {
             contentDescription = getString(R.string.settings)
             textSize = 18f
