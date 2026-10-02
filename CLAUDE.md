@@ -332,8 +332,9 @@ OnePlus Nord N200 5G (camera id 0 only), minSdk 29, arm64-v8a.
   photo beside the compared printing (default), or overlaid — *Wipe* (a
   divider on the slider: crisp pixels of each side, how a different frame /
   set symbol / collector line shows) or *Blend* (the top layer's opacity),
-  with either image as the base layer; ‹ › step through the candidates
-  without picking, "Pick SET #n" picks the compared one. A 664×926 photo is
+  with either image as the base layer; ‹ › or a horizontal swipe on the
+  pictures (≥50 px, mostly sideways) step through the candidates without
+  picking, "Pick SET #n" picks the compared one. A 664×926 photo is
   scaled 1.053 so just the card shows (ScanPhoto's 17/23 buffer); older
   photos show as they are. Mode and base layer persist in localStorage
   (`cmpMode`, `cmpTop`). Verified in headless Chromium (compare_ui.py).
