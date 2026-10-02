@@ -5,6 +5,7 @@ import androidx.camera.core.ImageProxy
 import io.github.darylno.cardscanner.core.AutoScanner
 import io.github.darylno.cardscanner.core.Box
 import io.github.darylno.cardscanner.core.CardOutline
+import io.github.darylno.cardscanner.core.OutlineTracker
 import io.github.darylno.cardscanner.core.DebugLog
 import io.github.darylno.cardscanner.core.Gray
 import io.github.darylno.cardscanner.core.GraySampler
@@ -90,9 +91,12 @@ class CaptureBurst(
  * draw an outline around the card … then watch that area for new cards";
  * "can't trigger on silly things like shadows") — none of it feeds the trigger,
  * [AutoScanner] / [Detection] and phone.html's detection are untouched:
- *  4. On occupied ticks (and the Trigger tick) the live card outline is found
- *     on the SAME 176×MH sample ([CardOutline], ~1.3 ms on x86) and goes out in
- *     the [DetectionUpdate]. It runs AFTER the tick / trigger / capture handling
+ *  4. On every tick a card may be sitting there (occupied, the Trigger tick,
+ *     awaiting the next card, a different card settling) the live card outline
+ *     is found on the SAME 176×MH sample ([CardOutline], ~1.3 ms on x86),
+ *     smoothed across ticks with outliers dropped ([OutlineTracker]: the
+ *     "much bigger card" the finder sometimes sees never moves it) and goes out
+ *     in the [DetectionUpdate]. It runs AFTER the tick / trigger / capture handling
  *     and inside runCatching, so nothing it does can skip fire() / captureDone()
  *     (a skipped captureDone leaves the scanner SCANNING for ever).
  *  5. The WATCH WINDOW: at a capture, the padded (15 %) card polygon in sample
@@ -218,6 +222,8 @@ class ScanAnalyzer(
     @Volatile private var captures = 0L
     @Volatile private var errors = 0L
     @Volatile private var lastError: String? = null
+    /** Smooths the live outline across ticks (display + the watch window; never the trigger). */
+    private val tracker = OutlineTracker()
     @Volatile private var outlineRuns = 0L
     @Volatile private var outlinesFound = 0L
     @Volatile private var outlineNsTotal = 0L
@@ -350,20 +356,30 @@ class ScanAnalyzer(
         val ev = event
         val g = tickSample
         if (ev != null && g != null) {
+            // Every tick a card may be sitting there — occupied, the trigger, awaiting
+            // the next card, a different card settling — so the card stays highlighted.
             val wantOutline = ev is AutoScanner.Event.Trigger ||
                 (ev is AutoScanner.Event.Watching && ev.occupied) ||
+                ev is AutoScanner.Event.AwaitingNext ||
                 (ev is AutoScanner.Event.NextCard && !ev.removed)
             var outline: CardOutline.Outline? = null
             var outlineNs: Long? = null
             if (wantOutline) {
                 val t0 = System.nanoTime()
-                outline = runCatching { outlineFinder(g, uw, uh, roi) }
+                val raw = runCatching { outlineFinder(g, uw, uh, roi) }
+                    .onFailure { outlineErrors++; lastOutlineError = it.toString() }
+                    .getOrNull()
+                // Smoothed across ticks, outliers dropped (OutlineTracker) — in sample px, then
+                // back to frame fractions the same way a raw find goes.
+                outline = runCatching { smooth(raw, g, uw, uh) }
                     .onFailure { outlineErrors++; lastOutlineError = it.toString() }
                     .getOrNull()
                 outlineNs = System.nanoTime() - t0
                 outlineRuns++
                 outlineNsTotal += outlineNs
-                if (outline != null) outlinesFound++
+                if (raw != null) outlinesFound++
+            } else {
+                tracker.reset()
             }
             runCatching { instrument(ev, g, outline, outlineNs, timestampNs) }
                 .onFailure { outlineErrors++; lastOutlineError = it.toString() }
@@ -376,6 +392,15 @@ class ScanAnalyzer(
     }
 
     // ---- the watch window + shadow mode (display / log only) ----
+
+    /** [raw] through the tracker: the outline to show, as an Outline in the same spaces, or null. */
+    private fun smooth(raw: CardOutline.Outline?, g: Gray, uw: Int, uh: Int): CardOutline.Outline? {
+        val sq = tracker.update(raw?.sampleQuad) ?: return null
+        if (raw != null && sq.contentEquals(raw.sampleQuad)) return raw
+        val area = roi?.toPixels(uw, uh) ?: RoiPx(0, 0, uw, uh)
+        val ns = raw?.nanos ?: 0L
+        return CardOutline.Outline(CardOutline.toFrameFractions(sq, g.w, g.h, area, uw, uh), sq, ns / 1_000_000, ns)
+    }
 
     /** The watch window as frame fractions for the overlay, or null. */
     private fun watchFractions(uw: Int, uh: Int): FloatArray? {
@@ -408,6 +433,7 @@ class ScanAnalyzer(
         if (inWait) endWait(ts, why)
         watch = null; heldTriggerQuad = null; lastFiredId = 0L
         preparedRef = null; preparedRefOf = null
+        tracker.reset()
     }
 
     /** Per tick, after the decisions: the watch window upkeep and the shadow-mode measurement. */
@@ -646,7 +672,8 @@ class ScanAnalyzer(
             append(" · captures $captures · errors $errors")
             lastError?.let { append(" (last: $it)") }
             val o = outlineRuns
-            if (o > 0) append(" · outlines $outlinesFound/$o avg outline ${"%.2f".format(outlineNsTotal / 1e6 / o)} ms")
+            if (o > 0) append(" · outlines $outlinesFound/$o avg outline ${"%.2f".format(outlineNsTotal / 1e6 / o)} ms" +
+                " · ${tracker.outliers} outlier(s) dropped")
             if (outlineErrors > 0) append(" · outline errors $outlineErrors (last: $lastOutlineError)")
             val x = textureRuns
             if (x > 0) append(" · texture $x avg ${"%.2f".format(textureNsTotal / 1e6 / x)} ms")

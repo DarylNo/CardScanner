@@ -405,7 +405,8 @@ class MainActivity : AppCompatActivity() {
         traySeg = segItem(getString(R.string.mode_tray), true)
         tapSeg = segItem(getString(R.string.mode_tap), false)
         seg.addView(traySeg); seg.addView(tapSeg)
-        // Share (left) · the mode switch · ⚙ Settings (right) — moved down from the top bar.
+        // The mode switch · ⚙ Settings (right) — moved down from the top bar. Share sits
+        // in the row below, above Scans (owner, 2026-10-02).
         val shareBtn = chrome.chip(getString(R.string.share)) { startActivity(Intent(this, ShareActivity::class.java)) }
         val settingsBtn = chrome.chip("⚙") { startActivity(Intent(this, SettingsActivity::class.java)) }.apply {
             contentDescription = getString(R.string.settings)
@@ -418,7 +419,7 @@ class MainActivity : AppCompatActivity() {
         val edge = { v: View, g: Int -> FrameLayout(this).apply {
             addView(v, FrameLayout.LayoutParams(wrap(), wrap(), g or Gravity.CENTER_VERTICAL))
         } }
-        modeRow.addView(edge(shareBtn, Gravity.START), LinearLayout.LayoutParams(0, wrap(), 1f))
+        modeRow.addView(View(this), LinearLayout.LayoutParams(0, wrap(), 1f))
         modeRow.addView(seg, LinearLayout.LayoutParams(wrap(), wrap()).apply { marginStart = dp(8); marginEnd = dp(8) })
         modeRow.addView(edge(settingsBtn, Gravity.END), LinearLayout.LayoutParams(0, wrap(), 1f))
         bottom.addView(modeRow, LinearLayout.LayoutParams(match(), wrap()).apply { bottomMargin = dp(16) })
@@ -439,7 +440,13 @@ class MainActivity : AppCompatActivity() {
             addView(v, FrameLayout.LayoutParams(wrap(), wrap(), g or Gravity.CENTER_VERTICAL))
         } }
         val scansBtn = chrome.chip(getString(R.string.scans)) { openPanel(0L) }
-        controls.addView(side(scansBtn, Gravity.START), LinearLayout.LayoutParams(0, wrap(), 1f))   // Scans · shutter · Area
+        val leftStack = LinearLayout(this).apply {           // Share over Scans, left-aligned
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.START
+            addView(shareBtn, LinearLayout.LayoutParams(wrap(), wrap()).apply { bottomMargin = dp(10) })
+            addView(scansBtn, LinearLayout.LayoutParams(wrap(), wrap()))
+        }
+        controls.addView(side(leftStack, Gravity.START), LinearLayout.LayoutParams(0, wrap(), 1f))   // Share/Scans · shutter · Area
         controls.addView(shutter, LinearLayout.LayoutParams(dp(76), dp(76)).apply { marginStart = dp(12); marginEnd = dp(12) })
         controls.addView(side(areaBtn, Gravity.END), LinearLayout.LayoutParams(0, wrap(), 1f))
         bottom.addView(controls, LinearLayout.LayoutParams(match(), wrap()))

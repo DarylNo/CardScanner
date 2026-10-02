@@ -7,6 +7,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.view.View
 import android.view.ViewGroup
+import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
@@ -18,6 +19,7 @@ import io.github.darylno.cardscanner.ui.SettingsActivity
 import io.github.darylno.cardscanner.ui.ShareActivity
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
@@ -114,8 +116,15 @@ class ScreensSmokeTest {
             (if (v is ViewGroup) (0 until v.childCount).sumOf { clickables(v.getChildAt(it)) } else 0)
         // Only the upload indicator (tap = retry now, shown while scans are queued) stays up there.
         assertTrue("no buttons left in the top bar", clickables(top) <= 1)
+        // Share sits directly above Scans (owner, 2026-10-02): same vertical column, Share first.
+        val share = findText(bottom, a.getString(R.string.share))!!
+        val scans = findText(bottom, a.getString(R.string.scans))!!
+        val column = share.parent as LinearLayout
+        assertSame("Share and Scans share a column", column, scans.parent)
+        assertEquals(LinearLayout.VERTICAL, column.orientation)
+        assertTrue("Share is above Scans", column.indexOfChild(share) < column.indexOfChild(scans))
         while (nextStarted() != null) { }
-        findText(bottom, a.getString(R.string.share))!!.performClick()
+        share.performClick()
         assertEquals(io.github.darylno.cardscanner.ui.ShareActivity::class.java.name, nextStarted()?.component?.className)
         findText(bottom, "⚙")!!.performClick()
         assertEquals(SettingsActivity::class.java.name, nextStarted()?.component?.className)

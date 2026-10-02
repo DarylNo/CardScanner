@@ -398,6 +398,22 @@ OnePlus Nord N200 5G (camera id 0 only), minSdk 29, arm64-v8a.
   tagged with the burst id, ignored after a newer trigger), drawn grey dashed
   while awaiting the next card. `OverlayView.plan()` is the pure decision the
   Robolectric tests assert.
+  **The card is ALWAYS highlighted, the outline SMOOTHED (owner, 2026-10-02:
+  "always highlight the card … average its position and throw away outliers.
+  Right now the card tracing is 98% successful. Sometimes it thinks it's a much
+  bigger card").** The outline runs on every tick a card may be sitting there
+  (occupied, Trigger, AwaitingNext, a different card settling); `core/OutlineTracker`
+  keeps the last 5 raw finds (sample px), takes the per-coordinate median,
+  drops any find whose farthest corner is > 0.12·√area of the median away
+  (the "much bigger card"), and shows the MEAN of the rest — so 1–2 bad finds
+  in 5 never move it, and a new card is adopted once it is the majority (3 of 5
+  ticks, ~600 ms), as a jump, never a slide. A missed tick holds the last
+  outline for 2 ticks, then the window empties (reset on card removed / tray
+  re-learned / new Area, `clearWatch`). The smoothed outline is what the
+  overlay draws (grey, solid, in AWAIT_NEXT too — the dashed watch window only
+  when there is none) AND what the watch window is armed from at the trigger.
+  Still display only; the analyzer line reports "N outlier(s) dropped".
+  Scan-screen layout: Tray|Tap · ⚙ over Share-above-Scans · shutter · Area.
 - **SHADOW MODE — the shadow-proof "texture change" signal, computed and
   logged, NEVER acting** (owner: "Can't trigger on silly things like shadows";
   a shadow is a brief, smooth, multiplicative change, a new card changes the

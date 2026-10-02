@@ -163,6 +163,21 @@ class OverlayViewTest {
         v.draw(Canvas())
     }
 
+    /** Owner: "always highlight the card" — the live outline stays up (grey) while waiting; the dashed window only without one. */
+    @Test fun theCardStaysHighlightedWhileWaitingForTheNextCard() {
+        val v = view()
+        v.setBox(box, 176, 235, OverlayView.BoxState.AWAIT_NEXT, outline, watch)
+        val p = v.plan()
+        assertArrayEquals("the outline, not the window", outline, p.shape!!, 1e-6f)
+        assertEquals(OverlayView.BoxState.AWAIT_NEXT, p.state)
+        assertFalse(p.dashed); assertFalse(p.check); assertFalse(p.badge)
+        v.draw(Canvas())
+        // The outline lost (a hand over the card) → the dashed watch window takes over.
+        v.setBox(box, 176, 235, OverlayView.BoxState.AWAIT_NEXT, null, watch)
+        assertTrue(v.plan().dashed)
+        assertArrayEquals(watch, v.plan().shape!!, 1e-6f)
+    }
+
     @Test fun noShapeAtAllGivesTheCentreBadgeUntilTheCaptureBringsOne() {
         val v = view()
         v.setBox(null, 176, 235, OverlayView.BoxState.SETTLING, null, null)

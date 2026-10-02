@@ -309,6 +309,55 @@ class ScanAnalyzerTest {
         assertTrue(a.stats(), a.stats().contains("avg outline"))
     }
 
+    /** Owner: "always highlight the card" — the outline also rides the ticks after a capture, while the card still sits there. */
+    @Test fun theOutlineStaysUpWhileAwaitingTheNextCard() {
+        val rec = Recorder()
+        val a = ScanAnalyzer(direct, rec, outlineFinder = boxFinder)
+        feedTo(a, tray, 12); feedTo(a, card, 12)
+        val waiting = rec.updates.filter { it.event is AutoScanner.Event.AwaitingNext }
+        assertTrue(waiting.isNotEmpty())
+        for (u in waiting) {
+            val q = u.outline
+            assertNotNull("outline while awaiting the next card", q)
+            val (cx, cy) = centroid(q!!)
+            assertEquals(176.0 / 352, cx.toDouble(), 0.02); assertEquals(138.0 / 264, cy.toDouble(), 0.02)
+        }
+        // The card leaves: nothing to outline, and the tracker starts clean for the next one.
+        feedTo(a, tray, 4)
+        assertNull(rec.updates.last().outline)
+    }
+
+    /**
+     * Owner: "average its position and throw away outliers … sometimes it thinks
+     * it's a much bigger card": one tick's find of a card 1.6× the size never
+     * moves the outline shown, and the Diagnostics line counts it.
+     */
+    @Test fun aMuchBiggerFindIsDroppedAsAnOutlier() {
+        val rec = Recorder()
+        var big = false
+        val finder: (Gray, Int, Int, RoiFrac?) -> CardOutline.Outline? = { g, fw, fh, roi ->
+            val o = boxFinder(g, fw, fh, roi)
+            if (o == null || !big) o else {
+                val sq = o.sampleQuad
+                val cx = (sq[0] + sq[2]) / 2; val cy = (sq[1] + sq[5]) / 2
+                val b = FloatArray(8) { i -> if (i % 2 == 0) cx + (sq[i] - cx) * 1.6f else cy + (sq[i] - cy) * 1.6f }
+                val area = roi?.toPixels(fw, fh) ?: RoiPx(0, 0, fw, fh)
+                CardOutline.Outline(CardOutline.toFrameFractions(b, g.w, g.h, area, fw, fh), b, 0, 0)
+            }
+        }
+        val a = ScanAnalyzer(direct, rec, outlineFinder = finder)
+        feedTo(a, tray, 12); feedTo(a, card, 12)
+        val steady = rec.updates.last().outline!!
+        big = true
+        feedTo(a, card, 2)                 // one tick (≥190 ms between samples)
+        big = false
+        val shown = rec.updates.last().outline!!
+        assertArrayEquals("the bigger find did not move the outline", steady, shown, 1e-4f)
+        assertTrue(a.stats(), a.stats().contains("1 outlier(s) dropped"))
+        feedTo(a, card, 2)
+        assertArrayEquals(steady, rec.updates.last().outline!!, 1e-4f)
+    }
+
     @Test fun theWatchWindowIsTheCardShapePaddedAndSnapsToTheCaptureQuad() {
         val rec = Recorder()
         val a = ScanAnalyzer(direct, rec, outlineFinder = boxFinder)
