@@ -434,6 +434,13 @@ OnePlus Nord N200 5G (camera id 0 only), minSdk 29, arm64-v8a.
   when there is none) AND what the watch window is armed from at the trigger.
   The analyzer line reports "N outlier(s) dropped".
   Scan-screen layout: Tray|Tap · ⚙ over Share-above-Scans · shutter · Area.
+  **1.1.7 shipped with that bottom row INVISIBLE** (owner's screenshot): the
+  mode row's balancing spacer was a bare `View` with WRAP_CONTENT height, which
+  a bare View measures as "all the height offered", so the row filled the
+  screen and Share/Scans/shutter/Area got 0 px. Fixed in 1.1.8 (spacer height
+  0). `mainActivity_everyControlIsOnScreen` lays the screen out at the N200's
+  size and asserts every control has a size and sits on screen — the old
+  "is it in the bottom bar" test passed with all of them at 0 px.
 - **THE CARD-SHAPE GATE (owner, 2026-10-02, a video of the Tray "trying to
   scan nothing" — "Card detected — hold still…" and a small amber box
   wandering over an empty white tray: "should try to find a shape that

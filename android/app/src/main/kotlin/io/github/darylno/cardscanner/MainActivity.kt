@@ -420,7 +420,11 @@ class MainActivity : AppCompatActivity() {
         val edge = { v: View, g: Int -> FrameLayout(this).apply {
             addView(v, FrameLayout.LayoutParams(wrap(), wrap(), g or Gravity.CENTER_VERTICAL))
         } }
-        modeRow.addView(View(this), LinearLayout.LayoutParams(0, wrap(), 1f))
+        // The left spacer balances ⚙ so the mode switch stays centred. Height 0, never
+        // wrap(): a bare View measures WRAP_CONTENT as "all the height offered", which
+        // made this row fill the screen and squeezed the Share/Scans · shutter · Area
+        // row to nothing (1.1.7 on the rig).
+        modeRow.addView(View(this), LinearLayout.LayoutParams(0, 0, 1f))
         modeRow.addView(seg, LinearLayout.LayoutParams(wrap(), wrap()).apply { marginStart = dp(8); marginEnd = dp(8) })
         modeRow.addView(edge(settingsBtn, Gravity.END), LinearLayout.LayoutParams(0, wrap(), 1f))
         bottom.addView(modeRow, LinearLayout.LayoutParams(match(), wrap()).apply { bottomMargin = dp(16) })
