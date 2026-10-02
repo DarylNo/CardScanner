@@ -50,6 +50,7 @@ The top of the screen shows the version and the server state
 
 **Scans** opens the scan list on the phone: each scan's printings ranked by
 artwork, the printing picker, condition / finish / quantity, and live prices.
+Picking a printing takes you back to the list.
 
 - A card is **auto-filed** (marked ⚠) when only one printing exists or when
   the collector line read off the card confirms the printing. Everything else

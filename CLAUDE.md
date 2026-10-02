@@ -325,7 +325,9 @@ OnePlus Nord N200 5G (camera id 0 only), minSdk 29, arm64-v8a.
   keeps the current Area). Tap to scan = the shutter, and that scan OPENS
   once identified (`/phone?panel=1&detail=<id>`: the page prices it at once,
   prices land live, Back returns to the camera; no Keep/Discard — it's filed
-  like any scan). Tap to scan always has an Area: with none set the app draws
+  like any scan). **Picking a printing closes the detail onto the scan
+  list** (owner, 2026-10-01) with a "Picked …" status, in every flow;
+  condition/finish/quantity edits stay on the card. Tap to scan always has an Area: with none set the app draws
   `HandheldGuide.defaultArea` (a centred card at 60% of the limiting side +
   15% pad — back from the card so the phone's shadow stays off it; a starting
   point, not measured). A drawn Area is never replaced; in Tap to scan the

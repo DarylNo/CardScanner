@@ -125,6 +125,11 @@
   #undoBar span { flex:1 1 auto; }
   #undoBar button { min-height:40px; padding:0 18px; border-radius:999px; border:0; font-weight:700;
                     background:transparent; color:var(--accent); font-size:15px; }
+  /* A passing notice on the list (a pick just closed the card): the undo bar's look, no button. */
+  #flash { position:absolute; left:12px; right:12px; bottom:calc(12px + env(safe-area-inset-bottom)); z-index:5;
+           display:none; padding:12px 16px; border-radius:14px; background:#262a35; color:var(--good);
+           box-shadow:0 6px 24px #0008; font-size:14px; font-weight:600; text-align:center; }
+  #flash.show { display:block; }
   .srow .sthumb { flex:0 0 48px; width:48px; height:67px; border-radius:5px; overflow:hidden;
                   background:var(--line); }
   .srow .sthumb img { width:100%; height:100%; object-fit:cover; display:block; }
@@ -294,6 +299,7 @@
     <div id="sweepInfo" style="display:none"></div>
     <div class="pbody" id="scansList"></div>
     <div id="undoBar" role="status"><span id="undoMsg"></span><button id="undoBtn">Undo</button></div>
+    <div id="flash" role="status"></div>
   </div>
 
   <div class="panel" id="detailPanel">
@@ -422,7 +428,7 @@ function formatChipsHtml(scan){
 }
 
 /* ── version banner — proves which page+server combo is running ────────────── */
-const UI_VERSION = 'v43';
+const UI_VERSION = 'v44';
 
 // Who is asking: the phone server says "guest" for the 6-digit code (admin =
 // the paired computer); the computer's own server always says admin. Guests
@@ -1545,7 +1551,11 @@ async function renderScanDetail() {
     el.style.opacity = '0.5';
     // Every scan keeps its own row (no merging of repeat copies — scan order).
     await jsend(`/api/scans/${scan.id}/select`, 'POST', { printing, ...detailCtl() });
-    await renderScanDetail(); refreshScans();
+    // Picked: back out to the scan list (owner, 2026-10-01) — the pick is the
+    // last thing to do on a card, and the next card is in the list. Condition /
+    // finish / quantity edits and a re-pick's Back stay as they were.
+    closeDetail();
+    flash(`Picked ${printing.name} · ${(printing.set || '').toUpperCase()} #${printing.collector_number}`);
   };
   const candPick = pickFrom(scan.candidates);
   detailBody.querySelectorAll('#pcands .pcard[data-pick]').forEach(el =>
@@ -1583,12 +1593,24 @@ async function renderScanDetail() {
 function closePanelApp() {
   if (window.CardScannerApp) window.CardScannerApp.close(); else history.back();
 }
-$('#detailBack').addEventListener('click', () => {
-  // Back from the scan the app opened goes straight back to the camera.
-  if (PANEL_DETAIL && detailScanId === PANEL_DETAIL && window.CardScannerApp) { closePanelApp(); return; }
+/** A passing notice on the list (the camera page's #status is hidden in panel mode). */
+let flashTimer = null;
+function flash(msg) {
+  const el = $('#flash');
+  el.textContent = msg; el.classList.add('show');
+  clearTimeout(flashTimer);
+  flashTimer = setTimeout(() => el.classList.remove('show'), 2500);
+}
+/** Close the detail view onto the scan list (a pick, or Back). */
+function closeDetail() {
   detailPanel.classList.remove('open');
   detailScanId = null;
   refreshScans();
+}
+$('#detailBack').addEventListener('click', () => {
+  // Back from the scan the app opened goes straight back to the camera.
+  if (PANEL_DETAIL && detailScanId === PANEL_DETAIL && window.CardScannerApp) { closePanelApp(); return; }
+  closeDetail();
 });
 
 /* ── lightbox ──────────────────────────────────────────────────────────────── */
