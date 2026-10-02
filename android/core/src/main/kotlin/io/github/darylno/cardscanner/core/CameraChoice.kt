@@ -47,6 +47,33 @@ object CameraChoice {
     fun resolve(lenses: List<Lens>, chosen: String?): String? =
         if (chosen != null && offered(lenses).any { it.id == chosen }) chosen else automatic(lenses)
 
+    /** The choices in pill / dialog order: Automatic (null) first, then each offered lens. */
+    fun choices(lenses: List<Lens>): List<String?> = listOf<String?>(null) + offered(lenses).map { it.id }
+
+    /**
+     * The scan screen's camera pill (owner, 2026-10-02: "a pill that you swipe around"):
+     * the choice [step] places from [chosen] in [choices], wrapping round. A saved id the
+     * phone doesn't offer counts as Automatic.
+     */
+    fun step(lenses: List<Lens>, chosen: String?, step: Int): String? {
+        val c = choices(lenses)
+        val i = c.indexOf(chosen).coerceAtLeast(0)
+        return c[Math.floorMod(i + step, c.size)]
+    }
+
+    /** The pill's words: "Auto · 13 MP" for Automatic, "Cam 3 · 2.0 MP fixed" for a lens. */
+    fun short(lenses: List<Lens>, chosen: String?): String {
+        val o = offered(lenses)
+        fun mp(l: Lens?) = l?.megapixels?.let { if (it >= 10) "%.0f MP".format(Locale.ROOT, it) else "%.1f MP".format(Locale.ROOT, it) }
+        val pick = chosen?.let { id -> o.firstOrNull { it.id == id } }
+        if (pick == null) {
+            val auto = automatic(lenses)?.let { id -> o.firstOrNull { it.id == id } }
+            return listOfNotNull("Auto", mp(auto)).joinToString(" · ")
+        }
+        return listOfNotNull("Cam ${pick.id}", listOfNotNull(mp(pick), "fixed".takeIf { pick.autofocus == false })
+            .joinToString(" ").ifEmpty { null }).joinToString(" · ")
+    }
+
     /** "Camera 0 · back · 13 MP · autofocus · 4.7 mm" — what a tester needs to tell the lenses apart. */
     fun label(l: Lens): String = listOfNotNull(
         "Camera ${l.id}",

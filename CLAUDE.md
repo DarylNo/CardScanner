@@ -376,7 +376,14 @@ lens on testers' phones), minSdk 29, arm64-v8a.
   dialog; `/api/device` carries `camera` ("auto" | id) and `cameras`
   [{id, label}], PATCH refuses an id this phone doesn't offer, and the
   desktop 📱 Scanner panel has a Lens dropdown (d40; hidden for an older phone
-  app with no `cameras`). Tested in code (CameraChoiceTest, CameraCatalogTest
+  app with no `cameras`). **The camera pill** (owner: "a chooser at the top of
+  the scan page where you see the live view … a pill that you swipe around"):
+  top-right of the top bar, "‹  Auto · 13 MP  ›" / "‹  Cam 3 · 2.0 MP fixed  ›"
+  (`CameraChoice.short`); a horizontal swipe ≥ `CAMERA_SWIPE_DP` (24 dp) steps
+  left = next / right = previous through `CameraChoice.choices` (Automatic
+  first, wrapping, `CameraChoice.step`), a tap steps forward; each step saves
+  `cameraId` and rebinds at once. GONE when the phone offers ≤ 1 lens — the
+  one deliberate exception to "no buttons in the top bar". Tested in code (CameraChoiceTest, CameraCatalogTest
   on Robolectric's camera manager, DeviceApiTest, the Settings chooser in
   ScreensSmokeTest, device_ui.py) — not on a second phone yet.
 - Tap to scan always has an Area: with none set the app draws

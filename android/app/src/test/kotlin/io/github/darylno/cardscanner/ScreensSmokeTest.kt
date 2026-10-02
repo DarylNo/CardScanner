@@ -118,7 +118,8 @@ class ScreensSmokeTest {
         // scrim, but it is GONE outside a session.
         fun clickables(v: View): Int = if (v.visibility != View.VISIBLE) 0 else (if (v.isClickable && v !is ViewGroup) 1 else 0) +
             (if (v is ViewGroup) (0 until v.childCount).sumOf { clickables(v.getChildAt(it)) } else 0)
-        // Only the upload indicator (tap = retry now, shown while scans are queued) stays up there.
+        // Only the upload indicator (tap = retry now, shown while scans are queued) and the
+        // camera pill (a phone with more than one lens; none here) live up there.
         assertTrue("no buttons left in the top bar", clickables(top) <= 1)
         // Share sits directly above Scans (owner, 2026-10-02): same vertical column, Share first.
         val share = findDesc(bottom, a.getString(R.string.share))!!
@@ -298,17 +299,7 @@ class ScreensSmokeTest {
      */
     @Test
     fun settings_cameraChooser_listsTheLensesAndSavesThePick() {
-        fun addCamera(id: String, facing: Int, w: Int, h: Int, minFocus: Float) {
-            val ch = org.robolectric.shadows.ShadowCameraCharacteristics.newCameraCharacteristics()
-            val sh = shadowOf(ch) as org.robolectric.shadows.ShadowCameraCharacteristics
-            sh.set(android.hardware.camera2.CameraCharacteristics.LENS_FACING, facing)
-            sh.set(android.hardware.camera2.CameraCharacteristics.SENSOR_INFO_PIXEL_ARRAY_SIZE, android.util.Size(w, h))
-            sh.set(android.hardware.camera2.CameraCharacteristics.LENS_INFO_MINIMUM_FOCUS_DISTANCE, minFocus)
-            shadowOf(app.getSystemService(android.hardware.camera2.CameraManager::class.java)).addCamera(id, ch)
-        }
-        addCamera("0", android.hardware.camera2.CameraCharacteristics.LENS_FACING_BACK, 4096, 3072, 10f)
-        addCamera("1", android.hardware.camera2.CameraCharacteristics.LENS_FACING_FRONT, 4608, 3456, 0f)
-        addCamera("3", android.hardware.camera2.CameraCharacteristics.LENS_FACING_BACK, 1600, 1200, 0f)
+        addN200Cameras()
         app.settings.cameraId = null
         val a = launch(SettingsActivity::class.java)
         fun openChooser(): androidx.appcompat.app.AlertDialog {
@@ -333,6 +324,74 @@ class ScreensSmokeTest {
         d2.listView.performItemClick(d2.listView.getChildAt(0) ?: d2.listView, 0, d2.listView.adapter.getItemId(0))
         ShadowLooper.idleMainLooper()
         assertEquals(null, app.settings.cameraId)
+    }
+
+    /** Robolectric's camera manager with the N200's lenses: 0 main, 1 front, 3 the 2 MP fixed-focus module. */
+    private fun addN200Cameras() {
+        fun add(id: String, facing: Int, w: Int, h: Int, minFocus: Float) {
+            val ch = org.robolectric.shadows.ShadowCameraCharacteristics.newCameraCharacteristics()
+            val sh = shadowOf(ch) as org.robolectric.shadows.ShadowCameraCharacteristics
+            sh.set(android.hardware.camera2.CameraCharacteristics.LENS_FACING, facing)
+            sh.set(android.hardware.camera2.CameraCharacteristics.SENSOR_INFO_PIXEL_ARRAY_SIZE, android.util.Size(w, h))
+            sh.set(android.hardware.camera2.CameraCharacteristics.LENS_INFO_MINIMUM_FOCUS_DISTANCE, minFocus)
+            shadowOf(app.getSystemService(android.hardware.camera2.CameraManager::class.java)).addCamera(id, ch)
+        }
+        add("0", android.hardware.camera2.CameraCharacteristics.LENS_FACING_BACK, 4096, 3072, 10f)
+        add("1", android.hardware.camera2.CameraCharacteristics.LENS_FACING_FRONT, 4608, 3456, 0f)
+        add("3", android.hardware.camera2.CameraCharacteristics.LENS_FACING_BACK, 1600, 1200, 0f)
+    }
+
+    /**
+     * The camera pill on the live view (owner, 2026-10-02: "a pill that you swipe
+     * around"): swipe left = next, right = previous, tap = next, Automatic is a stop;
+     * each change is saved at once. A phone with a single lens shows no pill.
+     */
+    @Test
+    @Config(qualifiers = "w411dp-h914dp-xxhdpi")
+    fun mainActivity_cameraPill_swipesThroughTheLenses() {
+        addN200Cameras()
+        app.settings.cameraId = null
+        grantCamera(true)
+        val a = launch(MainActivity::class.java)
+        val top = a.window.decorView.findViewWithTag<View>(TAG_TOP_BAR)
+        val pill = findText(top, "‹  Auto · 13 MP  ›")
+        assertNotNull("the pill reads Automatic", pill)
+        assertTrue("and is on screen", pill!!.isShown && pill.height > 0)
+        fun swipe(dx: Float) {
+            val t = android.os.SystemClock.uptimeMillis()
+            val x = pill.width / 2f; val y = pill.height / 2f
+            pill.dispatchTouchEvent(android.view.MotionEvent.obtain(t, t, android.view.MotionEvent.ACTION_DOWN, x, y, 0))
+            pill.dispatchTouchEvent(android.view.MotionEvent.obtain(t, t + 50, android.view.MotionEvent.ACTION_MOVE, x + dx / 2, y, 0))
+            pill.dispatchTouchEvent(android.view.MotionEvent.obtain(t, t + 100, android.view.MotionEvent.ACTION_UP, x + dx, y, 0))
+            ShadowLooper.idleMainLooper()
+        }
+        val far = 40 * a.resources.displayMetrics.density
+        swipe(-far)
+        assertEquals("swipe left → the next stop, camera 0", "0", app.settings.cameraId)
+        assertEquals("‹  Cam 0 · 13 MP  ›", pill.text.toString())
+        swipe(-far)
+        assertEquals("3", app.settings.cameraId)
+        assertEquals("‹  Cam 3 · 1.9 MP fixed  ›", pill.text.toString())
+        swipe(far)
+        assertEquals("swipe right → back to camera 0", "0", app.settings.cameraId)
+        swipe(0f)
+        assertEquals("a tap steps forward", "3", app.settings.cameraId)
+        swipe(-far)
+        assertEquals("wraps round to Automatic", null, app.settings.cameraId)
+        swipe(-5 * a.resources.displayMetrics.density)
+        assertEquals("a tiny move is a tap", "0", app.settings.cameraId)
+        app.settings.cameraId = null
+    }
+
+    @Test
+    fun mainActivity_cameraPill_hiddenWithOneLens() {
+        app.settings.cameraId = null
+        grantCamera(true)
+        val a = launch(MainActivity::class.java)
+        val top = a.window.decorView.findViewWithTag<View>(TAG_TOP_BAR)
+        val pill = findText(top, "‹  Auto  ›")
+        assertNotNull(pill)
+        assertEquals("no lenses listed → no pill", View.GONE, pill!!.visibility)
     }
 
     /** Settings → Delete all scans: the count is shown, the dialog says it, and OK deletes every scan and photo. */

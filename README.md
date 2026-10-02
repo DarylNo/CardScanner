@@ -56,8 +56,12 @@ The top of the screen shows the version and the server state
 the bottom, within thumb reach: Tray|Tap · **⚙ Settings**, then **Share** over
 **Scans** · shutter · **Area**.
 
-**Camera** — Settings → Camera picks which of the phone's back cameras scans,
-for testers on phones other than the Nord N200. Each lens is listed with what
+**Camera** — the pill at the top of the live view shows which camera is
+scanning ("Auto · 13 MP", "Cam 3 · 2.0 MP fixed"). Swipe it left or right, or
+tap it, to step through Automatic and each of the phone's back cameras. It
+shows only on a phone with more than one to choose from. Settings → Camera
+picks the same thing from a list, for testers on phones other than the Nord
+N200. Each lens is listed with what
 tells it apart (megapixels, autofocus or fixed focus, focal length).
 **Automatic** (the default) uses the main back camera. Changing it re-learns
 the empty tray. A paired computer can change it too, from 📱 Scanner.

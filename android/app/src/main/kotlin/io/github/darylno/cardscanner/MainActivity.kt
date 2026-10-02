@@ -1,5 +1,7 @@
 package io.github.darylno.cardscanner
 
+import io.github.darylno.cardscanner.camera.CameraCatalog
+import io.github.darylno.cardscanner.core.CameraChoice
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -67,6 +69,10 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var chrome: ScanChrome
     private lateinit var serverText: TextView
+    /** The camera pill (top right of the live view): swipe or tap to change lens. */
+    private lateinit var cameraPill: TextView
+    /** This phone's lenses (Camera2, read once — they don't change while the app runs). */
+    private val lenses: List<CameraChoice.Lens> by lazy { CameraCatalog.lenses(this) }
     private lateinit var connDot: View
     private lateinit var areaBtn: TextView
     private lateinit var preview: PreviewView
@@ -169,6 +175,47 @@ class MainActivity : AppCompatActivity() {
         app.uploads.addListener(uploadListener)
     }
 
+    /** Show the camera pill's current choice; hidden when the phone offers one lens or none. */
+    private fun refreshCameraPill() {
+        if (!::cameraPill.isInitialized) return
+        val offered = CameraChoice.offered(lenses)
+        cameraPill.visibility = if (offered.size > 1) View.VISIBLE else View.GONE
+        val words = CameraChoice.short(lenses, settings.cameraId)
+        cameraPill.text = "‹  $words  ›"
+        cameraPill.contentDescription = getString(R.string.camera_pill_desc, words)
+    }
+
+    /** Move the camera choice [by] stops (Automatic + each lens, wrapping) and apply it at once. */
+    private fun stepCamera(by: Int) {
+        val next = CameraChoice.step(lenses, settings.cameraId, by)
+        if (next == settings.cameraId) return
+        settings.cameraId = next
+        val words = CameraChoice.short(lenses, next)
+        dlog.i("device", "camera pill → " + (next?.let { "camera $it" } ?: "Automatic") + " ($words)")
+        camera?.setCamera(next)
+        refreshCameraPill()
+        setStatus(getString(if (settings.auto) R.string.camera_pill_changed else R.string.camera_pill_changed_tap, words))
+    }
+
+    /** A horizontal swipe on the pill steps the camera; a short touch is a tap (the chip's click). */
+    private val cameraSwipe = object : View.OnTouchListener {
+        private var x0 = 0f; private var y0 = 0f
+        @android.annotation.SuppressLint("ClickableViewAccessibility")
+        override fun onTouch(v: View, e: android.view.MotionEvent): Boolean {
+            when (e.actionMasked) {
+                android.view.MotionEvent.ACTION_DOWN -> { x0 = e.x; y0 = e.y; v.isPressed = true }
+                android.view.MotionEvent.ACTION_CANCEL -> v.isPressed = false
+                android.view.MotionEvent.ACTION_UP -> {
+                    v.isPressed = false
+                    val dx = e.x - x0; val dy = e.y - y0
+                    if (Math.abs(dx) >= dp(CAMERA_SWIPE_DP) && Math.abs(dx) > Math.abs(dy)) stepCamera(if (dx < 0) 1 else -1)
+                    else if (Math.abs(dx) < dp(CAMERA_SWIPE_DP) && Math.abs(dy) < dp(CAMERA_SWIPE_DP)) v.performClick()
+                }
+            }
+            return true
+        }
+    }
+
     override fun onResume() {
         super.onResume()
         refreshBanner()
@@ -194,6 +241,7 @@ class MainActivity : AppCompatActivity() {
             camera?.setAeLock(settings.aeLock)
             camera?.setHighRes(settings.highRes)
             camera?.setCamera(settings.cameraId)
+            refreshCameraPill()
             // Belt-and-braces: another screen may have unbound the shared CameraProvider
             // while we were stopped; re-bind so the preview/scanning isn't dead.
             camera?.rebind()
@@ -240,6 +288,7 @@ class MainActivity : AppCompatActivity() {
             camera?.setAeLock(settings.aeLock)
             camera?.setHighRes(settings.highRes)
             camera?.setCamera(settings.cameraId)
+            refreshCameraPill()
         }
 
         override fun snapshotJpeg(): ByteArray? = camera?.snapshotJpeg()
@@ -323,6 +372,16 @@ class MainActivity : AppCompatActivity() {
             text = getString(R.string.banner_fmt, BuildConfig.VERSION_NAME, "…")
         }
         topRow.addView(serverText, LinearLayout.LayoutParams(0, wrap(), 1f))
+        // The camera pill (owner, 2026-10-02: "a chooser at the top of the scan page where you
+        // see the live view … a pill that you swipe around"). Swipe left = next lens, right =
+        // previous, tap = next; Automatic is one of the stops. Only on a phone with a choice.
+        cameraPill = chrome.chip("") { stepCamera(1) }.apply {
+            textSize = 13f
+            minHeight = dp(36)
+            setPadding(dp(12), 0, dp(12), 0)
+        }
+        cameraPill.setOnTouchListener(cameraSwipe)
+        topRow.addView(cameraPill, LinearLayout.LayoutParams(wrap(), wrap()).apply { marginStart = dp(8) })
         top.addView(topRow)
         // Cards per minute (rolling 5 min) · cards this session — small and dim.
         rateView = TextView(this).apply {
@@ -488,6 +547,7 @@ class MainActivity : AppCompatActivity() {
             insets
         }
         setContentView(root)
+        refreshCameraPill()
 
         overlay.setRoi(settings.roi)
         overlay.onAreaDrawn = { r -> onAreaDrawn(r) }
@@ -1051,6 +1111,8 @@ class MainActivity : AppCompatActivity() {
 
 /** View tags of the scan screen's two scrims (tests check every button lives in the bottom one). */
 internal const val TAG_TOP_BAR = "scan_top_bar"
+/** A swipe on the camera pill must travel this far sideways (dp); less is a tap. */
+internal const val CAMERA_SWIPE_DP = 24
 internal const val TAG_BOTTOM_BAR = "scan_bottom_bar"
 
 /** How long the scan-taken blue ✓ stays up. */

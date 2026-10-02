@@ -40,6 +40,22 @@ class CameraChoiceTest {
         assertEquals(listOf("0", "2", "3"), CameraChoice.offered(n200).map { it.id })
     }
 
+    @Test fun thePillStepsRoundAutomaticAndTheLenses() {
+        assertEquals(listOf(null, "0", "2", "3"), CameraChoice.choices(n200))
+        assertEquals("0", CameraChoice.step(n200, null, 1))
+        assertEquals("3", CameraChoice.step(n200, null, -1))
+        assertEquals("wraps to Automatic", null, CameraChoice.step(n200, "3", 1))
+        assertEquals("2", CameraChoice.step(n200, "3", -1))
+        assertEquals("an id this phone lacks counts as Automatic", "0", CameraChoice.step(n200, "8", 1))
+    }
+
+    @Test fun thePillsWords() {
+        assertEquals("Auto · 13 MP", CameraChoice.short(n200, null))
+        assertEquals("Cam 0 · 13 MP", CameraChoice.short(n200, "0"))
+        assertEquals("Cam 3 · 2.0 MP fixed", CameraChoice.short(n200, "3"))
+        assertEquals("Auto", CameraChoice.short(emptyList(), null))
+    }
+
     @Test fun labelsTellTheLensesApart() {
         assertEquals("Camera 0 · back · 13 MP · autofocus · 4.7 mm", CameraChoice.label(n200[0]))
         assertEquals("Camera 3 · back · 2.0 MP · fixed focus · 2.2 mm", CameraChoice.label(n200[3]))
