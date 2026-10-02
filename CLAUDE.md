@@ -273,7 +273,8 @@ ALL bug survived review in the first place.
 ## The Android app — rules
 
 Build, sideload and the device checklist: `android/README.md`. Target device:
-OnePlus Nord N200 5G (camera id 0 only), minSdk 29, arm64-v8a.
+OnePlus Nord N200 5G (camera id 0 by default; Settings → Camera picks another
+lens on testers' phones), minSdk 29, arm64-v8a.
 
 - **Detection is a PORT, proven — never re-tuned in Kotlin.**
   `DetectionDifferentialTest` runs phone.html's REAL detection code under Node
@@ -358,6 +359,33 @@ OnePlus Nord N200 5G (camera id 0 only), minSdk 29, arm64-v8a.
   it read larger).
   Scan-screen Share is the standard share glyph (`drawable/ic_share`,
   `ScanChrome.iconChip`, named "Share" for TalkBack).
+- **The Camera setting (owner, 2026-10-02: "thinking about when people are
+  brought on to test. Different phones with different options"; 1.1.9).**
+  `AppSettings.cameraId` (a Camera2 id; null = Automatic). Core `CameraChoice`
+  decides: Automatic is the rule the app always had — camera "0" facing back,
+  else the first back camera, else the first external (on the N200, id 3 is the
+  2 MP fixed-focus module that must never be the default); a saved id the phone
+  doesn't offer falls back to Automatic. FRONT cameras are never offered (the
+  preview of a front camera is mirrored, its analysis frames are not, so a
+  drawn Area would land on the wrong side). `camera/CameraCatalog` reads the
+  lenses from Camera2 without opening one (BACKWARD_COMPATIBLE only — no depth
+  / IR sensors), labelled "Camera 3 · back · 2.0 MP · fixed focus · 2.2 mm".
+  `CameraController.setCamera` rebinds on a change (which re-learns the tray);
+  the choice and the fallback are logged under `camera`, and Diagnostics shows
+  the setting and every offered lens. Settings → Camera is a single-choice
+  dialog; `/api/device` carries `camera` ("auto" | id) and `cameras`
+  [{id, label}], PATCH refuses an id this phone doesn't offer, and the
+  desktop 📱 Scanner panel has a Lens dropdown (d40; hidden for an older phone
+  app with no `cameras`). **The camera pill** (owner: "a chooser at the top of
+  the scan page where you see the live view … a pill that you swipe around"):
+  top-right of the top bar, "‹  Auto · 13 MP  ›" / "‹  Cam 3 · 2.0 MP fixed  ›"
+  (`CameraChoice.short`); a horizontal swipe ≥ `CAMERA_SWIPE_DP` (24 dp) steps
+  left = next / right = previous through `CameraChoice.choices` (Automatic
+  first, wrapping, `CameraChoice.step`), a tap steps forward; each step saves
+  `cameraId` and rebinds at once. GONE when the phone offers ≤ 1 lens — the
+  one deliberate exception to "no buttons in the top bar". Tested in code (CameraChoiceTest, CameraCatalogTest
+  on Robolectric's camera manager, DeviceApiTest, the Settings chooser in
+  ScreensSmokeTest, device_ui.py) — not on a second phone yet.
 - Tap to scan always has an Area: with none set the app draws
   `HandheldGuide.defaultArea` (a centred card at 60% of the limiting side +
   15% pad — back from the card so the phone's shadow stays off it; a starting
@@ -536,7 +564,7 @@ OnePlus Nord N200 5G (camera id 0 only), minSdk 29, arm64-v8a.
   after 20 bad codes from anywhere in 5 min.
 - **Scanner settings from the browser** (`core/server/DeviceApi`, admin only):
   GET/PATCH `/api/device` (mode, roi, torch, vibration, high_res, ae_lock,
-  check_ms) + `/api/device/snapshot.jpg` (the current UPRIGHT analysis frame —
+  check_ms, camera — with the phone's `cameras` listed) + `/api/device/snapshot.jpg` (the current UPRIGHT analysis frame —
   the space the Area fractions live in). `DeviceBridge` writes `AppSettings`
   and the scan screen applies a change live (a new Area only when it changed —
   it re-learns the tray). The desktop "📱 Scanner" panel shows only when

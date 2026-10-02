@@ -18,6 +18,9 @@ import io.github.darylno.cardscanner.App
 import io.github.darylno.cardscanner.MainActivity
 import io.github.darylno.cardscanner.BuildConfig
 import io.github.darylno.cardscanner.R
+import io.github.darylno.cardscanner.camera.CameraCatalog
+import io.github.darylno.cardscanner.core.CameraChoice
+import io.github.darylno.cardscanner.core.DebugLog
 import io.github.darylno.cardscanner.core.server.DeviceApi
 import java.util.concurrent.Executors
 
@@ -68,6 +71,34 @@ class SettingsActivity : AppCompatActivity() {
 
     private fun note(t: String) = chrome.text(t, 13f, ScanChrome.Palette.TEXT_FAINT).apply { setPadding(dp(4), dp(8), dp(4), 0) }
 
+    /**
+     * The Camera setting: Automatic (camera 0 facing back, else the first back camera —
+     * core CameraChoice) or any back / external camera this phone has, each labelled
+     * with what tells them apart (MP, autofocus or fixed focus, focal length).
+     */
+    private fun chooseCamera() {
+        val s = app.settings
+        val lenses = CameraCatalog.lenses(this)
+        val offered = CameraChoice.offered(lenses)
+        val auto = CameraChoice.automatic(lenses)
+        val ids = listOf<String?>(null) + offered.map { it.id }
+        val labels = listOf(auto?.let { getString(R.string.settings_lens_auto_item, it) } ?: getString(R.string.settings_lens_auto_none)) +
+            offered.map { CameraChoice.label(it) }
+        val checked = ids.indexOf(s.cameraId).coerceAtLeast(0)
+        AlertDialog.Builder(this)
+            .setTitle(R.string.settings_lens)
+            .setSingleChoiceItems(labels.toTypedArray(), checked) { d, which ->
+                val id = ids[which]
+                if (id != s.cameraId) {
+                    DebugLog.global.i("device", "camera setting → " + (id?.let { "camera $it" } ?: "Automatic"))
+                    s.cameraId = id
+                }
+                d.dismiss(); render()
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
     /** The blue ✓'s hold time: typed in ms, refused outside DeviceApi's range (same rule as the browser). */
     private fun editCheckMs() {
         val s = app.settings
@@ -103,6 +134,10 @@ class SettingsActivity : AppCompatActivity() {
         // ── Camera ──
         col.addView(chrome.sectionHeader(getString(R.string.settings_camera)))
         val cam = chrome.card().apply { setPadding(dp(16), dp(4), dp(16), dp(4)) }
+        // Which lens (owner, 2026-10-02: testers bring other phones with other cameras).
+        cam.addView(chrome.valueRow(getString(R.string.settings_lens), getString(R.string.settings_lens_desc),
+            s.cameraId?.let { getString(R.string.settings_lens_value, it) } ?: getString(R.string.settings_lens_auto)) { chooseCamera() })
+        cam.addView(chrome.divider(), chrome.dividerParams())
         cam.addView(chrome.switchRow(getString(R.string.settings_highres), getString(R.string.settings_highres_desc), s.highRes) { s.highRes = it })
         // No focus-lock switch: Mount always locks focus on the first card after
         // each bind (CameraController) — a switch that couldn't turn it off

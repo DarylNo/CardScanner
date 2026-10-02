@@ -11,7 +11,8 @@ import io.github.darylno.cardscanner.core.RoiFrac
  *
  *   GET   /api/device               → [state]
  *   PATCH /api/device {…}           → apply what's given, answer the new state
- *                                     (`mode`: "tray" | "tap")
+ *                                     (`mode`: "tray" | "tap"; `camera`: "auto"
+ *                                     or an id from `cameras` [{id, label}])
  *   GET   /api/device/snapshot.jpg  → the camera's current upright frame, the
  *                                     space the scan Area fractions live in
  *
@@ -30,6 +31,8 @@ class DeviceApi(private val device: DeviceControl) {
         fun snapshot(): ByteArray?
         /** True while the scan screen (the camera) is open. */
         fun cameraLive(): Boolean
+        /** The cameras the Camera setting offers on this phone, as (id, label); empty = unknown. */
+        fun cameras(): List<Pair<String, String>> = emptyList()
     }
 
     /** [auto] = the mode: true = "tray" (hands-free), false = "tap" (tap to scan). */
@@ -38,11 +41,14 @@ class DeviceApi(private val device: DeviceControl) {
         val vibration: Boolean, val highRes: Boolean, val aeLock: Boolean,
         /** How long the blue ✓ stays up after each scan, in ms ([CHECK_MS_MIN]..[CHECK_MS_MAX]). */
         val checkMs: Int = CHECK_MS_DEFAULT,
+        /** The camera that scans: a Camera2 id, or null = Automatic ([CAMERA_AUTO] on the wire). */
+        val cameraId: String? = null,
     )
 
     companion object {
         const val MODE_TRAY = "tray"
         const val MODE_TAP = "tap"
+        const val CAMERA_AUTO = "auto"
         const val CHECK_MS_DEFAULT = 2_500
         const val CHECK_MS_MIN = 250
         const val CHECK_MS_MAX = 10_000
@@ -64,6 +70,8 @@ class DeviceApi(private val device: DeviceControl) {
             "roi" to s.roi?.let { linkedMapOf("x0" to it.x0, "y0" to it.y0, "x1" to it.x1, "y1" to it.y1) },
             "torch" to s.torch, "vibration" to s.vibration, "high_res" to s.highRes,
             "ae_lock" to s.aeLock, "check_ms" to s.checkMs,
+            "camera" to (s.cameraId ?: CAMERA_AUTO),
+            "cameras" to device.cameras().map { (id, label) -> linkedMapOf("id" to id, "label" to label) },
             "camera_live" to device.cameraLive(),
         )
     }
@@ -87,6 +95,12 @@ class DeviceApi(private val device: DeviceControl) {
                 "check_ms" -> s.copy(checkMs = (v as? Number)?.toDouble()
                     ?.takeIf { it == Math.floor(it) && it >= CHECK_MS_MIN && it <= CHECK_MS_MAX }?.toInt()
                     ?: return bad("check_ms must be a whole number of ms from $CHECK_MS_MIN to $CHECK_MS_MAX"))
+                "camera" -> s.copy(cameraId = when {
+                    v == CAMERA_AUTO -> null
+                    v is String && device.cameras().any { it.first == v } -> v
+                    else -> return bad("camera must be \"$CAMERA_AUTO\" or one of this phone's cameras: " +
+                        device.cameras().joinToString(", ") { it.first }.ifEmpty { "(none listed)" })
+                })
                 "roi" -> s.copy(roi = if (v == null) null else roi(v) ?: return bad(
                     "roi must be null or {x0,y0,x1,y1} fractions of the frame, each side at least ${RoiFrac.MIN_SIDE}"))
                 else -> return bad("unknown setting: $k")

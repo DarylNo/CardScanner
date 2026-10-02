@@ -11,11 +11,13 @@ class DeviceApiTest {
         vibration = true, highRes = false, aeLock = false)
     private var writes = 0
     private var live = true
+    private var cams = listOf("0" to "Camera 0 · back · 13 MP · autofocus", "2" to "Camera 2 · back · 2.0 MP · fixed focus")
     private val api = DeviceApi(object : DeviceApi.DeviceControl {
         override fun read() = st
         override fun write(s: DeviceApi.DeviceState) { st = s; writes++ }
         override fun snapshot(): ByteArray? = if (live) byteArrayOf(1, 2) else null
         override fun cameraLive() = live
+        override fun cameras() = cams
     })
 
     private fun patch(body: String) = api.handle(ApiRequest("PATCH", "/api/device", body = body.toByteArray()))!!
@@ -24,7 +26,10 @@ class DeviceApiTest {
     @Test fun readsTheSettings() {
         val s = json(api.handle(ApiRequest("GET", "/api/device"))!!)
         assertEquals(mapOf("mode" to "tray", "roi" to null, "torch" to false, "vibration" to true,
-            "high_res" to false, "ae_lock" to false, "check_ms" to 2500L, "camera_live" to true), s)
+            "high_res" to false, "ae_lock" to false, "check_ms" to 2500L, "camera" to "auto",
+            "cameras" to listOf(mapOf("id" to "0", "label" to "Camera 0 · back · 13 MP · autofocus"),
+                mapOf("id" to "2", "label" to "Camera 2 · back · 2.0 MP · fixed focus")),
+            "camera_live" to true), s)
     }
 
     @Test fun appliesWhatIsGivenInOneWrite() {
@@ -49,6 +54,23 @@ class DeviceApiTest {
         assertEquals(422, patch("[1]").status)
         assertEquals(0, writes)
         assertEquals(false, st.torch)
+    }
+
+    /** The Camera setting: "auto" or one of THIS phone's cameras; anything else writes nothing. */
+    @Test fun pickingACamera() {
+        val r = patch("""{"camera":"2"}""")
+        assertEquals(200, r.status)
+        assertEquals("2", st.cameraId); assertEquals("2", json(r)["camera"])
+        assertEquals(200, patch("""{"camera":"auto"}""").status)
+        assertEquals(null, st.cameraId)
+        assertEquals(2, writes)
+        for (b in listOf("""{"camera":"7"}""", """{"camera":0}""", """{"camera":null}""", """{"camera":"1"}""")) {
+            assertEquals(b, 400, patch(b).status)
+        }
+        cams = emptyList()
+        assertEquals("a phone that lists no cameras still takes Automatic", 200, patch("""{"camera":"auto"}""").status)
+        assertEquals(400, patch("""{"camera":"0"}""").status)
+        assertEquals(3, writes)
     }
 
     @Test fun snapshotNeedsTheScanScreen() {

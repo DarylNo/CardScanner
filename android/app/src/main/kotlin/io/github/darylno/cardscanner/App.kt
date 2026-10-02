@@ -52,7 +52,7 @@ class App : Application() {
             fetch = if (android.os.Build.FINGERPRINT == "robolectric") { { null } }
                 else io.github.darylno.cardscanner.update.UpdateLock::fetchLatest)
         identify = LocalIdentify(this)
-        phoneServer = PhoneServer(this, identify, DeviceBridge(settings), updates, debugHeader = { debugHeader() })
+        phoneServer = PhoneServer(this, identify, DeviceBridge(settings) { io.github.darylno.cardscanner.camera.CameraCatalog.lenses(this) }, updates, debugHeader = { debugHeader() })
         GatewayService.hostProvider = { phoneServer }
         uploads = Adapters.uploads(this, phoneServer)
         gateway = Adapters.gateway(this)
