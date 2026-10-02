@@ -95,6 +95,30 @@ class ScreensSmokeTest {
         assertEquals(GatewayService::class.java.name, svc!!.component?.className)
     }
 
+    /** Owner, 2026-10-02: every button on the scan screen is at the bottom (thumb reach); the top only reads. */
+    @Test
+    fun mainActivity_buttonsAreAtTheBottom() {
+        grantCamera(true)
+        val a = launch(MainActivity::class.java)
+        val top = a.window.decorView.findViewWithTag<View>(TAG_TOP_BAR)
+        val bottom = a.window.decorView.findViewWithTag<View>(TAG_BOTTOM_BAR)
+        assertNotNull(top); assertNotNull(bottom)
+        for (label in listOf(a.getString(R.string.scans), a.getString(R.string.share), "⚙",
+                a.getString(R.string.mode_tray), a.getString(R.string.mode_tap))) {
+            assertNotNull("$label is in the bottom bar", findText(bottom, label))
+            assertEquals("$label is not in the top bar", null, findText(top, label))
+        }
+        fun clickables(v: View): Int = (if (v.isClickable && v !is ViewGroup) 1 else 0) +
+            (if (v is ViewGroup) (0 until v.childCount).sumOf { clickables(v.getChildAt(it)) } else 0)
+        // Only the upload indicator (tap = retry now, shown while scans are queued) stays up there.
+        assertTrue("no buttons left in the top bar", clickables(top) <= 1)
+        while (nextStarted() != null) { }
+        findText(bottom, a.getString(R.string.share))!!.performClick()
+        assertEquals(io.github.darylno.cardscanner.ui.ShareActivity::class.java.name, nextStarted()?.component?.className)
+        findText(bottom, "⚙")!!.performClick()
+        assertEquals(SettingsActivity::class.java.name, nextStarted()?.component?.className)
+    }
+
     /** The update lock: a newer release is out → "Update required" covers the scan screen. */
     @Test
     fun mainActivity_newerReleaseOut_stopsScanning() {

@@ -54,6 +54,10 @@ jobs:
       - run: pip install -e ".[test]"
       - name: Detect fixtures match the server
         run: python scripts/export_detect_fixtures.py --check
+      # The shadow-proof texture-change signal (TextureChangeParityTest): its
+      # samples and answers come from mtg_card_scanner/change_signal.py.
+      - name: Texture-change fixtures match the reference
+        run: python scripts/export_change_fixtures.py --check
       # Same rule for the art-pack reader (ArtPackTest): its fixture pack is
       # written by the server's own mtg_card_scanner.art_pack.
       - name: Art-pack fixture matches the writer

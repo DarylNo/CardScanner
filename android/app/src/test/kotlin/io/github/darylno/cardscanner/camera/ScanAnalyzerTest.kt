@@ -1,14 +1,22 @@
 package io.github.darylno.cardscanner.camera
 
 import io.github.darylno.cardscanner.core.AutoScanner
+import io.github.darylno.cardscanner.core.CardOutline
+import io.github.darylno.cardscanner.core.DebugLog
+import io.github.darylno.cardscanner.core.Gray
 import io.github.darylno.cardscanner.core.RoiFrac
+import io.github.darylno.cardscanner.core.RoiPx
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.util.concurrent.Executor
+import kotlin.math.abs
+import kotlin.math.max
+import kotlin.math.min
 
 /**
  * Drives the analysis loop with synthetic frames (a flat tray, then a bright
@@ -234,5 +242,244 @@ class ScanAnalyzerTest {
         feed(tray, 1, rotation = 90)
         assertEquals(h, rec.updates.last().uprightW)
         assertEquals(w, rec.updates.last().uprightH)
+    }
+
+    // ── the live outline, the watch window and shadow mode (display / log only) ──
+
+    /** A stand-in for CardOutline.find (OpenCV is not loaded here): the bright pixels' bounding box. */
+    private val boxFinder: (Gray, Int, Int, RoiFrac?) -> CardOutline.Outline? = { g, fw, fh, roi ->
+        var x0 = Int.MAX_VALUE; var y0 = Int.MAX_VALUE; var x1 = -1; var y1 = -1
+        for (y in 0 until g.h) for (x in 0 until g.w) if (g.px[y * g.w + x] > 165) {
+            x0 = min(x0, x); y0 = min(y0, y); x1 = max(x1, x); y1 = max(y1, y)
+        }
+        if (x1 < 0) null else {
+            val sq = floatArrayOf(x0.toFloat(), y0.toFloat(), x1.toFloat(), y0.toFloat(), x1.toFloat(), y1.toFloat(), x0.toFloat(), y1.toFloat())
+            val area = roi?.toPixels(fw, fh) ?: RoiPx(0, 0, fw, fh)
+            CardOutline.Outline(CardOutline.toFrameFractions(sq, g.w, g.h, area, fw, fh), sq, 0, 0)
+        }
+    }
+
+    private fun centroid(q: FloatArray) = Pair((q[0] + q[2] + q[4] + q[6]) / 4, (q[1] + q[3] + q[5] + q[7]) / 4)
+
+    private fun feedTo(a: ScanAnalyzer, nv21: ByteArray, frames: Int, stepMs: Long = 100) {
+        repeat(frames) {
+            a.process(FakePlanes(nv21, w, h, yRowStride = w + 32, uvRowStride = w + 32, uvPixelStride = 2), 0, ts)
+            ts += stepMs * 1_000_000L
+        }
+    }
+
+    /**
+     * Critique #3: the outline helper runs AFTER the trigger / capture handling
+     * and inside runCatching — a helper that throws must never skip fire() or
+     * captureDone() (which would leave the scanner SCANNING until a double-tap).
+     */
+    @Test fun anOutlineFinderThatThrowsNeverSkipsTheCapture() {
+        val rec = Recorder()
+        val a = ScanAnalyzer(direct, rec, outlineFinder = { _, _, _, _ -> throw IllegalStateException("outline boom") })
+        feedTo(a, tray, 12); feedTo(a, card, 12)
+        assertEquals("the capture fired", 1, rec.bursts.size)
+        val trig = rec.updates.indexOfFirst { it.event is AutoScanner.Event.Trigger }
+        assertTrue(trig >= 0)
+        assertNull("no outline, no crash", rec.updates[trig].outline)
+        // captureDone() ran: the scanner is awaiting the next card, not stuck SCANNING.
+        assertTrue(rec.updates.drop(trig + 1).all { it.event is AutoScanner.Event.AwaitingNext })
+        feedTo(a, tray, 4); feedTo(a, card, 12)
+        assertEquals("and Auto still scans the next card", 2, rec.bursts.size)
+        assertTrue("outline failures are not analyzer errors", rec.errors.isEmpty())
+        assertTrue(a.stats(), a.stats().contains("outline errors"))
+    }
+
+    @Test fun theLiveOutlineRidesTheDetectionUpdateOnOccupiedTicksOnly() {
+        val rec = Recorder()
+        val a = ScanAnalyzer(direct, rec, outlineFinder = boxFinder)
+        feedTo(a, tray, 12)
+        assertTrue("nothing to outline while learning / empty", rec.updates.all { it.outline == null })
+        feedTo(a, card, 12)
+        val occupied = rec.updates.filter { (it.event as? AutoScanner.Event.Watching)?.occupied == true || it.event is AutoScanner.Event.Trigger }
+        assertTrue(occupied.isNotEmpty())
+        for (u in occupied) {
+            val q = u.outline
+            assertNotNull("outline on an occupied tick", q)
+            // The card spans x 120..231 of 352 and y 60..215 of 264 — the outline (frame fractions) lands on it.
+            val (cx, cy) = centroid(q!!)
+            assertEquals(176.0 / 352, cx.toDouble(), 0.02); assertEquals(138.0 / 264, cy.toDouble(), 0.02)
+            assertEquals((232 - 120) / 352.0, (q[2] - q[0]).toDouble(), 0.03)
+            assertNotNull(u.outlineNanos)
+        }
+        assertTrue(a.stats(), a.stats().contains("avg outline"))
+    }
+
+    @Test fun theWatchWindowIsTheCardShapePaddedAndSnapsToTheCaptureQuad() {
+        val rec = Recorder()
+        val a = ScanAnalyzer(direct, rec, outlineFinder = boxFinder)
+        feedTo(a, tray, 12); feedTo(a, card, 12)
+        assertEquals(1, rec.bursts.size)
+        val waiting = rec.updates.filter { it.event is AutoScanner.Event.AwaitingNext }
+        assertTrue(waiting.isNotEmpty())
+        val wq = waiting.last().watch
+        assertNotNull("a watch window while awaiting the next card", wq)
+        // The card's outline padded 15 % per side: same centre, 1.3× the size.
+        val (cx, cy) = centroid(wq!!)
+        assertEquals(176.0 / 352, cx.toDouble(), 0.02); assertEquals(138.0 / 264, cy.toDouble(), 0.02)
+        assertEquals(1.3 * (232 - 120) / 352.0, (wq[2] - wq[0]).toDouble(), 0.04)
+        assertEquals(1.3 * (216 - 60) / 264.0, (wq[5] - wq[3]).toDouble(), 0.04)
+        // The capture's exact quad (frame px), 20 px to the right of the live outline: the window follows it.
+        val q = floatArrayOf(140f, 60f, 251f, 60f, 251f, 215f, 140f, 215f)
+        a.onCaptureResult(rec.bursts[0].id, q, w, h)
+        feedTo(a, card, 2)
+        val wq2 = rec.updates.last().watch!!
+        assertEquals((cx + 20f / 352).toDouble(), centroid(wq2).first.toDouble(), 0.01)
+        assertEquals(cy.toDouble(), centroid(wq2).second.toDouble(), 0.01)
+    }
+
+    /** Critique #5: an old capture's quad (one pipeline time late) must not overwrite a newer trigger's window. */
+    @Test fun aStaleCaptureQuadNeverReplacesANewerTriggersWindow() {
+        val rec = Recorder()
+        val a = ScanAnalyzer(direct, rec, outlineFinder = boxFinder)
+        val card2 = FakePlanes.nv21(w, h, { x, y -> if (x in 40..151 && y in 40..195 && (x / 8 + y / 8) % 2 == 0) 240 else 100 })
+        feedTo(a, tray, 12); feedTo(a, card, 12)
+        feedTo(a, tray, 4); feedTo(a, card2, 12)
+        assertEquals(2, rec.bursts.size)
+        val before = rec.updates.last().watch!!
+        a.onCaptureResult(rec.bursts[0].id, floatArrayOf(300f, 200f, 340f, 200f, 340f, 250f, 300f, 250f), w, h)
+        feedTo(a, card2, 2)
+        assertArrayEquals("burst 1's quad arrived after burst 2 fired — ignored", before, rec.updates.last().watch!!, 1e-6f)
+        a.onCaptureResult(rec.bursts[1].id, floatArrayOf(300f, 200f, 340f, 200f, 340f, 250f, 300f, 250f), w, h)
+        feedTo(a, card2, 2)
+        assertFalse("the current burst's quad is taken", before.contentEquals(rec.updates.last().watch!!))
+    }
+
+    /**
+     * SHADOW MODE is logging only: with it on (and an outline) and off (no
+     * outline), the SAME frames give the SAME trigger / awaiting / next-card
+     * decisions and captures. The log shows it ran.
+     */
+    @Test fun shadowModeNeverChangesTheScannersDecisions() {
+        val recA = Recorder(); val recB = Recorder()
+        val log = DebugLog(100, clock = { 0L })
+        val a = ScanAnalyzer(direct, recA, outlineFinder = boxFinder, shadowMode = true, log = log)
+        val b = ScanAnalyzer(direct, recB, outlineFinder = { _, _, _, _ -> null }, shadowMode = false, log = DebugLog(10))
+        val hand = FakePlanes.nv21(w, h, { x, y -> if (x in 150..189 && y in 100..139) 30 else if (x in 120..231 && y in 60..215) 230 else 100 })
+        val card2 = FakePlanes.nv21(w, h, { x, y -> if (x in 120..231 && y in 60..215) (if ((x / 6 + y / 6) % 2 == 0) 250 else 120) else 100 })
+        val t0 = ts
+        for (an in listOf(a, b)) {
+            ts = t0
+            feedTo(an, tray, 12); feedTo(an, card, 12)      // learn, trigger
+            feedTo(an, card, 6)                             // waiting on the scanned card
+            feedTo(an, hand, 3); feedTo(an, card, 6)        // a hand over the card, then gone
+            feedTo(an, card2, 12)                           // a different card in its place (swap)
+            feedTo(an, tray, 4); feedTo(an, card, 12)       // removed, next card
+            feedTo(an, tray, 4)
+        }
+        fun describe(e: AutoScanner.Event) = when (e) {
+            is AutoScanner.Event.Watching -> "W${if (e.occupied) 1 else 0}/${e.stableCount}"
+            is AutoScanner.Event.NextCard -> "N${if (e.removed) "r" else "s"}"
+            else -> e.javaClass.simpleName
+        }
+        assertEquals(recA.updates.map { describe(it.event) }, recB.updates.map { describe(it.event) })
+        assertEquals(recA.bursts.map { it.id }, recB.bursts.map { it.id })
+        assertEquals(recA.bursts.map { it.frames.map { f -> f.timestampNs } }, recB.bursts.map { it.frames.map { f -> f.timestampNs } })
+        assertTrue(recA.errors.isEmpty() && recB.errors.isEmpty())
+        val shadow = log.all().filter { it.tag == "shadow" }
+        println(log.all().joinToString("\n") { it.line() })
+        println("stats A: ${a.stats()}")
+        assertTrue("shadow mode logged its waits", shadow.any { it.msg.startsWith("wait over") })
+        assertTrue("…but nothing per tick (events only)", shadow.size < recA.updates.count { it.event is AutoScanner.Event.AwaitingNext })
+        assertTrue(a.stats(), a.stats().contains("texture"))
+    }
+
+    /**
+     * A shutter scan fires with NO box (the scanner is SCANNING / Auto off, so
+     * its ticks are Idle): its window is the capture quad — not "ignored" with a
+     * line claiming the window had moved on (every Tap-to-scan capture used to
+     * read as a stale-quad event, and a Tray shutter scan waited with no
+     * card-shaped window).
+     */
+    @Test fun aShutterScanGetsItsWindowFromTheCaptureQuad() {
+        val rec = Recorder()
+        val log = DebugLog(100, clock = { 0L })
+        val a = ScanAnalyzer(direct, rec, outlineFinder = boxFinder, log = log)
+        feedTo(a, tray, 12)
+        a.manualScan()
+        feedTo(a, card, 8)
+        assertEquals(1, rec.bursts.size)
+        assertNull("no box at a shutter trigger", rec.bursts[0].box)
+        feedTo(a, card, 2)
+        assertNull("no window before the capture answers", rec.updates.last().watch)
+        a.onCaptureResult(rec.bursts[0].id, floatArrayOf(120f, 60f, 231f, 60f, 231f, 215f, 120f, 215f), w, h)
+        feedTo(a, card, 2)
+        val wq = rec.updates.last().watch
+        assertNotNull("the capture quad became the window", wq)
+        assertEquals(176.0 / 352, centroid(wq!!).first.toDouble(), 0.02)
+        assertEquals(1.3 * (232 - 120) / 352.0, (wq[2] - wq[0]).toDouble(), 0.04)
+        val lines = log.all().filter { it.tag == "outline" }.map { it.msg }
+        assertEquals(lines.toString(), 1, lines.size)
+        assertTrue(lines[0], lines[0].contains("card 155 px tall") && lines[0].contains("window from the capture quad"))
+        assertFalse(lines[0], lines[0].contains("ignored"))
+        // Tap to scan (Auto off): the same path, the same line.
+        a.setAuto(false)
+        feedTo(a, tray, 4); feedTo(a, card, 4)
+        a.manualScan()
+        feedTo(a, card, 8)
+        assertEquals(2, rec.bursts.size)
+        a.onCaptureResult(rec.bursts[1].id, floatArrayOf(120f, 60f, 231f, 60f, 231f, 215f, 120f, 215f), w, h)
+        val tap = log.all().filter { it.tag == "outline" }.map { it.msg }
+        assertEquals(tap.toString(), 2, tap.size)
+        assertTrue(tap[1], tap[1].contains("window from the capture quad") && !tap[1].contains("ignored"))
+        // A reset after the burst fired: its quad has no home — said so, not "a newer burst".
+        a.manualScan()
+        feedTo(a, card, 8)
+        assertEquals(3, rec.bursts.size)
+        a.reset()
+        a.onCaptureResult(rec.bursts[2].id, floatArrayOf(120f, 60f, 231f, 60f, 231f, 215f, 120f, 215f), w, h)
+        val cleared = log.all().filter { it.tag == "outline" }.map { it.msg }.last()
+        assertTrue(cleared, cleared.contains("cleared") && cleared.contains("ignored") && cleared.contains("card 155 px tall"))
+        feedTo(a, card, 2)
+        assertNull(rec.updates.last().watch)
+    }
+
+    /**
+     * Shadow-mode event lines are capped per wait: a signal flickering about the
+     * threshold through a long idle wait (one line per second) would otherwise
+     * push every capture line out of the 3000-line ring in under an hour. The
+     * wait's summary carries the count held back.
+     */
+    @Test fun shadowModeEventLinesAreCappedPerWait() {
+        val rec = Recorder()
+        val log = DebugLog(200, clock = { 0L })
+        val a = ScanAnalyzer(direct, rec, outlineFinder = boxFinder, shadowMode = true, log = log)
+        // A textured "hand" over the whole card for ONE tick, then the card again for five:
+        // never stable, so never a swap — the wait runs on while the signal crosses 8 each cycle.
+        val hand = FakePlanes.nv21(w, h, { x, y -> if (x in 120..231 && y in 60..215) (if ((x / 6 + y / 6) % 2 == 0) 250 else 120) else 100 })
+        feedTo(a, tray, 12); feedTo(a, card, 12)
+        assertEquals(1, rec.bursts.size)
+        val cycles = 2 * ScanAnalyzer.SHADOW_LOG_MAX_PER_WAIT
+        repeat(cycles) { feedTo(a, hand, 2); feedTo(a, card, 10) }   // 1.2 s per cycle: outside the 1/s gap
+        assertTrue("still one wait", rec.updates.takeLast(cycles * 6).all { it.event is AutoScanner.Event.AwaitingNext })
+        feedTo(a, tray, 4)                                            // card removed: the wait ends
+        val shadow = log.all().filter { it.tag == "shadow" }.map { it.msg }
+        val events = shadow.filter { !it.startsWith("wait over") }
+        val over = shadow.filter { it.startsWith("wait over") }
+        assertTrue(shadow.joinToString("\n"), events.any { it.startsWith("crossed") })
+        assertEquals(shadow.joinToString("\n"), ScanAnalyzer.SHADOW_LOG_MAX_PER_WAIT, events.size)
+        assertEquals(1, over.size)
+        assertTrue(over[0], over[0].contains("${cycles - ScanAnalyzer.SHADOW_LOG_MAX_PER_WAIT} event line(s) held back"))
+    }
+
+    @Test fun aLateFocusHoldKeepsTheTriggerTicksOutlineForItsWindow() {
+        val rec = Recorder()
+        val a = ScanAnalyzer(direct, rec, outlineFinder = boxFinder)
+        var due = true
+        a.focusFirst = { due }
+        feedTo(a, tray, 12); feedTo(a, card, 12)
+        assertEquals(1, rec.focusRequests)
+        due = false
+        a.focusDone()
+        feedTo(a, card, 3)
+        assertEquals(1, rec.bursts.size)
+        feedTo(a, card, 2)
+        val wq = rec.updates.last().watch
+        assertNotNull("the held trigger's outline became the window", wq)
+        assertEquals(176.0 / 352, centroid(wq!!).first.toDouble(), 0.02)
     }
 }

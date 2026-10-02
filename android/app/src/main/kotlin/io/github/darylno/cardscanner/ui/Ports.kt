@@ -21,20 +21,66 @@ class Captured(
     val timings: String,
     /** The detector's scene at capture time (Mount) — handed back on a no_card answer. */
     val scene: io.github.darylno.cardscanner.core.Gray?,
-)
+    /**
+     * The card's corners the capture found (CaptureResult.quad: TL,TR,BR,BL in
+     * UPRIGHT-FRAME pixels of a [frameW]×[frameH] frame), or null — the shape the
+     * overlay's blue ✓ snaps to. Display + log only.
+     */
+    val quad: FloatArray? = null,
+    val frameW: Int = 0,
+    val frameH: Int = 0,
+) {
+    /** The quad as frame FRACTIONS (the overlay's space), or null without one. */
+    fun quadFractions(): FloatArray? {
+        val q = quad ?: return null
+        if (q.size != 8 || frameW <= 0 || frameH <= 0) return null
+        // Pixel-centre coordinates → pixel-edge fractions (the same +0.5 as CardOutline.toFrameFractions).
+        return FloatArray(8) { if (it % 2 == 0) (q[it] + 0.5f) / frameW else (q[it] + 0.5f) / frameH }
+    }
+
+    /** The card's height in frame pixels (the mean of its two vertical sides), 0 without a quad — the zoom question's number. */
+    fun cardHeightPx(): Int {
+        val q = quad ?: return 0
+        if (q.size != 8) return 0
+        val left = Math.hypot((q[6] - q[0]).toDouble(), (q[7] - q[1]).toDouble())
+        val right = Math.hypot((q[4] - q[2]).toDouble(), (q[5] - q[3]).toDouble())
+        return Math.round((left + right) / 2).toInt()
+    }
+
+    /** The card's width in frame pixels (the mean of its two horizontal sides), 0 without a quad. */
+    fun cardWidthPx(): Int {
+        val q = quad ?: return 0
+        if (q.size != 8) return 0
+        val top = Math.hypot((q[2] - q[0]).toDouble(), (q[3] - q[1]).toDouble())
+        val bottom = Math.hypot((q[4] - q[6]).toDouble(), (q[5] - q[7]).toDouble())
+        return Math.round((top + bottom) / 2).toInt()
+    }
+}
 
 /** Camera + detection + capture, confined behind the analysis thread by the adapter. */
 interface CameraPort {
     interface Listener {
         /** Upright analysis frame size (overlay letterbox). Any thread. */
         fun onFrameSize(uprightW: Int, uprightH: Int)
-        /** A detection tick. [sampleW]×[sampleH] = the Gray sample the box lives in. Any thread. */
-        fun onDetection(event: AutoScanner.Event, sampleW: Int, sampleH: Int, debug: String?)
-        /** The burst exists (frames grabbed) — haptic "captured" now, before processing. */
-        fun onCaptureStarted(manual: Boolean)
+        /**
+         * A detection tick. [sampleW]×[sampleH] = the Gray sample the box lives in;
+         * [outline] = the live card outline and [watch] = the card-shaped watch
+         * window, both 8 floats TL,TR,BR,BL in upright-frame FRACTIONS, or null
+         * (display only — see ScanAnalyzer). Any thread.
+         */
+        fun onDetection(event: AutoScanner.Event, sampleW: Int, sampleH: Int, debug: String?,
+                        outline: FloatArray? = null, watch: FloatArray? = null)
+        /**
+         * The burst [id] exists (frames grabbed) — haptic "captured" now, before
+         * processing. Exactly one of [onCaptured] / [onCaptureFailed] follows it;
+         * the pipeline is one queue, so a newer burst can start before an older
+         * one answers — [id] tells them apart.
+         */
+        fun onCaptureStarted(id: Long, manual: Boolean)
         /** Frames captured and processed (auto trigger or manual). Any thread. */
         fun onCaptured(capture: Captured, manual: Boolean)
-        fun onCaptureFailed(message: String)
+        /** Burst [id] produced nothing. */
+        fun onCaptureFailed(id: Long, message: String)
         /** Fatal AND non-fatal camera/analyzer errors (a non-fatal one can still end a capture). */
         fun onCameraError(message: String)
     }

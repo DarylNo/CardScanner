@@ -34,6 +34,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import io.github.darylno.cardscanner.capture.CapturePipeline
 import io.github.darylno.cardscanner.capture.CaptureResult
+import io.github.darylno.cardscanner.core.DebugLog
 import io.github.darylno.cardscanner.core.Gray
 import io.github.darylno.cardscanner.core.RoiFrac
 import io.github.darylno.cardscanner.core.Rotation
@@ -112,7 +113,7 @@ class CameraController(
         Executors.newSingleThreadExecutor { r -> Thread(r, "scan-analysis") }
     val pipeline = CapturePipeline()
 
-    val analyzer = ScanAnalyzer(analysisExecutor, object : ScanAnalyzer.Sink {
+    val analyzer: ScanAnalyzer = ScanAnalyzer(analysisExecutor, object : ScanAnalyzer.Sink {
         override fun onDetection(update: DetectionUpdate) {
             main.post {
                 listener.onDetection(update)
@@ -134,6 +135,9 @@ class CameraController(
                     if (request.trigger == CaptureTrigger.AUTO && request.mode == ScanMode.MOUNT && res.flattened) {
                         res.sharpness.getOrNull(res.sharpestIndex)?.let(::noteSharpness)
                     }
+                    // The capture's exact corners → the analyzer's card-shaped watch window
+                    // (shadow-mode logging + the overlay; tagged with the burst, never the trigger).
+                    analyzer.onCaptureResult(request.id, res.quad, res.frameWidth, res.frameHeight)
                 }
                 val outcome = CaptureOutcome(
                     request.id, request.trigger, request.mode, request.scene, r.getOrNull(), r.exceptionOrNull(),
@@ -305,6 +309,7 @@ class CameraController(
         }
         camera = cam; analysis = an; preview = pv
         boundCameraId = runCatching { Camera2CameraInfo.from(cam.cameraInfo).cameraId }.getOrNull()
+        DebugLog.global.i("camera", readZoomFacts(cam).summary())
         lastStateType = null
         cam.cameraInfo.cameraState.observe(owner) { st -> onCameraState(st) }
         analyzer.cameraRestarted()
@@ -631,10 +636,61 @@ class CameraController(
         appendLine("analysis: ${analysis?.resolutionInfo?.resolution} · preview: ${preview?.resolutionInfo?.resolution}")
         appendLine("mode: $scanMode · focus: $focusNote · torch: $torchOn · AE/AWB lock: $aeAwbLock")
         appendLine("camera state: ${camera?.cameraInfo?.cameraState?.value?.type}")
+        val z = readZoomFacts(camera)
+        appendLine("zoom (CameraX): min ${z.minRatio} · max ${z.maxRatio} · current ${z.ratio} · linear ${z.linear}")
+        appendLine("zoom (Camera2): ratio range ${z.ratioRange} · max digital ${z.maxDigital} · " +
+            "active array ${z.activeArray} · pixel array ${z.pixelArray} · cropping ${z.cropping}")
         appendLine("last frame: AF state $metaAfState · focus ${metaFocusDist} dpt · exposure " +
             "${metaExposureNs?.let { "%.1f ms".format(it / 1e6) }} · ISO $metaIso · stab $metaStab")
         appendLine("analyzer: ${analyzer.stats()}")
         appendLine("last capture: ${pipeline.lastSummary ?: "none"}")
+    }
+
+    /**
+     * The zoom / sensor facts the auto-zoom question needs (nothing reported
+     * them before 1.1.5): CameraX's ZoomState and the Camera2 characteristics
+     * behind it. Every item reads "unknown" when absent — Robolectric's fake
+     * camera and odd vendors never crash this.
+     */
+    private class ZoomFacts(
+        val minRatio: String, val maxRatio: String, val ratio: String, val linear: String,
+        val ratioRange: String, val maxDigital: String, val activeArray: String, val pixelArray: String,
+        val cropping: String,
+    ) {
+        /** The one-line form logged at bind. */
+        fun summary(): String = "zoom range ${minRatio}–${maxRatio} (ratio range ${ratioRange}, " +
+            "max digital ${maxDigital}, active array ${activeArray}, cropping ${cropping})"
+    }
+
+    private fun readZoomFacts(cam: Camera?): ZoomFacts {
+        val unknown = "unknown"
+        val zs = runCatching { cam?.cameraInfo?.zoomState?.value }.getOrNull()
+        val info = runCatching { cam?.let { Camera2CameraInfo.from(it.cameraInfo) } }.getOrNull()
+        fun <T> characteristic(key: CameraCharacteristics.Key<T>): T? =
+            runCatching { info?.getCameraCharacteristic(key) }.getOrNull()
+        // CONTROL_ZOOM_RATIO_RANGE exists from API 30 (the N200 runs 30+); the guard sits beside the use for lint.
+        val ratioRange = runCatching {
+            if (Build.VERSION.SDK_INT >= 30) info?.getCameraCharacteristic(CameraCharacteristics.CONTROL_ZOOM_RATIO_RANGE) else null
+        }.getOrNull()
+        return ZoomFacts(
+            minRatio = zs?.let { "%.2f".format(it.minZoomRatio) } ?: unknown,
+            maxRatio = zs?.let { "%.2f".format(it.maxZoomRatio) } ?: unknown,
+            ratio = zs?.let { "%.2f".format(it.zoomRatio) } ?: unknown,
+            linear = zs?.let { "%.2f".format(it.linearZoom) } ?: unknown,
+            ratioRange = ratioRange?.let { "${it.lower}–${it.upper}" } ?: unknown,
+            maxDigital = characteristic(CameraCharacteristics.SCALER_AVAILABLE_MAX_DIGITAL_ZOOM)?.toString() ?: unknown,
+            activeArray = characteristic(CameraCharacteristics.SENSOR_INFO_ACTIVE_ARRAY_SIZE)
+                ?.let { "${it.width()}×${it.height()}" } ?: unknown,
+            pixelArray = characteristic(CameraCharacteristics.SENSOR_INFO_PIXEL_ARRAY_SIZE)
+                ?.let { "${it.width}×${it.height}" } ?: unknown,
+            cropping = characteristic(CameraCharacteristics.SCALER_CROPPING_TYPE)?.let { croppingName(it) } ?: unknown,
+        )
+    }
+
+    private fun croppingName(c: Int) = when (c) {
+        CameraCharacteristics.SCALER_CROPPING_TYPE_CENTER_ONLY -> "CENTER_ONLY"
+        CameraCharacteristics.SCALER_CROPPING_TYPE_FREEFORM -> "FREEFORM"
+        else -> "$c"
     }
 
     private fun levelName(l: Int?) = when (l) {

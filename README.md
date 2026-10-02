@@ -40,11 +40,16 @@ The scan screen has two modes (a new install starts in Tap to scan):
   Back returns to the camera.
 
 **Area** — drag a box around the tray; detection and capture stay inside it.
-With a scan taken, the only signal is a **blue ✓** on the card (held for the
-**Check mark time**, 2.5 s by default) plus two short buzzes.
+While a card sits in the Area the app draws its **outline**; when the picture
+is taken the outline turns **blue with a ✓** and stays on the card (held for
+the **Check mark time**, 2.5 s by default) plus two short buzzes — that is the
+only signal. While it waits for the next card, a grey dashed card shape marks
+where it is watching.
 
 The top of the screen shows the version and the server state
-(`serving at <ip>:8090`), cards/min and a battery estimate.
+(`serving at <ip>:8090`), cards/min and a battery estimate. Every button is at
+the bottom, within thumb reach: **Share** · Tray|Tap · **⚙ Settings**, then
+**Scans** · shutter · **Area**.
 
 ## Reviewing
 
