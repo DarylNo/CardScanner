@@ -34,6 +34,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import io.github.darylno.cardscanner.capture.CapturePipeline
 import io.github.darylno.cardscanner.capture.CaptureResult
+import io.github.darylno.cardscanner.core.CameraChoice
 import io.github.darylno.cardscanner.core.DebugLog
 import io.github.darylno.cardscanner.core.Gray
 import io.github.darylno.cardscanner.core.RoiFrac
@@ -236,6 +237,17 @@ class CameraController(
         return runCatching { p.isBound(a) }.getOrDefault(false)
     }
 
+    /** The saved Camera setting (a Camera2 id, null = Automatic); see [selectCamera]. */
+    var cameraId: String? = null
+        private set
+
+    /** Pick the camera that scans (null = Automatic) — rebinds when it changes. */
+    fun setCamera(id: String?) {
+        if (id == cameraId) return
+        cameraId = id
+        if (camera != null) bind()
+    }
+
     /** Standard 1600×1200 / High 2048×1536 — rebinds. */
     fun setResolution(res: Resolution) {
         if (res == resolution) return
@@ -297,7 +309,7 @@ class CameraController(
         camera = null; analysis = null; preview = null
 
         val cam = try {
-            p.bindToLifecycle(owner, selectMainCamera(p), pv, an)
+            p.bindToLifecycle(owner, selectCamera(p), pv, an)
         } catch (e: Exception) {
             try {
                 p.unbindAll()
@@ -320,14 +332,25 @@ class CameraController(
         )
     }
 
-    /** Camera "0" if it exists and faces back, else the default back camera. */
-    private fun selectMainCamera(p: ProcessCameraProvider): CameraSelector {
-        val zero = CameraSelector.Builder()
-            .requireLensFacing(CameraSelector.LENS_FACING_BACK)
-            .addCameraFilter { infos -> infos.filter { runCatching { Camera2CameraInfo.from(it).cameraId }.getOrNull() == "0" } }
+    /**
+     * The Camera setting resolved on this phone (core CameraChoice): the saved id when
+     * the phone offers it, else Automatic — camera "0" facing back, else the first
+     * back camera. Falls back to the default back camera if CameraX can't see it.
+     */
+    private fun selectCamera(p: ProcessCameraProvider): CameraSelector {
+        val lenses = CameraCatalog.lenses(context)
+        val want = CameraChoice.resolve(lenses, cameraId) ?: return CameraSelector.DEFAULT_BACK_CAMERA
+        val chosen = cameraId
+        DebugLog.global.i("camera", when {
+            chosen == null -> "camera setting: Automatic → camera $want"
+            chosen == want -> "camera setting: camera $want"
+            else -> "camera setting: camera $chosen is not on this phone → Automatic, camera $want"
+        })
+        val sel = CameraSelector.Builder()
+            .addCameraFilter { infos -> infos.filter { runCatching { Camera2CameraInfo.from(it).cameraId }.getOrNull() == want } }
             .build()
-        val ok = try { p.hasCamera(zero) } catch (e: Exception) { false }
-        return if (ok) zero else CameraSelector.DEFAULT_BACK_CAMERA
+        val ok = try { p.hasCamera(sel) } catch (e: Exception) { false }
+        return if (ok) sel else CameraSelector.DEFAULT_BACK_CAMERA
     }
 
     private fun onCameraState(st: CameraState) {
@@ -603,6 +626,8 @@ class CameraController(
     fun diagnostics(): String = buildString {
         appendLine("device: ${Build.MANUFACTURER} ${Build.MODEL} (API ${Build.VERSION.SDK_INT})")
         if (Build.VERSION.SDK_INT >= 31) appendLine("soc: ${Build.SOC_MANUFACTURER} ${Build.SOC_MODEL}")
+        appendLine("camera setting: " + (cameraId?.let { "camera $it" } ?: "Automatic") +
+            " · offered: " + CameraChoice.offered(CameraCatalog.lenses(context)).joinToString("; ") { CameraChoice.label(it) })
         val cm = context.getSystemService(CameraManager::class.java)
         runCatching {
             for (id in cm.cameraIdList) {

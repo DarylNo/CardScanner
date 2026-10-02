@@ -56,6 +56,12 @@ The top of the screen shows the version and the server state
 the bottom, within thumb reach: Tray|Tap · **⚙ Settings**, then **Share** over
 **Scans** · shutter · **Area**.
 
+**Camera** — Settings → Camera picks which of the phone's back cameras scans,
+for testers on phones other than the Nord N200. Each lens is listed with what
+tells it apart (megapixels, autofocus or fixed focus, focal length).
+**Automatic** (the default) uses the main back camera. Changing it re-learns
+the empty tray. A paired computer can change it too, from 📱 Scanner.
+
 ## Reviewing
 
 **Scans** opens the scan list on the phone: each scan's printings ranked by
@@ -94,7 +100,7 @@ On the same Wi-Fi, or the phone's hotspot:
   computers**: it can review, pick, delete, clear, **export** (the CSV
   column builder, or TXT in Mana Exchange's mass-entry format) and change the
   phone's scanner settings (**📱 Scanner**: mode, scan Area drawn on a live
-  picture of the tray, torch, resolution, exposure lock, vibration, check
+  picture of the tray, camera, torch, resolution, exposure lock, vibration, check
   mark time).
 - **Guests:** the **Share** screen shows a 6-digit code. Guests can review,
   pick, edit and **flag** cards for deletion; the admin sees "Delete flagged".

@@ -109,6 +109,8 @@ interface CameraPort {
     fun setAeLock(on: Boolean)
     fun setFocusLock(on: Boolean)
     fun setHighRes(high: Boolean)
+    /** The Camera setting (a Camera2 id, null = Automatic); rebinds — and re-learns the tray — when it changes. */
+    fun setCamera(id: String?) {}
     fun diagnostics(): String
     /** The current upright frame as JPEG, or null (see CameraController.snapshotJpeg). Off the UI thread. */
     fun snapshotJpeg(): ByteArray? = null

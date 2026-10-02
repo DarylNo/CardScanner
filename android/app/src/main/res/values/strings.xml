@@ -41,6 +41,12 @@
     <!-- Settings -->
     <string name="settings_camera">Camera</string>
     <string name="settings_camera_note">Changes apply when you return to the camera.</string>
+    <string name="settings_lens">Camera</string>
+    <string name="settings_lens_desc">Which of this phone\'s cameras scans. Changing it re-learns the empty tray.</string>
+    <string name="settings_lens_auto">Automatic</string>
+    <string name="settings_lens_auto_item">Automatic — the main back camera (camera %1$s here)</string>
+    <string name="settings_lens_auto_none">Automatic — the default back camera</string>
+    <string name="settings_lens_value">Camera %1$s</string>
     <string name="settings_highres">High resolution</string>
     <string name="settings_highres_desc">2048×1536 (Standard is 1600×1200)</string>
     <string name="settings_aelock">Lock exposure + white balance</string>

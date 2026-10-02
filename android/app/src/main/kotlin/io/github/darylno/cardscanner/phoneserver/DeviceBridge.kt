@@ -1,5 +1,6 @@
 package io.github.darylno.cardscanner.phoneserver
 
+import io.github.darylno.cardscanner.core.CameraChoice
 import io.github.darylno.cardscanner.core.server.DeviceApi
 import io.github.darylno.cardscanner.ui.AppSettings
 
@@ -9,7 +10,11 @@ import io.github.darylno.cardscanner.ui.AppSettings
  * so a change from the browser shows up on the live camera at once and the
  * browser can get a picture of the tray to draw the scan Area on.
  */
-class DeviceBridge(private val settings: AppSettings) : DeviceApi.DeviceControl {
+class DeviceBridge(
+    private val settings: AppSettings,
+    /** The phone's cameras (CameraCatalog in the app; a test passes its own). */
+    private val lenses: () -> List<CameraChoice.Lens> = { emptyList() },
+) : DeviceApi.DeviceControl {
 
     /** The open scan screen. It applies changes on ITS UI thread and snapshots off it. */
     interface Screen {
@@ -24,8 +29,11 @@ class DeviceBridge(private val settings: AppSettings) : DeviceApi.DeviceControl 
     override fun read() = DeviceApi.DeviceState(
         auto = settings.auto, roi = settings.roi,
         torch = settings.torch, vibration = settings.vibration, highRes = settings.highRes,
-        aeLock = settings.aeLock, checkMs = settings.checkMs,
+        aeLock = settings.aeLock, checkMs = settings.checkMs, cameraId = settings.cameraId,
     )
+
+    override fun cameras(): List<Pair<String, String>> =
+        CameraChoice.offered(lenses()).map { it.id to CameraChoice.label(it) }
 
     override fun write(s: DeviceApi.DeviceState) {
         val before = read()
@@ -38,6 +46,7 @@ class DeviceBridge(private val settings: AppSettings) : DeviceApi.DeviceControl 
                 "exposure lock → ${s.aeLock}".takeIf { before.aeLock != s.aeLock },
                 "vibration → ${s.vibration}".takeIf { before.vibration != s.vibration },
                 "check → ${s.checkMs} ms".takeIf { before.checkMs != s.checkMs },
+                "camera → ${s.cameraId?.let { "camera $it" } ?: "Automatic"}".takeIf { before.cameraId != s.cameraId },
             ).joinToString(", "))
         settings.auto = s.auto
         settings.roi = s.roi
@@ -46,6 +55,7 @@ class DeviceBridge(private val settings: AppSettings) : DeviceApi.DeviceControl 
         settings.highRes = s.highRes
         settings.aeLock = s.aeLock
         settings.checkMs = s.checkMs
+        settings.cameraId = s.cameraId
         screen?.applyRemoteSettings()
     }
 

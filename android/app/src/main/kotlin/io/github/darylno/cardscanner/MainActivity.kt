@@ -193,6 +193,7 @@ class MainActivity : AppCompatActivity() {
             camera?.setTorch(settings.torch)
             camera?.setAeLock(settings.aeLock)
             camera?.setHighRes(settings.highRes)
+            camera?.setCamera(settings.cameraId)
             // Belt-and-braces: another screen may have unbound the shared CameraProvider
             // while we were stopped; re-bind so the preview/scanning isn't dead.
             camera?.rebind()
@@ -238,6 +239,7 @@ class MainActivity : AppCompatActivity() {
             camera?.setTorch(settings.torch)
             camera?.setAeLock(settings.aeLock)
             camera?.setHighRes(settings.highRes)
+            camera?.setCamera(settings.cameraId)
         }
 
         override fun snapshotJpeg(): ByteArray? = camera?.snapshotJpeg()

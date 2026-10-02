@@ -291,6 +291,50 @@ class ScreensSmokeTest {
         assertResumed(a)
     }
 
+    /**
+     * Settings → Camera (owner, 2026-10-02: testers bring other phones): the chooser
+     * lists Automatic plus this phone's back cameras with what tells them apart; a pick
+     * is saved and the row shows it; Automatic clears it.
+     */
+    @Test
+    fun settings_cameraChooser_listsTheLensesAndSavesThePick() {
+        fun addCamera(id: String, facing: Int, w: Int, h: Int, minFocus: Float) {
+            val ch = org.robolectric.shadows.ShadowCameraCharacteristics.newCameraCharacteristics()
+            val sh = shadowOf(ch) as org.robolectric.shadows.ShadowCameraCharacteristics
+            sh.set(android.hardware.camera2.CameraCharacteristics.LENS_FACING, facing)
+            sh.set(android.hardware.camera2.CameraCharacteristics.SENSOR_INFO_PIXEL_ARRAY_SIZE, android.util.Size(w, h))
+            sh.set(android.hardware.camera2.CameraCharacteristics.LENS_INFO_MINIMUM_FOCUS_DISTANCE, minFocus)
+            shadowOf(app.getSystemService(android.hardware.camera2.CameraManager::class.java)).addCamera(id, ch)
+        }
+        addCamera("0", android.hardware.camera2.CameraCharacteristics.LENS_FACING_BACK, 4096, 3072, 10f)
+        addCamera("1", android.hardware.camera2.CameraCharacteristics.LENS_FACING_FRONT, 4608, 3456, 0f)
+        addCamera("3", android.hardware.camera2.CameraCharacteristics.LENS_FACING_BACK, 1600, 1200, 0f)
+        app.settings.cameraId = null
+        val a = launch(SettingsActivity::class.java)
+        fun openChooser(): androidx.appcompat.app.AlertDialog {
+            var v: View? = findText(a.window.decorView, a.getString(R.string.settings_lens))
+            while (v != null && !v.isClickable) v = v.parent as? View
+            assertNotNull("a clickable Camera row", v)
+            v!!.performClick()
+            ShadowLooper.idleMainLooper()
+            return org.robolectric.shadows.ShadowDialog.getLatestDialog() as androidx.appcompat.app.AlertDialog
+        }
+        assertNotNull("the row reads Automatic", findText(a.window.decorView, a.getString(R.string.settings_lens_auto)))
+        val d = openChooser()
+        val list = d.listView
+        val items = (0 until list.adapter.count).map { list.adapter.getItem(it).toString() }
+        assertEquals(listOf(a.getString(R.string.settings_lens_auto_item, "0"),
+            "Camera 0 · back · 13 MP · autofocus", "Camera 3 · back · 1.9 MP · fixed focus"), items)
+        list.performItemClick(list.getChildAt(2) ?: list, 2, list.adapter.getItemId(2))
+        ShadowLooper.idleMainLooper()
+        assertEquals("3", app.settings.cameraId)
+        assertNotNull("the row shows the pick", findText(a.window.decorView, a.getString(R.string.settings_lens_value, "3")))
+        val d2 = openChooser()
+        d2.listView.performItemClick(d2.listView.getChildAt(0) ?: d2.listView, 0, d2.listView.adapter.getItemId(0))
+        ShadowLooper.idleMainLooper()
+        assertEquals(null, app.settings.cameraId)
+    }
+
     /** Settings → Delete all scans: the count is shown, the dialog says it, and OK deletes every scan and photo. */
     @Test
     fun settings_deleteAllScans_asksThenDeletesEverything() {

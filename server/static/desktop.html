@@ -216,6 +216,8 @@
   #devCtl .seg { display: flex; gap: 6px; }
   #devCtl .seg .btn { flex: 1; }
   #devCtl label.num input { width: 84px; }
+  #devCtl label.sel { flex-direction: column; align-items: stretch; gap: 6px; cursor: default; }
+  #devCtl label.sel select { width: 100%; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--line); background: var(--card, #161a21); color: inherit; font-size: 13px; }
   #devCtl label small { display: block; color: var(--muted); font-size: 12px; }
   #devCtl .h { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-top: 4px; }
   #devArea { padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
@@ -274,6 +276,7 @@
           <button class="btn ghost" data-mode="tap" title="Tap the shutter on the phone; each scan opens there. A scan area is drawn for you if none is set.">Tap to scan</button>
         </div>
         <div class="h">Camera</div>
+        <label class="sel" id="devCamRow" style="display:none"><span>Lens<small>Which of the phone's cameras scans · changing it re-learns the empty tray</small></span><select id="devCam"></select></label>
         <label><input type="checkbox" data-k="torch"><span>Torch</span></label>
         <label><input type="checkbox" data-k="high_res"><span>High resolution<small>2048×1536 instead of 1600×1200</small></span></label>
         <label><input type="checkbox" data-k="ae_lock"><span>Exposure lock<small>Hold exposure + white balance</small></span></label>
@@ -1079,7 +1082,7 @@ function sigOf(scan){
 
 // Version banner — page version · server git hash. Same rationale as the
 // phone: without it, "is this the old page?" is undebuggable.
-const UI_VERSION = "d39";
+const UI_VERSION = "d40";
 
 // Who is asking: the phone server says "guest" for the 6-digit code (admin =
 // the paired computer); the computer's own server always says admin. Guests
@@ -1619,6 +1622,19 @@ function devRender(){
   $("#devLive").textContent = dev.camera_live ? "scan screen open" : "scan screen closed";
   $("#devCtl").querySelectorAll("[data-mode]").forEach(b => b.classList.toggle("ghost", b.dataset.mode !== dev.mode));
   $("#devCtl").querySelectorAll("input[data-k]").forEach(cb => { cb.checked = !!dev[cb.dataset.k]; });
+  // The Camera setting (owner, 2026-10-02: testers on other phones). Hidden for an older phone app.
+  const cam = $("#devCam"), camRow = $("#devCamRow");
+  camRow.style.display = Array.isArray(dev.cameras) ? "" : "none";
+  if (Array.isArray(dev.cameras) && document.activeElement !== cam) {
+    const opts = [["auto", "Automatic — the main back camera"]].concat(dev.cameras.map(c => [c.id, c.label]));
+    const sig = JSON.stringify(opts);
+    if (cam.dataset.sig !== sig) {
+      cam.innerHTML = "";
+      for (const [v, t] of opts) { const o = document.createElement("option"); o.value = v; o.textContent = t; cam.appendChild(o); }
+      cam.dataset.sig = sig;
+    }
+    cam.value = dev.camera || "auto";
+  }
   const cm = $("#devCheckMs");
   cm.closest("label").style.display = dev.check_ms == null ? "none" : "";   // an older phone app has no setting
   if (document.activeElement !== cm && dev.check_ms != null) cm.value = dev.check_ms;
@@ -1675,6 +1691,9 @@ $("#devCtl").querySelectorAll("[data-mode]").forEach(b =>
   b.addEventListener("click", () => { if (dev && dev.mode !== b.dataset.mode) devPatch({ mode: b.dataset.mode }); }));
 $("#devCtl").querySelectorAll("input[data-k]").forEach(cb =>
   cb.addEventListener("change", () => devPatch({ [cb.dataset.k]: cb.checked })));
+$("#devCam").addEventListener("change", async e => {
+  if (!(await devPatch({ camera: e.target.value }))) e.target.value = dev?.camera || "auto";
+});
 $("#devCheckMs").addEventListener("change", async e => {
   const v = Number(e.target.value);
   if (!Number.isInteger(v) || v < 250 || v > 10000) { devMsg("Check mark time: a whole number of ms from 250 to 10000.", true); e.target.value = dev?.check_ms ?? ""; return; }

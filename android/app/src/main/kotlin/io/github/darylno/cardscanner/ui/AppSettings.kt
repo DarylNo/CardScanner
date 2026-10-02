@@ -42,6 +42,14 @@ class AppSettings(context: Context) {
         get() = prefs.getBoolean(K_HIGH_RES, false)
         set(v) = prefs.edit().putBoolean(K_HIGH_RES, v).apply()
 
+    /**
+     * The camera that scans: a Camera2 id, or null = Automatic (core CameraChoice:
+     * camera 0 facing back, else the first back camera). For testers on other phones.
+     */
+    var cameraId: String?
+        get() = prefs.getString(K_CAMERA, null)
+        set(v) { if (v == null) prefs.edit().remove(K_CAMERA).apply() else prefs.edit().putString(K_CAMERA, v).apply() }
+
     /** Mount mode: lock focus once a card is present (default on — the tray never moves). */
     var focusLock: Boolean
         get() = prefs.getBoolean(K_FOCUS_LOCK, true)
@@ -110,6 +118,7 @@ class AppSettings(context: Context) {
         const val K_AUTO = "auto"
         const val K_ROI = "roi"
         const val K_HIGH_RES = "high_res"
+        const val K_CAMERA = "camera_id"
         const val K_FOCUS_LOCK = "focus_lock"
         const val K_AE_LOCK = "ae_lock"
         const val K_TORCH = "torch"

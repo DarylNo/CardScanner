@@ -76,6 +76,7 @@ class CameraAdapter(private val context: Context, private val settings: AppSetti
         c.setAuto(auto)
         c.setTorch(settings.torch)
         c.setAeAwbLock(settings.aeLock)
+        c.setCamera(settings.cameraId)
         c.start(preview, if (settings.highRes) CameraController.Resolution.HIGH else CameraController.Resolution.STANDARD)
     }
 
@@ -126,6 +127,8 @@ class CameraAdapter(private val context: Context, private val settings: AppSetti
     override fun setHighRes(high: Boolean) {
         controller?.setResolution(if (high) CameraController.Resolution.HIGH else CameraController.Resolution.STANDARD)
     }
+
+    override fun setCamera(id: String?) { controller?.setCamera(id) }
 
     override fun diagnostics(): String = controller?.diagnostics() ?: "camera not bound"
     override fun snapshotJpeg(): ByteArray? = controller?.snapshotJpeg()
