@@ -801,8 +801,8 @@ class MainActivity : AppCompatActivity() {
         }
 
         override fun onDetection(event: AutoScanner.Event, sampleW: Int, sampleH: Int, debug: String?,
-                                 outline: FloatArray?, watch: FloatArray?) {
-            runOnUiThread { handleDetection(event, sampleW, sampleH, debug, outline, watch) }
+                                 outline: FloatArray?, watch: FloatArray?, triggerRefused: Boolean) {
+            runOnUiThread { handleDetection(event, sampleW, sampleH, debug, outline, watch, triggerRefused) }
         }
 
         override fun onCaptureStarted(id: Long, manual: Boolean) {
@@ -842,7 +842,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun handleDetection(event: AutoScanner.Event, sw: Int, sh: Int, debug: String?,
-                                outline: FloatArray?, watch: FloatArray?) {
+                                outline: FloatArray?, watch: FloatArray?, triggerRefused: Boolean = false) {
         overlay.setDebugText(if (settings.debugOverlay) debug else null)
         if (overlay.settingArea) return
         when (event) {
@@ -854,9 +854,15 @@ class MainActivity : AppCompatActivity() {
             is AutoScanner.Event.Watching -> {
                 overlay.setBox(event.box, sw, sh,
                     if (event.occupied) OverlayView.BoxState.OCCUPIED else OverlayView.BoxState.SETTLING, outline, watch)
-                if (event.occupied && event.stableCount > 0) setStatus(StatusText.HOLD_STILL)
+                // "Card detected" only when a card SHAPE is there — the mask alone is
+                // glare, a shadow or a hand just as well (the tray "scanning nothing").
+                if (event.occupied && event.stableCount > 0) setStatus(if (outline != null) StatusText.HOLD_STILL else StatusText.NO_SHAPE)
             }
-            is AutoScanner.Event.Trigger -> {
+            is AutoScanner.Event.Trigger -> if (triggerRefused) {
+                // The card-shape gate said no: nothing shot, still watching (the analyzer logged it).
+                overlay.setBox(event.box, sw, sh, OverlayView.BoxState.OCCUPIED, outline, watch)
+                setStatus(StatusText.NO_SHAPE)
+            } else {
                 val b = event.box
                 dlog.i("detect", "TRIGGER box ${b.x},${b.y} ${b.w}×${b.h} of ${sw}×${sh} · mask %.1f%%".format(b.maskFrac * 100) +
                     (if (outline != null) " · outline found" else " · no outline") +

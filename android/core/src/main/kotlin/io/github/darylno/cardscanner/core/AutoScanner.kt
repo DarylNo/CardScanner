@@ -194,6 +194,33 @@ class AutoScanner {
         }
     }
 
+    /**
+     * App-only (the card-shape gate — phone.html has no outline finder, so the
+     * differential test never calls it): the Trigger just returned is REFUSED,
+     * nothing was shot. Back to WATCHING with stillness counted afresh, so the
+     * next [DetectConst.STABLE_FRAMES] steady ticks ask again — a card the
+     * finder missed on one tick is scanned on the next, a non-card is asked
+     * about for as long as it sits there (cheap: the outline runs every tick
+     * anyway). Never AWAIT_NEXT: that waits for the scene to CHANGE, and a
+     * still card the finder missed once would never be scanned.
+     */
+    fun triggerRefused() {
+        if (mode != Mode.SCANNING || !capturing) return
+        capturing = false
+        mode = Mode.WATCHING
+        stableCount = 0
+    }
+
+    /**
+     * App-only: adopt [sample] as the empty tray — a still scene the gate has
+     * refused repeatedly is not a card, and this is what [onNoCard] did after
+     * the wasted scan of it.
+     */
+    fun adoptEmpty(sample: Gray) {
+        val s = accept(sample)
+        emptyRef = s; emptyGrad = gradMap(s)
+    }
+
     /** Double-tap / new scan area: re-learn the empty tray. */
     fun reset() {
         emptyRef = null; emptyGrad = null; prevFrame = null

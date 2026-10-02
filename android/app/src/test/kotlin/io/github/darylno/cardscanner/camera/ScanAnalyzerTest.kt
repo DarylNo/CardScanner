@@ -42,7 +42,8 @@ class ScanAnalyzerTest {
 
     private val direct = Executor { it.run() }
     private val rec = Recorder()
-    private val analyzer = ScanAnalyzer(direct, rec)
+    // The card-shape gate needs an outline finder that sees the synthetic card (OpenCV is not loaded here).
+    private val analyzer by lazy { ScanAnalyzer(direct, rec, outlineFinder = boxFinder) }
     private var ts = 1_000_000_000L
 
     /** One frame every [stepMs] (a 30 fps stream gated to ~10 Hz looks like 100 ms). */
@@ -398,16 +399,70 @@ class ScanAnalyzerTest {
         assertFalse("the current burst's quad is taken", before.contentEquals(rec.updates.last().watch!!))
     }
 
+    // ── the card-shape gate (owner, 2026-10-02: the tray "trying to scan nothing") ──
+
+    /** Something still in the Area but no card shape: the Trigger is refused, nothing shot, and the scene is adopted as empty after 5 refusals. */
+    @Test fun aTriggerWithNoCardShapeIsRefusedAndTheTrayRelearnedAfterFive() {
+        val rec = Recorder()
+        val log = DebugLog(100, clock = { 0L })
+        val a = ScanAnalyzer(direct, rec, outlineFinder = { _, _, _, _ -> null }, log = log)
+        feedTo(a, tray, 12)
+        feedTo(a, card, 40)                              // a glare patch that just sits there
+        assertTrue("nothing shot", rec.bursts.isEmpty())
+        val refused = rec.updates.filter { it.event is AutoScanner.Event.Trigger }
+        assertTrue("triggers kept coming (back to WATCHING, not AWAIT_NEXT)", refused.size >= 5)
+        assertTrue("every one refused", refused.all { it.triggerRefused })
+        // Between refusals the scanner is WATCHING again (stillness counted afresh).
+        val afterFirst = rec.updates.drop(rec.updates.indexOfFirst { it.triggerRefused } + 1)
+        assertTrue(afterFirst.any { it.event is AutoScanner.Event.Watching })
+        assertTrue(afterFirst.none { it.event is AutoScanner.Event.AwaitingNext })
+        // After RELEARN_AFTER_REFUSALS the view is the empty tray: no longer occupied.
+        val last = rec.updates.last().event
+        assertTrue("adopted as empty: $last", last is AutoScanner.Event.Watching && !last.occupied)
+        val lines = log.all().filter { it.tag == "detect" }.map { it.msg }
+        assertEquals("one refusal line per scene", 1, lines.count { it.startsWith("TRIGGER refused") })
+        assertEquals(1, lines.count { it.contains("adopted the view as the empty tray") })
+        assertTrue(a.stats(), a.stats().contains("triggers refused (no card shape) 5"))
+        assertTrue(rec.errors.isEmpty())
+        // A real card placed afterwards (the finder sees it) is still scanned.
+    }
+
+    /** A card the finder misses on the trigger tick is scanned on the next ask, not lost. */
+    @Test fun aCardTheFinderMissesOnceIsScannedOnTheNextAsk() {
+        val rec = Recorder()
+        var misses = 3                                  // the 3rd occupied tick is the Trigger (2 steady ticks first)
+        val a = ScanAnalyzer(direct, rec, outlineFinder = { g, fw, fh, roi ->
+            val o = boxFinder(g, fw, fh, roi)
+            if (o != null && misses > 0) { misses--; null } else o
+        })
+        feedTo(a, tray, 12); feedTo(a, card, 16)
+        assertEquals("shot on the next ask", 1, rec.bursts.size)
+        assertTrue("the first ask was refused", rec.updates.any { it.triggerRefused })
+        assertEquals(0, misses)
+    }
+
+    /** The gate is Tray-only: a handheld / shutter scan is never refused. */
+    @Test fun theShutterIsNeverGated() {
+        val rec = Recorder()
+        val a = ScanAnalyzer(direct, rec, outlineFinder = { _, _, _, _ -> null })
+        feedTo(a, tray, 12)
+        a.setAuto(false)
+        a.manualScan()
+        feedTo(a, card, 12)
+        assertEquals(1, rec.bursts.size)
+        assertEquals(CaptureTrigger.MANUAL, rec.bursts[0].trigger)
+    }
+
     /**
-     * SHADOW MODE is logging only: with it on (and an outline) and off (no
-     * outline), the SAME frames give the SAME trigger / awaiting / next-card
-     * decisions and captures. The log shows it ran.
+     * SHADOW MODE is logging only: with it on and off, the SAME frames give the
+     * SAME trigger / awaiting / next-card decisions and captures. The log shows
+     * it ran.
      */
     @Test fun shadowModeNeverChangesTheScannersDecisions() {
         val recA = Recorder(); val recB = Recorder()
         val log = DebugLog(100, clock = { 0L })
         val a = ScanAnalyzer(direct, recA, outlineFinder = boxFinder, shadowMode = true, log = log)
-        val b = ScanAnalyzer(direct, recB, outlineFinder = { _, _, _, _ -> null }, shadowMode = false, log = DebugLog(10))
+        val b = ScanAnalyzer(direct, recB, outlineFinder = boxFinder, shadowMode = false, log = DebugLog(10))
         val hand = FakePlanes.nv21(w, h, { x, y -> if (x in 150..189 && y in 100..139) 30 else if (x in 120..231 && y in 60..215) 230 else 100 })
         val card2 = FakePlanes.nv21(w, h, { x, y -> if (x in 120..231 && y in 60..215) (if ((x / 6 + y / 6) % 2 == 0) 250 else 120) else 100 })
         val t0 = ts

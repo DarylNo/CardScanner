@@ -46,7 +46,10 @@ the **Check mark time**, 2.5 s by default) plus two short buzzes — that is the
 only signal. The card stays outlined (grey) while it waits for the next one;
 the outline is averaged over the last few looks with outliers thrown away, so a
 single bad find cannot jump it. When the card is lost, a grey dashed card shape
-marks where it is watching.
+marks where it is watching. In Tray mode a scan only fires when that outline
+is there: glare, a shadow or a hand that holds still is "Something in the
+Area — no card shape yet…", never a scan, and after a couple of seconds the
+app adopts the still view as the empty tray. The shutter always scans.
 
 The top of the screen shows the version and the server state
 (`serving at <ip>:8090`), cards/min and a battery estimate. Every button is at
