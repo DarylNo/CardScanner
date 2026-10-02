@@ -22,12 +22,16 @@ APK at build).
 
 ```
 android/core/        pure Kotlin (JVM-testable): AutoScanner/Detection (the
-                     trigger), CardQuad/Flatten, PHash/ArtHasher/ArtMatcher
-                     (bit-exact fingerprint), IdentifyPipeline, PrintingRanker,
+                     trigger), CardQuad/Flatten, ScanPhoto, CardOutline +
+                     OutlineTracker (the live outline / card-shape gate),
+                     TextureChange (shadow mode), CameraChoice (the Camera
+                     setting), PHash/ArtHasher/ArtMatcher (bit-exact
+                     fingerprint), IdentifyPipeline, PrintingRanker,
                      OcrMatch, Popularity, and core/server/ — ScanStore,
                      PhoneApi (the /api surface), PriceSweep/PriceWorker,
                      Export, DeviceApi, ScanServer (routing + admin-only rules)
-android/app/         Android: camera/ (CameraX, FrameRing, ScanAnalyzer),
+android/app/         Android: camera/ (CameraX, FrameRing, ScanAnalyzer,
+                     CameraCatalog),
                      capture/, ident/ (ArtPackStore, PhoneIdentifier, ML Kit
                      OCR), net/UploadQueue, phoneserver/ (PhoneServer,
                      PhoneBackend, LocalScanUploader, SqliteScanStore, PhoneF2f),
@@ -40,7 +44,7 @@ mtg_card_scanner/    reference pipeline: card_detect, art_index, art_pack,
                      facetoface
 scripts/             export_*_fixtures.py (generate the Kotlin fixtures from the
                      reference; `--check` in CI), make_android_keystore.py
-tests/               pytest (~450, all fakes — no camera/network)
+tests/               pytest (~470, all fakes — no camera/network)
 .github/workflows/   ci (pytest 3-OS, fixture --checks, android), release,
                      auto-tag, art-pack (weekly card database), pages
 ```
@@ -68,7 +72,7 @@ full session before the banners existed).
 ## Pipeline
 
 ```
-scan screen (Tray trigger or shutter tap)
+scan screen (Tray trigger — refused with no card outline — or shutter tap)
   → CapturePipeline: sharpest of the last 3 frames → CardQuad → Flatten WITH A
     MARGIN (+ the 3 raw ROI crops as fallbacks)
   → UploadQueue (persistent, retried) → LocalScanUploader = the phone's POST /api/scan
@@ -423,18 +427,20 @@ lens on testers' phones), minSdk 29, arm64-v8a.
   2500, `check_ms`), plus two short buzzes (Vibration switch).
 - **Live card outline + blue capture + card-shaped watch window (owner,
   2026-10-02: "see it draw an outline around the card, then have it go blue on
-  image capture … then watch that area for new cards"). DISPLAY ONLY — the
-  trigger, `Detection.kt`, `AutoScanner.kt` and phone.html's detection are
-  untouched.** `core/CardOutline` runs the reference port `CardQuad.find`
+  image capture … then watch that area for new cards"). `Detection.kt`,
+  `AutoScanner.kt` and phone.html's detection are untouched; the outline is
+  display, the watch window, and (since 1.1.7) the card-shape gate's evidence —
+  nothing else.** `core/CardOutline` runs the reference port `CardQuad.find`
   (unmodified) on the scanner's existing 176×MH detection sample — never a full
   frame (est. 65–90 ms on the N200 vs ~4–5 ms; measured 1.3 ms on x86) — and
   pulls each side in by 5·(1−1/k) sample px (k = frame px per sample px: the
   finder's dilation swells every side ~5 px at whatever resolution it runs;
   CardOutlineTest holds it within 2 sample px of the full-resolution quad on the
-  detect fixtures). `ScanAnalyzer` finds it on occupied ticks AFTER the
-  tick/trigger/capture handling and inside runCatching (a helper that threw
-  before `fire()` would skip `captureDone()` and leave Tray dead until a
-  double-tap; `anOutlineFinderThatThrowsNeverSkipsTheCapture`). `OverlayView`
+  detect fixtures). `ScanAnalyzer` finds it right after `AutoScanner.tick()` and
+  BEFORE the trigger decision (the gate needs it), inside runCatching — a finder
+  that throws counts as unknown and the capture still fires, so `fire()` /
+  `captureDone()` can never be skipped (a skipped captureDone leaves Tray dead
+  until a double-tap; `anOutlineFinderThatThrowsNeverSkipsTheCapture`). `OverlayView`
   draws it in place of the mask rectangle (green occupied / amber settling), the
   rectangle when there is none; `beginHold` at `onCaptureStarted` turns it blue
   with the ✓ and FREEZES it (it used to sit on the live box, which grew when a
@@ -461,8 +467,10 @@ lens on testers' phones), minSdk 29, arm64-v8a.
   overlay draws (grey, solid, in AWAIT_NEXT too — the dashed watch window only
   when there is none) AND what the watch window is armed from at the trigger.
   The analyzer line reports "N outlier(s) dropped".
-  Scan-screen layout: Tray|Tap · ⚙ over Share-above-Scans · shutter · Area.
-  **1.1.7 shipped with that bottom row INVISIBLE** (owner's screenshot): the
+- **Scan-screen layout** (owner, 2026-10-02): top bar = version · server state
+  (+ the camera pill on a phone with more than one lens), cards/min, the upload
+  indicator, the measurement card; bottom = status pill, Tray|Tap · ⚙, then
+  Share (icon) over Scans · shutter · Area. **1.1.7 shipped with that bottom row INVISIBLE** (owner's screenshot): the
   mode row's balancing spacer was a bare `View` with WRAP_CONTENT height, which
   a bare View measures as "all the height offered", so the row filled the
   screen and Share/Scans/shutter/Area got 0 px. Fixed in 1.1.8 (spacer height
@@ -597,7 +605,10 @@ lens on testers' phones), minSdk 29, arm64-v8a.
   commit message.
 - Verify every UI change by driving the real page in headless Chromium
   (Playwright, `executable_path` = `/opt/pw-browsers/chromium-*/…/chrome` in
-  cloud sessions) and every Android change with the gradle line above.
+  cloud sessions) and every Android change with the gradle line above. A
+  scan-screen layout change also needs a test at the N200's size
+  (`@Config(qualifiers = "w411dp-h914dp-xxhdpi")`) that asserts each control
+  has a size and sits on screen — "the view exists" is not enough (1.1.7).
 - Bug sweeps: parallel reviewers (one Android, one web/server) find real bugs;
   verify each finding before fixing, add a test that fails without the fix.
 - Decisions that stand: export is "Export to CSV" (column builder) +
@@ -620,6 +631,16 @@ Open threads:
   the analyzer line's outline / texture ms on the N200, the zoom line in
   Diagnostics, and the `shadow` lines (≤ 1/s, ≤ 10 per wait + the "wait
   over" summary).
+- Owner to confirm on the rig (1.1.7–1.1.9, all tested in code, not on the
+  phone): the bottom row (Share over Scans · shutter · Area) is back on 1.1.8+;
+  the outline stays on the card after a capture and ignores the odd "much
+  bigger card" (Diagnostics' "outlier(s) dropped"); the card-shape gate — no
+  scans of an empty tray / glare, real sleeved, dark, foil and especially
+  WHITE-BORDERED cards still scan (watch the `detect` log for "TRIGGER
+  refused" and "adopted the view as the empty tray"); the camera pill (shows
+  only if Android exposes >1 back camera on the N200; is a 24 dp swipe
+  comfortable?); the compare block's Scan size slider; and the Camera setting
+  on a tester's phone.
 - Proposed, not approved: "Fit to cards + zoom" (auto-fit the scan Area).
 - Ranking time for heavily reprinted names (cache candidate images).
 - Proposed, awaiting the owner: a measured card-detection goal — score the
@@ -646,7 +667,10 @@ Open threads:
   meaning to release: the merge IS the release, and the update lock then
   stops every older install scanning until it updates.
 - **ALWAYS end a push session with a `version` bump in pyproject.toml** —
-  master-only commits reach nobody.
+  master-only commits reach nobody. The one exception is a docs-only change
+  (CLAUDE.md / READMEs, nothing in the APK): merge it without a bump, because a
+  bump would make the update lock stop every phone scanning for a release
+  with nothing new in it.
 - **The repo MUST stay PUBLIC** — the APK download, the art pack and the
   update lock's `releases/latest` are all anonymous. Verify with an
   UNAUTHENTICATED request (GitHub answers 404, not 403, for a private repo;
@@ -654,7 +678,7 @@ Open threads:
 
 ## Testing
 
-`pytest tests/` (~450, fakes only, 3-OS CI) + the fixture `--check`s + the
+`pytest tests/` (~470, fakes only, 3-OS CI) + the fixture `--check`s + the
 gradle line (CI job `android`). Real-scan artifacts live in `scan_images/`
 (e.g. scan 837 = the Diabolic Edict OCR proof). When tuning detection or
 ranking, test against real scans before shipping — every threshold here was
