@@ -28,6 +28,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ActivityController
 import org.robolectric.shadows.ShadowLooper
@@ -132,6 +133,44 @@ class ScreensSmokeTest {
         assertEquals(io.github.darylno.cardscanner.ui.ShareActivity::class.java.name, nextStarted()?.component?.className)
         findText(bottom, "⚙")!!.performClick()
         assertEquals(SettingsActivity::class.java.name, nextStarted()?.component?.className)
+    }
+
+    /**
+     * Every scan-screen control is actually ON SCREEN, laid out at the N200's size
+     * (1080×2400, ~411×914 dp). 1.1.7 shipped with the mode row's spacer swelling
+     * to the whole screen height: Share, Scans, the shutter and Area all had 0 px
+     * height while the "is it in the bottom bar" test above still passed.
+     */
+    @Test
+    @Config(qualifiers = "w411dp-h914dp-xxhdpi")
+    fun mainActivity_everyControlIsOnScreen() {
+        grantCamera(true)
+        val a = launch(MainActivity::class.java)
+        val root = a.window.decorView
+        val screenH = root.height
+        assertTrue("laid out ($screenH px)", screenH > 0)
+        val bottom = root.findViewWithTag<View>(TAG_BOTTOM_BAR)
+        val share = findDesc(bottom, a.getString(R.string.share))!!
+        val scans = findText(bottom, a.getString(R.string.scans))!!
+        val shutter = findDesc(bottom, a.getString(R.string.scan_card))!!
+        val area = findText(bottom, a.getString(R.string.area))!!
+        val gear = findDesc(bottom, a.getString(R.string.settings))!!
+        val tray = findText(bottom, a.getString(R.string.mode_tray))!!
+        for ((name, v) in listOf("Share" to share, "Scans" to scans, "shutter" to shutter, "Area" to area, "⚙" to gear, "Tray" to tray)) {
+            val loc = IntArray(2); v.getLocationInWindow(loc)
+            assertTrue("$name has a size (${v.width}×${v.height})", v.width > 0 && v.height > 0)
+            assertTrue("$name is inside the screen (y ${loc[1]}..${loc[1] + v.height} of $screenH)", loc[1] >= 0 && loc[1] + v.height <= screenH)
+        }
+        // The bottom bar hugs the bottom: the mode row sits just above the controls,
+        // not in the middle of the screen.
+        val trayY = IntArray(2).also { tray.getLocationInWindow(it) }[1]
+        val shutterY = IntArray(2).also { shutter.getLocationInWindow(it) }[1]
+        assertTrue("Tray|Tap sits above the shutter row (tray $trayY, shutter $shutterY)", trayY < shutterY)
+        assertTrue("Tray|Tap is in the bottom third (y $trayY of $screenH)", trayY > screenH * 2 / 3)
+        // Share is directly above Scans.
+        val shareY = IntArray(2).also { share.getLocationInWindow(it) }[1]
+        val scansY = IntArray(2).also { scans.getLocationInWindow(it) }[1]
+        assertTrue("Share ($shareY) is above Scans ($scansY)", shareY + share.height <= scansY)
     }
 
     /** The measurement session's card sits on the scan screen, counts captures, and Next/Stop drive it. */
