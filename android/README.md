@@ -14,18 +14,23 @@ desktop page with Export to CSV) are the server's own `phone.html` /
 review UI, not two.
 
 Target device: **OnePlus Nord N200 5G** (Snapdragon 480, Android 11/12,
-arm64). Rear camera id `0` (13 MP) only — the 2 MP fixed-focus camera id `3`
-is never used. `minSdk` 29 (Android 10), `targetSdk` 35, arm64-v8a only.
+arm64). Rear camera id `0` (13 MP) by default — the 2 MP fixed-focus camera
+id `3` is never picked automatically. Testers on other phones choose a lens
+with the camera pill on the scan screen or Settings → Camera (see below).
+`minSdk` 29 (Android 10), `targetSdk` 35, arm64-v8a only.
 
 ## Architecture
 
 ```
-CameraX Preview + ImageAnalysis (camera 0, 4:3, 1600x1200 or 2048x1536, EIS off)
+CameraX Preview + ImageAnalysis (the Camera setting — camera 0 by default —
+   │  4:3, 1600x1200 or 2048x1536, EIS off)
    │  every frame (~90 ms): copy into FrameRing (4 preallocated NV21 slots)
    │  every ~200 ms: GraySampler → 176×MH luma sample
    ▼
 AutoScanner.tick()          :core — phone.html's detection + state machine, ported
-   │  Trigger (Tray)  or  shutter tap (Tap to scan, or any time)
+   │  CardOutline + OutlineTracker on the same sample: the live, smoothed outline
+   │  Trigger (Tray) with no card outline → REFUSED (the card-shape gate)
+   │  Trigger with an outline  or  shutter tap (Tap to scan, never gated)
    ▼
 CapturePipeline             last 3 ring frames → sharpest (Laplacian variance)
    │                        → CardQuad → Flatten with a margin → JPEG = PRIMARY
@@ -49,8 +54,8 @@ Modules and packages (`io.github.darylno.cardscanner`):
 
 | Where | What |
 |---|---|
-| `:core` (pure JVM) | `Detection`, `AutoScanner` (phone.html port), `CardQuad` (server `card_detect` port), `Flatten`, `GraySampler`, `Sharpness`, `Rotation`, `RoiFrac`, `Nv21Frame`, `Nv21Bgr`. OpenCV is `compileOnly`; tests load `org.openpnp:opencv` natives. |
-| `app/camera` | `CameraController` (bind, focus, torch, AE/AWB lock, diagnostics), `FrameRing`, `ScanAnalyzer` (the analysis-thread loop; all `AutoScanner` access is confined to it). |
+| `:core` (pure JVM) | `Detection`, `AutoScanner` (phone.html port), `CardQuad` (server `card_detect` port), `Flatten`, `ScanPhoto`, `CardOutline` + `OutlineTracker` (live outline, smoothing, the card-shape gate's evidence), `TextureChange` (shadow mode), `CameraChoice` (the Camera setting), `GraySampler`, `Sharpness`, `Rotation`, `RoiFrac`, `Nv21Frame`, `Nv21Bgr`. OpenCV is `compileOnly`; tests load `org.openpnp:opencv` natives. |
+| `app/camera` | `CameraController` (bind, camera choice, focus, torch, AE/AWB lock, diagnostics), `CameraCatalog` (the phone's lenses from Camera2), `FrameRing`, `ScanAnalyzer` (the analysis-thread loop; all `AutoScanner` access is confined to it). |
 | `app/capture` | `CapturePipeline` (sharpest frame → quad → flatten → JPEG). |
 | `app/net` | `UploadQueue` (persistent FIFO, fallback retry, `ScanUploader`). |
 | `app/ident` | `LocalIdentify` (the art pack — the phone's card database — and the one `PhoneIdentifier`), `ArtPackStore`, Scryfall over Cronet, `CachedImageSource`. |
@@ -65,7 +70,8 @@ Rules the app keeps (see also CLAUDE.md → "Android app"):
   runs phone.html's REAL detection code under Node
   (`core/src/test/resources/phone_harness.js`) and compares it with the Kotlin
   port step by step. The trigger is occupancy + stillness only; no geometry
-  gates.
+  gates on the detection mask. The app's card-shape gate sits after it: a
+  Tray trigger with no card-shaped outline is refused (see CLAUDE.md).
 - **The identifier keeps the server's rules.** The phone flattens the card
   with a margin and the ported pipeline re-detects inside it, exactly as the
   server did (`IdentifyParityTest` against the real Python pipeline); no card
@@ -170,7 +176,15 @@ after shoots instantly with focus held. It focuses again only when the Area
 changes, the camera reopens, you tap the preview (locks where you tapped), or
 a capture comes out far softer than the session's usual (bumped mount).
 Tray
-scans are hands-free.
+scans are hands-free. While a card sits there the app outlines it (blue with
+a ✓ when it is captured). A Tray scan only fires when that outline is there:
+glare, a shadow or a still hand reads "Something in the Area — no card shape
+yet…", and after a couple of seconds the app adopts it as the empty tray.
+
+**Camera** — the pill at the top right of the live view ("‹ Auto · 13 MP ›")
+shows the lens in use; swipe or tap it to step through Automatic and each back
+camera. Settings → Camera picks from a list, and a paired computer's
+📱 Scanner panel has the same choice. Automatic is camera 0 facing back.
 
 **Tap to scan** — tap the shutter. It always scans inside a scan Area: if
 none is set, the app draws one for you — a card-shaped box in the middle of
@@ -300,9 +314,17 @@ Run on the Nord N200 after installing a new build:
 - [ ] Tray: "waiting for a steady view" → "watching for a card" →
       card in → "hold still" → capture (vibration) → filed; next card works.
 - [ ] Draw an Area; detection and capture stay inside it. Double-tap re-learns.
-- [ ] Sleeved card, dark card, foil under glare all trigger (no geometry
-      rejections).
-- [ ] Empty tray / hand in frame → nothing filed as a card.
+- [ ] Sleeved card, dark card, foil under glare and a white-bordered card all
+      trigger (the card-shape gate refuses none of them; the `detect` log
+      shows no "TRIGGER refused" for a real card).
+- [ ] Empty tray / glare / hand in frame → nothing filed as a card; the status
+      reads "no card shape yet", then the view is adopted as the empty tray.
+- [ ] The outline sits on the card, turns blue with the ✓ on capture, and stays
+      (grey) on the card until it is lifted.
+- [ ] Every control is visible at the bottom: Tray|Tap · ⚙, then Share over
+      Scans · shutter · Area.
+- [ ] Camera pill (if shown): swiping steps the lens and re-learns the tray;
+      Settings → Camera agrees; Automatic goes back to camera 0.
 - [ ] Tap to scan with no Area → a card-shaped Area appears in the middle; the
       card in it scans, reads its collector line, and no phone shadow on it
       (if the box is too big/small, say so — its size is a guess).
@@ -318,18 +340,20 @@ Run on the Nord N200 after installing a new build:
       flag, can't delete); wrong code 8× → locked out; New guest code → the
       guest is signed out and the old code fails, the computer stays in.
 - [ ] Screen off for 10 minutes: the computer and guests still get through.
-- [ ] Settings → Diagnostics shows camera 0, hardware level, analysis size and
-      capture timings; Copy works.
+- [ ] Settings → Diagnostics shows the camera setting, every offered lens,
+      the bound camera, hardware level, analysis size and capture timings;
+      Copy works.
 - [ ] Update to the next release-signed APK installs over the old one with
       the scans and the paired computer intact.
 
 ## Known limits
 
-- **No device was available while this was written.** Everything is proven by
-  JVM tests (including the Node differential test against phone.html), lint and
-  compilation; camera behaviour, focus and the luma sampling (Y-plane box
-  average vs Chrome's RGB luma — equal on neutral greys) still need the device
-  checklist above. The debug overlay shows the detection numbers for that.
+- **Tested in code first, then on the owner's N200.** Everything is proven by
+  JVM tests (including the Node differential test against phone.html),
+  Robolectric screen tests, lint and compilation before a release; camera
+  behaviour, focus and timings are confirmed on the rig afterwards with the
+  checklist above (CLAUDE.md → Open threads lists what is still waiting). The
+  debug overlay and the measurement session show the detection numbers.
 - **arm64-v8a only** (keeps the OpenCV native libs to one ABI) — fine for the
   N200; it won't install on 32-bit-only phones or x86 emulators.
 - **Google developer verification.** Google is rolling out mandatory developer
