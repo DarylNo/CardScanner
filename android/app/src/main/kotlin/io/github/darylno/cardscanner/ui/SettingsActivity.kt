@@ -15,6 +15,7 @@ import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import io.github.darylno.cardscanner.App
+import io.github.darylno.cardscanner.MainActivity
 import io.github.darylno.cardscanner.BuildConfig
 import io.github.darylno.cardscanner.R
 import io.github.darylno.cardscanner.core.server.DeviceApi
@@ -147,6 +148,12 @@ class SettingsActivity : AppCompatActivity() {
             Toast.makeText(this, getString(R.string.copied), Toast.LENGTH_SHORT).show()
         }, lp(14))
         diagCard.addView(chrome.secondaryButton(getString(R.string.settings_share_report)) { shareDebugReport() }, lp(10))
+        // The guided rig session (owner, 2026-10-02): prompts each test on the scan screen, marks the log.
+        diagCard.addView(chrome.primaryButton(getString(if (app.measure.active) R.string.measure_resume else R.string.measure_run)) {
+            if (!app.measure.active) app.measure.start()
+            startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP))
+            finish()
+        }, lp(10))
         col.addView(diagCard, lp())
     }
 
@@ -178,18 +185,7 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     /** The debug report (diagnostics + the live log) through the share sheet — paste it anywhere. */
-    private fun shareDebugReport() {
-        val text = app.debugReport()
-        val send = Intent(Intent.ACTION_SEND).setType("text/plain")
-            .putExtra(Intent.EXTRA_SUBJECT, "Card Scanner debug report")
-            .putExtra(Intent.EXTRA_TEXT, text)
-        try {
-            startActivity(Intent.createChooser(send, getString(R.string.settings_share_report)))
-        } catch (_: Exception) {
-            getSystemService(ClipboardManager::class.java)?.setPrimaryClip(ClipData.newPlainText("Card Scanner debug report", text))
-            Toast.makeText(this, getString(R.string.copied), Toast.LENGTH_SHORT).show()
-        }
-    }
+    private fun shareDebugReport() = DebugShare.share(this, app)
 }
 
 /** Latest CameraController.diagnostics() text, captured by the camera screen (Settings has no camera). */

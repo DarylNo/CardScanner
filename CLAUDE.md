@@ -424,6 +424,19 @@ OnePlus Nord N200 5G (camera id 0 only), minSdk 29, arm64-v8a.
   it on and off and asserts identical outcomes. Diagnostics also reports the
   camera's zoom range and sensor facts (the auto-zoom question). Re-arming on
   the signal is NOT built: that is phone.html first, after the rig data.
+- **The guided measurement session** (owner, 2026-10-02: "a test mode that
+  prompts me to do all these tests"): Settings → Diagnostics → **Run the
+  measurement session** (`ui/MeasureSession`, state in `AppSettings` so it
+  survives leaving the screen) shows a prompt card in the scan screen's top
+  scrim that walks the rig session step by step (set-up + outline check,
+  250 ms check time, 20 swaps, 10 lift-and-replace, hand passes, lean-ins,
+  lights, foil, AE lock on, done), counts the captures during each step,
+  applies the settings a step needs (AE lock / vibration / check time) and
+  restores the owner's own at the end, asks Yes/No where a step is a visual
+  check, and writes a `test` marker into the debug log at every transition
+  (`step k/N START/END … n capture(s)`, answers, `session START/END`) so the
+  `shadow` / `outline` / `capture` lines read against what was being done.
+  Finish opens the share sheet with the debug report. Display + logging only.
 - **The update lock (owner): a newer release stops scanning.**
   `update/UpdateLock` reads GitHub `releases/latest` at app start and when the
   scan screen opens (≤ every 30 min). Once a release newer than the build is

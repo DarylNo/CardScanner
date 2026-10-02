@@ -115,7 +115,9 @@ computer, **🐞 → App log** shows it as it happens; **Copy report** /
 **Download** give the whole thing plus the phone's diagnostics, ready to
 paste into a bug report. On the phone: Settings → Diagnostics → **Share debug
 report**. With USB or wireless debugging on, `adb logcat -s CardScanner` shows
-the same lines.
+the same lines. **Run the measurement session** (same screen) walks you
+through the rig tests step by step on the scan screen, counting captures and
+marking the log, then shares the report at the end.
 
 ## Your data
 

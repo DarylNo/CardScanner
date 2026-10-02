@@ -39,6 +39,8 @@ class App : Application() {
     /** Stops scanning once a newer release is out (the owner's update lock). */
     lateinit var updates: io.github.darylno.cardscanner.update.UpdateLock
         private set
+    /** The guided measurement session (Settings → Diagnostics → Run the measurement session). */
+    val measure: io.github.darylno.cardscanner.ui.MeasureSession by lazy { io.github.darylno.cardscanner.ui.MeasureSession(settings) }
 
     override fun onCreate() {
         super.onCreate()

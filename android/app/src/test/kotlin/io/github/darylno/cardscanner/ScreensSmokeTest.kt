@@ -108,7 +108,9 @@ class ScreensSmokeTest {
             assertNotNull("$label is in the bottom bar", findText(bottom, label))
             assertEquals("$label is not in the top bar", null, findText(top, label))
         }
-        fun clickables(v: View): Int = (if (v.isClickable && v !is ViewGroup) 1 else 0) +
+        // Visible clickables only: the measurement session's prompt card also lives in the top
+        // scrim, but it is GONE outside a session.
+        fun clickables(v: View): Int = if (v.visibility != View.VISIBLE) 0 else (if (v.isClickable && v !is ViewGroup) 1 else 0) +
             (if (v is ViewGroup) (0 until v.childCount).sumOf { clickables(v.getChildAt(it)) } else 0)
         // Only the upload indicator (tap = retry now, shown while scans are queued) stays up there.
         assertTrue("no buttons left in the top bar", clickables(top) <= 1)
@@ -117,6 +119,27 @@ class ScreensSmokeTest {
         assertEquals(io.github.darylno.cardscanner.ui.ShareActivity::class.java.name, nextStarted()?.component?.className)
         findText(bottom, "⚙")!!.performClick()
         assertEquals(SettingsActivity::class.java.name, nextStarted()?.component?.className)
+    }
+
+    /** The measurement session's card sits on the scan screen, counts captures, and Next/Stop drive it. */
+    @Test
+    fun mainActivity_measurementSession_promptsEachStep() {
+        grantCamera(true)
+        app.measure.start()
+        val a = launch(MainActivity::class.java)
+        val step1 = app.measure.steps[0]
+        assertNotNull("the first step's title is shown", findText(a.window.decorView, a.getString(R.string.measure_step, 1, app.measure.steps.size, step1.title)))
+        assertNotNull(findText(a.window.decorView, step1.instruction))
+        assertNotNull(findText(a.window.decorView, a.getString(R.string.measure_captures, 0)))
+        findText(a.window.decorView, a.getString(R.string.measure_yes))!!.performClick()
+        findText(a.window.decorView, a.getString(R.string.measure_next))!!.performClick()
+        ShadowLooper.idleMainLooper()
+        assertEquals(1, app.measure.index)
+        assertNotNull(findText(a.window.decorView, app.measure.steps[1].instruction))
+        findText(a.window.decorView, a.getString(R.string.measure_stop))!!.performClick()
+        ShadowLooper.idleMainLooper()
+        assertFalse(app.measure.active)
+        assertFalse("the card is gone", findText(a.window.decorView, app.measure.steps[1].instruction)!!.isShown)
     }
 
     /** The update lock: a newer release is out → "Update required" covers the scan screen. */

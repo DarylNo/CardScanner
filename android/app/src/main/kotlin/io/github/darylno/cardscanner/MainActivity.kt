@@ -39,6 +39,7 @@ import io.github.darylno.cardscanner.ui.ScanChrome
 import io.github.darylno.cardscanner.ui.ScanRate
 import io.github.darylno.cardscanner.ui.SettingsActivity
 import io.github.darylno.cardscanner.ui.ShareActivity
+import io.github.darylno.cardscanner.ui.DebugShare
 import io.github.darylno.cardscanner.ui.StatusText
 import io.github.darylno.cardscanner.ui.UploadPort
 import io.github.darylno.cardscanner.update.UpdateLock
@@ -87,6 +88,18 @@ class MainActivity : AppCompatActivity() {
     }
     /** "Update required" — covers the scan screen while the update lock holds. */
     private lateinit var lockView: View
+    // The guided measurement session's prompt card (ui/MeasureSession): lives in the top scrim.
+    private lateinit var measureCard: LinearLayout
+    private lateinit var measureTitle: TextView
+    private lateinit var measureText: TextView
+    private lateinit var measureCount: TextView
+    private lateinit var measureQuestion: TextView
+    private lateinit var measureYesNo: LinearLayout
+    private lateinit var measureNext: android.widget.Button
+    private lateinit var measureBack: android.widget.Button
+    private val measureTick = object : Runnable {
+        override fun run() { if (app.measure.active) { refreshMeasure(); measureCard.postDelayed(this, 1000) } }
+    }
     private lateinit var lockText: TextView
     private lateinit var traySeg: TextView
     private lateinit var tapSeg: TextView
@@ -159,6 +172,8 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         refreshBanner()
+        refreshMeasure()
+        measureCard.removeCallbacks(measureTick); if (app.measure.active) measureCard.postDelayed(measureTick, 1000)
         overlay.setDebugText(null)
         if (camera == null) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
@@ -199,6 +214,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onStop() {
         rateView.removeCallbacks(rateTick)
+        measureCard.removeCallbacks(measureTick)
         app.updates.removeListener(lockListener)
         if (app.phoneServer.device.screen === remoteScreen) app.phoneServer.device.screen = null
         GatewayService.screenVisible(false)
@@ -324,6 +340,34 @@ class MainActivity : AppCompatActivity() {
         top.addView(queueView, LinearLayout.LayoutParams(wrap(), wrap()).apply {
             gravity = Gravity.END; topMargin = dp(8)
         })
+        // ── the measurement session's prompt card (hidden unless a session is on) ──
+        measureCard = chrome.card(padDp = 14).apply { visibility = View.GONE }
+        measureTitle = chrome.text("", 15f, bold = true)
+        measureText = chrome.text("", 13f, ScanChrome.Palette.TEXT_DIM).apply { setPadding(0, dp(4), 0, 0) }
+        measureCount = chrome.text("", 13f).apply { setPadding(0, dp(6), 0, 0) }
+        measureQuestion = chrome.text("", 13f, bold = true).apply { setPadding(0, dp(8), 0, 0); visibility = View.GONE }
+        measureYesNo = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL; visibility = View.GONE
+            addView(chrome.smallButton(chrome.secondaryButton(getString(R.string.measure_yes)) { measureAnswer(true) }),
+                LinearLayout.LayoutParams(wrap(), wrap()).apply { marginEnd = dp(8) })
+            addView(chrome.smallButton(chrome.secondaryButton(getString(R.string.measure_no)) { measureAnswer(false) }),
+                LinearLayout.LayoutParams(wrap(), wrap()))
+        }
+        measureBack = chrome.smallButton(chrome.secondaryButton(getString(R.string.measure_back)) { app.measure.back(); afterMeasureStep() })
+        measureNext = chrome.smallButton(chrome.primaryButton(getString(R.string.measure_next)) { measureNextStep() })
+        val measureButtons = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            addView(measureBack, LinearLayout.LayoutParams(wrap(), wrap()).apply { marginEnd = dp(8) })
+            addView(chrome.smallButton(chrome.secondaryButton(getString(R.string.measure_stop)) { measureStop() }),
+                LinearLayout.LayoutParams(wrap(), wrap()))
+            addView(View(this@MainActivity), LinearLayout.LayoutParams(0, 1, 1f))
+            addView(measureNext, LinearLayout.LayoutParams(wrap(), wrap()))
+        }
+        measureCard.addView(measureTitle); measureCard.addView(measureText); measureCard.addView(measureCount)
+        measureCard.addView(measureQuestion); measureCard.addView(measureYesNo, LinearLayout.LayoutParams(wrap(), wrap()).apply { topMargin = dp(6) })
+        measureCard.addView(measureButtons, LinearLayout.LayoutParams(match(), wrap()).apply { topMargin = dp(10) })
+        top.addView(measureCard, LinearLayout.LayoutParams(match(), wrap()).apply { topMargin = dp(8) })
         root.addView(top, FrameLayout.LayoutParams(match(), wrap(), Gravity.TOP))
 
         // ── bottom controls ──
@@ -828,8 +872,54 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // ── the guided measurement session (ui/MeasureSession) ──────────────────
+    /** Show the current step, or hide the card when no session is on. */
+    private fun refreshMeasure() {
+        if (!::measureCard.isInitialized) return
+        val m = app.measure
+        if (!m.active) { measureCard.visibility = View.GONE; return }
+        val st = m.step
+        measureCard.visibility = View.VISIBLE
+        measureTitle.text = getString(R.string.measure_step, m.index + 1, m.steps.size, st.title)
+        measureText.text = st.instruction
+        val count = if (st.target > 0) getString(R.string.measure_captures_of, m.captures, st.target) else getString(R.string.measure_captures, m.captures)
+        measureCount.text = if (st.minutes > 0) {
+            val secs = ((System.currentTimeMillis() - m.stepStartedAt) / 1000L).coerceAtLeast(0)
+            count + " · " + getString(R.string.measure_elapsed, secs / 60, secs % 60, st.minutes)
+        } else count
+        val q = st.question
+        measureQuestion.visibility = if (q != null) View.VISIBLE else View.GONE
+        measureQuestion.text = q?.let { it + (m.answer?.let { a -> if (a) "  ✓ yes" else "  ✗ no" } ?: "") } ?: ""
+        measureYesNo.visibility = if (q != null) View.VISIBLE else View.GONE
+        measureBack.visibility = if (m.index > 0) View.VISIBLE else View.INVISIBLE
+        measureNext.text = getString(if (m.isLast) R.string.measure_finish else R.string.measure_next)
+    }
+
+    private fun measureAnswer(yes: Boolean) { app.measure.answer(yes); refreshMeasure() }
+
+    private fun measureNextStep() {
+        val wasLast = app.measure.isLast
+        app.measure.next()
+        afterMeasureStep()
+        if (wasLast && !app.measure.active) DebugShare.share(this, app)     // the last step: hand over the report
+    }
+
+    private fun measureStop() {
+        app.measure.finish(abandoned = true)
+        afterMeasureStep()
+        setStatus(getString(R.string.measure_stopped), Tone.OK)
+    }
+
+    /** A step changed its settings (AE lock, vibration, check time): apply what the camera reads live. */
+    private fun afterMeasureStep() {
+        camera?.setAeLock(settings.aeLock)
+        refreshMeasure()
+        measureCard.removeCallbacks(measureTick); if (app.measure.active) measureCard.postDelayed(measureTick, 1000)
+    }
+
     private fun handleCaptured(capture: Captured, manual: Boolean) {
         settings.addTiming(capture.timings)
+        if (app.measure.active) { app.measure.captured(); refreshMeasure() }
         val replace = if (manual) pendingReplace else null
         pendingReplace = null
         // Tapped with Auto off: this scan opens once it's identified (was Handheld's price check).
