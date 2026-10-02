@@ -135,6 +135,28 @@ class PhoneServer(
         try { deleteExec.execute(work) } catch (_: java.util.concurrent.RejectedExecutionException) { work.run() }
     }
 
+    /**
+     * Delete EVERY scan and its photo as the owner (Settings → Delete all scans), off the
+     * UI thread, through the API's own `POST /api/scans/delete-all` (what the pages'
+     * "Clear all" sends) so the photos go too and the pricing worker is told.
+     * [done] gets the number deleted (−1 when the request failed), on the worker thread.
+     */
+    fun deleteAllScansAsOwner(done: (Int) -> Unit = {}) {
+        val work = Runnable {
+            val n = try {
+                val res = backend.handle(io.github.darylno.cardscanner.core.server.ApiRequest(
+                    "POST", "/api/scans/delete-all", body = "{}".toByteArray(Charsets.UTF_8),
+                    role = io.github.darylno.cardscanner.core.server.ROLE_ADMIN))
+                val body = io.github.darylno.cardscanner.core.MiniJson.parse(String(res.body, Charsets.UTF_8)) as? Map<*, *>
+                if (res.status == 200) ((body?.get("deleted") as? Number)?.toInt() ?: -1) else -1
+            } catch (e: Exception) { -1 }
+            io.github.darylno.cardscanner.core.DebugLog.global.i("scans",
+                if (n >= 0) "deleted all scans from Settings: $n" else "delete all scans from Settings FAILED")
+            done(n)
+        }
+        try { deleteExec.execute(work) } catch (_: java.util.concurrent.RejectedExecutionException) { work.run() }
+    }
+
     /** One log line per identification: what it read, how sure, how many printings, OCR, timings. */
     internal fun describeIdentified(frames: Int, json: Map<String, Any?>, timings: Map<String, Long>): String {
         val read = json["card_read"] as? Map<*, *>

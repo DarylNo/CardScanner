@@ -325,12 +325,33 @@ OnePlus Nord N200 5G (camera id 0 only), minSdk 29, arm64-v8a.
   keeps the current Area). Tap to scan = the shutter, and that scan OPENS
   once identified (`/phone?panel=1&detail=<id>`: the page prices it at once,
   prices land live, Back returns to the camera; no Keep/Discard — it's filed
-  like any scan). Tap to scan always has an Area: with none set the app draws
+  like any scan). **Picking a printing closes the detail onto the scan
+  list** (owner, 2026-10-01) with a "Picked …" status, in every flow;
+  condition/finish/quantity edits stay on the card.
+- **Compare block on the card (phone.html, owner 2026-10-02):** the scan
+  photo beside the compared printing (default), or overlaid — *Wipe* (a
+  divider on the slider: crisp pixels of each side, how a different frame /
+  set symbol / collector line shows) or *Blend* (the top layer's opacity),
+  with either image as the base layer; ‹ › or a horizontal swipe on the
+  pictures (≥50 px, mostly sideways) step through the candidates without
+  picking, "Pick SET #n" picks the compared one. A 664×926 photo is
+  scaled 1.053 so just the card shows (ScanPhoto's 17/23 buffer); older
+  photos show as they are. Mode and base layer persist in localStorage
+  (`cmpMode`, `cmpTop`). Verified in headless Chromium (compare_ui.py).
+- Tap to scan always has an Area: with none set the app draws
   `HandheldGuide.defaultArea` (a centred card at 60% of the limiting side +
   15% pad — back from the card so the phone's shadow stays off it; a starting
   point, not measured). A drawn Area is never replaced; in Tap to scan the
   Area button draws, it never clears. Mount focus: locks on the Area centre,
   then on the first card; tap the preview to lock elsewhere.
+- **The review WebView shows the page's `confirm()`/`alert()`** (`ui/JsDialogs`,
+  a `WebChromeClient`): an Android WebView drops JavaScript dialogs unless the
+  app shows them, so `confirm()` returned false and phone.html's "Clear all" /
+  "Clear unpicked" / "Delete flagged" silently did nothing on the phone
+  (owner, 2026-10-01: "need a way to delete all scans"). Settings → Scans →
+  **Delete all scans** is the native way (count shown, one confirmation, no
+  backup — `PhoneServer.deleteAllScansAsOwner` → the API's own
+  `POST /api/scans/delete-all`, so photos go and the price worker hears).
 - **Swipe-to-delete holds the DELETE for a 5 s Undo.** Inside the app the
   WebView is destroyed when its screen closes (no pagehide, timers die), so
   the page reports its pending ids to `CardScannerApp.pendingDeletes` and

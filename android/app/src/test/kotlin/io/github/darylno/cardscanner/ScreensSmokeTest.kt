@@ -192,6 +192,32 @@ class ScreensSmokeTest {
         assertResumed(a)
     }
 
+    /** Settings → Delete all scans: the count is shown, the dialog says it, and OK deletes every scan and photo. */
+    @Test
+    fun settings_deleteAllScans_asksThenDeletesEverything() {
+        for (name in listOf("Opt", "Shock")) app.phoneServer.backend.file(mapOf("identified" to true,
+            "card_read" to mapOf("name" to name), "confidence" to mapOf("name" to "high"),
+            "candidates" to listOf(mapOf("id" to name.lowercase(), "name" to name, "set" to "dom", "collector_number" to "1"))), null)
+        assertEquals(2, app.phoneServer.store.count())
+        val a = launch(SettingsActivity::class.java)
+        val row = findText(a.window.decorView, a.getString(R.string.settings_delete_all))
+        assertNotNull(row)
+        assertNotNull("the row shows how many would go", findText(a.window.decorView, "2 scans"))
+        // The row's click lands on its container (ScanChrome.valueRow): climb to the clickable parent.
+        var v: View? = row
+        while (v != null && !v.isClickable) v = v.parent as? View
+        assertNotNull("a clickable row", v)
+        v!!.performClick()
+        ShadowLooper.idleMainLooper()
+        val d = org.robolectric.shadows.ShadowDialog.getLatestDialog() as androidx.appcompat.app.AlertDialog
+        assertTrue(d.isShowing)
+        assertNotNull(findText(d.window!!.decorView, a.getString(R.string.settings_delete_all_title, "2 scans")))
+        d.getButton(android.content.DialogInterface.BUTTON_POSITIVE).performClick()
+        val deadline = System.currentTimeMillis() + 5_000
+        while (app.phoneServer.store.count() != 0 && System.currentTimeMillis() < deadline) { ShadowLooper.idleMainLooper(); Thread.sleep(20) }
+        assertEquals(0, app.phoneServer.store.count())
+    }
+
     @Test
     fun settingsActivity_showsThePhonesServer() {
         val a = launch(SettingsActivity::class.java)
