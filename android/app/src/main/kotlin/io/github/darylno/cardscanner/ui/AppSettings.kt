@@ -71,6 +71,26 @@ class AppSettings(context: Context) {
         get() = prefs.getBoolean(K_NOTIF_ASKED, false)
         set(v) = prefs.edit().putBoolean(K_NOTIF_ASKED, v).apply()
 
+    // ── the guided measurement session (MeasureSession): survives leaving the screen ──
+    /** The current step, −1 = no session. */
+    var measureStep: Int
+        get() = prefs.getInt(K_MEASURE_STEP, -1)
+        set(v) = prefs.edit().putInt(K_MEASURE_STEP, v).apply()
+    var measureCaptures: Int
+        get() = prefs.getInt(K_MEASURE_CAPTURES, 0)
+        set(v) = prefs.edit().putInt(K_MEASURE_CAPTURES, v).apply()
+    var measureStepStartedAt: Long
+        get() = prefs.getLong(K_MEASURE_STARTED, 0L)
+        set(v) = prefs.edit().putLong(K_MEASURE_STARTED, v).apply()
+    /** The step's Yes/No answer (null = none yet). */
+    var measureAnswer: Boolean?
+        get() = if (prefs.contains(K_MEASURE_ANSWER)) prefs.getBoolean(K_MEASURE_ANSWER, false) else null
+        set(v) { if (v == null) prefs.edit().remove(K_MEASURE_ANSWER).apply() else prefs.edit().putBoolean(K_MEASURE_ANSWER, v).apply() }
+    /** The owner's own "aeLock,vibration,checkMs" to restore when the session ends. */
+    var measureOriginal: String?
+        get() = prefs.getString(K_MEASURE_ORIG, null)
+        set(v) { if (v == null) prefs.edit().remove(K_MEASURE_ORIG).apply() else prefs.edit().putString(K_MEASURE_ORIG, v).apply() }
+
     var debugOverlay: Boolean
         get() = prefs.getBoolean(K_DEBUG, false)
         set(v) = prefs.edit().putBoolean(K_DEBUG, v).apply()
@@ -97,6 +117,11 @@ class AppSettings(context: Context) {
         const val K_NOTIF_ASKED = "notif_asked"
         const val K_CHECK_MS = "check_ms"
         const val K_DEBUG = "debug_overlay"
+        const val K_MEASURE_STEP = "measure_step"
+        const val K_MEASURE_CAPTURES = "measure_captures"
+        const val K_MEASURE_STARTED = "measure_started"
+        const val K_MEASURE_ANSWER = "measure_answer"
+        const val K_MEASURE_ORIG = "measure_orig"
         const val K_TIMINGS = "recent_timings"
     }
 }

@@ -65,6 +65,19 @@
     <string name="settings_diagnostics">Diagnostics</string>
     <string name="settings_copy_diag">Copy diagnostics</string>
     <string name="settings_share_report">Share debug report</string>
+    <string name="measure_run">Run the measurement session</string>
+    <string name="measure_resume">Resume the measurement session</string>
+    <string name="measure_step">Step %1$d of %2$d · %3$s</string>
+    <string name="measure_captures">Captures during this step: %1$d</string>
+    <string name="measure_captures_of">Captures during this step: %1$d of %2$d</string>
+    <string name="measure_elapsed">%1$d:%2$02d of %3$d min</string>
+    <string name="measure_next">Next</string>
+    <string name="measure_finish">Finish</string>
+    <string name="measure_back">Back</string>
+    <string name="measure_stop">Stop</string>
+    <string name="measure_yes">Yes</string>
+    <string name="measure_no">No</string>
+    <string name="measure_stopped">Measurement session stopped — your settings are back.</string>
 
     <!-- Share -->
     <string name="share_title">Share</string>
