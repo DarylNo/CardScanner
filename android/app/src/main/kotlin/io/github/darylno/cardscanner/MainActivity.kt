@@ -263,8 +263,10 @@ class MainActivity : AppCompatActivity() {
 
     // ── layout ──────────────────────────────────────────────────────────────
     // A camera app: the preview fills the screen; controls float over it on
-    // scrims. Top: server status + Scans/Share/Settings. Middle: nothing but
-    // the card. Bottom: status pill, then Auto (left) · shutter · Area (right).
+    // scrims. Top: server status, cards/min, the upload indicator — read-only.
+    // Middle: nothing but the card. Bottom, every button within thumb reach
+    // (owner, 2026-10-02: "bring the buttons at the top to the bottom"): the
+    // status pill, then Share · Tray|Tap · ⚙, then Scans · shutter · Area.
     private fun dp(v: Int) = chrome.dp(v)
 
     private fun wrap() = ViewGroup.LayoutParams.WRAP_CONTENT
@@ -284,6 +286,7 @@ class MainActivity : AppCompatActivity() {
 
         // ── top bar ──
         val top = LinearLayout(this).apply {
+            tag = TAG_TOP_BAR
             orientation = LinearLayout.VERTICAL
             background = chrome.scrim(top = true)
             setPadding(dp(12), dp(10), dp(12), dp(28))
@@ -302,14 +305,6 @@ class MainActivity : AppCompatActivity() {
             text = getString(R.string.banner_fmt, BuildConfig.VERSION_NAME, "…")
         }
         topRow.addView(serverText, LinearLayout.LayoutParams(0, wrap(), 1f))
-        topRow.addView(chrome.chip(getString(R.string.scans)) { openPanel(0L) },
-            LinearLayout.LayoutParams(wrap(), wrap()).apply { marginStart = dp(6) })
-        topRow.addView(chrome.chip(getString(R.string.share)) { startActivity(Intent(this, ShareActivity::class.java)) },
-            LinearLayout.LayoutParams(wrap(), wrap()).apply { marginStart = dp(6) })
-        topRow.addView(chrome.chip("⚙") { startActivity(Intent(this, SettingsActivity::class.java)) }.apply {
-            contentDescription = getString(R.string.settings)
-            textSize = 18f
-        }, LinearLayout.LayoutParams(wrap(), wrap()).apply { marginStart = dp(6) })
         top.addView(topRow)
         // Cards per minute (rolling 5 min) · cards this session — small and dim.
         rateView = TextView(this).apply {
@@ -333,6 +328,7 @@ class MainActivity : AppCompatActivity() {
 
         // ── bottom controls ──
         val bottom = LinearLayout(this).apply {
+            tag = TAG_BOTTOM_BAR
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
             background = chrome.scrim(top = false)
@@ -365,7 +361,23 @@ class MainActivity : AppCompatActivity() {
         traySeg = segItem(getString(R.string.mode_tray), true)
         tapSeg = segItem(getString(R.string.mode_tap), false)
         seg.addView(traySeg); seg.addView(tapSeg)
-        bottom.addView(seg, LinearLayout.LayoutParams(wrap(), wrap()).apply { bottomMargin = dp(16) })
+        // Share (left) · the mode switch · ⚙ Settings (right) — moved down from the top bar.
+        val shareBtn = chrome.chip(getString(R.string.share)) { startActivity(Intent(this, ShareActivity::class.java)) }
+        val settingsBtn = chrome.chip("⚙") { startActivity(Intent(this, SettingsActivity::class.java)) }.apply {
+            contentDescription = getString(R.string.settings)
+            textSize = 18f
+        }
+        val modeRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        val edge = { v: View, g: Int -> FrameLayout(this).apply {
+            addView(v, FrameLayout.LayoutParams(wrap(), wrap(), g or Gravity.CENTER_VERTICAL))
+        } }
+        modeRow.addView(edge(shareBtn, Gravity.START), LinearLayout.LayoutParams(0, wrap(), 1f))
+        modeRow.addView(seg, LinearLayout.LayoutParams(wrap(), wrap()).apply { marginStart = dp(8); marginEnd = dp(8) })
+        modeRow.addView(edge(settingsBtn, Gravity.END), LinearLayout.LayoutParams(0, wrap(), 1f))
+        bottom.addView(modeRow, LinearLayout.LayoutParams(match(), wrap()).apply { bottomMargin = dp(16) })
 
         val controls = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -382,7 +394,8 @@ class MainActivity : AppCompatActivity() {
         val side = { v: View, g: Int -> FrameLayout(this).apply {
             addView(v, FrameLayout.LayoutParams(wrap(), wrap(), g or Gravity.CENTER_VERTICAL))
         } }
-        controls.addView(FrameLayout(this), LinearLayout.LayoutParams(0, wrap(), 1f))   // keeps the shutter centred
+        val scansBtn = chrome.chip(getString(R.string.scans)) { openPanel(0L) }
+        controls.addView(side(scansBtn, Gravity.START), LinearLayout.LayoutParams(0, wrap(), 1f))   // Scans · shutter · Area
         controls.addView(shutter, LinearLayout.LayoutParams(dp(76), dp(76)).apply { marginStart = dp(12); marginEnd = dp(12) })
         controls.addView(side(areaBtn, Gravity.END), LinearLayout.LayoutParams(0, wrap(), 1f))
         bottom.addView(controls, LinearLayout.LayoutParams(match(), wrap()))
@@ -906,5 +919,9 @@ class MainActivity : AppCompatActivity() {
         }
     }
 }
+
+/** View tags of the scan screen's two scrims (tests check every button lives in the bottom one). */
+internal const val TAG_TOP_BAR = "scan_top_bar"
+internal const val TAG_BOTTOM_BAR = "scan_bottom_bar"
 
 /** How long the scan-taken blue ✓ stays up. */

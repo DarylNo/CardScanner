@@ -44,7 +44,9 @@ With a scan taken, the only signal is a **blue ✓** on the card (held for the
 **Check mark time**, 2.5 s by default) plus two short buzzes.
 
 The top of the screen shows the version and the server state
-(`serving at <ip>:8090`), cards/min and a battery estimate.
+(`serving at <ip>:8090`), cards/min and a battery estimate. Every button is at
+the bottom, within thumb reach: **Share** · Tray|Tap · **⚙ Settings**, then
+**Scans** · shutter · **Area**.
 
 ## Reviewing
 
