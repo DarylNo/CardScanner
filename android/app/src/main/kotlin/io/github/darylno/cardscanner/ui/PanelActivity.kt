@@ -59,6 +59,7 @@ class PanelActivity : AppCompatActivity() {
         web.settings.domStorageEnabled = true
         web.setBackgroundColor(0xff0f1115.toInt())
         web.addJavascriptInterface(Bridge(), "CardScannerApp")
+        JsDialogs.install(this, web)                    // the page's confirm()/alert() — silently dropped otherwise
         web.webViewClient = object : WebViewClient() {
             override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
                 if (request.isForMainFrame) {

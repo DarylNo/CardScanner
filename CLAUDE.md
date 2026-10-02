@@ -331,6 +331,14 @@ OnePlus Nord N200 5G (camera id 0 only), minSdk 29, arm64-v8a.
   point, not measured). A drawn Area is never replaced; in Tap to scan the
   Area button draws, it never clears. Mount focus: locks on the Area centre,
   then on the first card; tap the preview to lock elsewhere.
+- **The review WebView shows the page's `confirm()`/`alert()`** (`ui/JsDialogs`,
+  a `WebChromeClient`): an Android WebView drops JavaScript dialogs unless the
+  app shows them, so `confirm()` returned false and phone.html's "Clear all" /
+  "Clear unpicked" / "Delete flagged" silently did nothing on the phone
+  (owner, 2026-10-01: "need a way to delete all scans"). Settings → Scans →
+  **Delete all scans** is the native way (count shown, one confirmation, no
+  backup — `PhoneServer.deleteAllScansAsOwner` → the API's own
+  `POST /api/scans/delete-all`, so photos go and the price worker hears).
 - **Swipe-to-delete holds the DELETE for a 5 s Undo.** Inside the app the
   WebView is destroyed when its screen closes (no pagehide, timers die), so
   the page reports its pending ids to `CardScannerApp.pendingDeletes` and

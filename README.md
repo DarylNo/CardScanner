@@ -56,7 +56,8 @@ artwork, the printing picker, condition / finish / quantity, and live prices.
   waits for you to pick.
 - Every scan keeps its own row, in scan order, with a photo of the card
   (straightened, filling 95% of the picture); swipe a row to delete it (5 s
-  Undo).
+  Undo). **Filters → Bulk actions** has *Clear unpicked* and *Clear all*;
+  **Settings → Scans → Delete all scans** does the same from the app.
 - **Filters:** a price band and a popularity floor, combined by *match any*
   (default) or *match all*. They stay set when you leave and come back.
 - **Popularity** comes from EDHREC's Commander rank (free, from the same

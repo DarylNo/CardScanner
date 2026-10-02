@@ -120,6 +120,14 @@ class SettingsActivity : AppCompatActivity() {
         col.addView(cam, lp())
         col.addView(note(getString(R.string.settings_camera_note)))
 
+        // ── Scans (owner, 2026-10-01: "need a way to delete all scans") ──
+        col.addView(chrome.sectionHeader(getString(R.string.settings_scans)))
+        val scansCard = chrome.card().apply { setPadding(dp(16), dp(4), dp(16), dp(4)) }
+        val count = runCatching { app.phoneServer.store.count() }.getOrDefault(0)
+        scansCard.addView(chrome.valueRow(getString(R.string.settings_delete_all), getString(R.string.settings_delete_all_desc),
+            resources.getQuantityString(R.plurals.scans_n, count, count)) { confirmDeleteAll() })
+        col.addView(scansCard, lp())
+
         // ── Diagnostics ──
         // Long-press the header → the hidden Stage 1c F2F network test.
         col.addView(chrome.sectionHeader(getString(R.string.settings_diagnostics)).apply {
@@ -140,6 +148,33 @@ class SettingsActivity : AppCompatActivity() {
         }, lp(14))
         diagCard.addView(chrome.secondaryButton(getString(R.string.settings_share_report)) { shareDebugReport() }, lp(10))
         col.addView(diagCard, lp())
+    }
+
+    /**
+     * Delete every scan on the phone — the only copy, so the dialog says how many and
+     * that there is no backup. Goes through the phone server as the owner (the pages'
+     * own "Clear all"), then the count on this screen is refreshed.
+     */
+    private fun confirmDeleteAll() {
+        val count = runCatching { app.phoneServer.store.count() }.getOrDefault(0)
+        val what = resources.getQuantityString(R.plurals.scans_n, count, count)
+        if (count == 0) { Toast.makeText(this, R.string.settings_delete_all_none, Toast.LENGTH_SHORT).show(); return }
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.settings_delete_all_title, what))
+            .setMessage(R.string.settings_delete_all_msg)
+            .setPositiveButton(R.string.settings_delete_all_go) { _, _ ->
+                app.phoneServer.deleteAllScansAsOwner { n ->
+                    runOnUiThread {
+                        if (isFinishing || isDestroyed) return@runOnUiThread
+                        val msg = if (n >= 0) getString(R.string.settings_deleted_n, resources.getQuantityString(R.plurals.scans_n, n, n))
+                                  else getString(R.string.settings_delete_all_failed)
+                        Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
+                        render()
+                    }
+                }
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
     }
 
     /** The debug report (diagnostics + the live log) through the share sheet — paste it anywhere. */

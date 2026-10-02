@@ -49,6 +49,19 @@
     <string name="settings_torch_desc">Keep the flashlight on while scanning</string>
     <string name="settings_debug">Debug overlay</string>
     <string name="settings_debug_desc">Mask coverage, steadiness, timings</string>
+    <string name="settings_scans">Scans</string>
+    <string name="settings_delete_all">Delete all scans</string>
+    <string name="settings_delete_all_desc">Removes every scan and its photo from this phone. There is no backup — export a copy from the paired computer first if you want one.</string>
+    <string name="settings_delete_all_title">Delete all %1$s?</string>
+    <string name="settings_delete_all_msg">They will be gone from this phone for good — there is no backup and no undo.</string>
+    <string name="settings_delete_all_go">Delete all</string>
+    <string name="settings_delete_all_none">There are no scans to delete.</string>
+    <string name="settings_deleted_n">Deleted %1$s.</string>
+    <string name="settings_delete_all_failed">Couldn\'t delete the scans — try again.</string>
+    <plurals name="scans_n">
+        <item quantity="one">%d scan</item>
+        <item quantity="other">%d scans</item>
+    </plurals>
     <string name="settings_diagnostics">Diagnostics</string>
     <string name="settings_copy_diag">Copy diagnostics</string>
     <string name="settings_share_report">Share debug report</string>
