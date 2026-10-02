@@ -167,10 +167,6 @@
 
   /* detail / printing picker */
   #detailBody { padding:4px 16px 24px; }
-  .prow { display:flex; gap:14px; align-items:flex-start; padding:12px; border-radius:18px;
-          background:var(--card); }
-  .prow > img { flex:0 0 96px; width:96px; border-radius:8px; background:var(--line); cursor:zoom-in; }
-  .prow .pinfo { flex:1; min-width:0; }
   .pname { font-size:19px; font-weight:700; line-height:1.25; overflow-wrap:anywhere; }
   .psub { font-size:13px; color:var(--muted); margin-top:3px; line-height:1.35; }
   .pprice { font-size:22px; font-weight:700; color:var(--good); margin:8px 0 2px; line-height:1.2; }
@@ -192,7 +188,13 @@
   /* Compare the scan photo with a printing (owner, 2026-10-02): side by side, or
      overlaid — "wipe" (a divider to drag) or "blend" (the top layer's opacity),
      with either image as the base layer. The buttons step through the candidates. */
-  .cmp { margin-top:12px; border-radius:18px; background:var(--card); padding:10px 12px 12px; }
+  .cmp { margin-top:8px; border-radius:18px; background:var(--card); padding:12px 12px 12px; }
+  /* The compared printing is the card's head (no photo row above it any more). */
+  .cmptitle { padding-bottom:10px; margin-bottom:8px; border-bottom:1px solid var(--line); }
+  .cmptitle .psub b { color:var(--text); }
+  .cmptitle .picked { color:var(--good); font-weight:700; }
+  .cmptitle .pprice.pp.none { color:var(--muted); font-weight:400; font-size:14px; }
+  .cmptitle .pfmt { margin-top:8px; }
   .cmphead { display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap;
              font-size:13px; color:var(--muted); line-height:1.4; }
   .cmphead b { color:var(--text); }
@@ -206,7 +208,10 @@
   .cmpbox { position:relative; aspect-ratio:5/7; border-radius:8px; overflow:hidden; background:#000; }
   .cmpbox img { position:absolute; inset:0; width:100%; height:100%; object-fit:contain; display:block; }
   /* A 664×926 scan photo (ScanPhoto: the card inset 17/23) shows just the card, like the printing. */
-  .cmpbox img.fill { transform:scale(1.053); }
+  .cmpbox img.fill { transform:scale(1.053); }   /* applyScanScale() folds in the viewer's "Scan size" */
+  .cmpscale { margin-top:6px; }
+  .cmpscale .pd { font-size:12px; flex:0 0 auto; }
+  .cmpscale button { min-height:32px; padding:0 10px; font-size:12px; color:var(--muted); flex:0 0 auto; }
   .cmpbody.overlay .cmpbox img.under { z-index:1; }
   .cmpbody.overlay .cmpbox img.over { z-index:2; }
   .cmpcap { position:absolute; left:6px; bottom:6px; z-index:3; font-size:11px; font-weight:700;
@@ -441,8 +446,8 @@ function popSig(scan){
 // most cards are not legal in most formats and listing that buries the rest.
 const FORMAT_LABELS = { standard:'Standard', pioneer:'Pioneer', modern:'Modern',
   legacy:'Legacy', vintage:'Vintage', pauper:'Pauper', commander:'Commander' };
-function formatChipsHtml(scan){
-  const f = popOf(scan)?.formats;
+function formatChipsHtml(scan, pop = popOf(scan)){
+  const f = pop?.formats;
   if (!f) return '';
   const chip = k => `<span class="fmt ${escHtml(f[k])}">${escHtml(FORMAT_LABELS[k])}</span>`;
   const keys = Object.keys(FORMAT_LABELS);
@@ -456,7 +461,7 @@ function formatChipsHtml(scan){
 }
 
 /* ── version banner — proves which page+server combo is running ────────────── */
-const UI_VERSION = 'v46';
+const UI_VERSION = 'v48';
 
 // Who is asking: the phone server says "guest" for the 6-digit code (admin =
 // the paired computer); the computer's own server always says admin. Guests
@@ -1529,6 +1534,18 @@ let cmpIndex = -1;                                             // -1: start at t
 let cmpMode = localStorage.getItem('cmpMode') || 'side';       // side | wipe | blend
 let cmpTop = localStorage.getItem('cmpTop') || 'scan';         // the top layer when overlaid: scan | print
 let cmpPos = 50;                                               // the slider: wipe = divider %, blend = top opacity %
+// "Scan size" (owner, 2026-10-02: "are we able to size either card to match the
+// size of the other?"): the scan photo's card is not always exactly the
+// printing's size (a sleeve edge, a quad a little off) — this scales the scan
+// layer, in every mode, around its centre; 100 = as filed. Remembered per viewer.
+let cmpScale = Math.min(130, Math.max(70, Number(localStorage.getItem('cmpScale')) || 100));
+function applyScanScale() {
+  for (const img of document.querySelectorAll('#cmp .cmpscan')) {
+    const base = img.classList.contains('fill') ? 1.053 : 1;        // the 664×926 photo's card inset (ScanPhoto)
+    img.style.transform = `scale(${(base * cmpScale / 100).toFixed(4)})`;
+  }
+  const b = $('#cmp-scale-reset'); if (b) b.textContent = `${cmpScale}%`;
+}
 function compareHtml(scan, cands, sel) {
   if (!cands.length) return '';
   if (cmpIndex < 0) cmpIndex = Math.max(0, cands.findIndex(c => c.id === sel?.scryfall_id));
@@ -1536,21 +1553,40 @@ function compareHtml(scan, cands, sel) {
   const c = cands[cmpIndex];
   const tag = `${escHtml((c.set||'').toUpperCase())} #${escHtml(c.collector_number)}`;
   const scanImg = `<img class="cmpscan" src="/api/scans/${scan.id}/image" alt="Scan photo"
-      onload="if(this.naturalWidth===664&&this.naturalHeight===926)this.classList.add('fill')" onerror="this.style.visibility='hidden'">`;
+      onload="if(this.naturalWidth===664&&this.naturalHeight===926)this.classList.add('fill');applyScanScale()" onerror="this.style.visibility='hidden'">`;
   const printImg = `<img class="cmpprint" src="${escHtml(c.image_normal||c.image_small)}" alt="Printing" onerror="this.style.visibility='hidden'">`;
   const overlay = cmpMode !== 'side';
   const body = overlay
     ? `<div class="cmpbody overlay"><div class="cmpbox">${scanImg}${printImg}<span class="cmpcap" id="cmp-cap"></span></div></div>`
     : `<div class="cmpbody side"><div class="cmpbox">${scanImg}<span class="cmpcap">scan</span></div>
          <div class="cmpbox">${printImg}<span class="cmpcap">${tag}</span></div></div>`;
+  // The head of the card IS the compared printing (owner, 2026-10-02: "get rid of
+  // the top area and rework this section now that I have the top print side by
+  // side"): its name, set, number, the pick mark and quantity, its price and
+  // where it plays — the picked printing's price is the scan's own (live-polled
+  // as #p-headprice), another printing's is its sweep price (data-price-for).
+  const picked = c.id === sel?.scryfall_id;
+  const price = picked ? `<div class="pprice" id="p-headprice">${headPriceHtml(scan)}</div>`
+    : (() => { const pp = printPrice(c); return (sel && pp.none) ? ''
+        : `<div class="pprice pp${pp.none?' none':''}" data-price-for="${escHtml(c.id)}">${escHtml(pp.text)}</div>`; })();
   return `<div class="cmp" id="cmp">
-    <div class="cmphead"><span id="cmp-name">Compare with <b>${tag}</b>${c.multi_distance!=null?` <span class="pd">Δ${c.multi_distance}</span>`:''}${c.id===sel?.scryfall_id?' <span class="pd">✓ picked</span>':''} <span class="pd">${cmpIndex+1}/${cands.length}</span></span>
+    <div class="cmptitle">
+      <div class="pname">${escHtml(c.name || scan.card_read?.name || '(unread)')}</div>
+      <div class="psub" id="cmp-name">${escHtml(c.set_name||'')} · <b>${tag}</b>${picked?` <span class="picked">✓ picked</span> · ×${sel.quantity}`:''}${c.multi_distance!=null?` <span class="pd">Δ${c.multi_distance}</span>`:''} <span class="pd">${cmpIndex+1}/${cands.length}</span></div>
+      ${price}
+      ${scan.error ? `<div class="perr">${escHtml(scan.error)}</div>` : ''}
+      ${formatChipsHtml(scan, c.popularity || popOf(scan))}
+    </div>
+    <div class="cmphead"><span class="pd">${picked ? 'Compare the scan with the picked printing' : sel ? 'Compare with another printing' : 'Compare — pick the printing that matches'}</span>
       <div class="cmpmodes">${[['side','Side by side'],['wipe','Wipe'],['blend','Blend']].map(([m,t]) =>
         `<button data-cmpmode="${m}" class="${m===cmpMode?'on':''}">${t}</button>`).join('')}</div></div>
     ${body}
     <div class="cmpctl"><button id="cmp-prev" aria-label="Previous printing">‹</button>
       ${overlay ? `<input id="cmp-slider" type="range" min="0" max="100" value="${cmpPos}" aria-label="${cmpMode==='wipe'?'Wipe':'Blend'}">` : '<span class="sp"></span>'}
       <button id="cmp-next" aria-label="Next printing">›</button></div>
+    <div class="cmpctl cmpscale"><span class="pd">Scan size</span>
+      <input id="cmp-scale" type="range" min="70" max="130" value="${cmpScale}" aria-label="Scan size">
+      <button id="cmp-scale-reset" title="Back to the filed size">${cmpScale}%</button></div>
     <div class="cmpctl">${overlay ? `<button id="cmp-swap">${cmpTop==='scan'?'Scan on top':'Print on top'}</button>` : ''}
       <button id="cmp-pick" class="primary" data-pick="${escHtml(c.id)}">${c.id===sel?.scryfall_id?'Keep':'Pick'} ${tag}</button></div>
   </div>`;
@@ -1574,6 +1610,8 @@ function wireCompare(cands, pick) {
   $('#cmp-prev').addEventListener('click', () => { cmpIndex = (cmpIndex - 1 + cands.length) % cands.length; renderScanDetail(); });
   $('#cmp-next').addEventListener('click', () => { cmpIndex = (cmpIndex + 1) % cands.length; renderScanDetail(); });
   $('#cmp-slider')?.addEventListener('input', e => { cmpPos = Number(e.target.value); applyCompareLayers(); });
+  $('#cmp-scale')?.addEventListener('input', e => { cmpScale = Number(e.target.value); localStorage.setItem('cmpScale', String(cmpScale)); applyScanScale(); });
+  $('#cmp-scale-reset')?.addEventListener('click', () => { cmpScale = 100; localStorage.setItem('cmpScale', '100'); const r = $('#cmp-scale'); if (r) r.value = '100'; applyScanScale(); });
   $('#cmp-swap')?.addEventListener('click', () => {
     cmpTop = cmpTop === 'scan' ? 'print' : 'scan'; localStorage.setItem('cmpTop', cmpTop); renderScanDetail();
   });
@@ -1599,6 +1637,7 @@ function wireCompare(cands, pick) {
     renderScanDetail();
   });
   applyCompareLayers();
+  applyScanScale();
 }
 const CMP_SWIPE_PX = 50;
 
@@ -1610,23 +1649,23 @@ async function renderScanDetail() {
   detailTitle.textContent = sel?.name || cr.name || '(unread)';
   detailPollSig = '';
 
-  let html = `<div class="prow">
-    <img src="/api/scans/${scan.id}/image" alt="Scan photo" onerror="this.style.display='none'">
-    <div class="pinfo">
-      ${sel ? `<div class="pname">${escHtml(sel.name)}</div>
-        <div class="psub">${escHtml(sel.set_name)} · ${escHtml((sel.set||'').toUpperCase())} #${escHtml(sel.collector_number)} · ×${sel.quantity}</div>
-        <div class="pprice" id="p-headprice">${headPriceHtml(scan)}</div>`
-      : `<div class="pname">${escHtml(cr.name||'(unread)')}</div>
-        <div class="psub">tap a printing below to select it</div>
-        <div class="pprice" id="p-headprice">${headPriceHtml(scan)}</div>`}
-      ${scan.error ? `<div class="perr">${escHtml(scan.error)}</div>` : ''}
-      ${formatChipsHtml(scan)}
-    </div>
-  </div>`;
+  // No photo row any more: the compare block is the head of the card. Without
+  // a single candidate (unread, or an error) a bare head keeps the name, the
+  // photo and the error in view.
   const cands = scan.candidates || [];
   const folded = cands.filter(c => c.other_art && c.id !== sel?.scryfall_id);
   const shown = detailShowAllArt ? cands : cands.filter(c => !folded.includes(c));
-  html += compareHtml(scan, shown, sel);
+  let html = shown.length ? compareHtml(scan, shown, sel) : `<div class="cmp" id="cmp-bare">
+    <div class="cmptitle">
+      <div class="pname">${escHtml(sel?.name || cr.name || '(unread)')}</div>
+      <div class="psub">${sel ? `${escHtml(sel.set_name)} · <b>${escHtml((sel.set||'').toUpperCase())} #${escHtml(sel.collector_number)}</b> · ×${sel.quantity}` : 'no printing found — search below'}</div>
+      ${sel ? `<div class="pprice" id="p-headprice">${headPriceHtml(scan)}</div>` : ''}
+      ${scan.error ? `<div class="perr">${escHtml(scan.error)}</div>` : ''}
+      ${formatChipsHtml(scan)}
+    </div>
+    <div class="cmpbody side"><div class="cmpbox"><img class="cmpscan" src="/api/scans/${scan.id}/image" alt="Scan photo"
+      onload="if(this.naturalWidth===664&&this.naturalHeight===926)this.classList.add('fill')" onerror="this.style.visibility='hidden'"><span class="cmpcap">scan</span></div></div>
+  </div>`;
   html += detailControls(scan);
   html += `<div class="subhead">${sel ? 'Re-pick printing' : 'Pick the printing'} — closest first</div>`;
   const foldTile = folded.length
@@ -1656,8 +1695,8 @@ async function renderScanDetail() {
     await renderScanDetail(); refreshScans();
   });
 
-  const scanImg = detailBody.querySelector('.prow > img');
-  scanImg?.addEventListener('click', () => openLightbox(scanImg.src));
+  const bareImg = detailBody.querySelector('#cmp-bare .cmpscan');
+  bareImg?.addEventListener('click', () => openLightbox(bareImg.src));
 
   const pickFrom = (pool) => async (el) => {
     const printing = (pool || []).find(c => c.id === el.dataset.pick);

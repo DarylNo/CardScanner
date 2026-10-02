@@ -11,6 +11,7 @@ object StatusText {
     const val WAITING = "Tray: waiting for a steady view…"
     const val WATCHING = "Tray: watching for a card…"
     const val HOLD_STILL = "Card detected — hold still…"
+    const val NO_SHAPE = "Something in the Area — no card shape yet…"
     const val NEW_CARD = "New card…"
     const val AUTO_OFF = "Tap to scan — card in the box, tap the shutter."
     const val CAPTURING = "Capturing…"

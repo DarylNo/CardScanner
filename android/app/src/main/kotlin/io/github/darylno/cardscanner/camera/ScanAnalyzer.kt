@@ -5,6 +5,7 @@ import androidx.camera.core.ImageProxy
 import io.github.darylno.cardscanner.core.AutoScanner
 import io.github.darylno.cardscanner.core.Box
 import io.github.darylno.cardscanner.core.CardOutline
+import io.github.darylno.cardscanner.core.OutlineTracker
 import io.github.darylno.cardscanner.core.DebugLog
 import io.github.darylno.cardscanner.core.Gray
 import io.github.darylno.cardscanner.core.GraySampler
@@ -48,6 +49,8 @@ class DetectionUpdate(
     val outline: FloatArray? = null,
     val watch: FloatArray? = null,
     val outlineNanos: Long? = null,
+    /** This Trigger was REFUSED by the card-shape gate (nothing shot; the scanner keeps watching). */
+    val triggerRefused: Boolean = false,
 )
 
 /**
@@ -90,11 +93,25 @@ class CaptureBurst(
  * draw an outline around the card … then watch that area for new cards";
  * "can't trigger on silly things like shadows") — none of it feeds the trigger,
  * [AutoScanner] / [Detection] and phone.html's detection are untouched:
- *  4. On occupied ticks (and the Trigger tick) the live card outline is found
- *     on the SAME 176×MH sample ([CardOutline], ~1.3 ms on x86) and goes out in
- *     the [DetectionUpdate]. It runs AFTER the tick / trigger / capture handling
- *     and inside runCatching, so nothing it does can skip fire() / captureDone()
- *     (a skipped captureDone leaves the scanner SCANNING for ever).
+ *  4. On every tick a card may be sitting there (occupied, the Trigger tick,
+ *     awaiting the next card, a different card settling) the live card outline
+ *     is found on the SAME 176×MH sample ([CardOutline], ~1.3 ms on x86),
+ *     smoothed across ticks with outliers dropped ([OutlineTracker]: the
+ *     "much bigger card" the finder sometimes sees never moves it) and goes out
+ *     in the [DetectionUpdate]. It runs inside runCatching, so nothing it does
+ *     can skip fire() / captureDone() (a skipped captureDone leaves the scanner
+ *     SCANNING for ever).
+ *     THE ONE PLACE IT FEEDS A DECISION — the card-shape gate (owner,
+ *     2026-10-02, a video of the Tray "trying to scan nothing": "should try to
+ *     find a shape that matches the ratio of a magic card"): a Tray Trigger
+ *     with NO outline (none this tick, none held from the last two) is REFUSED
+ *     — nothing shot, [AutoScanner.triggerRefused] puts the scanner back to
+ *     WATCHING so it asks again after the next steady ticks; after
+ *     [RELEARN_AFTER_REFUSALS] refusals of one still scene it is adopted as
+ *     the empty tray (what a wasted no_card scan used to do). The occupancy +
+ *     stillness trigger itself is untouched; the gate sits after it, in the
+ *     app, and only says no. A finder that THREW is unknown, not "no card",
+ *     and the capture goes ahead. The shutter is never gated.
  *  5. The WATCH WINDOW: at a capture, the padded (15 %) card polygon in sample
  *     pixels — the live outline at the Trigger tick, else the mask box; when the
  *     capture's own quad arrives ([onCaptureResult], tagged with the burst id,
@@ -218,6 +235,11 @@ class ScanAnalyzer(
     @Volatile private var captures = 0L
     @Volatile private var errors = 0L
     @Volatile private var lastError: String? = null
+    /** Smooths the live outline across ticks (display, the watch window, and the card-shape gate). */
+    private val tracker = OutlineTracker()
+    /** Consecutive Triggers the card-shape gate refused on the current still scene. */
+    private var refusals = 0
+    @Volatile private var triggersRefused = 0L
     @Volatile private var outlineRuns = 0L
     @Volatile private var outlinesFound = 0L
     @Volatile private var outlineNsTotal = 0L
@@ -298,7 +320,66 @@ class ScanAnalyzer(
             lastBoxInfo = lastBox?.let { it to roi }
         }
 
-        val trigger = event as? AutoScanner.Event.Trigger
+        // The live outline for this tick — BEFORE the trigger decision, because the
+        // Tray trigger now asks it whether a card shape is there at all (below).
+        // Every tick a card may be sitting there: occupied, the trigger, awaiting
+        // the next card, a different card settling — so the card stays highlighted.
+        val ev0 = event
+        val g0 = tickSample
+        var outline: CardOutline.Outline? = null
+        var outlineNs: Long? = null
+        var outlineThrew = false
+        if (ev0 != null && g0 != null) {
+            val wantOutline = ev0 is AutoScanner.Event.Trigger ||
+                (ev0 is AutoScanner.Event.Watching && ev0.occupied) ||
+                ev0 is AutoScanner.Event.AwaitingNext ||
+                (ev0 is AutoScanner.Event.NextCard && !ev0.removed)
+            if (wantOutline) {
+                val t0 = System.nanoTime()
+                val raw = runCatching { outlineFinder(g0, uw, uh, roi) }
+                    .onFailure { outlineThrew = true; outlineErrors++; lastOutlineError = it.toString() }
+                    .getOrNull()
+                // Smoothed across ticks, outliers dropped (OutlineTracker) — in sample px, then
+                // back to frame fractions the same way a raw find goes.
+                outline = runCatching { smooth(raw, g0, uw, uh) }
+                    .onFailure { outlineThrew = true; outlineErrors++; lastOutlineError = it.toString() }
+                    .getOrNull()
+                outlineNs = System.nanoTime() - t0
+                outlineRuns++
+                outlineNsTotal += outlineNs
+                if (raw != null) outlinesFound++
+            } else {
+                tracker.reset()
+            }
+            if (!(ev0 is AutoScanner.Event.Watching && ev0.occupied) && ev0 !is AutoScanner.Event.Trigger) refusals = 0
+        }
+
+        var trigger = event as? AutoScanner.Event.Trigger
+        var triggerRefused = false
+        if (trigger != null && mode == ScanMode.MOUNT && outline == null && !outlineThrew) {
+            // THE CARD-SHAPE GATE (owner, 2026-10-02, a video of the tray "trying to
+            // scan nothing"): the mask says something still is in the Area, but no
+            // card-shaped, card-textured quad (CardQuad: ratio 1.15–1.75, rectangular,
+            // printed interior) was found on this tick or held from the last two —
+            // glare, a shadow, a hand's edge. Nothing is shot; the scanner keeps
+            // watching and asks again after the next steady ticks. A finder that
+            // THREW is "unknown", not "no card": the capture goes ahead as before.
+            triggerRefused = true
+            triggersRefused++
+            refusals++
+            scanner.triggerRefused()
+            val b = trigger.box
+            if (refusals == 1) {
+                log.i("detect", "TRIGGER refused — no card shape in the Area (box ${b.x},${b.y} ${b.w}×${b.h}, mask %.1f%%) · still watching".format(b.maskFrac * 100))
+            }
+            if (refusals >= RELEARN_AFTER_REFUSALS && g0 != null) {
+                scanner.adoptEmpty(g0)
+                log.i("detect", "no card shape after $refusals refused triggers — adopted the view as the empty tray")
+                refusals = 0
+            }
+            trigger = null
+        }
+
         val needCopy = mode == ScanMode.HANDHELD || manualPending || trigger != null ||
             !scanner.autoEnabled || lastBox != null || scanner.mode != AutoScanner.Mode.WATCHING
         if (needCopy) {
@@ -350,32 +431,28 @@ class ScanAnalyzer(
         val ev = event
         val g = tickSample
         if (ev != null && g != null) {
-            val wantOutline = ev is AutoScanner.Event.Trigger ||
-                (ev is AutoScanner.Event.Watching && ev.occupied) ||
-                (ev is AutoScanner.Event.NextCard && !ev.removed)
-            var outline: CardOutline.Outline? = null
-            var outlineNs: Long? = null
-            if (wantOutline) {
-                val t0 = System.nanoTime()
-                outline = runCatching { outlineFinder(g, uw, uh, roi) }
+            if (!triggerRefused) {
+                runCatching { instrument(ev, g, outline, outlineNs, timestampNs) }
                     .onFailure { outlineErrors++; lastOutlineError = it.toString() }
-                    .getOrNull()
-                outlineNs = System.nanoTime() - t0
-                outlineRuns++
-                outlineNsTotal += outlineNs
-                if (outline != null) outlinesFound++
             }
-            runCatching { instrument(ev, g, outline, outlineNs, timestampNs) }
-                .onFailure { outlineErrors++; lastOutlineError = it.toString() }
             val wf = runCatching { watchFractions(uw, uh) }.getOrNull()
             sink.onDetection(
                 DetectionUpdate(ev, lastBox, g.w, g.h, uw, uh, roi, scanner.autoEnabled, scanner.hasEmptyRef, g,
-                    outline?.quad, wf, outlineNs),
+                    outline?.quad, wf, outlineNs, triggerRefused),
             )
         }
     }
 
     // ---- the watch window + shadow mode (display / log only) ----
+
+    /** [raw] through the tracker: the outline to show, as an Outline in the same spaces, or null. */
+    private fun smooth(raw: CardOutline.Outline?, g: Gray, uw: Int, uh: Int): CardOutline.Outline? {
+        val sq = tracker.update(raw?.sampleQuad) ?: return null
+        if (raw != null && sq.contentEquals(raw.sampleQuad)) return raw
+        val area = roi?.toPixels(uw, uh) ?: RoiPx(0, 0, uw, uh)
+        val ns = raw?.nanos ?: 0L
+        return CardOutline.Outline(CardOutline.toFrameFractions(sq, g.w, g.h, area, uw, uh), sq, ns / 1_000_000, ns)
+    }
 
     /** The watch window as frame fractions for the overlay, or null. */
     private fun watchFractions(uw: Int, uh: Int): FloatArray? {
@@ -408,6 +485,7 @@ class ScanAnalyzer(
         if (inWait) endWait(ts, why)
         watch = null; heldTriggerQuad = null; lastFiredId = 0L
         preparedRef = null; preparedRefOf = null
+        tracker.reset()
     }
 
     /** Per tick, after the decisions: the watch window upkeep and the shadow-mode measurement. */
@@ -546,6 +624,7 @@ class ScanAnalyzer(
     private fun fire(trigger: CaptureTrigger, box: Box?, uw: Int, uh: Int, freshNs: Long) {
         val burst = ring.snapshotLast(BURST, freshNs)
         deferring = false; deferredBox = null
+        refusals = 0
         scanner.captureDone()
         manualPending = false
         manualStartTs = NONE
@@ -573,7 +652,7 @@ class ScanAnalyzer(
     }
 
     /** Double-tap: re-learn the empty tray. */
-    fun reset() = post { scanner.reset(); lastBox = null; deferring = false; clearWatch(lastFrameTs, "reset") }
+    fun reset() = post { scanner.reset(); lastBox = null; deferring = false; refusals = 0; clearWatch(lastFrameTs, "reset") }
 
     /** The focus asked for by [Sink.onFocusRequest] finished (success or not). */
     fun focusDone() = post {
@@ -646,7 +725,9 @@ class ScanAnalyzer(
             append(" · captures $captures · errors $errors")
             lastError?.let { append(" (last: $it)") }
             val o = outlineRuns
-            if (o > 0) append(" · outlines $outlinesFound/$o avg outline ${"%.2f".format(outlineNsTotal / 1e6 / o)} ms")
+            if (o > 0) append(" · outlines $outlinesFound/$o avg outline ${"%.2f".format(outlineNsTotal / 1e6 / o)} ms" +
+                " · ${tracker.outliers} outlier(s) dropped")
+            if (triggersRefused > 0) append(" · triggers refused (no card shape) $triggersRefused")
             if (outlineErrors > 0) append(" · outline errors $outlineErrors (last: $lastOutlineError)")
             val x = textureRuns
             if (x > 0) append(" · texture $x avg ${"%.2f".format(textureNsTotal / 1e6 / x)} ms")
@@ -654,6 +735,9 @@ class ScanAnalyzer(
     }
 
     companion object {
+        /** Refused Triggers of one still scene before it is adopted as the empty tray (~2 s at 5 ticks/s). */
+        const val RELEARN_AFTER_REFUSALS = 5
+
         private const val NONE = Long.MIN_VALUE
         const val FRAME_GATE_NS = 90_000_000L
         const val SAMPLE_GATE_NS = 190_000_000L

@@ -87,10 +87,13 @@ scan screen (Tray trigger or shutter tap)
 **Detection:** the Tray trigger is *occupancy + stillness only* (mask
 coverage >2%, 2 steady samples, exposure-drift-cancelled diff) — phone.html's
 detection, ported to `AutoScanner`. Three separate attempts at card-shaped
-geometry gates (ratio/density/texture windows) each rejected real sleeved
-cards. The identification pipeline judges card content (texture-gated quads,
-blank-surface guard), never the trigger. The scan Area (ROI) crops sampling
-and capture.
+geometry gates on the DIFF MASK (ratio/density/texture windows) each rejected
+real sleeved cards. The identification pipeline judges card content
+(texture-gated quads, blank-surface guard), never the trigger. Since 1.1.7
+the app refuses a Tray trigger when the live outline (`CardQuad.find` on the
+detection sample — found edges, not the mask) sees no card shape, and asks
+again on the next steady ticks (the card-shape gate, below). The scan Area
+(ROI) crops sampling and capture.
 
 **Identification thresholds** (`art_index.py`): confident ≤110, or ≤140 with
 a ≥20-point lead over the 2nd name (validated on live data: the gap rule
@@ -338,6 +341,23 @@ OnePlus Nord N200 5G (camera id 0 only), minSdk 29, arm64-v8a.
   scaled 1.053 so just the card shows (ScanPhoto's 17/23 buffer); older
   photos show as they are. Mode and base layer persist in localStorage
   (`cmpMode`, `cmpTop`). Verified in headless Chromium (compare_ui.py).
+  **The compare block IS the head of the card (owner, 2026-10-02: "get rid of
+  the top area and rework this section now that I have the top print side by
+  side", phone.html v47):** no photo row above it; its title shows the
+  COMPARED printing — name, set name · SET #n, "✓ picked · ×q" when it is
+  the pick, Δ, k/N — its price (the pick's = the scan's own `#p-headprice`,
+  live-polled; another printing's = its sweep price, `data-price-for`, shown
+  on a picked scan only when one exists), the scan error, and ITS "plays in"
+  chips (`formatChipsHtml(scan, c.popularity)`). A scan with no candidates
+  gets a bare head (name, error, the photo alone; a price only when picked).
+  **"Scan size"** (owner: "size either card to match the size of the other",
+  v48): a 70–130 % slider scales the SCAN layer around its centre in every
+  mode (folded into the 1.053 fill scale by `applyScanScale()`), the % button
+  resets; persisted per viewer (`cmpScale`). Manual on purpose — the photo's
+  card is at a known 95 % only when the quad was right (a sleeve edge makes
+  it read larger).
+  Scan-screen Share is the standard share glyph (`drawable/ic_share`,
+  `ScanChrome.iconChip`, named "Share" for TalkBack).
 - Tap to scan always has an Area: with none set the app draws
   `HandheldGuide.defaultArea` (a centred card at 60% of the limiting side +
   15% pad — back from the card so the phone's shadow stays off it; a starting
@@ -398,6 +418,45 @@ OnePlus Nord N200 5G (camera id 0 only), minSdk 29, arm64-v8a.
   tagged with the burst id, ignored after a newer trigger), drawn grey dashed
   while awaiting the next card. `OverlayView.plan()` is the pure decision the
   Robolectric tests assert.
+  **The card is ALWAYS highlighted, the outline SMOOTHED (owner, 2026-10-02:
+  "always highlight the card … average its position and throw away outliers.
+  Right now the card tracing is 98% successful. Sometimes it thinks it's a much
+  bigger card").** The outline runs on every tick a card may be sitting there
+  (occupied, Trigger, AwaitingNext, a different card settling); `core/OutlineTracker`
+  keeps the last 5 raw finds (sample px), takes the per-coordinate median,
+  drops any find whose farthest corner is > 0.12·√area of the median away
+  (the "much bigger card"), and shows the MEAN of the rest — so 1–2 bad finds
+  in 5 never move it, and a new card is adopted once it is the majority (3 of 5
+  ticks, ~600 ms), as a jump, never a slide. A missed tick holds the last
+  outline for 2 ticks, then the window empties (reset on card removed / tray
+  re-learned / new Area, `clearWatch`). The smoothed outline is what the
+  overlay draws (grey, solid, in AWAIT_NEXT too — the dashed watch window only
+  when there is none) AND what the watch window is armed from at the trigger.
+  The analyzer line reports "N outlier(s) dropped".
+  Scan-screen layout: Tray|Tap · ⚙ over Share-above-Scans · shutter · Area.
+- **THE CARD-SHAPE GATE (owner, 2026-10-02, a video of the Tray "trying to
+  scan nothing" — "Card detected — hold still…" and a small amber box
+  wandering over an empty white tray: "should try to find a shape that
+  matches the ratio of a magic card").** The occupancy + stillness trigger is
+  UNTOUCHED (`Detection`/`AutoScanner`/phone.html unchanged, the differential
+  test still holds); the gate sits AFTER it, in `ScanAnalyzer`, and only says
+  no: a Tray Trigger with no live outline (none this tick, none held by the
+  tracker from the last two) is REFUSED — nothing shot, `AutoScanner.triggerRefused()`
+  (app-only, like `rebaseScene`) puts the scanner back to WATCHING with
+  stillness counted afresh, so it asks again 2 steady ticks later (never
+  AWAIT_NEXT: that waits for the scene to change, and a still card the finder
+  missed once would never be scanned). After `RELEARN_AFTER_REFUSALS` = 5
+  refusals of one still scene (~2 s) `adoptEmpty()` makes it the empty tray —
+  exactly what the wasted no_card scan used to do via `onNoCard`. The outline
+  is the card judge CardQuad already is (ratio 1.15–1.75, rectangular,
+  printed interior — the earlier geometry gates that failed were on the DIFF
+  MASK, not on found edges). A finder that THREW is unknown, not "no card":
+  the capture goes ahead (`anOutlineFinderThatThrowsNeverSkipsTheCapture`);
+  with OpenCV not loaded every outline is null and Tray would refuse
+  everything — the `detect` log says "TRIGGER refused" once per scene. The
+  shutter / Tap to scan is never gated. The UI says "Something in the Area —
+  no card shape yet…" instead of "Card detected" while the mask is occupied
+  without an outline; the Diagnostics line counts "triggers refused".
 - **SHADOW MODE — the shadow-proof "texture change" signal, computed and
   logged, NEVER acting** (owner: "Can't trigger on silly things like shadows";
   a shadow is a brief, smooth, multiplicative change, a new card changes the

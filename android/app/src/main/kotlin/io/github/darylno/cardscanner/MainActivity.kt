@@ -405,8 +405,10 @@ class MainActivity : AppCompatActivity() {
         traySeg = segItem(getString(R.string.mode_tray), true)
         tapSeg = segItem(getString(R.string.mode_tap), false)
         seg.addView(traySeg); seg.addView(tapSeg)
-        // Share (left) · the mode switch · ⚙ Settings (right) — moved down from the top bar.
-        val shareBtn = chrome.chip(getString(R.string.share)) { startActivity(Intent(this, ShareActivity::class.java)) }
+        // The mode switch · ⚙ Settings (right) — moved down from the top bar. Share sits
+        // in the row below, above Scans (owner, 2026-10-02).
+        // The standard share glyph (owner, 2026-10-02: "just use the standard share icon").
+        val shareBtn = chrome.iconChip(R.drawable.ic_share, getString(R.string.share)) { startActivity(Intent(this, ShareActivity::class.java)) }
         val settingsBtn = chrome.chip("⚙") { startActivity(Intent(this, SettingsActivity::class.java)) }.apply {
             contentDescription = getString(R.string.settings)
             textSize = 18f
@@ -418,7 +420,7 @@ class MainActivity : AppCompatActivity() {
         val edge = { v: View, g: Int -> FrameLayout(this).apply {
             addView(v, FrameLayout.LayoutParams(wrap(), wrap(), g or Gravity.CENTER_VERTICAL))
         } }
-        modeRow.addView(edge(shareBtn, Gravity.START), LinearLayout.LayoutParams(0, wrap(), 1f))
+        modeRow.addView(View(this), LinearLayout.LayoutParams(0, wrap(), 1f))
         modeRow.addView(seg, LinearLayout.LayoutParams(wrap(), wrap()).apply { marginStart = dp(8); marginEnd = dp(8) })
         modeRow.addView(edge(settingsBtn, Gravity.END), LinearLayout.LayoutParams(0, wrap(), 1f))
         bottom.addView(modeRow, LinearLayout.LayoutParams(match(), wrap()).apply { bottomMargin = dp(16) })
@@ -439,7 +441,13 @@ class MainActivity : AppCompatActivity() {
             addView(v, FrameLayout.LayoutParams(wrap(), wrap(), g or Gravity.CENTER_VERTICAL))
         } }
         val scansBtn = chrome.chip(getString(R.string.scans)) { openPanel(0L) }
-        controls.addView(side(scansBtn, Gravity.START), LinearLayout.LayoutParams(0, wrap(), 1f))   // Scans · shutter · Area
+        val leftStack = LinearLayout(this).apply {           // Share over Scans, left-aligned
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.START
+            addView(shareBtn, LinearLayout.LayoutParams(wrap(), wrap()).apply { bottomMargin = dp(10) })
+            addView(scansBtn, LinearLayout.LayoutParams(wrap(), wrap()))
+        }
+        controls.addView(side(leftStack, Gravity.START), LinearLayout.LayoutParams(0, wrap(), 1f))   // Share/Scans · shutter · Area
         controls.addView(shutter, LinearLayout.LayoutParams(dp(76), dp(76)).apply { marginStart = dp(12); marginEnd = dp(12) })
         controls.addView(side(areaBtn, Gravity.END), LinearLayout.LayoutParams(0, wrap(), 1f))
         bottom.addView(controls, LinearLayout.LayoutParams(match(), wrap()))
@@ -794,8 +802,8 @@ class MainActivity : AppCompatActivity() {
         }
 
         override fun onDetection(event: AutoScanner.Event, sampleW: Int, sampleH: Int, debug: String?,
-                                 outline: FloatArray?, watch: FloatArray?) {
-            runOnUiThread { handleDetection(event, sampleW, sampleH, debug, outline, watch) }
+                                 outline: FloatArray?, watch: FloatArray?, triggerRefused: Boolean) {
+            runOnUiThread { handleDetection(event, sampleW, sampleH, debug, outline, watch, triggerRefused) }
         }
 
         override fun onCaptureStarted(id: Long, manual: Boolean) {
@@ -835,7 +843,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun handleDetection(event: AutoScanner.Event, sw: Int, sh: Int, debug: String?,
-                                outline: FloatArray?, watch: FloatArray?) {
+                                outline: FloatArray?, watch: FloatArray?, triggerRefused: Boolean = false) {
         overlay.setDebugText(if (settings.debugOverlay) debug else null)
         if (overlay.settingArea) return
         when (event) {
@@ -847,9 +855,15 @@ class MainActivity : AppCompatActivity() {
             is AutoScanner.Event.Watching -> {
                 overlay.setBox(event.box, sw, sh,
                     if (event.occupied) OverlayView.BoxState.OCCUPIED else OverlayView.BoxState.SETTLING, outline, watch)
-                if (event.occupied && event.stableCount > 0) setStatus(StatusText.HOLD_STILL)
+                // "Card detected" only when a card SHAPE is there — the mask alone is
+                // glare, a shadow or a hand just as well (the tray "scanning nothing").
+                if (event.occupied && event.stableCount > 0) setStatus(if (outline != null) StatusText.HOLD_STILL else StatusText.NO_SHAPE)
             }
-            is AutoScanner.Event.Trigger -> {
+            is AutoScanner.Event.Trigger -> if (triggerRefused) {
+                // The card-shape gate said no: nothing shot, still watching (the analyzer logged it).
+                overlay.setBox(event.box, sw, sh, OverlayView.BoxState.OCCUPIED, outline, watch)
+                setStatus(StatusText.NO_SHAPE)
+            } else {
                 val b = event.box
                 dlog.i("detect", "TRIGGER box ${b.x},${b.y} ${b.w}×${b.h} of ${sw}×${sh} · mask %.1f%%".format(b.maskFrac * 100) +
                     (if (outline != null) " · outline found" else " · no outline") +

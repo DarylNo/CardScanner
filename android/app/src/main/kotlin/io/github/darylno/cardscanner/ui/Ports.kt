@@ -66,10 +66,12 @@ interface CameraPort {
          * A detection tick. [sampleW]×[sampleH] = the Gray sample the box lives in;
          * [outline] = the live card outline and [watch] = the card-shaped watch
          * window, both 8 floats TL,TR,BR,BL in upright-frame FRACTIONS, or null
-         * (display only — see ScanAnalyzer). Any thread.
+         * (display only — see ScanAnalyzer). [triggerRefused]: this Trigger was
+         * refused by the card-shape gate (no card outline), nothing was shot and
+         * the scanner keeps watching. Any thread.
          */
         fun onDetection(event: AutoScanner.Event, sampleW: Int, sampleH: Int, debug: String?,
-                        outline: FloatArray? = null, watch: FloatArray? = null)
+                        outline: FloatArray? = null, watch: FloatArray? = null, triggerRefused: Boolean = false)
         /**
          * The burst [id] exists (frames grabbed) — haptic "captured" now, before
          * processing. Exactly one of [onCaptured] / [onCaptureFailed] follows it;

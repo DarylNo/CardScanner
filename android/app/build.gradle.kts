@@ -59,6 +59,10 @@ android {
         unitTests.isReturnDefaultValues = true
         // Robolectric smoke tests (ScreensSmokeTest) inflate the real manifest/resources.
         unitTests.isIncludeAndroidResources = true
+        // Robolectric + the art-pack replay outgrow Gradle's default 512 MB test
+        // heap: OutOfMemoryError landed on whichever test ran next (UpdateLockTest,
+        // OverlayViewTest) on 3 of 4 runs, 2026-10-02.
+        unitTests.all { it.maxHeapSize = "1g" }
     }
     // The ident/ tests (PhoneIdentifier, ArtPackStore) replay :core's committed
     // server fixtures — the art pack, the arthash index, recorded Scryfall pages,

@@ -34,7 +34,8 @@ class CameraAdapter(private val context: Context, private val settings: AppSetti
                         ?.let { " · steady ${it.stableCount}" } ?: "") +
                     (update.outlineNanos?.let { " · outline %.1f ms".format(it / 1e6) } ?: "") +
                     "\n" + (controller?.pipeline?.lastSummary ?: "")
-                listener.onDetection(update.event, update.grayW, update.grayH, dbg, update.outline, update.watch)
+                listener.onDetection(update.event, update.grayW, update.grayH, dbg, update.outline, update.watch,
+                    update.triggerRefused)
             }
 
             override fun onCaptureStarted(request: CaptureBurst) {

@@ -87,6 +87,18 @@ class ScanChrome(private val ctx: Context) {
         setOnClickListener { onClick() }
     }
 
+    /** A chip showing only an icon ([res], tinted like text); [label] is read by TalkBack. */
+    fun iconChip(res: Int, label: String, onClick: () -> Unit): TextView = chip("", onClick).apply {
+        contentDescription = label
+        val d = androidx.core.content.ContextCompat.getDrawable(ctx, res)?.mutate()?.apply {
+            setTint(Palette.TEXT)
+            setBounds(0, 0, dp(22), dp(22))
+        }
+        setCompoundDrawables(d, null, null, null)
+        setPadding(dp(12), 0, dp(12), 0)
+        minWidth = dp(48)
+    }
+
     /** Non-interactive status pill; the text colour carries the tone. */
     fun statusPill(): TextView = TextView(ctx).apply {
         setTextColor(Palette.TEXT)

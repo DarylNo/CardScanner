@@ -41,10 +41,12 @@ import kotlin.math.min
  * LIVE box, which grew when a hand came in). [cancelHold] takes it down if the
  * capture fails — only the hold that burst started, so a failed older capture
  * never takes down a newer one's ✓ (the pipeline is one queue; two bursts can
- * be in flight). While the scanner waits for the next card the card-shaped
- * WATCH window is drawn as a grey dashed outline (the mask rectangle without
- * one). [plan] is the pure decision of what to draw, so a test can assert it
- * without a Canvas.
+ * be in flight). While the scanner waits for the next card the card is STILL
+ * highlighted — its live outline in grey (owner: "always highlight the card";
+ * the outline is smoothed across ticks by core OutlineTracker, outliers
+ * dropped) — and only without one is the card-shaped WATCH window drawn as a
+ * grey dashed outline (the mask rectangle without either). [plan] is the pure
+ * decision of what to draw, so a test can assert it without a Canvas.
  */
 class OverlayView @JvmOverloads constructor(
     context: Context, attrs: AttributeSet? = null,
@@ -235,6 +237,10 @@ class OverlayView @JvmOverloads constructor(
             return Plan(s?.copyOf(), BoxState.CAPTURED, dashed = false, check = s != null, badge = s == null)
         }
         if (boxState == BoxState.AWAIT_NEXT) {
+            // The card is always highlighted: its live outline (grey) while it sits there
+            // after a capture; the dashed watch window only when there is no outline.
+            val o = outline
+            if (o != null) return Plan(o.copyOf(), BoxState.AWAIT_NEXT, dashed = false, check = false, badge = false)
             val w = watch
             return if (w != null) Plan(w.copyOf(), BoxState.AWAIT_NEXT, dashed = true, check = false, badge = false)
             else Plan(boxQuad(), BoxState.AWAIT_NEXT, dashed = false, check = false, badge = false)
