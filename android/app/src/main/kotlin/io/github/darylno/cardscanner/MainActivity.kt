@@ -732,8 +732,10 @@ class MainActivity : AppCompatActivity() {
      * flash, the "Got it" pill and the "same card as last" warning were
      * removed at the owner's request.)
      */
-    private fun signalCaptured() {
-        overlay.holdCheck(settings.checkMs.toLong())
+    private fun signalCaptured(capture: Captured) {
+        // The ✓ went up at onCaptureStarted (beginHold); now it snaps onto the
+        // capture's exact corners and holds there for check_ms.
+        overlay.holdCheck(settings.checkMs.toLong(), capture.quadFractions())
         vibratePattern(40, 70, 40)
     }
 
@@ -747,24 +749,39 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        override fun onDetection(event: AutoScanner.Event, sampleW: Int, sampleH: Int, debug: String?) {
-            runOnUiThread { handleDetection(event, sampleW, sampleH, debug) }
+        override fun onDetection(event: AutoScanner.Event, sampleW: Int, sampleH: Int, debug: String?,
+                                 outline: FloatArray?, watch: FloatArray?) {
+            runOnUiThread { handleDetection(event, sampleW, sampleH, debug, outline, watch) }
         }
 
-        override fun onCaptureStarted(manual: Boolean) {
-            dlog.i("capture", if (manual) "shutter — capturing" else "trigger — capturing")
-            runOnUiThread { vibrateTick() }
+        override fun onCaptureStarted(id: Long, manual: Boolean) {
+            dlog.i("capture", if (manual) "shutter — capturing (#$id)" else "trigger — capturing (#$id)")
+            // The blue ✓ goes up on the card's outline NOW (the burst exists) and
+            // freezes there until the pipeline answers — not when it returns, which
+            // painted the box grey in between (blue → grey → blue). Cancelled if
+            // THIS capture fails (tagged by burst: two can be in flight).
+            runOnUiThread { vibrateTick(); overlay.beginHold(settings.checkMs.toLong(), id) }
         }
 
         override fun onCaptured(capture: Captured, manual: Boolean) {
-            dlog.i("capture", "done (${if (manual) "manual" else "auto"}, ${if (capture.flattened) "card flattened" else "no card quad — raw area"}, " +
-                "${capture.primary.size / 1024} KB + ${capture.fallbacks.size} fallback frames) · ${capture.timings}")
+            val how = when {
+                capture.flattened -> "card flattened"
+                capture.quad != null -> "card quad, no margin fits — raw area"
+                else -> "no card quad — raw area"
+            }
+            val size = if (capture.quad != null) "card ${capture.cardHeightPx()} px tall × ${capture.cardWidthPx()} wide of ${capture.frameW}×${capture.frameH}"
+                else "card 0 px tall (no quad)"
+            dlog.i("capture", "done (${if (manual) "manual" else "auto"}, $how, " +
+                "${capture.primary.size / 1024} KB + ${capture.fallbacks.size} fallback frames) · $size · ${capture.timings}")
             runOnUiThread { handleCaptured(capture, manual) }
         }
 
-        override fun onCaptureFailed(message: String) {
-            dlog.e("capture", "failed: $message")
-            runOnUiThread { setStatus(getString(R.string.capture_failed, message), Tone.ERR) }
+        override fun onCaptureFailed(id: Long, message: String) {
+            dlog.e("capture", "failed (#$id): $message")
+            runOnUiThread {
+                overlay.cancelHold(id)   // no ✓ for a capture that produced nothing (only ITS hold)
+                setStatus(getString(R.string.capture_failed, message), Tone.ERR)
+            }
         }
 
         override fun onCameraError(message: String) {
@@ -773,7 +790,8 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun handleDetection(event: AutoScanner.Event, sw: Int, sh: Int, debug: String?) {
+    private fun handleDetection(event: AutoScanner.Event, sw: Int, sh: Int, debug: String?,
+                                outline: FloatArray?, watch: FloatArray?) {
         overlay.setDebugText(if (settings.debugOverlay) debug else null)
         if (overlay.settingArea) return
         when (event) {
@@ -784,23 +802,24 @@ class MainActivity : AppCompatActivity() {
             }
             is AutoScanner.Event.Watching -> {
                 overlay.setBox(event.box, sw, sh,
-                    if (event.occupied) OverlayView.BoxState.OCCUPIED else OverlayView.BoxState.SETTLING)
+                    if (event.occupied) OverlayView.BoxState.OCCUPIED else OverlayView.BoxState.SETTLING, outline, watch)
                 if (event.occupied && event.stableCount > 0) setStatus(StatusText.HOLD_STILL)
             }
             is AutoScanner.Event.Trigger -> {
                 val b = event.box
                 dlog.i("detect", "TRIGGER box ${b.x},${b.y} ${b.w}×${b.h} of ${sw}×${sh} · mask %.1f%%".format(b.maskFrac * 100) +
+                    (if (outline != null) " · outline found" else " · no outline") +
                     (debug?.let { " · " + it.replace('\n', ' ') } ?: ""))
-                overlay.setBox(event.box, sw, sh, OverlayView.BoxState.CAPTURED)
+                overlay.setBox(event.box, sw, sh, OverlayView.BoxState.CAPTURED, outline, watch)
                 hideRetry()
                 forgetLastCapture()
                 setStatus(StatusText.CAPTURING)
             }
             is AutoScanner.Event.AwaitingNext ->
-                overlay.setBox(event.box, sw, sh, OverlayView.BoxState.AWAIT_NEXT)
+                overlay.setBox(event.box, sw, sh, OverlayView.BoxState.AWAIT_NEXT, outline, watch)
             is AutoScanner.Event.NextCard -> {
                 dlog.i("detect", if (event.removed) "card removed — watching" else "a different card settled — next")
-                overlay.setBox(event.box, sw, sh, OverlayView.BoxState.SETTLING)
+                overlay.setBox(event.box, sw, sh, OverlayView.BoxState.SETTLING, outline, watch)
                 // The failed card left the tray — a retry now would replace the old row with the WRONG card.
                 hideRetry()
                 forgetLastCapture()
@@ -819,7 +838,7 @@ class MainActivity : AppCompatActivity() {
         setStatus(StatusText.SCANNING)
         // The photo is taken — the rest (upload, identify) happens in the background,
         // so the card can go now. Say so, loudly.
-        signalCaptured()
+        signalCaptured(capture)
         val gen = captureGen
         // enqueue persists ≈1 MB with fsyncs — off the main thread. [io] is single-threaded,
         // so jobs still enter the FIFO queue in capture order.

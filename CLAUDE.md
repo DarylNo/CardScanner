@@ -370,9 +370,60 @@ OnePlus Nord N200 5G (camera id 0 only), minSdk 29, arm64-v8a.
   codes, cookies or tokens (`joinsAreLoggedWithoutTheCode`). The page's copy
   falls back to a textarea: the LAN page is plain HTTP, where browsers give no
   `navigator.clipboard`.
-- **The scan signal** is ONLY the blue box ✓ (a centre ✓ badge with no box),
-  held for Settings/📱 Scanner "Check mark time" (250–10000 ms, default 2500,
-  `check_ms`), plus two short buzzes (Vibration switch).
+- **The scan signal** is ONLY the blue ✓ on the card (a centre ✓ badge with no
+  shape), held for Settings/📱 Scanner "Check mark time" (250–10000 ms, default
+  2500, `check_ms`), plus two short buzzes (Vibration switch).
+- **Live card outline + blue capture + card-shaped watch window (owner,
+  2026-10-02: "see it draw an outline around the card, then have it go blue on
+  image capture … then watch that area for new cards"). DISPLAY ONLY — the
+  trigger, `Detection.kt`, `AutoScanner.kt` and phone.html's detection are
+  untouched.** `core/CardOutline` runs the reference port `CardQuad.find`
+  (unmodified) on the scanner's existing 176×MH detection sample — never a full
+  frame (est. 65–90 ms on the N200 vs ~4–5 ms; measured 1.3 ms on x86) — and
+  pulls each side in by 5·(1−1/k) sample px (k = frame px per sample px: the
+  finder's dilation swells every side ~5 px at whatever resolution it runs;
+  CardOutlineTest holds it within 2 sample px of the full-resolution quad on the
+  detect fixtures). `ScanAnalyzer` finds it on occupied ticks AFTER the
+  tick/trigger/capture handling and inside runCatching (a helper that threw
+  before `fire()` would skip `captureDone()` and leave Tray dead until a
+  double-tap; `anOutlineFinderThatThrowsNeverSkipsTheCapture`). `OverlayView`
+  draws it in place of the mask rectangle (green occupied / amber settling), the
+  rectangle when there is none; `beginHold` at `onCaptureStarted` turns it blue
+  with the ✓ and FREEZES it (it used to sit on the live box, which grew when a
+  hand came in, and went blue → grey → blue), `holdCheck(ms, quad)` snaps it to
+  `CaptureResult.quad` — now carried through `Captured` with the frame size —
+  for `check_ms`, `cancelHold` on a failed capture. The WATCH WINDOW is the
+  padded (15 %) card polygon in sample px (the live outline at the Trigger
+  tick, else the mask box, replaced by the capture's quad when it arrives —
+  tagged with the burst id, ignored after a newer trigger), drawn grey dashed
+  while awaiting the next card. `OverlayView.plan()` is the pure decision the
+  Robolectric tests assert.
+- **SHADOW MODE — the shadow-proof "texture change" signal, computed and
+  logged, NEVER acting** (owner: "Can't trigger on silly things like shadows";
+  a shadow is a brief, smooth, multiplicative change, a new card changes the
+  fine print and stays). Reference `mtg_card_scanner/change_signal.py` →
+  `core/TextureChange` (pure Kotlin, held bit-close by TextureChangeParityTest
+  on `scripts/export_change_fixtures.py`'s fixtures in
+  `core/src/test/resources/change/`; change the reference first). logHP p75 =
+  the 75th percentile over 8×8 blocks (≥75 % inside the window) of mean
+  |Δ(ln(Y+8) − blur_σ4)|×100 between the sample and the scanner's scanned frame;
+  logGrad (mean Sobel difference of ln Y ×100) is the second opinion. Measured
+  on synthetic scenes at sample resolution: shadows / glare / exposure ≤ 4.8
+  (the assessment's summary quotes ≤ 6.3), real changes ≥ 8.6; the gap narrows
+  with noise (σ 2.5: 5.4 vs 9.7; σ 4: 7.9 vs 10.6), so `START_THRESHOLD = 8` is
+  provisional until the rig's numbers are in. While the scanner awaits the next
+  card, `ScanAnalyzer` measures it every tick inside the watch window and logs
+  EVENTS only under tag `shadow` (≤ ~1 line/s, 3000-line ring): the maximum per
+  wait when the wait ends (with its tick count), every crossing of 8 with its
+  duration and logGrad, and "WOULD re-arm (texture)" when ≥ 8 holds 2 ticks —
+  plus one `outline` line per capture (live outline vs capture quad, card
+  height in frame px) and the Diagnostics analyzer line's avg outline / texture
+  ms (the scanned frame is prepared ONCE per wait, `TextureChange.prepare`:
+  4.7 ms per tick warm on x86 for 176×235, est. 15–20 ms on the N200 — only
+  while a scanned card sits there). `shadowModeNeverChangesTheScannersDecisions` feeds the same frames with
+  it on and off and asserts identical outcomes. Diagnostics also reports the
+  camera's zoom range and sensor facts (the auto-zoom question). Re-arming on
+  the signal is NOT built: that is phone.html first, after the rig data.
 - **The update lock (owner): a newer release stops scanning.**
   `update/UpdateLock` reads GitHub `releases/latest` at app start and when the
   scan screen opens (≤ every 30 min). Once a release newer than the build is
@@ -452,12 +503,28 @@ Open threads:
 - Owner to confirm on the rig: no phantom scans (incl. after visiting other
   screens), the scan acknowledgement, the Tap-to-scan default Area's size
   (shadows vs collector-line OCR).
+- Owner to confirm on the rig (1.1.5 — all of it tested in code, not on the
+  phone; every timing above is x86 measured, N200 estimated): the live outline
+  on real sleeved cards (the TRIGGER line's "outline found" / "no outline"),
+  the ✓ going blue at the trigger and snapping to the capture's corners with
+  no grey in between (also at a 250 ms check time), the grey dashed
+  card-shaped watch window while waiting, the `outline` line per capture (card
+  height in frame px — a shutter scan's window comes from the capture quad),
+  the analyzer line's outline / texture ms on the N200, the zoom line in
+  Diagnostics, and the `shadow` lines (≤ 1/s, ≤ 10 per wait + the "wait
+  over" summary).
 - Proposed, not approved: "Fit to cards + zoom" (auto-fit the scan Area).
 - Ranking time for heavily reprinted names (cache candidate images).
 - Proposed, awaiting the owner: a measured card-detection goal — score the
   current detector from real debug reports (phantom triggers, captures with no
   card quad, first-try identification) before changing anything; the trigger
-  stays occupancy + stillness, improvements go to the card judge.
+  stays occupancy + stillness, improvements go to the card judge. The
+  instrumentation is in (1.1.5): every capture logs the card's size in frame
+  px and whether a live outline was found, the analyzer line reports outline /
+  texture ms, and shadow mode logs what the texture-change signal would have
+  done — one rig session (swaps, lift-and-replace, hand passes, leaning in,
+  lights changing) decides `START_THRESHOLD` and whether "watch the card shape
+  for a new card" ships (phone.html first).
 
 ## Release / distribution
 

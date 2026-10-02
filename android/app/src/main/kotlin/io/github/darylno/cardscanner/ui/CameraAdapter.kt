@@ -32,23 +32,27 @@ class CameraAdapter(private val context: Context, private val settings: AppSetti
                     " · ${update.event.javaClass.simpleName}" +
                     ((update.event as? io.github.darylno.cardscanner.core.AutoScanner.Event.Watching)
                         ?.let { " · steady ${it.stableCount}" } ?: "") +
+                    (update.outlineNanos?.let { " · outline %.1f ms".format(it / 1e6) } ?: "") +
                     "\n" + (controller?.pipeline?.lastSummary ?: "")
-                listener.onDetection(update.event, update.grayW, update.grayH, dbg)
+                listener.onDetection(update.event, update.grayW, update.grayH, dbg, update.outline, update.watch)
             }
 
             override fun onCaptureStarted(request: CaptureBurst) {
                 listener.onFrameSize(request.uprightW, request.uprightH)
-                listener.onCaptureStarted(request.trigger == CaptureTrigger.MANUAL)
+                listener.onCaptureStarted(request.id, request.trigger == CaptureTrigger.MANUAL)
             }
 
             override fun onCapture(outcome: CaptureOutcome) {
                 val r = outcome.result
                 if (r == null) {
-                    listener.onCaptureFailed(outcome.error?.message ?: outcome.error?.toString() ?: "unknown error")
+                    listener.onCaptureFailed(outcome.id, outcome.error?.message ?: outcome.error?.toString() ?: "unknown error")
                     return
                 }
                 listener.onCaptured(
-                    Captured(r.primary, r.fallbacks, r.flattened, r.summary(), if (outcome.mode == ScanMode.MOUNT) outcome.scene else null),
+                    Captured(
+                        r.primary, r.fallbacks, r.flattened, r.summary(), if (outcome.mode == ScanMode.MOUNT) outcome.scene else null,
+                        quad = r.quad, frameW = r.frameWidth, frameH = r.frameHeight,
+                    ),
                     outcome.trigger == CaptureTrigger.MANUAL,
                 )
             }
