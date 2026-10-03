@@ -342,10 +342,32 @@ lens on testers' phones), minSdk 29, arm64-v8a.
   set symbol / collector line shows) or *Blend* (the top layer's opacity),
   with either image as the base layer; ‹ › or a horizontal swipe on the
   pictures (≥50 px, mostly sideways) step through the candidates without
-  picking, "Pick SET #n" picks the compared one. A 664×926 photo is
-  scaled 1.053 so just the card shows (ScanPhoto's 17/23 buffer); older
-  photos show as they are. Mode and base layer persist in localStorage
-  (`cmpMode`, `cmpTop`). Verified in headless Chromium (compare_ui.py).
+  picking, "Pick SET #n" picks the compared one. Mode and base layer
+  persist in localStorage (`cmpMode`, `cmpTop`).
+  **Just the card, on BOTH pages (owner, 2026-10-03: "a tight look on the
+  phone and desktop … almost the same display on both"; phone v49, desktop
+  d41):** `PHOTO_FILL` — the same table in both pages, keep them in step —
+  scales a photo whose card sits at a KNOWN place about its centre so the
+  card fills its box: 664×926 (ScanPhoto, the 17/23 inset) ×1.053;
+  914×1276 / 882×1232 / 852×1188 (a flattened upload filed as it came —
+  before 1.1.3, or no edges re-found since — the 788×1100 card inside the
+  8 / 6 / 4 % margin of `tests/phone_flatten_ref.py`) ×1.160 / 1.119 /
+  1.081; anything else (a raw crop, an old plain warp) shows as it is. A
+  click / tap on a photo still opens the WHOLE photo. A real photo's card
+  sits at ~94 %, not 95 % (the finder's dilation — `tests/test_card_detect.py`),
+  so a hairline of tray can remain; Scan size closes it.
+  **The desktop's "Pick the printing" is the same compare block (d41):** the
+  same modes, ‹ › (and ← →), Scan size and "Pick / Keep SET #n"; its head
+  is the compared printing (set · SET #n · ✓ picked ×q · k of N · its price)
+  with its badges. The desktop keeps its own top area (F2F box, controls —
+  the top thumbnail is just the card too) and the thumbnail grid below it
+  (click = compare, double-click = pick); the ⇆ full-screen compare shows
+  just the card. A re-render of the same scan (a price landing, a pick)
+  keeps the compared printing and the scroll; a row click renders once (it
+  used to blank `detailSig`, so the next poll rendered it again).
+  Verified by `scripts/check_compare_ui.py` (headless Chromium against a stub
+  phone server; the tray is painted magenta and measured — 0.00 % of it in
+  every known-layout box, on both pages).
   **The compare block IS the head of the card (owner, 2026-10-02: "get rid of
   the top area and rework this section now that I have the top print side by
   side", phone.html v47):** no photo row above it; its title shows the
@@ -357,7 +379,7 @@ lens on testers' phones), minSdk 29, arm64-v8a.
   gets a bare head (name, error, the photo alone; a price only when picked).
   **"Scan size"** (owner: "size either card to match the size of the other",
   v48): a 70–130 % slider scales the SCAN layer around its centre in every
-  mode (folded into the 1.053 fill scale by `applyScanScale()`), the % button
+  mode (folded into the `PHOTO_FILL` scale by `applyScanScale()`), the % button
   resets; persisted per viewer (`cmpScale`). Manual on purpose — the photo's
   card is at a known 95 % only when the quad was right (a sleeve edge makes
   it read larger).

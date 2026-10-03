@@ -207,8 +207,8 @@
   .cmpbody.overlay { grid-template-columns:minmax(0, 320px); justify-content:center; }
   .cmpbox { position:relative; aspect-ratio:5/7; border-radius:8px; overflow:hidden; background:#000; }
   .cmpbox img { position:absolute; inset:0; width:100%; height:100%; object-fit:contain; display:block; }
-  /* A 664×926 scan photo (ScanPhoto: the card inset 17/23) shows just the card, like the printing. */
-  .cmpbox img.fill { transform:scale(1.053); }   /* applyScanScale() folds in the viewer's "Scan size" */
+  /* A scan photo with a known card layout shows just the card, like the printing:
+     fitScan() / applyScanScale() set its transform (PHOTO_FILL × the viewer's "Scan size"). */
   .cmpscale { margin-top:6px; }
   .cmpscale .pd { font-size:12px; flex:0 0 auto; }
   .cmpscale button { min-height:32px; padding:0 10px; font-size:12px; color:var(--muted); flex:0 0 auto; }
@@ -461,7 +461,7 @@ function formatChipsHtml(scan, pop = popOf(scan)){
 }
 
 /* ── version banner — proves which page+server combo is running ────────────── */
-const UI_VERSION = 'v48';
+const UI_VERSION = 'v49';
 
 // Who is asking: the phone server says "guest" for the 6-digit code (admin =
 // the paired computer); the computer's own server always says admin. Guests
@@ -1539,9 +1539,26 @@ let cmpPos = 50;                                               // the slider: wi
 // printing's size (a sleeve edge, a quad a little off) — this scales the scan
 // layer, in every mode, around its centre; 100 = as filed. Remembered per viewer.
 let cmpScale = Math.min(130, Math.max(70, Number(localStorage.getItem('cmpScale')) || 100));
+// Just the card (owner, 2026-10-03: "a tight look on the phone and desktop"): a
+// scan photo whose card sits at a KNOWN place is scaled about its centre so the
+// card fills its box —
+//   664×926   ScanPhoto (card_detect.scan_photo): the card inset 17/23 px → ×1.053
+//   914×1276 / 882×1232 / 852×1188   a flattened upload filed as it came (before
+//             1.1.3, or no edges re-found since): the 788×1100 card inside the
+//             8 / 6 / 4 % margin of tests/phone_flatten_ref.py → ×1.160 / 1.119 / 1.081
+// Anything else (a raw crop, an old plain warp) shows as it is; a tap still
+// opens the whole photo. The same table is in desktop.html — keep them in step.
+const PHOTO_FILL = { '664x926': 1.053, '914x1276': 914/788, '882x1232': 882/788, '852x1188': 852/788 };
+function photoFill(img) { return PHOTO_FILL[`${img.naturalWidth}x${img.naturalHeight}`] || 1; }
+function fitScan(img) {
+  img.dataset.fill = String(photoFill(img));
+  if (img.closest('#cmp')) { applyScanScale(); return; }       // a compare: × the viewer's Scan size
+  const f = Number(img.dataset.fill);
+  img.style.transform = f === 1 ? '' : `scale(${f.toFixed(4)})`;
+}
 function applyScanScale() {
   for (const img of document.querySelectorAll('#cmp .cmpscan')) {
-    const base = img.classList.contains('fill') ? 1.053 : 1;        // the 664×926 photo's card inset (ScanPhoto)
+    const base = Number(img.dataset.fill || 1);                  // PHOTO_FILL, once the photo has loaded
     img.style.transform = `scale(${(base * cmpScale / 100).toFixed(4)})`;
   }
   const b = $('#cmp-scale-reset'); if (b) b.textContent = `${cmpScale}%`;
@@ -1553,7 +1570,7 @@ function compareHtml(scan, cands, sel) {
   const c = cands[cmpIndex];
   const tag = `${escHtml((c.set||'').toUpperCase())} #${escHtml(c.collector_number)}`;
   const scanImg = `<img class="cmpscan" src="/api/scans/${scan.id}/image" alt="Scan photo"
-      onload="if(this.naturalWidth===664&&this.naturalHeight===926)this.classList.add('fill');applyScanScale()" onerror="this.style.visibility='hidden'">`;
+      onload="fitScan(this)" onerror="this.style.visibility='hidden'">`;
   const printImg = `<img class="cmpprint" src="${escHtml(c.image_normal||c.image_small)}" alt="Printing" onerror="this.style.visibility='hidden'">`;
   const overlay = cmpMode !== 'side';
   const body = overlay
@@ -1664,7 +1681,7 @@ async function renderScanDetail() {
       ${formatChipsHtml(scan)}
     </div>
     <div class="cmpbody side"><div class="cmpbox"><img class="cmpscan" src="/api/scans/${scan.id}/image" alt="Scan photo"
-      onload="if(this.naturalWidth===664&&this.naturalHeight===926)this.classList.add('fill')" onerror="this.style.visibility='hidden'"><span class="cmpcap">scan</span></div></div>
+      onload="fitScan(this)" onerror="this.style.visibility='hidden'"><span class="cmpcap">scan</span></div></div>
   </div>`;
   html += detailControls(scan);
   html += `<div class="subhead">${sel ? 'Re-pick printing' : 'Pick the printing'} — closest first</div>`;
