@@ -347,7 +347,7 @@ lens on testers' phones), minSdk 29, arm64-v8a.
   **Just the card — cropped to the card's OWN edges, on BOTH pages (owner,
   2026-10-03: "a tight look on the phone and desktop … almost the same display
   on both", then "can we just make it crop the card directly to the edge of
-  the card?"; phone v50, desktop d43).** A photo with a KNOWN layout has its
+  the card?"; phone v51, desktop d44).** A photo with a KNOWN layout has its
   card near a known rect (`PHOTO_LAYOUT`): 664×926 ScanPhoto → x 17..647, y
   23..903; a flattened upload filed as it came (914×1276 / 882×1232 /
   852×1188 — before 1.1.3, or no edges re-found since) → the 788×1100 card in
@@ -368,14 +368,19 @@ lens on testers' phones), minSdk 29, arm64-v8a.
   / 0 % / 0.14 mm. It is built to go LOOSE (tray shows, never a cut) whenever
   the ring around the card could be the card's own border: a dark tray round
   a white card, a black mat, a sleeve the colour of the border, textured
-  trays. Known loose / failing cases, all ≤ today's crop: a white card with a
-  black frame on a white tray whose quad sat on the border's inner edge. Any
+  trays. The hard case is a WHITE border with a DARK frame on a white tray:
+  the finder locks onto the frame, so even the fixed zoom cut into the white
+  border on every side, and a black BORDER on a light tray looks the same up
+  close — told apart per card (rule 6b: a black border is a 2–3.8 mm band all
+  round, a frame is narrower at the sides). `--frames` measures it: cut
+  > 0.5 mm on 6.6 % of sides (fixed zoom 100 %), but 36 of 576 sides still
+  cut deeper than the fixed zoom did (worst +2.9 mm). Any
   other photo (a raw crop, an old plain warp) shows as it is; a click / tap
   still opens the WHOLE photo. The block is byte-identical in both pages
   (`tests/test_static_pages.py`, CI) — change it in both, then re-run the
   scorer and put the numbers in the commit. Synthetic photos only: not yet
   measured on real rig photos.
-  **The desktop's "Pick the printing" is the same compare block (d43):** the
+  **The desktop's "Pick the printing" is the same compare block (d44):** the
   same modes, ‹ › (and ← →), Scan size and "Pick / Keep SET #n"; its head
   is the compared printing (set · SET #n · ✓ picked ×q · k of N · its price)
   with its badges. The desktop keeps its own top area (F2F box, controls —

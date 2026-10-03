@@ -223,8 +223,8 @@ with sync_playwright() as pw:
     pg.on("console", lambda m: m.type == "error" and "404" not in m.text and errs.append(m.text))
     pg.goto(BASE + "/")
     pg.wait_for_selector("#dver")
-    pg.wait_for_function("document.querySelector('#dver').textContent.startsWith('d43')")
-    check(pg.locator("#dver").text_content().startswith("d43"), "banner reads d43")
+    pg.wait_for_function("document.querySelector('#dver').textContent.startsWith('d44')")
+    check(pg.locator("#dver").text_content().startswith("d44"), "banner reads d44")
 
     def focus(i):
         pg.locator(f'.row[data-id="{i}"]').click()
@@ -435,7 +435,7 @@ with sync_playwright() as pw:
     pg = ctx.new_page(); errs3 = []
     pg.on("pageerror", lambda e: errs3.append(str(e)))
     pg.goto(BASE + "/phone?panel=1"); pg.wait_for_timeout(1200)
-    check(pg.evaluate("UI_VERSION") == "v50", "phone banner v49")
+    want = "v51"; check(pg.evaluate("UI_VERSION") == want, f"phone banner {want}")
     for sid, s in STATE["scans"].items():
         if s["photo"] in REAL: continue       # measured geometrically below
         pg.evaluate(f"openDetail({sid})"); pg.wait_for_timeout(500)

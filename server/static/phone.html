@@ -464,7 +464,7 @@ function formatChipsHtml(scan, pop = popOf(scan)){
 }
 
 /* ── version banner — proves which page+server combo is running ────────────── */
-const UI_VERSION = 'v50';
+const UI_VERSION = 'v51';
 
 // Who is asking: the phone server says "guest" for the 6-digit code (admin =
 // the paired computer); the computer's own server always says admin. Guests
@@ -1557,7 +1557,8 @@ let cmpScale = Math.min(130, Math.max(70, Number(localStorage.getItem('cmpScale'
 // shows as it is, and a click / tap still opens the whole photo.
 // Measured with scripts/score_card_edges.py (the reference chain's own photos, the true
 // card known): tray > 0.25 mm on 3 % of sides (the fixed zoom: 78 %), card cut > 0.5 mm
-// on 0 % (22 %), mean error 0.09 mm (0.98); held-out photos 6 % / 0 % / 0.14 mm.
+// on 0 % (22 %), mean error 0.09 mm (0.98); held-out photos 6 % / 0 % / 0.14 mm; a white
+// border with a dark frame on a white tray (--frames) cut > 0.5 mm on 7 % (100 %).
 const PHOTO_LAYOUT = { "664x926": [17, 23, 647, 903], "914x1276": [63, 88, 851, 1188],
                        "882x1232": [47, 66, 835, 1166], "852x1188": [32, 44, 820, 1144] };
 const cardCropCache = new Map();   // photo URL → its crop (a filed photo never changes)
@@ -1681,6 +1682,17 @@ function segFindCardEdges(photo, expect, dbg) {
     sides = [0, 1, 2, 3].map(s => segSide(ctx, s));
     if (dbg) dbg.blackTray = true;
   }
+  // 6b. A dark band inside a light ring is a black BORDER (light tray) or a white border's dark
+  //     FRAME (white tray, the finder on the frame). Per card: a black border is 2-3.8 mm wide
+  //     all round; a frame is narrower at the sides (and open at the bottom). Bands under 1.2 mm
+  //     are no evidence either way (a sleeve's edge misread as the band). Unless the bands that
+  //     are evidence say "border" (at most one side out), the dark-inside sides go LOOSE.
+  //     Review 2026-10-03, scored with scripts/score_card_edges.py --frames: sides cut > 0.3 mm
+  //     deeper than the fixed zoom 351 -> 36 of 576; the tuning and held-out sets unchanged.
+  const ev = sides.filter(r => r.status === 'edge' && r.bandW >= 1.2);
+  const borderSides = ev.filter(r => r.bandW >= 2.0 && r.bandW <= 3.8).length;
+  if (!(ev.length && borderSides >= Math.max(1, ev.length - 1)))
+    for (const r of sides) if (r.byInk && r.trust) { r.trust = false; r.dbg.frameNotBorder = 1; }
   segUniformBorder(sides, ctx);
   const out = { x0: ex0, y0: ey0, x1: ex1, y1: ey1 };
   const names = ['x0', 'y0', 'x1', 'y1'];
@@ -1967,14 +1979,15 @@ function segSide(ctx, s) {
   //    (lighter at its outer rim) is neither; a sleeve seen between ring and band already shows
   //    the ring to be tray, so then a smaller margin will do;
   //  - a ring that could be paper white: only when the inside is brighter (light tray -> white
-  //    border) or black ink (light tray -> black border, by far the commoner of the two
-  //    readings — and where the other one, a white border with a black frame on a paper-white
-  //    tray, is wrong, the layout rect already cuts as deep);
+  //    border) or black ink (light tray -> black border, by far the commoner reading). The
+  //    other reading of a dark band inside a light ring — a white border's dark FRAME on a
+  //    white tray, the finder locked onto the frame — is settled per CARD in 6b
+  //    (segFindCardEdges): taking it would cut off the whole white border;
   //  - never when the rounded-corner test says the ring is card.
   const Lo = segLuma(ring), Li = segLuma(res.Ic);
   let trust = !res.ringCard;
   if (trust && res.ringInk) trust = (Li < Lo - Math.max(15, 0.35 * Lo) || (c0 > 0 && Li < Lo - Math.max(8, 0.2 * Lo))) && (res.bandW >= 1.2 || !res.bandClosed);
-  else if (trust && res.ringPaper) trust = Li > Lo + 3 || inkish(res.Ic);
+  else if (trust && res.ringPaper) { res.byInk = !(Li > Lo + 3) && inkish(res.Ic); trust = Li > Lo + 3 || res.byInk; }
   res.trust = trust;
   res.dbg.trust = trust;
   return res;

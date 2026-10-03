@@ -2,7 +2,14 @@
 phone.html / desktop.html) against photos whose TRUE card is known.
 
     pip install playwright        # Chromium: /opt/pw-browsers in a cloud session, or set CHROME
-    python scripts/score_card_edges.py [--heldout] [--detail]
+    python scripts/score_card_edges.py [--heldout | --frames] [--detail] [--block FILE.js]
+
+  (default)   the tuning set the block was chosen on
+  --heldout   photos none of the four candidate designs saw
+  --frames    white-bordered cards with a DARK frame on a near-white tray — the
+              finder locks onto the frame, so the layout rect already cuts into
+              the white border; the crop must not cut deeper (review, 2026-10-03)
+  --block     score another findCardEdges (a JS file) instead of phone.html's
 
 Each photo is made by the reference chain, exactly as the phone files it: a
 tests/card_scenes card face rendered on a tray (blur, sensor noise, frame JPEG) →
@@ -37,6 +44,7 @@ SS = 2                           # supersampled render: anti-aliased card edges
 MM = np.float32([[0, 0], [63, 0], [63, 88], [0, 88]])
 TEX_UP = 4                       # the 315x440 card face, x4 (nearest: crisp print)
 BORDERS = {"black": (18, 18, 18), "white": (235, 235, 235)}
+FRAMES = {"wdark": (60, 60, 60), "wblack": (25, 25, 25)}   # white border, this frame colour
 SEEDS = {"black": 11, "white": 12}
 TRAYS = {"light": (190, 190, 190), "dark": (40, 42, 48)}
 PHOTO_DST = np.float32([[cd.PHOTO_MARGIN_X, cd.PHOTO_MARGIN_Y], [cd.PHOTO_MARGIN_X + cd.CARD_W, cd.PHOTO_MARGIN_Y],
@@ -56,7 +64,15 @@ def apply(M, pts):
 _TEX = {}
 def texture(border):
     if border not in _TEX:
-        t = cs.card_texture(SEEDS[border], BORDERS[border])
+        if border in FRAMES:       # a white-bordered card whose frame (and the gaps between its boxes) is dark
+            t0 = cs.card_texture(SEEDS["white"], BORDERS["white"]); t = t0.copy()
+            h, w = t.shape[:2]
+            ring = np.zeros((h, w), bool); ring[14:h - 14, 14:w - 14] = True
+            inner = np.zeros((h, w), bool); inner[22:h - 23, 22:w - 23] = True
+            t[ring & ~inner] = FRAMES[border]
+            t[inner & np.all(t0 == t0[18, 18], axis=2)] = FRAMES[border]
+        else:
+            t = cs.card_texture(SEEDS[border], BORDERS[border])
         _TEX[border] = cv2.resize(t, (t.shape[1] * TEX_UP, t.shape[0] * TEX_UP), interpolation=cv2.INTER_NEAREST)
     return _TEX[border]
 
@@ -154,9 +170,20 @@ def heldout():
     return [(500 + i, c) for i, c in enumerate(out)]
 
 
+def frames():
+    out = []
+    for h, b, fr, tr, kind in itertools.product([380, 600, 850], [0, 1.5, 3], FRAMES, [215, 225, 232, 240], ["photo", "flat"]):
+        out.append((h, b, fr, tr, 0, "centre", kind))
+    return [(800 + i, c) for i, c in enumerate(out)]
+
+
 def layout(_):
-    """The card-edges block exactly as phone.html ships it (desktop.html carries the same)."""
+    """The card-edges block exactly as phone.html ships it (desktop.html carries the same),
+    or with --block FILE.js, that file's findCardEdges after the page's own helpers."""
     t = (ROOT / "server/static/phone.html").read_text()
+    if "--block" in sys.argv:
+        blk = t[t.index("/* ═══ card edges ═══"):t.index("function findCardEdges")]
+        return blk + Path(sys.argv[sys.argv.index("--block") + 1]).read_text()
     return t[t.index("/* ═══ card edges ═══"):t.index("/* ═══ end card edges ═══ */")]
 
 
@@ -196,7 +223,7 @@ async function runAll(n){ const out = [];
 
 def main():
     from playwright.sync_api import sync_playwright
-    cfgs = heldout() if "--heldout" in sys.argv else tuning()
+    cfgs = heldout() if "--heldout" in sys.argv else frames() if "--frames" in sys.argv else tuning()
     with Pool(max(1, (os.cpu_count() or 2) - 1)) as p:
         photos = [x for x in p.map(make_photo, cfgs, chunksize=2) if x]
     def valid(it):        # the chain photographed THE card (within 8 mm of the layout)
@@ -231,6 +258,8 @@ def main():
     base = [dict(it=it, e=errors(it, None, r["exp"])) for it, r in zip(scored, res)]
     page = [dict(it=it, e=errors(it, r["r"], r["exp"])) for it, r in zip(scored, res)]
     print(summary("before", base)); print(summary("edges", page))
+    deeper = sum(e > b + 0.3 and e > 0.3 for rb, rp in zip(base, page) for b, e in zip(rb["e"], rp["e"]))
+    print(f"sides cut > 0.3 mm deeper than the fixed zoom: {deeper}")
     print(f"edges: median {statistics.median(r['ms'] for r in res):.1f} ms per photo (desktop Chromium; the phone's WebView ~4x)")
     if "--detail" in sys.argv:
         g = defaultdict(list)
