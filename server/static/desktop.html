@@ -172,6 +172,8 @@
   .cmpbox { position: relative; aspect-ratio: 5/7; border-radius: 12px; overflow: hidden; background: #000; }
   .cmpbox img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; display: block; }
   .cmpbody.side .cmpbox img { cursor: zoom-in; }
+  /* A scan photo shows only once fitScan has applied its fill (no frame of the whole photo). */
+  .cmpbox img.cmpscan:not([data-fill]), .shotbox img:not([data-fill]), .lbscan img:not([data-fill]) { visibility: hidden; }
   .cmpbody.overlay .cmpbox img.under { z-index: 1; }
   .cmpbody.overlay .cmpbox img.over { z-index: 2; }
   .cmpcap { position: absolute; left: 8px; bottom: 8px; z-index: 3; font-size: 11px; font-weight: 700;
@@ -788,9 +790,13 @@ function candCard(c, chosenId, idx){
 // the two in step.
 const PHOTO_FILL = { "664x926": 1.053, "914x1276": 914/788, "882x1232": 882/788, "852x1188": 852/788 };
 function photoFill(img){ return PHOTO_FILL[`${img.naturalWidth}x${img.naturalHeight}`] || 1; }
+// The compare's own preferences: storage that throws (site data blocked) must
+// cost only the memory, never the page — these are read at load.
+const lsGet = k => { try { return localStorage.getItem(k); } catch (e) { return null; } };
+const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch (e) { /* not remembered */ } };
 // "Scan size" (the phone's, owner 2026-10-02): the viewer's own scale on the
 // scan side of a compare (img.cmpscan), around its centre; 100 = as filed.
-let cmpScale = Math.min(130, Math.max(70, Number(localStorage.getItem("cmpScale")) || 100));
+let cmpScale = Math.min(130, Math.max(70, Number(lsGet("cmpScale")) || 100));
 function fitScan(img){
   img.dataset.fill = String(photoFill(img));
   const s = Number(img.dataset.fill) * (img.classList.contains("cmpscan") ? cmpScale / 100 : 1);
@@ -799,6 +805,31 @@ function fitScan(img){
 function applyScanScale(){
   document.querySelectorAll("img.cmpscan").forEach(img => { if (img.dataset.fill) fitScan(img); });
   const b = $("#cmpScaleReset"); if (b) b.textContent = `${cmpScale}%`;
+}
+// A scan photo, once loaded, is KEPT and moved between renders, never rebuilt:
+// the phone serves it no-store, so a new <img> downloaded it again — showing
+// black meanwhile, then a frame of the whole photo before its fill — on every
+// ‹ › step, mode change and re-render. One per place (top thumbnail, compare,
+// ⇆ compare); a filed photo never changes, so the scan id is the key.
+const keptScanImgs = {};
+function placeScanImg(slot, place, scanId, cls){
+  if (!slot) return;
+  let el = keptScanImgs[place];
+  if (!el || el.dataset.scan !== String(scanId)){
+    el = document.createElement("img");
+    el.className = cls; el.alt = "your card"; el.dataset.scan = String(scanId);
+    el.addEventListener("load", () => fitScan(el));
+    el.addEventListener("error", () => { el.dataset.err = "1"; scanImgFailed(el); });
+    el.src = `/api/scans/${scanId}/image`;
+    keptScanImgs[place] = el;
+  }
+  el.classList.remove("under", "over"); el.style.clipPath = ""; el.style.opacity = "";
+  slot.replaceWith(el);
+  if (el.dataset.err) scanImgFailed(el);
+}
+function scanImgFailed(el){
+  const shot = el.closest(".scanshot");
+  if (shot) shot.style.display = "none"; else el.style.visibility = "hidden";
 }
 
 /* ── compare (the phone's compare block) ───────────────────────────────── */
@@ -809,10 +840,13 @@ function applyScanScale(){
 // / a swipe step through the printings without picking; the thumbnails below
 // load one (double-click picks it); "Pick SET #n" picks the one compared.
 // Mode, top layer and scan size are remembered per viewer.
-let cmpMode = ["side","wipe","blend"].includes(localStorage.getItem("cmpMode")) ? localStorage.getItem("cmpMode") : "side";
-let cmpTop = localStorage.getItem("cmpTop") === "print" ? "print" : "scan";
+let cmpMode = ["side","wipe","blend"].includes(lsGet("cmpMode")) ? lsGet("cmpMode") : "side";
+let cmpTop = lsGet("cmpTop") === "print" ? "print" : "scan";
 let cmpPos = 50;                 // the slider: wipe = divider %, blend = top opacity %
-let cmpScanId = null, cmpId = null;   // the printing being compared, kept across re-renders of its scan
+// The printing being compared: kept across re-renders of the same scan; another
+// scan, or a new pick on this one (from anywhere — ⇆, a search, an auto-pick),
+// starts again at the pick (else the closest). renderDetail resets it.
+let cmpId = null, cmpSelId = null;
 let cmpCtx = null;               // { scan, cands, pick } of the rendered detail
 let cmpKeyNav = null;            // ←/→: step the compared printing (null with no candidates)
 const CMP_SWIPE_PX = 50;
@@ -838,6 +872,21 @@ function cmpPrice(scan, c){
   const pp = printPrice(c);
   return (pp.none && (sel || c.other_art)) ? null : pp;
 }
+function cmpPriceHtml(scan, c){
+  const pp = cmpPrice(scan, c);
+  return pp ? ` · <span class="cprice${pp.none ? " none" : ""}">${esc(pp.text)}</span>` : "";
+}
+// A sweep prices printings one after another; the pane's layout doesn't change,
+// so a poll refreshes the compare's data and its head price in place — a full
+// render would wipe a typed name search and a slider mid-drag.
+function refreshCompare(scan){
+  if (!scan || !cmpCtx || cmpCtx.scan.id !== scan.id) return;
+  const byId = new Map((scan.candidates || []).map(c => [c.id, c]));
+  cmpCtx.scan = scan;
+  cmpCtx.cands = cmpCtx.cands.map(c => byId.get(c.id) || c);
+  const c = cmpCtx.cands.find(x => x.id === cmpId), el = $("#cmpPrice");
+  if (c && el){ const h = cmpPriceHtml(scan, c); if (el.innerHTML !== h) el.innerHTML = h; }
+}
 function drawCompare(){
   const wrap = $("#cmpWrap");
   if (!wrap || !cmpCtx || !cmpCtx.cands.length) return;
@@ -849,17 +898,15 @@ function drawCompare(){
   const picked = c.id === sel?.scryfall_id;
   const tag = `${(c.set||"").toUpperCase()} #${c.collector_number}`;
   const overlay = cmpMode !== "side";
-  const scanImg = `<img class="cmpscan" src="/api/scans/${scan.id}/image" alt="your card" onload="fitScan(this)" onerror="this.style.visibility='hidden'">`;
+  const scanImg = `<i id="cmpScanSlot"></i>`;   // the kept photo goes here (placeScanImg)
   const printImg = `<img class="cmpprint" src="${esc(c.image_normal||c.image_small)}" alt="${esc(tag)}" onerror="this.style.visibility='hidden'">`;
   const body = overlay
     ? `<div class="cmpbody overlay"><div class="cmpbox">${scanImg}${printImg}<span class="cmpcap" id="cmpOverCap"></span></div></div>`
     : `<div class="cmpbody side"><div class="cmpbox">${scanImg}<span class="cmpcap">scan</span></div>
          <div class="cmpbox">${printImg}<span class="cmpcap">${esc(tag)}</span></div></div>`;
-  const pp = cmpPrice(scan, c);
   wrap.innerHTML = `<div class="cmpblk" id="cmp">
     <div class="cmphead"><div>
-        <b>${esc(c.set_name||"")}</b> · <b>${esc(tag)}</b>${picked ? ` · <span class="picked">✓ picked</span> · ×${esc(sel.quantity)}` : ""} · ${i+1} of ${n}${
-          pp ? ` · <span class="cprice${pp.none ? " none" : ""}">${esc(pp.text)}</span>` : ""}
+        <b>${esc(c.set_name||"")}</b> · <b>${esc(tag)}</b>${picked ? ` · <span class="picked">✓ picked</span> · ×${esc(sel.quantity)}` : ""} · ${i+1} of ${n}<span id="cmpPrice">${cmpPriceHtml(scan, c)}</span>
         <div class="badges">${candBadges(c, i)}</div></div>
       <div class="cmpmodes">${[["side","Side by side"],["wipe","Wipe"],["blend","Blend"]].map(([m,t]) =>
         `<button data-cmpmode="${m}" class="${m===cmpMode?"on":""}">${t}</button>`).join("")}</div></div>
@@ -873,32 +920,36 @@ function drawCompare(){
     <div class="cmpctl">${overlay ? `<button class="btn ghost" id="cmpSwap">${cmpTop==="scan"?"Scan on top":"Print on top"}</button>` : ""}
       <button class="btn pick" id="cmpPick">${picked ? "Keep" : "Pick"} ${esc(tag)}</button></div>
   </div>`;
+  placeScanImg($("#cmpScanSlot"), "cmp", scan.id, "cmpscan");
   $("#cands")?.querySelectorAll(".card").forEach(el => el.classList.toggle("viewing", el.dataset.pick === c.id));
 
   const root = $("#cmp");
   const step = (d) => { cmpId = cands[((i + d) % n + n) % n].id; drawCompare(); };
   root.querySelectorAll("[data-cmpmode]").forEach(b => b.addEventListener("click", () => {
-    cmpMode = b.dataset.cmpmode; localStorage.setItem("cmpMode", cmpMode); drawCompare();
+    cmpMode = b.dataset.cmpmode; lsSet("cmpMode", cmpMode); drawCompare();
   }));
   $("#cmpPrev").addEventListener("click", () => step(-1));
   $("#cmpNext").addEventListener("click", () => step(1));
   cmpKeyNav = step;
   $("#cmpSlider")?.addEventListener("input", e => { cmpPos = Number(e.target.value); applyCompareLayers(); });
   $("#cmpScale").addEventListener("input", e => {
-    cmpScale = Number(e.target.value); localStorage.setItem("cmpScale", String(cmpScale)); applyScanScale();
+    cmpScale = Number(e.target.value); lsSet("cmpScale", String(cmpScale)); applyScanScale();
   });
   $("#cmpScaleReset").addEventListener("click", () => {
-    cmpScale = 100; localStorage.setItem("cmpScale", "100"); $("#cmpScale").value = "100"; applyScanScale();
+    cmpScale = 100; lsSet("cmpScale", "100"); $("#cmpScale").value = "100"; applyScanScale();
   });
   $("#cmpSwap")?.addEventListener("click", () => {
-    cmpTop = cmpTop === "scan" ? "print" : "scan"; localStorage.setItem("cmpTop", cmpTop); drawCompare();
+    cmpTop = cmpTop === "scan" ? "print" : "scan"; lsSet("cmpTop", cmpTop); drawCompare();
   });
   $("#cmpPick").addEventListener("click", () => {
     const el = $("#cands")?.querySelector(`.card[data-pick="${CSS.escape(c.id)}"]`);
     if (el) cmpCtx.pick(el);
   });
-  // Side by side: click either picture for the whole of it.
-  root.querySelectorAll(".cmpbody.side .cmpbox img").forEach(img => img.addEventListener("click", () => openLightbox(img.src)));
+  // Side by side: click either picture for the whole of it (on the box — the
+  // kept photo would collect a listener per draw).
+  root.querySelectorAll(".cmpbody.side .cmpbox").forEach(box => box.addEventListener("click", () => {
+    const img = box.querySelector("img"); if (img) openLightbox(img.src);
+  }));
   // Swipe the pictures (a touch screen): left = next printing, right = previous —
   // a mostly-horizontal move of CMP_SWIPE_PX or more; a vertical one keeps scrolling.
   const bodyEl = root.querySelector(".cmpbody");
@@ -1006,7 +1057,7 @@ function renderDetail(){
 
   let html = `<div class="dhead">
     <div class="scanshot">
-      <div class="shotbox" id="scanShot"><img src="/api/scans/${scan.id}/image" alt="your card" onload="fitScan(this)" onerror="this.closest('.scanshot').style.display='none'"></div>
+      <div class="shotbox" id="scanShot"><i id="shotSlot"></i></div>
       <div class="cap">your card · click to enlarge</div>
     </div>
     <div class="dinfo">
@@ -1065,8 +1116,11 @@ function renderDetail(){
   // (Restored after wireDetail: the compare block is drawn there, and until
   // then the pane is too short to hold the old scroll position.)
   const y = renderedDetailId === scan.id ? right.scrollTop : 0;
+  const selId = sel?.scryfall_id ?? null;
+  if (renderedDetailId !== scan.id || selId !== cmpSelId){ cmpId = null; cmpSelId = selId; }
   right.innerHTML = html;
   renderedDetailId = scan.id;
+  placeScanImg($("#shotSlot"), "shot", scan.id, "");
   wireDetail(scan);
   right.scrollTop = y;
 }
@@ -1091,6 +1145,8 @@ function wireDetail(scan){
     // an older row (that broke scan order); the export sums them instead.
     await jsend(`/api/scans/${scan.id}/select`, "POST", { printing, ...currentControls() });
     toast(`Selected ${printing.set_name} #${printing.collector_number}`);
+    // A name-search pick (another card): back to the top, where it now shows.
+    if (pool !== scan.candidates) renderedDetailId = null;
     await poll(); detailSig=""; renderDetail(); listSig=""; renderList();
   };
   const candPick = pickFrom(scan.candidates);
@@ -1106,9 +1162,6 @@ function wireDetail(scan){
     detailSig = ""; renderDetail(); $("#right").scrollTop = y;
   });
   if ($("#cmpWrap") && cands.length){
-    // A new scan starts at its pick (else the closest); a re-render of the same
-    // scan keeps the printing that was being compared.
-    if (cmpScanId !== scan.id){ cmpScanId = scan.id; cmpId = null; }
     cmpCtx = { scan, cands, pick: candPick };
     drawCompare();
     $("#cands").querySelectorAll(".card[data-pick]").forEach(el => {
@@ -1214,12 +1267,13 @@ function openLightbox(src){
 function openCompare(scanId, cand, onPick){
   const duo = $("#lbDuo");
   duo.innerHTML = `<div class="duo">
-    <figure><div class="lbscan"><img class="cmpscan" src="/api/scans/${scanId}/image" alt="your card" onload="fitScan(this)" onerror="this.style.visibility='hidden'"></div>
+    <figure><div class="lbscan"><i id="lbScanSlot"></i></div>
       <figcaption>your card</figcaption></figure>
     <figure><img src="${esc(cand.image_normal||cand.image_small)}">
       <figcaption>${esc(cand.set_name)} #${esc(cand.collector_number)}</figcaption>
       ${onPick ? `<button class="btn" id="lbPickBtn" style="margin-top:10px">Pick this printing</button>` : ""}
     </figure></div>`;
+  placeScanImg($("#lbScanSlot"), "lb", scanId, "cmpscan");
   $("#lightboxImg").style.display = "none"; duo.style.display = "";
   $("#lightbox").classList.add("open");
   // Clicks on the images/captions shouldn't close — only backdrop or Esc.
@@ -1250,13 +1304,13 @@ function sigOf(scan){
           scan.selection?.quantity, scan.selection?.auto_picked, scan.error,
           scan.f2f ? JSON.stringify(scan.f2f.conditions||{}) : "null",
           printInfo(scan).vals.join(";"), popSig(scan), scan.included, scan.flagged, role,
-          // the compare head shows one printing's NM-first price and its badges
-          (scan.candidates||[]).map(c => `${c.id}:${c.ocr_confirmed ? 1 : 0}:${JSON.stringify(c.f2f_conditions ?? null)}`).join(",")].join("|");
+          // the order and OCR marks the compare and the grid show (prices refresh in place: refreshCompare)
+          (scan.candidates||[]).map(c => `${c.id}:${c.ocr_confirmed ? 1 : 0}`).join(",")].join("|");
 }
 
 // Version banner — page version · server git hash. Same rationale as the
 // phone: without it, "is this the old page?" is undebuggable.
-const UI_VERSION = "d41";
+const UI_VERSION = "d42";
 
 // Who is asking: the phone server says "guest" for the 6-digit code (admin =
 // the paired computer); the computer's own server always says admin. Guests
@@ -1354,6 +1408,7 @@ async function poll(){
     const focused = scans.find(s => s.id === focusedId);
     const sig = sigOf(focused);
     if (sig !== detailSig){ detailSig = sig; renderDetail(); }
+    else refreshCompare(focused);
   } catch (e) { /* server momentarily unreachable */ }
 }
 

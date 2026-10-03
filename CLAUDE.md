@@ -346,7 +346,7 @@ lens on testers' phones), minSdk 29, arm64-v8a.
   persist in localStorage (`cmpMode`, `cmpTop`).
   **Just the card, on BOTH pages (owner, 2026-10-03: "a tight look on the
   phone and desktop … almost the same display on both"; phone v49, desktop
-  d41):** `PHOTO_FILL` — the same table in both pages, keep them in step —
+  d42):** `PHOTO_FILL` — the same table in both pages, keep them in step —
   scales a photo whose card sits at a KNOWN place about its centre so the
   card fills its box: 664×926 (ScanPhoto, the 17/23 inset) ×1.053;
   914×1276 / 882×1232 / 852×1188 (a flattened upload filed as it came —
@@ -355,16 +355,27 @@ lens on testers' phones), minSdk 29, arm64-v8a.
   1.081; anything else (a raw crop, an old plain warp) shows as it is. A
   click / tap on a photo still opens the WHOLE photo. A real photo's card
   sits at ~94 %, not 95 % (the finder's dilation — `tests/test_card_detect.py`),
-  so a hairline of tray can remain; Scan size closes it.
-  **The desktop's "Pick the printing" is the same compare block (d41):** the
+  so a thin strip of tray remains — measured through the reference chain
+  at ~1.5–2 % a side (4–7 px on the desktop's box, 2–5 px on the phone's);
+  Scan size closes it.
+  **The desktop's "Pick the printing" is the same compare block (d42):** the
   same modes, ‹ › (and ← →), Scan size and "Pick / Keep SET #n"; its head
   is the compared printing (set · SET #n · ✓ picked ×q · k of N · its price)
   with its badges. The desktop keeps its own top area (F2F box, controls —
   the top thumbnail is just the card too) and the thumbnail grid below it
   (click = compare, double-click = pick); the ⇆ full-screen compare shows
-  just the card. A re-render of the same scan (a price landing, a pick)
-  keeps the compared printing and the scroll; a row click renders once (it
-  used to blank `detailSig`, so the next poll rendered it again).
+  just the card. A re-render of the same scan keeps the compared printing
+  and the scroll; a NEW pick from anywhere (the block, ⇆, a name search, an
+  auto-pick) moves the compare to the pick, and a name-search pick (another
+  card) goes back to the top. The scan photo `<img>` is KEPT and moved
+  between renders (`placeScanImg`): the phone serves it no-store, so a
+  rebuilt one re-downloaded it and showed black on every ‹ › step. `sigOf`
+  carries the candidates' order and OCR marks only; prices landing on the
+  printings refresh the compare head in place (`refreshCompare`), so a sweep
+  never wipes a typed name search. A row click renders once (it used to
+  blank `detailSig`, so the next poll rendered it again). The compare's
+  storage reads are guarded (`lsGet`) — blocked site data must not kill the
+  page.
   Verified by `scripts/check_compare_ui.py` (headless Chromium against a stub
   phone server; the tray is painted magenta and measured — 0.00 % of it in
   every known-layout box, on both pages).

@@ -77,7 +77,7 @@ def make_scans():
     }
 
 
-STATE = {"role": "admin", "scans": make_scans(), "selects": []}
+STATE = {"role": "admin", "scans": make_scans(), "selects": [], "img_gets": {}}
 
 
 class H(BaseHTTPRequestHandler):
@@ -106,8 +106,13 @@ class H(BaseHTTPRequestHandler):
         if p == "/api/setup/status": return self.send(200, {"index_built": True})
         if p == "/api/scans":
             return self.send(200, [self.public(s) for s in sorted(STATE["scans"].values(), key=lambda s: -s["id"])])
+        if p == "/api/search":
+            other = cand("s1", "zzz", 9, 0, "blue"); other["name"] = "Other Card"
+            return self.send(200, {"candidates": [other]})
         m = re.fullmatch(r"/api/scans/(\d+)/image", p)
-        if m: return self.send(200, photo_png(STATE["scans"][int(m.group(1))]["photo"]), "image/png")
+        if m:
+            sid = int(m.group(1)); STATE["img_gets"][sid] = STATE["img_gets"].get(sid, 0) + 1
+            return self.send(200, photo_png(STATE["scans"][sid]["photo"]), "image/png")
         m = re.fullmatch(r"/api/scans/(\d+)", p)
         if m: return self.send(200, self.public(STATE["scans"][int(m.group(1))]))
         return self.send(404, {"error": "stub: no such route"})
@@ -166,8 +171,8 @@ with sync_playwright() as pw:
     pg.on("console", lambda m: m.type == "error" and "404" not in m.text and errs.append(m.text))
     pg.goto(BASE + "/")
     pg.wait_for_selector("#dver")
-    pg.wait_for_function("document.querySelector('#dver').textContent.startsWith('d41')")
-    check(pg.locator("#dver").text_content().startswith("d41"), "banner reads d41")
+    pg.wait_for_function("document.querySelector('#dver').textContent.startsWith('d42')")
+    check(pg.locator("#dver").text_content().startswith("d42"), "banner reads d42")
 
     def focus(i):
         pg.locator(f'.row[data-id="{i}"]').click()
@@ -261,6 +266,55 @@ with sync_playwright() as pw:
     focus(4)
     check("2 of 3" in head() and "✓ picked" in head(), "a picked scan opens on its pick")
 
+    # a pick made OUTSIDE the compare block (the ⇆ chip's lightbox) moves the compare to it
+    focus(5)
+    check("AAA #1" in head() and "✓ picked" in head(), "scan 5 opens on its pick (AAA #1)")
+    pg.locator('#cands .card[data-pick="a2"]').hover()
+    pg.locator('#cands .card[data-pick="a2"] .cmp').click(); pg.wait_for_timeout(300)
+    pg.locator("#lbPickBtn").click(); pg.wait_for_timeout(900)
+    check(STATE["selects"][-1] == (5, "a2"), "⇆ lightbox pick filed a2")
+    check("BBB #2" in head() and "✓ picked" in head() and pg.locator("#cmpPick").inner_text().startswith("Keep"),
+          f"after a ⇆ pick the compare shows the pick, not the old printing ({head()[:60]!r})")
+
+    # stepping / mode changes never re-download the photo (the phone serves it no-store)
+    n0 = STATE["img_gets"].get(5, 0)
+    for _ in range(4):
+        pg.locator("#cmpNext").click()
+        ok = pg.locator("#cmp img.cmpscan").evaluate("e => e.complete && e.naturalWidth > 0 && !!e.style.transform")
+        if not ok: break
+    check(ok, "right after a step the scan photo is already loaded and fitted (no black, no whole-photo frame)")
+    pg.locator('[data-cmpmode="wipe"]').click(); pg.locator("#cmpSwap").click(); pg.locator('[data-cmpmode="side"]').click()
+    pg.keyboard.press("ArrowRight"); pg.wait_for_timeout(300)
+    check(STATE["img_gets"].get(5, 0) == n0, f"4 steps + 3 mode changes + a key: no photo re-download ({STATE['img_gets'].get(5, 0) - n0})")
+    fr = pg.evaluate("""async () => { renderDetail(); await new Promise(r => requestAnimationFrame(r));
+        return [document.querySelector('#cmp img.cmpscan').style.transform, document.querySelector('#scanShot img').dataset.fill]; }""")
+    check(bool(fr[0]) and bool(fr[1]), f"the frame after a full re-render already shows just the card ({fr})")
+    check(STATE["img_gets"].get(5, 0) == n0, "a full re-render doesn't re-download the photo either")
+
+    # another scan — even one with no printings — and back: starts again at the pick
+    pg.locator("#cmpNext").click()
+    focus(2); focus(5)
+    check("BBB #2" in head() and "✓ picked" in head(), f"5 → 2 (no printings) → 5 reopens on the pick ({head()[:40]!r})")
+
+    # a price landing elsewhere refreshes the head in place, never wiping a typed search
+    focus(3)
+    check("…" in head(), "pending printing not searched yet: …")
+    pg.locator("#msearch").fill("typed")
+    STATE["scans"][3]["candidates"][0]["f2f_conditions"] = {}
+    STATE["scans"][3]["candidates"][1]["f2f_conditions"] = {}
+    pg.wait_for_timeout(3300)
+    check("no listing" in head(), f"a searched-no-listing result shows in place ({head()[:60]!r})")
+    check(pg.locator("#msearch").input_value() == "typed", "…and the typed name search survives")
+
+    # a name-search pick (another card) goes back to the top, where it now shows
+    focus(4)
+    pg.locator("#msearch").fill("other"); pg.locator("#msearch").press("Enter"); pg.wait_for_timeout(500)
+    pg.locator("#right").evaluate("e => e.scrollTop = e.scrollHeight")
+    pg.locator('#msearchResults .card[data-pick="s1"] img').click(); pg.wait_for_timeout(900)
+    check(STATE["selects"][-1] == (4, "s1"), "search result picked")
+    check(pg.locator("#right").evaluate("e => e.scrollTop") == 0 and "Other Card" in pg.locator(".dname").inner_text(),
+          "a name-search pick returns to the top showing the new card")
+
     # ⇆ full-screen compare: the scan side is just the card too
     pg.locator('#cands .card[data-pick="a1"]').hover()
     pg.locator('#cands .card[data-pick="a1"] .cmp').click(); pg.wait_for_timeout(400)
@@ -282,6 +336,17 @@ with sync_playwright() as pw:
     check(ov <= 0, f"1280×720: no horizontal overflow in the right pane ({ov}px)")
     if SHOTS: SHOTS.mkdir(parents=True, exist_ok=True); pg.screenshot(path=str(SHOTS / "desktop_compare.png"))
     check(not errs, f"no page errors ({errs[:3]})")
+    ctx.close()
+
+    # site storage blocked: the page still works (the compare just doesn't remember)
+    ctx = b.new_context(viewport={"width": 1600, "height": 1000})
+    ctx.add_init_script("Object.defineProperty(window, 'localStorage', { get(){ throw new DOMException('blocked', 'SecurityError'); } });")
+    pg = ctx.new_page(); errs4 = []
+    pg.on("pageerror", lambda e: errs4.append(str(e)))
+    pg.goto(BASE + "/"); pg.wait_for_timeout(1500)
+    check(pg.locator(".row").count() == 5 and pg.locator("#cmp").count() == 1, "storage blocked: the list and the compare still render")
+    pg.locator('[data-cmpmode="blend"]').click()
+    check(pg.locator("#cmp .cmpbody.overlay").count() == 1, "storage blocked: the modes still work")
     ctx.close()
 
     # guest
