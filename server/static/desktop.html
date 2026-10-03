@@ -94,8 +94,8 @@
   .muted { color: var(--muted); }
   .dhead { display: flex; gap: 18px; align-items: flex-start; margin-bottom: 16px; }
   .scanshot { width: 168px; flex: 0 0 auto; }
-  /* Just the card, like the compare block (photoFill); the click opens the whole photo. */
-  .scanshot .shotbox { position: relative; aspect-ratio: 5/7; border-radius: 10px; overflow: hidden; background: var(--line); cursor: zoom-in; }
+  /* Just the card, like the compare block (cardCrop); the click opens the whole photo. */
+  .scanshot .shotbox { position: relative; aspect-ratio: 5/7; border-radius: 5% / 3.6%; overflow: hidden; background: var(--line); cursor: zoom-in; }
   .scanshot img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; display: block; }
   .scanshot .cap { font-size: 11px; color: var(--dim); text-align: center; margin-top: 4px; }
   .dinfo { flex: 1; min-width: 0; }
@@ -138,8 +138,8 @@
   #lbDuo .duo { display: flex; gap: 24px; align-items: flex-start; justify-content: center; }
   #lbDuo figure { margin: 0; text-align: center; }
   #lbDuo .duo img { max-width: 44vw; max-height: 80vh; border-radius: 12px; }
-  /* The scan side of the ⇆ compare: just the card (photoFill), sized like the printing. */
-  #lbDuo .lbscan { position: relative; overflow: hidden; border-radius: 12px; background: #000;
+  /* The scan side of the ⇆ compare: just the card (cardCrop), sized like the printing. */
+  #lbDuo .lbscan { position: relative; overflow: hidden; border-radius: 5% / 3.6%; background: #000;
                    aspect-ratio: 5/7; width: min(44vw, 57vh); }
   #lbDuo .lbscan img { position: absolute; inset: 0; width: 100%; height: 100%; max-width: none; max-height: none;
                        object-fit: contain; border-radius: 0; }
@@ -169,10 +169,12 @@
   /* Each picture at most ~64vh tall (the old side-by-side's 62vh), centred. */
   .cmpbody { margin-top: 10px; display: grid; grid-template-columns: repeat(2, minmax(0, 46vh)); gap: 14px; justify-content: center; }
   .cmpbody.overlay { grid-template-columns: minmax(0, 46vh); }
-  .cmpbox { position: relative; aspect-ratio: 5/7; border-radius: 12px; overflow: hidden; background: #000; }
+  /* Card-shaped: a card's corners are rounded 3.2 mm on 63 × 88 mm — the scan, cropped to
+     its edges, and the printing both read as cards. */
+  .cmpbox { position: relative; aspect-ratio: 5/7; border-radius: 5% / 3.6%; overflow: hidden; background: #000; }
   .cmpbox img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; display: block; }
   .cmpbody.side .cmpbox img { cursor: zoom-in; }
-  /* A scan photo shows only once fitScan has applied its fill (no frame of the whole photo). */
+  /* A scan photo shows only once fitScan has cropped it (no frame of the whole photo). */
   .cmpbox img.cmpscan:not([data-fill]), .shotbox img:not([data-fill]), .lbscan img:not([data-fill]) { visibility: hidden; }
   .cmpbody.overlay .cmpbox img.under { z-index: 1; }
   .cmpbody.overlay .cmpbox img.over { z-index: 2; }
@@ -777,19 +779,652 @@ function candCard(c, chosenId, idx){
   </div>`;
 }
 
-/* ── just the card ─────────────────────────────────────────────────────── */
-// Owner, 2026-10-03: "a tight look on the phone and desktop". A scan photo
-// whose card sits at a KNOWN place is scaled about its centre so the card
-// fills its box (the box clips the rest):
-//   664×926   ScanPhoto (card_detect.scan_photo): the card inset 17/23 px → ×1.053
-//   914×1276 / 882×1232 / 852×1188   a flattened upload filed as it came (before
-//             1.1.3, or no edges re-found since): the 788×1100 card inside the
-//             8 / 6 / 4 % margin of tests/phone_flatten_ref.py → ×1.160 / 1.119 / 1.081
-// Anything else (a raw crop, an old plain warp) shows as it is. Clicking a
-// photo still opens the WHOLE photo. The same table is in phone.html — keep
-// the two in step.
-const PHOTO_FILL = { "664x926": 1.053, "914x1276": 914/788, "882x1232": 882/788, "852x1188": 852/788 };
-function photoFill(img){ return PHOTO_FILL[`${img.naturalWidth}x${img.naturalHeight}`] || 1; }
+/* ═══ card edges ═══ this block is IDENTICAL in phone.html and desktop.html,
+   byte for byte (tests/test_static_pages.py holds them to it) ═══════════════ */
+// "Can we just make it crop the card directly to the edge of the card?" (owner,
+// 2026-10-03). A stored scan photo with a KNOWN layout has its card near a known rect:
+//   664×926   ScanPhoto (card_detect.scan_photo): the card warped to x 17..647, y 23..903
+//   914×1276 / 882×1232 / 852×1188   a flattened upload filed as it came (before 1.1.3,
+//             or no edges re-found since): tests/phone_flatten_ref.py's 788×1100 card
+//             inside its 8 / 6 / 4 % margin
+// — but the phone's finder outlines a card 0.3–2.5 mm OUTSIDE its true edge (its 5×5
+// dilation, blur, a sleeve), or on a black border's INNER edge (a black card on a dark
+// tray). So the page finds the card's own edges in the photo (findCardEdges below), once
+// per photo, and crops exactly there; any other photo (a raw crop, an old plain warp)
+// shows as it is, and a click / tap still opens the whole photo.
+// Measured with scripts/score_card_edges.py (the reference chain's own photos, the true
+// card known): tray > 0.25 mm on 3 % of sides (the fixed zoom: 78 %), card cut > 0.5 mm
+// on 0 % (22 %), mean error 0.09 mm (0.98); held-out photos 6 % / 0 % / 0.14 mm.
+const PHOTO_LAYOUT = { "664x926": [17, 23, 647, 903], "914x1276": [63, 88, 851, 1188],
+                       "882x1232": [47, 66, 835, 1166], "852x1188": [32, 44, 820, 1144] };
+const cardCropCache = new Map();   // photo URL → its crop (a filed photo never changes)
+function cardCrop(img){
+  const key = img.currentSrc || img.src;
+  if (cardCropCache.has(key)) return cardCropCache.get(key);
+  const w = img.naturalWidth, h = img.naturalHeight, L = PHOTO_LAYOUT[`${w}x${h}`];
+  let crop = null;
+  if (L){
+    crop = { x0: L[0], y0: L[1], x1: L[2], y1: L[3] };        // no answer → the layout rect
+    try {
+      const cv = document.createElement("canvas"); cv.width = w; cv.height = h;
+      const cx = cv.getContext("2d", { willReadFrequently: true });
+      cx.drawImage(img, 0, 0);
+      const r = findCardEdges({ data: cx.getImageData(0, 0, w, h).data, width: w, height: h }, crop);
+      // Only a sane answer: inside the photo, at least 80 % of the layout rect each way,
+      // card-shaped (63:88 within 12 %).
+      if (r && r.x0 >= 0 && r.y0 >= 0 && r.x1 <= w && r.y1 <= h
+          && r.x1 - r.x0 > 0.8 * (L[2] - L[0]) && r.y1 - r.y0 > 0.8 * (L[3] - L[1])) {
+        const a = (r.x1 - r.x0) / (r.y1 - r.y0) / (63 / 88);
+        if (a > 0.88 && a < 1.12) crop = r;
+      }
+    } catch (e) { /* keep the layout rect */ }
+  }
+  cardCropCache.set(key, crop);
+  return crop;
+}
+// The CSS transform that maps the crop exactly onto its 5:7 box (object-fit: contain draws
+// the photo at scale r): each found edge lands on the box's edge — a slightly non-card-shaped
+// crop (one side kept loose) is stretched by those few % rather than cutting the other sides —
+// then × k (the viewer's Scan size) around the card's centre.
+function cardCropTransform(img, crop, k){
+  const w = img.naturalWidth, h = img.naturalHeight, BW = 1, BH = 1.4;
+  const r = Math.min(BW / w, BH / h), ox = (BW - w * r) / 2, oy = (BH - h * r) / 2;
+  const cx = ox + r * (crop.x0 + crop.x1) / 2, cy = oy + r * (crop.y0 + crop.y1) / 2;
+  const sx = k * BW / (r * (crop.x1 - crop.x0)), sy = k * BH / (r * (crop.y1 - crop.y0));
+  const tx = -sx * (cx - BW / 2) / BW * 100, ty = -sy * (cy - BH / 2) / BH * 100;
+  return `translate(${tx.toFixed(3)}%, ${ty.toFixed(3)}%) scale(${sx.toFixed(4)}, ${sy.toFixed(4)})`;
+}
+// findCardEdges(photo, expect) — crop a stored scan photo to the card's own edges.
+// Approach: tray-vs-card SEGMENTATION, one side at a time, plus the rules that keep it from
+// ever taking an inner line (the black border's inner edge, a frame, a text line) for the edge.
+//
+//   photo  = {data: RGBA Uint8ClampedArray, width, height} — canvas ImageData of the stored JPEG
+//   expect = {x0, y0, x1, y1} — the layout's card rect (where the finder's quad was warped to)
+//   returns {x0, y0, x1, y1} in photo px (pixel-centre coordinates, like the layout rect); a
+//   side it is unsure of keeps expect's value; null when the inputs make no sense. Never throws.
+//
+// Per side (left / top / right / bottom), only the central 56 % of the side is sampled (real
+// cards have ~3 mm rounded corners; sleeves round too):
+//  1. PROFILE: up to 64 rows across the side (each a 3-row average, then [1 2 1] along the
+//     row), from the photo's edge (or 6 mm outside the layout rect in a wide-margin photo) to
+//     5 mm inside the layout rect.
+//  2. TRAY MODEL: each row's tray colour is the median of its 3 outermost pixels (after any
+//     black warp fill), smoothed by a running median over +-5 rows (a speck or a glare dot is not
+//     the tray; a gradient tray is followed along the side). The noise of those pixels sets the
+//     not-tray threshold.
+//  3. SEGMENT: per row, the first run of >= 0.25 mm of not-tray pixels (an opening along the
+//     row); the side's boundary is where half the rows have left the tray (the median). The same
+//     test on the per-position median across rows catches weak but continuous edges (a
+//     borderless card on a textured tray) that single noisy rows miss.
+//  4. LAYERS: from there, up to three successive transitions on the median profile, each placed
+//     at the sub-pixel 50 % crossing between the colour outside it and its inside plateau.
+//     Leading weak transitions that are not one continuous edge (tray texture, a glare
+//     gradient) are dropped. A narrow, near-neutral, slightly BRIGHTER band (with perhaps a
+//     bright cut-edge line) is a sleeve and is skipped; under blur its width and level come from
+//     a blurred two-step model fit, because a narrow band never reaches its plateau.
+//  5. CONTINUITY: the chosen transition must show in >= 60 % of the rows themselves (each row's
+//     own crossing within 0.35 mm): text in a border, a speck, glare patches are not an edge.
+//  6. TRUST — could the margin ring itself be the card? The finder sometimes takes the card's
+//     border's INNER edge for the card's edge (a black card on a dark tray, a white card on a
+//     light one), so the layout rect sits ~2-2.6 mm inside the card and the photo's margin is
+//     the card's own border running off the photo. The first transition is then the frame —
+//     taking it would cut ~2.5 mm into the card. So:
+//      - a ring that could be black ink is trusted only when the inside is clearly darker
+//        still (dark tray -> black border); one that could be paper white only when the inside
+//        is brighter (light tray -> white border) or black ink (light tray -> black border);
+//      - the ROUNDED-CORNER test: when a side's ring is card, the photo's corner pixels fall
+//        outside the card's rounded corner and show tray, unlike the ring 5.5 mm along the edge;
+//      - the UNIFORM-BORDER test rescues the ambiguous sides when all four sides show the same
+//        closed band of equal 2-3.8 mm width (a border is a uniform ring; a frame is broken by
+//        the title / art / text boxes and is wider at the bottom).
+//     An untrusted side goes LOOSE: to the photo's edge (or, in a wide-margin photo, 4 mm out
+//     from the transition and >= 2.6 mm outside the layout rect) — loose never cuts.
+//  7. A trusted edge deeper than 3.3 mm inside the layout rect is an inner feature: keep the
+//     layout rect for that side.
+//  8. BLACK TRAY, NOT FILL (judge's guard): the warp's black fill exists only where the
+//     camera frame ended next to the card, which can border at most two sides of a card (a
+//     card spanning the whole frame height at one side edge would make three — rare, and then
+//     the guard only loosens). When three or more sides read as "fill" in most of their
+//     rows, the near-black is a black mat (or an Area cropped through the card), not fill:
+//     the sides are re-read with no fill skipping, so the black is the ring, which a lighter
+//     border inside can never be trusted against — loose, never cut. Without it a white-
+//     bordered card with a dark frame on a near-black mat had its whole border cut off
+//     (the ring was measured on the fill->border ramp, an in-between grey trusted as tray).
+// Cost (desktop Chromium, warm): ~3 ms mean, p95 ~5 ms, max ~7 ms per photo (a few typed
+// arrays per side, no image copy; guard 8 re-reads the sides, so a black mat costs ~2x). The
+// very first call is ~25-40 ms while V8 compiles it. Expect ~4x in the phone's WebView.
+//
+// Provenance: candidate "segment" (cand_segment.js) chosen by the judge, plus guard 8. Its
+// output is identical to cand_segment.js on the tuning and held-out corpora (and on 7 of the 8
+// stress / validation corpora; one stress photo comes out looser on one side).
+
+function findCardEdges(photo, expect) {
+  try { return segFindCardEdges(photo, expect, null); } catch (e) { return null; }
+}
+
+function segFindCardEdges(photo, expect, dbg) {
+  const W = photo && photo.width | 0, H = photo && photo.height | 0, D = photo && photo.data;
+  if (!D || W < 64 || H < 64 || D.length < W * H * 4 || !expect) return null;
+  const ex0 = +expect.x0, ey0 = +expect.y0, ex1 = +expect.x1, ey1 = +expect.y1;
+  if (!(isFinite(ex0) && isFinite(ey0) && isFinite(ex1) && isFinite(ey1))) return null;
+  if (ex0 < 0 || ey0 < 0 || ex1 > W || ey1 > H || ex1 - ex0 < 60 || ey1 - ey0 < 80) return null;
+  const pxmm = ((ex1 - ex0) / 63 + (ey1 - ey0) / 88) / 2;           // photo px per card mm
+  const ctx = { D, W, H, ex0, ey0, ex1, ey1, pxmm, ink: segInkPaper(D, W, H, ex0, ey0, ex1, ey1) };
+  ctx.cornerFlag = segCorners(ctx);
+  let sides = [0, 1, 2, 3].map(s => segSide(ctx, s));
+  // 8. three or more sides "filled": a black tray, not the warp's fill — read it as the ring
+  if (sides.filter(r => r.fillFrac > 0.5).length >= 3) {
+    ctx.noFill = true;
+    sides = [0, 1, 2, 3].map(s => segSide(ctx, s));
+    if (dbg) dbg.blackTray = true;
+  }
+  segUniformBorder(sides, ctx);
+  const out = { x0: ex0, y0: ey0, x1: ex1, y1: ey1 };
+  const names = ['x0', 'y0', 'x1', 'y1'];
+  for (let s = 0; s < 4; s++) {
+    const a = segAnswer(sides[s], ctx);
+    if (a !== null && isFinite(a)) out[names[s]] = a;
+  }
+  if (dbg) { dbg.ink = ctx.ink; dbg.corner = ctx.cornerFlag; for (let s = 0; s < 4; s++) dbg[names[s]] = sides[s].dbg; }
+  return out;
+}
+
+// Luma percentiles of the card's interior: p2 ~ its printed black ink, p98 ~ its paper white
+// (relative references, so exposure and white balance do not matter).
+function segInkPaper(D, W, H, x0, y0, x1, y1) {
+  const hist = new Uint32Array(256);
+  const ax = Math.round(x0 + 0.12 * (x1 - x0)), bx = Math.round(x1 - 0.12 * (x1 - x0));
+  const ay = Math.round(y0 + 0.08 * (y1 - y0)), by = Math.round(y1 - 0.08 * (y1 - y0));
+  let n = 0;
+  for (let y = ay; y < by; y += 4) for (let x = ax; x < bx; x += 4) {
+    const i = (y * W + x) * 4;
+    hist[(D[i] * 77 + D[i + 1] * 150 + D[i + 2] * 29) >> 8]++; n++;
+  }
+  const pct = (p) => { let c = 0; for (let v = 0; v < 256; v++) { c += hist[v]; if (c >= p * n) return v; } return 255; };
+  return { ink: pct(0.02), paper: pct(0.98) };
+}
+
+function segLuma(c) { return 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2]; }
+function segChroma(c) { return Math.max(c[0], c[1], c[2]) - Math.min(c[0], c[1], c[2]); }
+function segL1(a, b) { return Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]) + Math.abs(a[2] - b[2]); }
+
+// Mean colour + mean L1 deviation of a w x h block; null if it is the warp's black fill
+// (exactly 0 before JPEG, while even a black border photographs above ~8).
+function segBlock(D, W, H, x, y, w, h) {
+  x = Math.max(0, Math.min(W - w, Math.round(x))); y = Math.max(0, Math.min(H - h, Math.round(y)));
+  const m = [0, 0, 0];
+  for (let yy = y; yy < y + h; yy++) for (let xx = x; xx < x + w; xx++) {
+    const i = (yy * W + xx) * 4; m[0] += D[i]; m[1] += D[i + 1]; m[2] += D[i + 2];
+  }
+  const n = w * h; m[0] /= n; m[1] /= n; m[2] /= n;
+  if (Math.max(m[0], m[1], m[2]) <= 6) return null;
+  let dev = 0;
+  for (let yy = y; yy < y + h; yy++) for (let xx = x; xx < x + w; xx++) {
+    const i = (yy * W + xx) * 4; dev += Math.abs(D[i] - m[0]) + Math.abs(D[i + 1] - m[1]) + Math.abs(D[i + 2] - m[2]);
+  }
+  return { c: m, dev: dev / n };
+}
+
+// Rounded-corner test. A real card's corners are rounded (r ~ 3 mm). When a side's margin
+// ring is not tray but the card's own border running off the photo, the colour along that
+// photo edge stays the border's until within ~1-2.5 mm of the photo's corner and then steps to
+// tray: the corner pixels fall outside the rounded corner. So each corner's 2x2 px is compared
+// with the ring 5.5 mm along each of its two photo edges (local: a vignette or a glare gradient
+// changes little over 5.5 mm; and past the arc of a card corner that sits up to ~2.5 mm inside
+// the photo on the other side). A corner that differs from this side's ring counts when it ALSO
+// differs from the neighbouring side's ring (the whole margin is card), or when this side's
+// ring differs from the neighbouring side's ring there (this side alone is card: e.g. a black
+// bottom border with the collector line). flag[s]: a corner of side s counts. A false flag
+// only makes the side loose, never cuts.
+function segCorners(ctx) {
+  const { D, W, H, pxmm } = ctx;
+  const b = 2, bw = 3, bl = 5;
+  const off = Math.round(5.5 * pxmm);
+  const cor = [segBlock(D, W, H, 0, 0, b, b), segBlock(D, W, H, W - b, 0, b, b),
+               segBlock(D, W, H, W - b, H - b, b, b), segBlock(D, W, H, 0, H - b, b, b)];   // TL TR BR BL
+  const near = (s, c) => {                  // side s's ring next to corner c
+    const top = c === 0 || c === 1, left = c === 0 || c === 3;
+    if (s === 0 || s === 2) {
+      const x = s === 0 ? 1 : W - 1 - bw, y = top ? off - bl / 2 : H - 1 - off - bl / 2;
+      return segBlock(D, W, H, x, y, bw, bl);
+    }
+    const y = s === 1 ? 1 : H - 1 - bw, x = left ? off - bl / 2 : W - 1 - off - bl / 2;
+    return segBlock(D, W, H, x, y, bl, bw);
+  };
+  const ends = [[0, 3], [0, 1], [1, 2], [3, 2]];           // each side's two corners
+  const nb = [[1, 3], [0, 2], [1, 3], [0, 2]];             // the side meeting it at each
+  const flag = [false, false, false, false];
+  for (let s = 0; s < 4; s++) for (let k = 0; k < 2; k++) {
+    const ci = ends[s][k], c = cor[ci], e = near(s, ci);
+    if (!c || !e) continue;
+    const tol = Math.max(30, 4 * (c.dev + e.dev));
+    if (segL1(c.c, e.c) <= tol) continue;
+    const o = near(nb[s][k], ci);
+    if (!o) { flag[s] = true; continue; }
+    const tol2 = Math.max(30, 4 * (c.dev + o.dev));
+    if (segL1(c.c, o.c) > tol2 || segL1(e.c, o.c) > Math.max(tol, tol2)) flag[s] = true;
+  }
+  return flag;
+}
+
+// k-th smallest of a[0..n) (quickselect; partially reorders a)
+function segSelect(a, n, k) {
+  let lo = 0, hi = n - 1;
+  while (hi > lo) {
+    const pv = a[(lo + hi) >> 1];
+    let i = lo, j = hi;
+    while (i <= j) {
+      while (a[i] < pv) i++;
+      while (a[j] > pv) j--;
+      if (i <= j) { const t = a[i]; a[i] = a[j]; a[j] = t; i++; j--; }
+    }
+    if (k <= j) hi = j; else if (k >= i) lo = i; else return a[k];
+  }
+  return a[k];
+}
+
+// Analyse side s (0 left, 1 top, 2 right, 3 bottom); u = px inward. Returns what was found;
+// segUniformBorder may upgrade its trust, segAnswer turns it into a coordinate.
+function segSide(ctx, s) {
+  const { D, W, H, ex0, ey0, ex1, ey1, pxmm, ink } = ctx;
+  const horiz = (s === 0 || s === 2);
+  const eu = s === 0 ? ex0 : s === 1 ? ey0 : s === 2 ? W - ex1 : H - ey1;   // layout edge, px from the photo edge
+  const lenU = horiz ? W : H, lenV = horiz ? H : W;
+  const va = horiz ? ey0 : ex0, vb = horiz ? ey1 : ex1;
+  const v0 = Math.round(va + 0.22 * (vb - va)), v1 = Math.round(vb - 0.22 * (vb - va));
+  // 1. the profile window: from the photo edge (or, in a wide-margin photo, from 6 mm outside
+  // the layout rect: the card's edge is never found further out than ~2.6 mm, plus a sleeve)
+  // to 5 mm inside it. u is local to that window; u0 is its offset from the photo edge.
+  const u0 = Math.max(0, Math.round(eu - 6.0 * pxmm)), euL = eu - u0;
+  const U = Math.min(Math.round(eu + 5.0 * pxmm), Math.floor(lenU * 0.3)) - u0;
+  const res = { s, eu, u0, status: 'none', dbg: {} };
+  if (U < 12) return res;
+  const R = Math.max(16, Math.min(64, Math.floor((v1 - v0) / 3)));
+  const vstep = (v1 - v0) / (R - 1);
+  const P = new Float32Array(R * U * 3);       // P[(r * U + u) * 3 + c]
+  const tmp = new Float32Array(U * 3);
+  const du = horiz ? (s === 0 ? 4 : -4) : (s === 1 ? 4 * W : -4 * W), dvs = horiz ? 4 * W : 4;   // byte strides
+  const base0 = s === 0 ? u0 * 4 : s === 2 ? (W - 1 - u0) * 4 : s === 1 ? u0 * W * 4 : (H - 1 - u0) * W * 4;
+  for (let r = 0; r < R; r++) {
+    const v = Math.round(v0 + r * vstep);
+    let i0 = base0 + Math.max(0, v - 1) * dvs, i1 = base0 + v * dvs, i2 = base0 + Math.min(lenV - 1, v + 1) * dvs;
+    for (let u = 0; u < U; u++) {
+      tmp[u * 3] = (D[i0] + D[i1] + D[i2]) * (1 / 3);
+      tmp[u * 3 + 1] = (D[i0 + 1] + D[i1 + 1] + D[i2 + 1]) * (1 / 3);
+      tmp[u * 3 + 2] = (D[i0 + 2] + D[i1 + 2] + D[i2 + 2]) * (1 / 3);
+      i0 += du; i1 += du; i2 += du;
+    }
+    const o = r * U * 3;
+    for (let u = 0; u < U; u++) {
+      const a = u > 0 ? u - 1 : 0, b = u < U - 1 ? u + 1 : U - 1;
+      for (let c = 0; c < 3; c++) P[o + u * 3 + c] = (tmp[a * 3 + c] + 2 * tmp[u * 3 + c] + tmp[b * 3 + c]) * 0.25;
+    }
+  }
+  // 2. tray model. Per row: skip the warp's black fill (a card near the frame's edge), then the
+  // median of the next 3 px; the fill is overwritten with that colour so it reads as tray.
+  const FILL = ctx.noFill ? -1 : 6, nRef = 3;
+  const refs = new Float32Array(R * 3), us = new Int32Array(R);
+  let nFill = 0;
+  for (let r = 0; r < R; r++) {
+    const o = r * U * 3;
+    let f = 0;
+    while (f < U && Math.max(P[o + f * 3], P[o + f * 3 + 1], P[o + f * 3 + 2]) <= FILL) f++;
+    if (f > 0) { nFill++; f += 2; }
+    if (f + nRef >= U) f = U - nRef - 1;
+    us[r] = f;
+    for (let c = 0; c < 3; c++) {
+      const p = P[o + f * 3 + c], q = P[o + (f + 1) * 3 + c], w = P[o + (f + 2) * 3 + c];
+      refs[r * 3 + c] = Math.max(Math.min(p, q), Math.min(Math.max(p, q), w));
+    }
+    for (let u = 0; u < f; u++) for (let c = 0; c < 3; c++) P[o + u * 3 + c] = refs[r * 3 + c];
+  }
+  // smoothed along the side: running median over +-5 rows
+  const sref = new Float32Array(R * 3), sc = new Float32Array(Math.max(R, 11) * nRef);
+  for (let r = 0; r < R; r++) for (let c = 0; c < 3; c++) {
+    let n = 0;
+    for (let k = Math.max(0, r - 5); k <= Math.min(R - 1, r + 5); k++) sc[n++] = refs[k * 3 + c];
+    sref[r * 3 + c] = segSelect(sc, n, n >> 1);
+  }
+  // noise: median L1 distance of the ring pixels from their row's tray colour
+  let nd = 0;
+  for (let r = 0; r < R; r++) {
+    const o = r * U * 3;
+    for (let k = 0; k < nRef; k++) {
+      const u = us[r] + k;
+      sc[nd++] = Math.abs(P[o + u * 3] - sref[r * 3]) + Math.abs(P[o + u * 3 + 1] - sref[r * 3 + 1]) + Math.abs(P[o + u * 3 + 2] - sref[r * 3 + 2]);
+    }
+  }
+  res.fillFrac = nFill / R;
+  const noise = segSelect(sc, nd, nd >> 1);
+  const T = Math.max(15, 4 * noise + 6);                 // per-pixel not-tray threshold (L1 over RGB)
+  const k = Math.max(2, Math.round(0.25 * pxmm));        // a run this long is "not tray" (opening)
+  // 3. segment: per row, the first run of k not-tray px; the side's boundary is where half
+  // the rows have left the tray
+  const b = new Float32Array(R);
+  for (let r = 0; r < R; r++) {
+    const o = r * U * 3, r0 = sref[r * 3], r1 = sref[r * 3 + 1], r2 = sref[r * 3 + 2];
+    let run = 0, found = -1;
+    for (let u = us[r] + nRef; u < U; u++) {
+      const d = Math.abs(P[o + u * 3] - r0) + Math.abs(P[o + u * 3 + 1] - r1) + Math.abs(P[o + u * 3 + 2] - r2);
+      if (d > T) { if (++run >= k) { found = u - k + 1; break; } } else run = 0;
+    }
+    b[r] = found < 0 ? 1e9 : found;
+  }
+  const B1 = segSelect(b, R, R >> 1);
+  // the median profile across rows (noise and tray texture average out here)
+  const M = new Float32Array(U * 3);
+  for (let u = 0; u < U; u++) for (let c = 0; c < 3; c++) {
+    for (let r = 0; r < R; r++) sc[r] = P[r * U * 3 + u * 3 + c];
+    M[u * 3 + c] = segSelect(sc, R, R >> 1);
+  }
+  const ring = [0, 1, 2].map(c => { for (let r = 0; r < R; r++) sc[r] = sref[r * 3 + c]; return segSelect(sc, R, R >> 1); });
+  let usM = 0;
+  for (let r = 0; r < R; r++) { usM = Math.max(usM, us[r]); sc[r] = us[r]; }
+  const usMed = segSelect(sc, R, R >> 1);
+  // the same segmentation on the median profile, its threshold from the profile's own ripple
+  // over the ring: a weak but continuous edge shows here before single rows see it
+  let ripple = 0;
+  const uR1 = Math.min(U - 1, usM + Math.max(nRef, Math.round(0.35 * euL)));
+  for (let u = usM; u <= uR1; u++) ripple = Math.max(ripple, segL1([M[u * 3], M[u * 3 + 1], M[u * 3 + 2]], ring));
+  const TM = Math.min(T, Math.max(12, 1.5 * ripple));
+  const BM = segNextBoundary(M, U, ring, usM + nRef, U - 1, TM, k);
+  const Bc = BM >= 0 ? Math.min(BM, B1) : B1;
+  // could the ring itself be the card's black / white border? Relative to the card's own ink
+  // and paper; black ink photographs with a colour cast, so a DARK colour counts whatever its tint
+  const inkish = (c) => segLuma(c) <= Math.min(100, Math.max(ink.ink + 30, 1.6 * ink.ink)) && (segChroma(c) <= 30 || Math.max(c[0], c[1], c[2]) <= 70);
+  const paperish = (c) => segLuma(c) >= Math.max(120, 0.78 * ink.paper) && segChroma(c) <= 35;
+  Object.assign(res, { ring, ringInk: inkish(ring), ringPaper: paperish(ring), ringCard: ctx.cornerFlag[s] });
+  Object.assign(res.dbg, { T, TM, noise, ripple, B1, BM, eu, fill: nFill, ring, ringInk: res.ringInk, ringPaper: res.ringPaper, ringCard: res.ringCard });
+  if (Bc >= 1e9) return res;
+  // 4. layers: up to three successive transitions; t[j].E is the 50 % crossing from the colour
+  // outside it (t[j].out) to its inside plateau (t[j].I)
+  const t = [];
+  let from = Bc, prev = ring;
+  for (let j = 0; j < 3 && from >= 0; j++) {
+    const st = segStep(M, U, prev, from, TM, pxmm);
+    if (!st) break;
+    st.out = prev;
+    t.push(st);
+    // the next one must be a sizeable change (a ramp still creeping onto its plateau is not a
+    // new layer) within 3.6 mm (a border's width + margin)
+    const step = segL1(st.I, prev);
+    const lim = Math.min(U - 2, Math.round(st.E + 3.6 * pxmm));
+    from = segNextBoundary(M, U, st.I, st.up, lim, Math.max(TM, Math.min(60, 0.25 * step)), k);
+    prev = st.I;
+    if (from < 0) st.limit = lim;
+  }
+  if (!t.length) { res.status = 'weak'; res.E = Bc + u0; return res; }
+  const bandOf = (j) => (j + 1 < t.length ? t[j + 1].E - t[j].E : t[j].limit !== undefined ? t[j].limit - t[j].E : 0) / pxmm;
+  // 5. continuity of transition j (sampled no further than the middle of the bands next to it;
+  // the first one's outside is each row's own tray colour)
+  const agreeAt = (j) => segAgree(P, R, U, t[j].E, t[j].out, t[j].I, t[j].up, pxmm,
+    j > 0 ? (t[j].E - t[j - 1].E) / 2 : undefined, j + 1 < t.length ? (t[j + 1].E - t[j].E) / 2 : undefined, j === 0 ? sref : null);
+  // tray texture (wood grain, a weave) or a glare gradient can come first as a weak transition
+  // that is not one continuous edge: drop such while a much stronger one follows
+  let d = 0;
+  while (d + 1 < t.length && segL1(t[d].I, t[d].out) < Math.max(3 * TM, 0.35 * segL1(t[d + 1].I, t[d + 1].out)) && agreeAt(d) < 0.6) d++;
+  if (d) { t.splice(0, d); res.dbg.dropped = d; }
+  // a sleeve: up to two narrow leading bands (the haze, perhaps a bright line at the sleeve's
+  // cut edge) slightly BRIGHTER than the tray by a near-neutral amount (translucent plastic
+  // over the tray), together <= 1.9 mm wide, every edge continuous; then the card
+  const sleeveLike = (B) => {
+    const sh = [B[0] - ring[0], B[1] - ring[1], B[2] - ring[2]], m = (sh[0] + sh[1] + sh[2]) / 3;
+    return m >= 6 && m <= 90 && segBrighterNeutral(B, ring);
+  };
+  let c0 = 0;
+  for (let j = 0; j < 2 && j + 1 < t.length && !d; j++) {
+    let level = t[j].I, wd = (t[j + 1].E - t[0].E) / pxmm;
+    // blur keeps a narrow band from reaching its plateau, which pushes its first crossing
+    // outward, inflates its width and misstates its level: for a single leading band, measure
+    // both with the blurred two-step fit
+    if (j === 0 && wd < 3.4 && segBrighterNeutral(t[0].I, ring)) {
+      const f = segFit2(M, U, ring, t[1].I, t[0].E, t[1].E, t[0].I, ctx.phi || (ctx.phi = segPhiTable()));
+      if (f) {
+        wd = (f.e1 - f.e0) / pxmm; level = f.B;
+        res.dbg.fit = [Math.round(f.e0 * 10) / 10, Math.round(f.e1 * 10) / 10, Math.round(f.sig * 10) / 10, f.B.map(Math.round)];
+      }
+    }
+    if (!(wd >= 0.2 && wd <= 1.9 && sleeveLike(level))) break;
+    if (agreeAt(j) < 0.8 || agreeAt(j + 1) < 0.8) break;
+    c0 = j + 1;
+  }
+  const tc = t[c0];
+  Object.assign(res, {
+    status: 'edge', E: tc.E + u0, Ic: tc.I, sleeve: c0 > 0,
+    agree: agreeAt(c0),
+    bandW: bandOf(c0), bandClosed: c0 + 1 < t.length,       // the card's outermost band (mm), and whether its inner edge was seen
+    delta: (tc.E - euL) / pxmm,                              // + = inside the layout rect (mm)
+    ringBand: (tc.E + u0 - usMed) / pxmm,                    // how much ring the photo shows (mm)
+  });
+  Object.assign(res.dbg, { E: res.E, Ic: res.Ic, sleeve: c0, agree: res.agree, bandW: res.bandW, bandClosed: res.bandClosed, delta: res.delta,
+    t: t.map(x => [Math.round(x.E * 10) / 10, x.I.map(Math.round)]) });
+  // 6. trust: the transition is the card's OUTER edge unless the ring could be its border.
+  //  - a ring that could be black ink: only when the inside is clearly darker still (dark tray
+  //    -> black border) and that band is >= 1.2 mm wide — a real black border's own shading
+  //    (lighter at its outer rim) is neither; a sleeve seen between ring and band already shows
+  //    the ring to be tray, so then a smaller margin will do;
+  //  - a ring that could be paper white: only when the inside is brighter (light tray -> white
+  //    border) or black ink (light tray -> black border, by far the commoner of the two
+  //    readings — and where the other one, a white border with a black frame on a paper-white
+  //    tray, is wrong, the layout rect already cuts as deep);
+  //  - never when the rounded-corner test says the ring is card.
+  const Lo = segLuma(ring), Li = segLuma(res.Ic);
+  let trust = !res.ringCard;
+  if (trust && res.ringInk) trust = (Li < Lo - Math.max(15, 0.35 * Lo) || (c0 > 0 && Li < Lo - Math.max(8, 0.2 * Lo))) && (res.bandW >= 1.2 || !res.bandClosed);
+  else if (trust && res.ringPaper) trust = Li > Lo + 3 || inkish(res.Ic);
+  res.trust = trust;
+  res.dbg.trust = trust;
+  return res;
+}
+
+// A white-bordered card on a dark tray reads exactly like a white FRAME inside a black border
+// running off the photo, side by side (a silver border on a grey tray likewise). What separates
+// them is that a border is a uniform ring: the same colour, the same 2-3.8 mm width, closed by
+// a further edge, on all four sides — a frame is broken by the title, art and text boxes and is
+// wider at the bottom. Only then are the ambiguous sides trusted. Every side must show the band
+// (sides already trusted included); an untrusted side only with a band LIGHTER than its dark
+// ring, or still light inside a light ring (a dark band inside a light ring is what a white
+// border with a dark frame looks like, frame and all), or darker than its dark ring behind
+// >= 2.5 mm of ring (more than the lighter outer rim a black border can show: that ring is tray).
+function segUniformBorder(sides, ctx) {
+  const ws = [];
+  for (const r of sides) {
+    if (r.status !== 'edge' || r.ringCard || r.agree < 0.6) return;
+    if (!r.trust) {
+      const Lo = segLuma(r.ring), Li = segLuma(r.Ic);
+      if (!((r.ringInk && Li > Lo + 10) || (r.ringPaper && Li >= 0.75 * Lo) ||
+            (r.ringInk && Li < Lo - 4 && r.ringBand >= 2.5))) return;
+    }
+    if (!r.bandClosed || r.bandW < 2.0 || r.bandW > 3.8) return;
+    ws.push(r);
+  }
+  let lo = 1e9, hi = -1e9, llo = 1e9, lhi = 0;
+  for (const r of ws) {
+    lo = Math.min(lo, r.bandW); hi = Math.max(hi, r.bandW);
+    llo = Math.min(llo, segLuma(r.Ic)); lhi = Math.max(lhi, segLuma(r.Ic));
+  }
+  if (hi - lo > 0.6 || llo < 0.85 * lhi) return;
+  // the same hue all round (brightness may differ: glare, vignetting)
+  const hue = (c) => { const L = Math.max(1, (c[0] + c[1] + c[2]) / 3); return [c[0] / L, c[1] / L, c[2] / L]; };
+  for (const r of ws) for (const q of ws) if (segL1(hue(r.Ic), hue(q.Ic)) > 0.25) return;
+  for (const r of ws) if (!r.trust) { r.trust = true; r.dbg.uniformBorder = 1; }
+}
+
+// Turn a side's analysis into its crop coordinate (null = keep the layout rect's side).
+function segAnswer(r, ctx) {
+  const { W, H, pxmm } = ctx;
+  const s = r.s;
+  // pixel-centre coordinates: u inward from the left/top is x/y = u; from the right/bottom it
+  // is W-1-u / H-1-u, and the photo's own edge (u = 0) is W / H
+  const toCoord = (u) => (s === 0 || s === 1) ? u : (s === 2 ? W : H) - 1 - u + (u === 0 ? 1 : 0);
+  const maybeBorder = r.ringInk || r.ringPaper || r.ringCard;
+  // loose: the photo's edge, which never cuts. In a wide-margin photo: 4 mm out from the
+  // transition (past any card border), and at least 2.6 mm outside the layout rect (the card's
+  // edge is never further out than that: the finder took the border's inner edge).
+  const loose = (E) => toCoord(Math.max(0, Math.round(Math.min(E - 4.0 * pxmm, r.eu - 2.6 * pxmm))));
+  let ans = null;
+  if (r.status === 'none') ans = maybeBorder ? toCoord(0) : null;   // no transition at all
+  else if (r.status === 'weak') ans = maybeBorder ? loose(r.E) : null;
+  else if (r.agree < 0.6) ans = maybeBorder ? loose(r.E) : null;    // not one straight edge
+  else if (!r.trust) ans = loose(r.E);
+  else if (r.delta > 3.3) ans = null;                                // 7. too deep: an inner feature
+  else ans = toCoord(r.E);
+  r.dbg.ans = ans;
+  return ans;
+}
+
+// Fraction of rows that show the same edge themselves: in each row the colours a little
+// outside and inside E (the row's own, so a glare or vignette gradient along the side does not
+// matter) must differ like the side's outside / inside colours (same direction, at least half
+// the size), and the row's own 50 % crossing must lie within 0.35 mm of E. Text in a border,
+// a speck or a glare patch is not a continuous edge.
+function segAgree(P, R, U, E, out, ins, up, pxmm, capOut, capIn, rowOut) {
+  const dv = [ins[0] - out[0], ins[1] - out[1], ins[2] - out[2]];
+  const den = dv[0] * dv[0] + dv[1] * dv[1] + dv[2] * dv[2];
+  if (den < 1) return 0;
+  const half = Math.max(3, Math.round(0.35 * pxmm), Math.min(Math.round(1.5 * pxmm), Math.round(up - E)));
+  const hi = Math.max(1, Math.min(half, capIn === undefined ? half : Math.floor(capIn)));
+  const ho = Math.max(1, Math.min(half, capOut === undefined ? half : Math.floor(capOut)));
+  const ui = Math.min(U - 1, Math.round(E) + hi), uo = Math.max(0, Math.round(E) - ho);
+  const tol = Math.max(2, 0.35 * pxmm);
+  let n = 0;
+  for (let r = 0; r < R; r++) {
+    const o = r * U * 3;
+    const a = rowOut ? [rowOut[r * 3], rowOut[r * 3 + 1], rowOut[r * 3 + 2]] : [P[o + uo * 3], P[o + uo * 3 + 1], P[o + uo * 3 + 2]];
+    const b = [P[o + ui * 3], P[o + ui * 3 + 1], P[o + ui * 3 + 2]];
+    const rv = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+    if (rv[0] * dv[0] + rv[1] * dv[1] + rv[2] * dv[2] < 0.5 * den) continue;
+    const rd = rv[0] * rv[0] + rv[1] * rv[1] + rv[2] * rv[2];
+    let prev = 0, cross = -1;
+    for (let u = uo; u <= ui; u++) {
+      const tv = ((P[o + u * 3] - a[0]) * rv[0] + (P[o + u * 3 + 1] - a[1]) * rv[1] + (P[o + u * 3 + 2] - a[2]) * rv[2]) / rd;
+      if (u > uo && prev < 0.5 && tv >= 0.5) { cross = u - 1 + (0.5 - prev) / (tv - prev); break; }
+      prev = tv;
+    }
+    if (cross >= 0 && Math.abs(cross - E) <= tol) n++;
+  }
+  return n / R;
+}
+
+// Is colour B the colour `ring` brightened by a near-neutral amount (what translucent plastic
+// over the tray does)?
+function segBrighterNeutral(B, ring) {
+  const sh = [B[0] - ring[0], B[1] - ring[1], B[2] - ring[2]], m = (sh[0] + sh[1] + sh[2]) / 3;
+  return m > 2 && Math.max(sh[0], sh[1], sh[2]) - Math.min(sh[0], sh[1], sh[2]) <= 0.35 * m + 8;
+}
+
+// From a coarse boundary B on the median profile M: the inside plateau colour, and the
+// sub-pixel 50 % crossing between the outside colour `out` and it (the 50 % point of a blurred
+// step is the step itself, whatever the blur).
+function segStep(M, U, out, B, T, pxmm) {
+  // the plateau starts where, past the ramp's steepest point, the colour changes by less than
+  // 10 % of the step so far over the next 0.3 mm (a heavily blurred ramp is not cut short)
+  let smax = 0, up = -1, peaked = false;
+  const lim = Math.min(U - 2, B + Math.round(2.5 * pxmm)), w3 = Math.max(2, Math.round(0.3 * pxmm));
+  for (let u = Math.max(1, B - 2); u < lim; u++) {
+    const sl = (Math.abs(M[(u + 1) * 3] - M[(u - 1) * 3]) + Math.abs(M[(u + 1) * 3 + 1] - M[(u - 1) * 3 + 1]) + Math.abs(M[(u + 1) * 3 + 2] - M[(u - 1) * 3 + 2])) / 2;
+    if (sl > smax) { smax = sl; continue; }
+    if (u <= B) continue;
+    if (sl < Math.max(0.2 * smax, T / 6)) peaked = true;
+    if (!peaked) continue;
+    const ua = Math.min(U - 1, u + w3);
+    const ahead = Math.abs(M[ua * 3] - M[u * 3]) + Math.abs(M[ua * 3 + 1] - M[u * 3 + 1]) + Math.abs(M[ua * 3 + 2] - M[u * 3 + 2]);
+    const sofar = Math.abs(M[u * 3] - out[0]) + Math.abs(M[u * 3 + 1] - out[1]) + Math.abs(M[u * 3 + 2] - out[2]);
+    if (ahead <= Math.max(T / 2, 0.1 * sofar)) { up = u; break; }
+  }
+  if (up < 0) up = lim;
+  const w = Math.max(2, Math.round(0.25 * pxmm));
+  const I = [0, 0, 0];
+  let n = 0;
+  for (let u = up; u < Math.min(U, up + w); u++) { for (let c = 0; c < 3; c++) I[c] += M[u * 3 + c]; n++; }
+  if (!n) return null;
+  for (let c = 0; c < 3; c++) I[c] /= n;
+  const dv = [I[0] - out[0], I[1] - out[1], I[2] - out[2]];
+  const den = dv[0] * dv[0] + dv[1] * dv[1] + dv[2] * dv[2];
+  if (Math.abs(dv[0]) + Math.abs(dv[1]) + Math.abs(dv[2]) < T) return null;
+  const tt = (u) => ((M[u * 3] - out[0]) * dv[0] + (M[u * 3 + 1] - out[1]) * dv[1] + (M[u * 3 + 2] - out[2]) * dv[2]) / den;
+  let E = -1;
+  for (let u = up; u > 0; u--) {
+    const a = tt(u - 1), bb = tt(u);
+    if (a < 0.5 && bb >= 0.5) { E = u - 1 + (0.5 - a) / (bb - a); break; }
+  }
+  if (E < 0) return null;
+  return { E, I, up };
+}
+
+// Two blurred steps A -> B -> C fitted to the median profile (A the outside colour and C the
+// inside one, both known; B the band's level, solved in closed form): m(u) = A (1 - g0) +
+// B (g0 - g1) + C g1, g = Phi((u - e) / sigma). sigma comes from the steeper step's maximum
+// slope; e0 / e1 are searched on a 1 px grid around the measured crossings, then refined at
+// 0.25 px. Null when the model does not explain the profile (R^2 < 0.97).
+function segFit2(M, U, A, C, E0, E1, B0, tab) {
+  let smax = 0;
+  for (let u = Math.max(1, Math.floor(E1) - 6); u < Math.min(U - 1, Math.ceil(E1) + 7); u++)
+    smax = Math.max(smax, (Math.abs(M[(u + 1) * 3] - M[(u - 1) * 3]) + Math.abs(M[(u + 1) * 3 + 1] - M[(u - 1) * 3 + 1]) + Math.abs(M[(u + 1) * 3 + 2] - M[(u - 1) * 3 + 2])) / 2);
+  if (smax <= 0) return null;
+  const sig = Math.max(0.5, Math.min(15, segL1(C, B0) / (2.5066 * smax)));
+  const a = Math.max(0, Math.floor(E0 - 3 * sig - 2)), b = Math.min(U - 1, Math.ceil(E1 + 3 * sig + 2));
+  const n = b - a + 1;
+  if (n < 6) return null;
+  const phi = (z) => { const x = (z + 6) * 100; if (x <= 0) return 0; if (x >= 1200) return 1; const i = x | 0; return tab[i] + (x - i) * (tab[i + 1] - tab[i]); };
+  const mean = [0, 0, 0];
+  let tss = 0;
+  for (let u = a; u <= b; u++) for (let c = 0; c < 3; c++) mean[c] += M[u * 3 + c] / n;
+  for (let u = a; u <= b; u++) for (let c = 0; c < 3; c++) tss += (M[u * 3 + c] - mean[c]) ** 2;
+  if (tss <= 0) return null;
+  const g1 = new Float64Array(n), g0 = new Float64Array(n);
+  const rssAt = (e0, e1) => {
+    let shh = 0;
+    const sy = [0, 0, 0], syy = [0, 0, 0];
+    for (let i = 0; i < n; i++) { g1[i] = phi((a + i - e1) / sig); g0[i] = phi((a + i - e0) / sig); }
+    for (let i = 0; i < n; i++) {
+      const g = g0[i], h = g - g1[i], o = (a + i) * 3;
+      shh += h * h;
+      for (let c = 0; c < 3; c++) { const y = M[o + c] - A[c] * (1 - g) - C[c] * g1[i]; sy[c] += y * h; syy[c] += y * y; }
+    }
+    if (shh < 1e-6) return null;
+    let rss = 0;
+    for (let c = 0; c < 3; c++) rss += syy[c] - sy[c] * sy[c] / shh;
+    return { e0, e1, sig, rss, B: [sy[0] / shh, sy[1] / shh, sy[2] / shh] };
+  };
+  let best = null;
+  const search = (l1, h1, l0, h0, st) => {
+    for (let e1 = l1; e1 <= h1 + 1e-9; e1 += st) for (let e0 = l0; e0 <= Math.min(h0, e1 - 0.5) + 1e-9; e0 += st) {
+      const r = rssAt(e0, e1);
+      if (r && (!best || r.rss < best.rss)) best = r;
+    }
+  };
+  search(E1 - 3, E1 + 3, E0 - 8, E0 + 12, 1);
+  if (!best) return null;
+  const c1 = best.e1, c0 = best.e0;
+  search(c1 - 0.75, c1 + 0.75, c0 - 0.75, c0 + 0.75, 0.25);
+  if (1 - best.rss / tss < 0.97) return null;
+  return best;
+}
+
+// The normal CDF tabulated on [-6, 6] at 0.01 (Zelen & Severo, |error| < 1e-7); built at most
+// once per photo, and only when a fit runs.
+function segPhiTable() {
+  const tab = new Float64Array(1201);
+  for (let i = 0; i <= 1200; i++) {
+    const z = i / 100 - 6, q = 1 / (1 + 0.2316419 * Math.abs(z)), dz = 0.3989423 * Math.exp(-z * z / 2);
+    const p = dz * q * (0.3193815 + q * (-0.3565638 + q * (1.781478 + q * (-1.821256 + q * 1.330274))));
+    tab[i] = z > 0 ? 1 - p : p;
+  }
+  return tab;
+}
+
+// First u in [from, to) where the median profile has left `ref` by more than T for k px.
+function segNextBoundary(M, U, ref, from, to, T, k) {
+  let run = 0;
+  for (let u = Math.max(0, from); u < to; u++) {
+    const d = Math.abs(M[u * 3] - ref[0]) + Math.abs(M[u * 3 + 1] - ref[1]) + Math.abs(M[u * 3 + 2] - ref[2]);
+    if (d > T) { if (++run >= k) return u - k + 1; } else run = 0;
+  }
+  return -1;
+}
+/* ═══ end card edges ═══ */
+
 // The compare's own preferences: storage that throws (site data blocked) must
 // cost only the memory, never the page — these are read at load.
 const lsGet = k => { try { return localStorage.getItem(k); } catch (e) { return null; } };
@@ -797,10 +1432,12 @@ const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch (e) { /* not
 // "Scan size" (the phone's, owner 2026-10-02): the viewer's own scale on the
 // scan side of a compare (img.cmpscan), around its centre; 100 = as filed.
 let cmpScale = Math.min(130, Math.max(70, Number(lsGet("cmpScale")) || 100));
+// Just the card (cardCrop above): a loaded scan photo is cropped to its card's edges;
+// a compare's (img.cmpscan) also takes the viewer's Scan size.
 function fitScan(img){
-  img.dataset.fill = String(photoFill(img));
-  const s = Number(img.dataset.fill) * (img.classList.contains("cmpscan") ? cmpScale / 100 : 1);
-  img.style.transform = s === 1 ? "" : `scale(${s.toFixed(4)})`;
+  const crop = cardCrop(img), k = img.classList.contains("cmpscan") ? cmpScale / 100 : 1;
+  img.dataset.fill = crop ? "edges" : "as-is";
+  img.style.transform = crop ? cardCropTransform(img, crop, k) : (k === 1 ? "" : `scale(${k})`);
 }
 function applyScanScale(){
   document.querySelectorAll("img.cmpscan").forEach(img => { if (img.dataset.fill) fitScan(img); });
@@ -1310,7 +1947,7 @@ function sigOf(scan){
 
 // Version banner — page version · server git hash. Same rationale as the
 // phone: without it, "is this the old page?" is undebuggable.
-const UI_VERSION = "d42";
+const UI_VERSION = "d43";
 
 // Who is asking: the phone server says "guest" for the 6-digit code (admin =
 // the paired computer); the computer's own server always says admin. Guests

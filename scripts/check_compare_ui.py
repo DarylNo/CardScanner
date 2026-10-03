@@ -20,7 +20,7 @@ from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
 
 import numpy as np
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFilter
 from playwright.sync_api import sync_playwright
 
 STATIC = Path(__file__).resolve().parents[1] / "server" / "static"
@@ -35,9 +35,33 @@ LAYOUTS = {
     "flat04": (852, 1188, 32, 44, 820, 1144),
     "raw": (1000, 1300, 200, 260, 800, 1100),
 }
+# Photos as the phone really leaves them: the finder's quad a little OUTSIDE the card,
+# so the card sits INSIDE the layout rect (by `inset` px), blurred, on a grey tray —
+# kind -> (w, h, true card x0, y0, x1, y1, tray, border, blur px)
+REAL = {
+    "real_black": (664, 926, 29, 36, 635, 890, (186, 186, 182), (20, 20, 24), 1.6),
+    "real_white": (664, 926, 26, 33, 638, 893, (186, 186, 182), (240, 238, 232), 1.2),
+    # a dark ring around a white card could be the card's own black border (the finder on
+    # its INNER edge): ambiguous, so the edge finder keeps it loose — never a cut
+    "real_white_dark": (664, 926, 26, 33, 638, 893, (60, 62, 66), (232, 230, 225), 1.2),
+    "real_flat": (914, 1276, 78, 104, 836, 1172, (190, 190, 186), (20, 20, 24), 2.0),
+}
 
 
 def photo_png(kind):
+    if kind in REAL:
+        w, h, x0, y0, x1, y1, tray, border, blur = REAL[kind]
+        im = Image.new("RGB", (w, h), tray)
+        d = ImageDraw.Draw(im)
+        d.rectangle([x0, y0, x1 - 1, y1 - 1], fill=border)
+        bx, by = (x1 - x0) * 0.05, (y1 - y0) * 0.04
+        d.rectangle([x0 + bx, y0 + by, x1 - bx, y1 - by * 2], fill=(200, 170, 120))     # frame
+        d.rectangle([x0 + bx * 1.6, y0 + by * 2.5, x1 - bx * 1.6, y0 + (y1 - y0) * 0.55], fill=(60, 90, 160))
+        for k in range(6):                                                                # text lines
+            yy = y0 + (y1 - y0) * (0.62 + k * 0.045)
+            d.rectangle([x0 + bx * 2, yy, x1 - bx * 3, yy + 6], fill=(40, 40, 40))
+        im = im.filter(ImageFilter.GaussianBlur(blur))
+        b = io.BytesIO(); im.save(b, "JPEG", quality=90); return b.getvalue()
     w, h, x0, y0, x1, y1 = LAYOUTS[kind]
     im = Image.new("RGB", (w, h), MAGENTA)
     d = ImageDraw.Draw(im)
@@ -74,6 +98,10 @@ def make_scans():
         3: scan(3, "flat06", [cand("f1", "fff", 1, 90, "red"), cand("f2", "ggg", 2, 125, "green")]),
         4: scan(4, "flat08", [dict(c) for c in c3], sel=sel_b),
         5: scan(5, "scanphoto", [dict(c) for c in c3]),
+        6: scan(6, "real_black", [cand("b1", "bbb", 1, 90, "red"), cand("b2", "ccc", 2, 130, "green")]),
+        7: scan(7, "real_white", [cand("w1", "www", 1, 90, "red"), cand("w2", "xxx", 2, 130, "green")]),
+        8: scan(8, "real_flat", [cand("p1", "ppp", 1, 90, "red"), cand("p2", "qqq", 2, 130, "green")]),
+        9: scan(9, "real_white_dark", [cand("d1", "ddd", 1, 90, "red"), cand("d2", "eee", 2, 130, "green")]),
     }
 
 
@@ -159,6 +187,30 @@ def magenta_share(page, locator):
 
 TIGHT = {"scanphoto", "flat08", "flat06", "flat04"}
 
+
+def edge_errors_mm(page, locator, kind):
+    """Where the TRUE card edges land in the rendered box, mm of the 63x88 card:
+    + = inside the box edge (tray shows), - = beyond it (card cut). From the img's own
+    transform: translate(tx%, ty%) scale(sx, sy) about the box centre, the photo drawn
+    object-fit: contain."""
+    w, h, x0, y0, x1, y1 = REAL[kind][:6]
+    g = locator.evaluate("""el => { const img = el.querySelector('img'), b = el.getBoundingClientRect();
+        return {W: b.width, H: b.height, tf: img.style.transform}; }""")
+    m = re.fullmatch(r"translate\(([-\d.]+)%, ([-\d.]+)%\) scale\(([\d.]+), ([\d.]+)\)", g["tf"])
+    assert m, g["tf"]
+    tx, ty, sx, sy = map(float, m.groups())
+    W, H = g["W"], g["H"]
+    r = min(W / w, H / h); ox, oy = (W - w * r) / 2, (H - h * r) / 2
+    X = lambda x: W / 2 + tx / 100 * W + sx * (ox + r * x - W / 2)
+    Y = lambda y: H / 2 + ty / 100 * H + sy * (oy + r * y - H / 2)
+    mmx, mmy = (X(x1) - X(x0)) / 63, (Y(y1) - Y(y0)) / 88
+    return [X(x0) / mmx, Y(y0) / mmy, (W - X(x1)) / mmx, (H - Y(y1)) / mmy]
+
+def edge_block(name):
+    t = (STATIC / name).read_text()
+    return t[t.index("/* ═══ card edges ═══"):t.index("/* ═══ end card edges ═══ */")]
+check(edge_block("phone.html") == edge_block("desktop.html"), "the card-edges block is identical in both pages")
+
 with sync_playwright() as pw:
     b = pw.chromium.launch(executable_path=EXE) if EXE else pw.chromium.launch()
 
@@ -171,14 +223,15 @@ with sync_playwright() as pw:
     pg.on("console", lambda m: m.type == "error" and "404" not in m.text and errs.append(m.text))
     pg.goto(BASE + "/")
     pg.wait_for_selector("#dver")
-    pg.wait_for_function("document.querySelector('#dver').textContent.startsWith('d42')")
-    check(pg.locator("#dver").text_content().startswith("d42"), "banner reads d42")
+    pg.wait_for_function("document.querySelector('#dver').textContent.startsWith('d43')")
+    check(pg.locator("#dver").text_content().startswith("d43"), "banner reads d43")
 
     def focus(i):
         pg.locator(f'.row[data-id="{i}"]').click()
         pg.wait_for_timeout(400)
 
     for sid, s in STATE["scans"].items():
+        if s["photo"] in REAL: continue       # measured geometrically below
         focus(sid)
         kind = s["photo"]
         shot = magenta_share(pg, pg.locator("#scanShot"))
@@ -195,6 +248,17 @@ with sync_playwright() as pw:
             check(share < 0.003, f"scan {sid} ({kind}): compare shows just the card (tray {share:.2%})")
         else:
             check(share > 0.05, f"scan {sid} ({kind}): raw crop in compare shown as it is (tray {share:.2%})")
+
+    # photos as the phone leaves them: the card INSIDE the layout rect, blurred → cropped to ITS edges
+    for sid in (6, 7, 8, 9):
+        focus(sid)
+        kind = STATE["scans"][sid]["photo"]
+        for where, loc in (("compare", pg.locator("#cmp .cmpbody.side .cmpbox").first), ("thumbnail", pg.locator("#scanShot"))):
+            e = edge_errors_mm(pg, loc, kind)
+            if kind == "real_white_dark":
+                check(all(v >= -0.5 for v in e), f"scan {sid} ({kind}) {where}: ambiguous ring kept loose, never cut, mm {[round(v, 2) for v in e]}")
+            else:
+                check(all(-0.5 <= v <= 0.25 for v in e), f"scan {sid} ({kind}) {where}: edges at the box edge, mm L/T/R/B {[round(v, 2) for v in e]}")
 
     # interactions on scan 5 (pending, 3 printings)
     focus(5)
@@ -230,17 +294,20 @@ with sync_playwright() as pw:
     check("2 of 3" in head(), "mode changes keep the compared printing")
 
     # scan size
+    scl = lambda: [float(v) for v in re.search(r"scale\(([\d.]+), ([\d.]+)\)", pg.locator("#cmp img.cmpscan").evaluate("e => e.style.transform")).groups()]
+    base = scl()
+    check(all(1.03 < v < 1.08 for v in base), f"cropped to the card's edges: scale {base}")
     pg.locator("#cmpScale").fill("110")
-    tf = pg.locator("#cmp img.cmpscan").evaluate("e => e.style.transform")
-    check(tf == "scale(1.1583)", f"Scan size 110% × 1.053 fill → {tf}")
+    tf = scl()
+    check(all(abs(t / b - 1.1) < 1e-3 for t, b in zip(tf, base)), f"Scan size 110% × the crop → {tf}")
     check(pg.locator("#cmpScaleReset").inner_text().strip() == "110%", "reset button shows 110%")
     pg.reload(); pg.wait_for_selector("#cmp"); focus(5)
     check(pg.locator("#cmpScale").input_value() == "110", "Scan size remembered across a reload")
     check(pg.locator("#cmp .cmpbody.side").count() == 1, "mode remembered across a reload (side)")
     pg.wait_for_function("document.querySelector('#cmp img.cmpscan').dataset.fill")
     pg.locator("#cmpScaleReset").click()
-    tf = pg.locator("#cmp img.cmpscan").evaluate("e => e.style.transform")
-    check(abs(float(tf[6:-1]) - 1.053) < 1e-4, f"reset → 100% (just the fill): {tf}")
+    tf = scl()
+    check(all(abs(t - b) < 1e-3 for t, b in zip(tf, base)), f"reset → 100% (just the crop): {tf}")
 
     # a re-render of the same scan (a price lands) keeps the compared printing and the scroll
     pg.locator("#cmpNext").click(); pg.locator("#cmpNext").click()
@@ -344,7 +411,7 @@ with sync_playwright() as pw:
     pg = ctx.new_page(); errs4 = []
     pg.on("pageerror", lambda e: errs4.append(str(e)))
     pg.goto(BASE + "/"); pg.wait_for_timeout(1500)
-    check(pg.locator(".row").count() == 5 and pg.locator("#cmp").count() == 1, "storage blocked: the list and the compare still render")
+    check(pg.locator(".row").count() == len(STATE["scans"]) and pg.locator("#cmp").count() == 1, "storage blocked: the list and the compare still render")
     pg.locator('[data-cmpmode="blend"]').click()
     check(pg.locator("#cmp .cmpbody.overlay").count() == 1, "storage blocked: the modes still work")
     ctx.close()
@@ -368,8 +435,9 @@ with sync_playwright() as pw:
     pg = ctx.new_page(); errs3 = []
     pg.on("pageerror", lambda e: errs3.append(str(e)))
     pg.goto(BASE + "/phone?panel=1"); pg.wait_for_timeout(1200)
-    check(pg.evaluate("UI_VERSION") == "v49", "phone banner v49")
+    check(pg.evaluate("UI_VERSION") == "v50", "phone banner v49")
     for sid, s in STATE["scans"].items():
+        if s["photo"] in REAL: continue       # measured geometrically below
         pg.evaluate(f"openDetail({sid})"); pg.wait_for_timeout(500)
         kind = s["photo"]
         sel = "#cmp .cmpbody.side .cmpbox" if s["candidates"] else "#cmp-bare .cmpbox"
@@ -379,10 +447,16 @@ with sync_playwright() as pw:
         else:
             check(share > 0.05, f"phone scan {sid} ({kind}): raw crop shown as it is (tray {share:.2%})")
         pg.evaluate("closeDetail()"); pg.wait_for_timeout(200)
+    for sid in (6, 7, 8, 9):
+        pg.evaluate(f"openDetail({sid})"); pg.wait_for_timeout(600)
+        e = edge_errors_mm(pg, pg.locator("#cmp .cmpbody.side .cmpbox").first, STATE["scans"][sid]["photo"])
+        lo, hi = (-0.5, 99) if STATE["scans"][sid]["photo"] == "real_white_dark" else (-0.5, 0.25)
+        check(all(lo <= v <= hi for v in e), f"phone scan {sid}: edges at the box edge (loose allowed only when ambiguous), mm L/T/R/B {[round(v, 2) for v in e]}")
+        pg.evaluate("closeDetail()"); pg.wait_for_timeout(200)
     pg.evaluate("openDetail(3)"); pg.wait_for_timeout(500)
     pg.locator("#cmp-scale").fill("90")
-    tf = pg.locator("#cmp img.cmpscan").evaluate("e => e.style.transform")
-    check(tf == f"scale({882/788*0.9:.4f})", f"phone: Scan size 90% × 1.119 fill → {tf}")
+    tf = [float(v) for v in re.search(r"scale\(([\d.]+), ([\d.]+)\)", pg.locator("#cmp img.cmpscan").evaluate("e => e.style.transform")).groups()]
+    check(all(abs(v - 882 / 788 * 0.9) < 0.02 for v in tf), f"phone: Scan size 90% × the crop → {tf}")
     if SHOTS: SHOTS.mkdir(parents=True, exist_ok=True); pg.screenshot(path=str(SHOTS / "phone_compare.png"))
     check(not errs3, f"phone: no page errors ({errs3[:3]})")
     ctx.close()
