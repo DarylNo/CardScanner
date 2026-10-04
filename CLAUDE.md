@@ -342,10 +342,66 @@ lens on testers' phones), minSdk 29, arm64-v8a.
   set symbol / collector line shows) or *Blend* (the top layer's opacity),
   with either image as the base layer; ‹ › or a horizontal swipe on the
   pictures (≥50 px, mostly sideways) step through the candidates without
-  picking, "Pick SET #n" picks the compared one. A 664×926 photo is
-  scaled 1.053 so just the card shows (ScanPhoto's 17/23 buffer); older
-  photos show as they are. Mode and base layer persist in localStorage
-  (`cmpMode`, `cmpTop`). Verified in headless Chromium (compare_ui.py).
+  picking, "Pick SET #n" picks the compared one. Mode and base layer
+  persist in localStorage (`cmpMode`, `cmpTop`).
+  **Just the card — cropped to the card's OWN edges, on BOTH pages (owner,
+  2026-10-03: "a tight look on the phone and desktop … almost the same display
+  on both", then "can we just make it crop the card directly to the edge of
+  the card?"; phone v51, desktop d44).** A photo with a KNOWN layout has its
+  card near a known rect (`PHOTO_LAYOUT`): 664×926 ScanPhoto → x 17..647, y
+  23..903; a flattened upload filed as it came (914×1276 / 882×1232 /
+  852×1188 — before 1.1.3, or no edges re-found since) → the 788×1100 card in
+  the 8 / 6 / 4 % margin of `tests/phone_flatten_ref.py`. But the phone's
+  finder outlines a card 0.3–2.5 mm OUTSIDE its true edge (the 5×5 dilation,
+  blur, a sleeve) — or on a black border's INNER edge (black card, dark tray)
+  — so a fixed zoom left tray on 78 % of sides and cut 22 % (up to 2.5 mm).
+  The page now finds the card's edges in the photo itself (`findCardEdges`,
+  tray-vs-card segmentation per side, central 56 % of each side for the
+  rounded corners), ONCE per photo (`cardCrop`, cached by URL), and maps them
+  exactly onto the 5:7 box (`cardCropTransform`: translate + per-axis scale —
+  a crop with one side kept loose is stretched a few %, never cut on the
+  others); boxes have card-shaped corners (`border-radius: 5% / 3.6%`).
+  Measured by `scripts/score_card_edges.py` (the reference chain's own photos,
+  the true card known, the page's own code in Chromium; chosen from four
+  designs on a held-out set): tray > 0.25 mm on 3.2 % of sides (was 78.2 %),
+  cut > 0.5 mm on 0 % (was 21.8 %), mean error 0.09 mm (0.98); held-out 5.6 %
+  / 0 % / 0.14 mm. It is built to go LOOSE (tray shows, never a cut) whenever
+  the ring around the card could be the card's own border: a dark tray round
+  a white card, a black mat, a sleeve the colour of the border, textured
+  trays. The hard case is a WHITE border with a DARK frame on a white tray:
+  the finder locks onto the frame, so even the fixed zoom cut into the white
+  border on every side, and a black BORDER on a light tray looks the same up
+  close — told apart per card (rule 6b: a black border is a 2–3.8 mm band all
+  round, a frame is narrower at the sides). `--frames` measures it: cut
+  > 0.5 mm on 6.6 % of sides (fixed zoom 100 %), but 36 of 576 sides still
+  cut deeper than the fixed zoom did (worst +2.9 mm). Any
+  other photo (a raw crop, an old plain warp) shows as it is; a click / tap
+  still opens the WHOLE photo. The block is byte-identical in both pages
+  (`tests/test_static_pages.py`, CI) — change it in both, then re-run the
+  scorer and put the numbers in the commit. Synthetic photos only: not yet
+  measured on real rig photos.
+  **The desktop's "Pick the printing" is the same compare block (d44):** the
+  same modes, ‹ › (and ← →), Scan size and "Pick / Keep SET #n"; its head
+  is the compared printing (set · SET #n · ✓ picked ×q · k of N · its price)
+  with its badges. The desktop keeps its own top area (F2F box, controls —
+  the top thumbnail is just the card too) and the thumbnail grid below it
+  (click = compare, double-click = pick); the ⇆ full-screen compare shows
+  just the card. A re-render of the same scan keeps the compared printing
+  and the scroll; a NEW pick from anywhere (the block, ⇆, a name search, an
+  auto-pick) moves the compare to the pick, and a name-search pick (another
+  card) goes back to the top. The scan photo `<img>` is KEPT and moved
+  between renders (`placeScanImg`): the phone serves it no-store, so a
+  rebuilt one re-downloaded it and showed black on every ‹ › step. `sigOf`
+  carries the candidates' order and OCR marks only; prices landing on the
+  printings refresh the compare head in place (`refreshCompare`), so a sweep
+  never wipes a typed name search. A row click renders once (it used to
+  blank `detailSig`, so the next poll rendered it again). The compare's
+  storage reads are guarded (`lsGet`) — blocked site data must not kill the
+  page.
+  Verified by `scripts/check_compare_ui.py` (headless Chromium against a stub
+  phone server: magenta-tray photos at the exact layout show 0.00 % tray;
+  realistic blurred photos with the card INSIDE the layout land within
+  0.06 mm of the true edge, measured geometrically on both pages).
   **The compare block IS the head of the card (owner, 2026-10-02: "get rid of
   the top area and rework this section now that I have the top print side by
   side", phone.html v47):** no photo row above it; its title shows the
@@ -357,7 +413,7 @@ lens on testers' phones), minSdk 29, arm64-v8a.
   gets a bare head (name, error, the photo alone; a price only when picked).
   **"Scan size"** (owner: "size either card to match the size of the other",
   v48): a 70–130 % slider scales the SCAN layer around its centre in every
-  mode (folded into the 1.053 fill scale by `applyScanScale()`), the % button
+  mode (folded into the edge crop by `applyScanScale()`), the % button
   resets; persisted per viewer (`cmpScale`). Manual on purpose — the photo's
   card is at a known 95 % only when the quad was right (a sleeve edge makes
   it read larger).
