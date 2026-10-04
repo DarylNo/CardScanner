@@ -256,7 +256,7 @@ class PhoneServerTest {
         val bridge = DeviceBridge(settings)
         var applied = 0
         bridge.screen = object : DeviceBridge.Screen {
-            override fun applyRemoteSettings() { applied++ }
+            override fun applyRemoteSettings(): java.util.concurrent.Future<*>? { applied++; return null }
             override fun snapshotJpeg(): ByteArray? = byteArrayOf(-1, -40, -1)
         }
         val b = PhoneBackend(store, PhotoDir(tmp.newFolder("p2")), pages = { null }, version = "t",

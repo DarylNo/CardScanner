@@ -6,10 +6,15 @@ server and check the 📱 Scanner panel's "Zoom to fit the Area" controls
 - the checkbox reflects `zoom_fit` and PATCHes {"zoom_fit": true/false};
 - the zoom line shows what the phone reports (ratio, target, what bound it,
   Area fit / lossless / lens max) and "settling…" while it settles;
+- a PATCH answer whose zoom predates the change (an older phone app, or a
+  busy one — the stub answers that way on purpose) is never shown: the line
+  says "applying…" and the panel reads /api/device again (review of 1.1.11:
+  "Zoom to fit is off" right after ticking the box);
+- an Area being drawn on the phone (zoom.drawing) is said so;
 - after a zoom / Area PATCH the panel takes a new snapshot once it settles;
 - an Area drawn on the (base-space) snapshot while zoomed is PATCHed as the
   picture's own fractions — base fractions, 1:1, never divided by the zoom;
-- the banner reads d45 and the page throws nothing.
+- the banner reads d46 and the page throws nothing.
 
     pip install playwright        # the browser: Chromium, see EXE below
     python scripts/check_device_ui.py
@@ -24,7 +29,7 @@ from PIL import Image, ImageDraw
 from playwright.sync_api import sync_playwright
 
 STATIC = Path(__file__).resolve().parents[1] / "server" / "static"
-VERSION = "d45"
+VERSION = "d46"
 
 ZOOMED = {"ratio": 1.9, "target": 1.9, "limit": "the Area fit", "fit": 2.0, "lossless": 2.6, "max": 10.0, "settling": False}
 UNZOOMED = {"ratio": 1.0, "target": 1.0, "limit": "Zoom to fit is off", "fit": 2.0, "lossless": 2.6, "max": 10.0, "settling": False}
@@ -88,17 +93,22 @@ class H(BaseHTTPRequestHandler):
         if p != "/api/device": return self.send(404, {"error": "stub"})
         STATE["patches"].append(body)
         d = STATE["dev"]
+        stale = json.loads(json.dumps(d.get("zoom")))
         for k, v in body.items():
             if k == "zoom_fit":
                 if not isinstance(v, bool): return self.send(400, {"error": "zoom_fit must be true or false"})
                 d["zoom_fit"] = v
-                # The phone answers at once with the switch on and the zoom settling.
+                # What /api/device reads once the phone has applied it: the zoom settling.
                 d["zoom"] = dict(ZOOMED if v else UNZOOMED, settling=True)
             elif k == "roi":
                 d["roi"] = v
             else:
                 d[k] = v
-        return self.send(200, d)
+        # The ANSWER carries the zoom from before the change — what a busy phone (or 1.1.11
+        # before its review) sends: the settings are new, the camera's zoom is not yet.
+        answer = dict(d)
+        if "zoom" in d: answer["zoom"] = stale
+        return self.send(200, answer)
 
 
 srv = ThreadingHTTPServer(("127.0.0.1", 0), H)
@@ -146,13 +156,23 @@ with sync_playwright() as pw:
     check(not pg.locator("#devZoom").is_visible(), "no zoom line while off at 1×")
     check(not pg.locator("#devZoomNote").is_visible(), "no zoomed-picture note")
 
+    # Every text the zoom line shows, in order (a stale answer must never be on screen, even briefly).
+    pg.evaluate("""() => { window.__zl = []; const el = document.querySelector('#devZoom');
+        new MutationObserver(() => window.__zl.push(el.style.display === 'none' ? '' : el.textContent))
+          .observe(el, {childList: true, subtree: true, characterData: true, attributes: true}); }""")
+
     print("turn it on")
     snaps_before = STATE["snap_gets"]
+    pg.evaluate("window.__zl = []")
     cb.check()
     pg.wait_for_function("document.querySelector('#devZoom').style.display !== 'none'")
     check(STATE["patches"][-1] == {"zoom_fit": True}, f"PATCH {{zoom_fit: true}} (got {STATE['patches'][-1]})")
+    check("applying" in pg.locator("#devZoom").inner_text(), f"the stale answer shows as applying: {pg.locator('#devZoom').inner_text()!r}")
+    pg.wait_for_function("document.querySelector('#devZoom').textContent.includes('1.90×')", timeout=2000)
     line = pg.locator("#devZoom").inner_text()
-    check("1.90×" in line and "settling" in line and "the Area fit" in line, f"the line shows the settling zoom: {line!r}")
+    check("1.90×" in line and "settling" in line and "the Area fit" in line, f"…then the phone read again: the settling zoom: {line!r}")
+    shown = pg.evaluate("window.__zl")
+    check(not any("Zoom to fit is off" in t for t in shown), f"never 'Zoom to fit is off' after ticking it: {shown}")
     STATE["dev"]["zoom"]["settling"] = False                       # the phone settles…
     pg.wait_for_function("!document.querySelector('#devZoom').textContent.includes('settling')", timeout=8000)
     line = pg.locator("#devZoom").inner_text()
@@ -177,9 +197,25 @@ with sync_playwright() as pw:
     check(ok, f"the Area is PATCHed as the picture's fractions (base, 1:1): {roi}")
 
     print("turn it off")
+    pg.wait_for_timeout(2000)                                      # the Area PATCH's re-read is over
+    pg.evaluate("window.__zl = []")
     cb.uncheck()
     pg.wait_for_timeout(300)
     check(STATE["patches"][-1] == {"zoom_fit": False}, f"PATCH {{zoom_fit: false}} (got {STATE['patches'][-1]})")
+    pg.wait_for_function("document.querySelector('#devZoom').textContent.includes('Zoom to fit is off')", timeout=2000)
+    shown = pg.evaluate("window.__zl")
+    check(not any("target 1.90×" in t for t in shown), f"never the old 1.90× target after unticking: {shown}")
+    STATE["dev"]["zoom"]["settling"] = False                       # settled at 1×: the line goes
+    pg.wait_for_function("document.querySelector('#devZoom').style.display === 'none'", timeout=8000)
+    check(not pg.locator("#devZoomNote").is_visible(), "no zoomed-picture note at 1×")
+
+    print("an Area drawn on the phone while zoomed")
+    STATE["dev"]["zoom_fit"] = True
+    STATE["dev"]["zoom"] = dict(ZOOMED, ratio=1.0, drawing=True)
+    pg.wait_for_function("document.querySelector('#devZoom').textContent.includes('drawn on the phone')", timeout=8000)
+    line = pg.locator("#devZoom").inner_text()
+    check("1.00×" in line and "settling" not in line, f"the line says the phone is drawing, at 1×: {line!r}")
+    check(not pg.locator("#devZoomNote").is_visible(), "no zoomed-picture note while drawing (the camera is at 1×)")
 
     check(not errs, f"no page errors: {errs}")
     b.close()

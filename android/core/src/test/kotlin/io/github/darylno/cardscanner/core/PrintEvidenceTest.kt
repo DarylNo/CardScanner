@@ -12,15 +12,20 @@ import org.junit.Test
 /**
  * MEASURES the card-shape gate's print-evidence fallback ([PrintEvidence]) on
  * synthetic detection samples ([SyntheticTray], 176×235 — a portrait Area) and
- * holds its thresholds: with the outline forced null, every card must still be
- * accepted and every thing that is not a card refused.
+ * holds its thresholds: with the outline forced null, every card on a smooth
+ * tray must still be accepted and every thing that is not a card refused —
+ * including an empty TEXTURED tray read against a STALE reference (the review
+ * of 1.1.11: learned with a card on it and the card lifted, learned out of
+ * focus, a light under AE lock, a nudged mat), where the old three tests let
+ * the tray's own texture through as "print".
  *
- * Each scene runs through the REAL [AutoScanner]: learn the empty tray, then the
- * scene until the occupancy + stillness Trigger; the evidence is measured on the
- * Trigger's own box against the scanner's own learned gradient (the accessor the
- * app uses). A non-card the mask never calls occupied never triggers — the gate
- * is never asked, which is counted, not failed. The table is printed; it is what
- * the thresholds were chosen from (and the commit message quotes it).
+ * Each scene runs through the REAL [AutoScanner]: learn the empty tray (for a
+ * stale scene: the tray as it WAS), then the scene until the occupancy +
+ * stillness Trigger; the evidence is measured on the Trigger's own box against
+ * the scanner's own learned gradient (the accessor the app uses). A non-card
+ * the mask never calls occupied never triggers — the gate is never asked, which
+ * is counted, not failed. The tables are printed; they are what the thresholds
+ * were chosen from (and the commit messages quote them).
  *
  * The "outline" column is CardQuad.find on the same sample (the live outline
  * before smoothing) — informational: it shows which classes the finder already
@@ -56,6 +61,8 @@ class PrintEvidenceTest {
     )
 
     private fun skin(tray: String) = if (tray.startsWith("dark")) 150.0 else 160.0
+    /** The fallback is for smooth trays; on a textured one it stands aside (a stale reference reads as print there). */
+    private fun smoothTray(tray: String) = !tray.startsWith("grain")
 
     private var seq = 0L
 
@@ -109,6 +116,77 @@ class PrintEvidenceTest {
         return out
     }
 
+    private fun shifted(t: (Double, Double) -> Double, dx: Double, dy: Double): (Double, Double) -> Double = { x, y -> t(x + dx, y + dy) }
+
+    /** A playmat: blocks of random grey ([block] sample px) round [level] ± [amp]. */
+    private fun playmat(level: Double, amp: Double, seed: Long, block: Double): (Double, Double) -> Double {
+        val rnd = java.util.Random(seed)
+        val n = 64
+        val v = DoubleArray(n * n) { level + amp * (rnd.nextDouble() * 2 - 1) }
+        return { x, y -> v[(y / block).toInt().coerceIn(0, n - 1) * n + (x / block).toInt().coerceIn(0, n - 1)] }
+    }
+
+    /** A smooth card-sized thing (a face-down sleeve, a blank) of [level] over [base], [sw]×[sh] centred. */
+    private fun smoothThing(base: (Double, Double) -> Double, level: Double, sw: Double, sh: Double): (Double, Double) -> Double {
+        val x0 = W / 2.0 - sw / 2; val y0 = H / 2.0 - sh / 2
+        return { x, y -> if (x >= x0 && x < x0 + sw && y >= y0 && y < y0 + sh) level else base(x, y) }
+    }
+
+    /**
+     * An empty tray read against a STALE reference ([learn] is what the scanner
+     * learned, [now] the empty tray as it is) — the review of 1.1.11, at sensor
+     * noise σ 0.5 and 1. Nothing here is a card.
+     */
+    private fun staleNonCards(): List<Scene> {
+        val out = ArrayList<Scene>()
+        fun add(cls: String, tray: String, detail: String, learn: (Double, Double) -> Double, now: (Double, Double) -> Double,
+                card: SyntheticTray.Card? = null, learnBlur: Double = 0.0) {
+            for (noise in listOf(0.5, 1.0)) {
+                val n = ++seq
+                out += Scene(false, cls, tray, "$detail σ$noise",
+                    SyntheticTray.render(W, H, learn, card, blur = learnBlur, noise = noise, seed = 1000 + n),
+                    SyntheticTray.render(W, H, now, noise = noise, seed = 5000 + n))
+            }
+        }
+        // AE locked, the room light brightens an UNCLIPPED textured tray (grain 215 clips at 255).
+        for (lvl in listOf(80.0, 120.0)) for (amp in listOf(5.0, 8.0, 12.0)) for (g in listOf(1.3, 1.5, 1.6, 1.8)) {
+            val t = SyntheticTray.grain(W, H, lvl, amp, 77)
+            add("AE-lock light", "grain $lvl/$amp", "×$g", t, SyntheticTray.exposure(t, g, 0.0))
+        }
+        // Learned slightly out of focus, then the lens sharpened it (the focus passes).
+        for (lvl in listOf(120.0, 170.0)) for (amp in listOf(5.0, 8.0, 12.0)) for (b in listOf(0.8, 1.2, 1.4, 1.6, 2.0)) {
+            val t = SyntheticTray.grain(W, H, lvl, amp, 77)
+            add("focus", "grain $lvl/$amp", "learned at blur $b, now sharp", t, t, learnBlur = b)
+        }
+        // The mat / the mount nudged.
+        for (lvl in listOf(120.0, 160.0)) for (amp in listOf(5.0, 8.0, 12.0)) for (d in listOf(1.0, 2.0, 3.0)) {
+            val t = SyntheticTray.grain(W, H, lvl, amp, 77)
+            add("nudge", "grain $lvl/$amp", "shift $d px", t, shifted(t, d, d * 0.5))
+        }
+        for (amp in listOf(30.0, 60.0)) for (blk in listOf(4.0, 8.0)) for (d in listOf(1.0, 2.0, 4.0)) {
+            val t = playmat(130.0, amp, 9, blk)
+            add("nudge", "playmat $amp/$blk", "shift $d px", t, shifted(t, d, d * 0.7))
+        }
+        // Learned WITH a card on it (a double-tap, a new Area, a zoom change, a rebind), then the card lifted.
+        var face = 0L
+        for (lvl in listOf(120.0, 170.0, 215.0)) for (amp in listOf(5.0, 8.0, 12.0)) for (border in Border.values()) for (size in listOf(0.6, 0.85)) {
+            val t = SyntheticTray.grain(W, H, lvl, amp, 77)
+            val c = SyntheticTray.Card(SyntheticTray.cardFace(11 + (face++ % 7), border), W / 2.0 + 3, H / 2.0 - 4, size * H, 2.0, false)
+            add("lifted card", "grain $lvl/$amp", "${border.label} size $size", t, t, card = c)
+        }
+        for (lvl in listOf(190.0, 215.0, 240.0, 40.0)) for (border in Border.values()) for (size in listOf(0.6, 0.85)) {
+            val t = SyntheticTray.flat(lvl)
+            val c = SyntheticTray.Card(SyntheticTray.cardFace(11 + (face++ % 7), border), W / 2.0 + 3, H / 2.0 - 4, size * H, 2.0, false)
+            add("lifted card", "flat $lvl", "${border.label} size $size", t, t, card = c)
+        }
+        // …or a SMOOTH card-sized thing learned in and lifted off a mat: its core reads as all "smooth tray".
+        for ((name, t) in listOf("playmat 30/4" to playmat(130.0, 30.0, 9, 4.0), "playmat 60/8" to playmat(130.0, 60.0, 9, 8.0),
+                "grain 170/8" to SyntheticTray.grain(W, H, 170.0, 8.0, 77), "grain 170/12" to SyntheticTray.grain(W, H, 170.0, 12.0, 77)))
+            for ((sw, sh) in listOf(56.0 to 78.0, 80.0 to 112.0, 110.0 to 154.0))
+                add("lifted smooth thing", name, "${sw.toInt()}×${sh.toInt()}", smoothThing(t, 225.0, sw, sh), t)
+        return out
+    }
+
     private fun run(s: Scene): Result {
         val sc = AutoScanner()
         repeat(5) { sc.tick(s.empty) }
@@ -123,6 +201,10 @@ class PrintEvidenceTest {
     }
 
     private fun pct(v: Double) = "%.0f%%".format(v * 100)
+    private fun pct1(v: Double?) = v?.let { "%.1f%%".format(it * 100) } ?: "—"
+
+    /** What the fallback said before the review of 1.1.11 (print + shape + size): the hazard the stale scenes show. */
+    private fun oldRule(e: PrintEvidence.Evidence) = e.printed && e.cardShaped && e.bigEnough
 
     private fun table(results: List<Result>) {
         fun spread(v: List<Double>): String {
@@ -133,14 +215,16 @@ class PrintEvidenceTest {
         val cards = results.filter { it.s.isCard }
         val non = results.filter { !it.s.isCard }
         println("\n=== CARDS — the outline forced null: the fallback alone (core inset ${PrintEvidence.CORE_INSET}, textured now > ${PrintEvidence.PRINT_GRAD}) ===")
-        println("%-18s %-10s %4s %8s %8s  %-20s %-11s %-10s".format("border", "tray", "n", "accept", "outline", "print min/med/max", "box aspect", "share"))
+        println("%-18s %-10s %4s %8s %8s  %-20s %-11s %-9s %-9s %-9s".format("border", "tray", "n", "accept", "outline", "print min/med/max", "box aspect", "share", "tray tex", "ring max"))
         for ((key, rs) in cards.groupBy { it.s.cls to it.s.tray }) {
             val t = rs.filter { it.triggered }
-            println("%-18s %-10s %4d %8s %8s  %-20s %-11s %-10s".format(key.first, key.second, rs.size,
+            println("%-18s %-10s %4d %8s %8s  %-20s %-11s %-9s %-9s %-9s".format(key.first, key.second, rs.size,
                 "${rs.count { it.accepted }}/${rs.size}", "${rs.count { it.outline }}/${rs.size}",
                 spread(t.map { it.evidence.print }),
                 if (t.isEmpty()) "—" else "%.2f–%.2f".format(t.minOf { it.evidence.aspect }, t.maxOf { it.evidence.aspect }),
-                if (t.isEmpty()) "—" else "${pct(t.minOf { it.evidence.share })}–${pct(t.maxOf { it.evidence.share })}"))
+                if (t.isEmpty()) "—" else "${pct(t.minOf { it.evidence.share })}–${pct(t.maxOf { it.evidence.share })}",
+                if (t.isEmpty()) "—" else "≤ ${pct1(t.maxOf { it.evidence.trayTexture })}",
+                pct1(t.mapNotNull { it.evidence.ring }.maxOrNull())))
         }
         for ((label, f) in listOf<Pair<String, (Scene) -> String>>(
             "blur" to { it.detail.substringAfter("blur ").substringBefore(" ") },
@@ -148,25 +232,32 @@ class PrintEvidenceTest {
             "angle" to { it.detail.substringAfter("angle ") },
             "sleeve" to { it.detail.substringBefore(" ") },
         )) {
-            println("  by $label: " + cards.groupBy { f(it.s) }.entries.joinToString("  ·  ") { (k, rs) ->
+            println("  by $label: " + cards.filter { smoothTray(it.s.tray) }.groupBy { f(it.s) }.entries.joinToString("  ·  ") { (k, rs) ->
                 val t = rs.filter { it.triggered }
                 "$k: accept ${rs.count { it.accepted }}/${rs.size}, print min ${if (t.isEmpty()) "—" else pct(t.minOf { it.evidence.print })}, outline ${rs.count { it.outline }}/${rs.size}"
             })
         }
-        println("\n=== NOT CARDS — accept must be 0 (trig = the occupancy trigger fired, so the gate is asked) ===")
-        println("%-10s %-10s %4s %5s %7s  %-10s %-11s %-10s %8s".format("event", "tray", "n", "trig", "accept", "print max", "box aspect", "share", "outline"))
+        println("\n=== NOT CARDS — accept must be 0 (trig = the occupancy trigger fired, so the gate is asked; old = print + shape + size alone) ===")
+        println("%-20s %-16s %4s %5s %5s %7s  %-10s %-11s %-10s %-11s %-11s %8s".format("event", "tray", "n", "trig", "old", "accept", "print max", "box aspect", "share", "tray tex", "ring", "outline"))
         for ((key, rs) in non.groupBy { it.s.cls to it.s.tray }) {
             val t = rs.filter { it.triggered }
-            println("%-10s %-10s %4d %5d %7s  %-10s %-11s %-10s %8s".format(key.first, key.second, rs.size, t.size,
-                "${rs.count { it.accepted }}/${t.size}",
+            println("%-20s %-16s %4d %5d %5d %7s  %-10s %-11s %-10s %-11s %-11s %8s".format(key.first, key.second, rs.size, t.size,
+                t.count { oldRule(it.evidence) }, "${rs.count { it.accepted }}/${t.size}",
                 if (t.isEmpty()) "—" else pct(t.maxOf { it.evidence.print }),
                 if (t.isEmpty()) "—" else "%.2f–%.2f".format(t.minOf { it.evidence.aspect }, t.maxOf { it.evidence.aspect }),
                 if (t.isEmpty()) "—" else "${pct(t.minOf { it.evidence.share })}–${pct(t.maxOf { it.evidence.share })}",
+                if (t.isEmpty()) "—" else "${pct(t.minOf { it.evidence.trayTexture })}–${pct(t.maxOf { it.evidence.trayTexture })}",
+                t.mapNotNull { it.evidence.ring }.let { r -> if (r.isEmpty()) "none" else "${pct(r.min())}–${pct(r.max())}" },
                 "${rs.count { it.outline }}/${rs.size}"))
         }
-        // How the alternatives separate: the lowest card against the highest non-card that passes shape + size.
+        for (r in cards.filter { smoothTray(it.s.tray) && !it.accepted }.take(25)) println("  CARD REFUSED: ${r.name} " + (if (r.triggered) r.evidence.describe() else "(never triggered)"))
+        for (r in non.filter { it.accepted }) println("  NON-CARD ACCEPTED: ${r.name} ${r.evidence.describe()}")
+    }
+
+    /** The alternatives for the original three tests: the lowest card against the highest card-shaped, big-enough non-card. */
+    private fun alternatives(cards: List<Result>, non: List<Result>) {
         val shaped = non.filter { it.triggered && it.evidence.cardShaped && it.evidence.bigEnough }
-        println("\n=== THE ALTERNATIVES — card minimum vs the highest card-shaped, big-enough non-card (${shaped.size} of them) ===")
+        println("\n=== THE ALTERNATIVES — card minimum vs the highest card-shaped, big-enough non-card (${shaped.size} of them, fresh references) ===")
         for (v in VARIANTS) {
             val c = cards.filter { it.triggered }.minBy { it.ev.getValue(v).print }
             val n = shaped.maxByOrNull { it.ev.getValue(v).print }
@@ -174,29 +265,63 @@ class PrintEvidenceTest {
                 pct(c.ev.getValue(v).print), n?.let { pct(it.ev.getValue(v).print) } ?: "—", if (v == CHOSEN) "  ← chosen" else "",
                 c.name, n?.name ?: "—"))
         }
-        val ct = cards.filter { it.triggered }
-        println("\nTOTAL: cards ${cards.count { it.accepted }}/${cards.size} accepted (outline found ${cards.count { it.outline }}/${cards.size}); " +
-            "not cards ${non.count { it.accepted }}/${non.count { it.triggered }} triggered accepted (${non.size} scenes). " +
-            "Card print ≥ ${pct(ct.minOf { it.evidence.print })}, box ${"%.2f".format(ct.minOf { it.evidence.aspect })}–${"%.2f".format(ct.maxOf { it.evidence.aspect })}, " +
-            "share ≥ ${pct(ct.minOf { it.evidence.share })}; non-card print ≤ ${pct(non.filter { it.triggered }.maxOf { it.evidence.print })}")
-        for (r in cards.filter { !it.accepted }.take(25)) println("  CARD REFUSED: ${r.name} " + (if (r.triggered) r.evidence.describe() else "(never triggered)"))
-        for (r in non.filter { it.accepted }) println("  NON-CARD ACCEPTED: ${r.name} ${r.evidence.describe()}")
     }
 
-    @Test fun cardsAreAcceptedWithoutAnOutlineAndNothingElseIs() {
+    @Test fun cardsOnASmoothTrayAreAcceptedWithoutAnOutlineAndNothingElseIs() {
         val results = (cards() + nonCards()).map(::run)
         table(results)
         val cards = results.filter { it.s.isCard }
         val non = results.filter { !it.s.isCard }
+        alternatives(cards, non)
+        val smooth = cards.filter { smoothTray(it.s.tray) }
+        val textured = cards.filter { !smoothTray(it.s.tray) }
+        println("\nTOTAL: smooth-tray cards ${smooth.count { it.accepted }}/${smooth.size} accepted (outline found ${smooth.count { it.outline }}); " +
+            "textured-tray cards ${textured.count { it.accepted }}/${textured.size} accepted — the fallback stands aside there, the outline found " +
+            "${textured.count { it.outline }}/${textured.size}; not cards ${non.count { it.accepted }}/${non.count { it.triggered }} triggered accepted (${non.size} scenes). " +
+            "Smooth-tray card print ≥ ${pct(smooth.minOf { it.evidence.print })}, tray texture ≤ ${pct1(smooth.maxOf { it.evidence.trayTexture })}, " +
+            "print ÷ ring ≥ ${"%.1f".format(smooth.filter { (it.evidence.ring ?: 0.0) > 0 }.minOf { it.evidence.print / it.evidence.ring!! })}, " +
+            "box ${"%.2f".format(smooth.minOf { it.evidence.aspect })}–${"%.2f".format(smooth.maxOf { it.evidence.aspect })}, share ≥ ${pct(smooth.minOf { it.evidence.share })}; " +
+            "non-card print ≤ ${pct(non.filter { it.triggered }.maxOf { it.evidence.print })}")
         assertTrue("every card triggers", cards.all { it.triggered })
-        val refusedCards = cards.filter { !it.accepted }.map { "${it.name}: ${it.evidence.describe()}" }
-        assertTrue("every card accepted on print evidence:\n" + refusedCards.joinToString("\n"), refusedCards.isEmpty())
+        val refusedCards = smooth.filter { !it.accepted }.map { "${it.name}: ${it.evidence.describe()}" }
+        assertTrue("every card on a smooth tray accepted on print evidence:\n" + refusedCards.joinToString("\n"), refusedCards.isEmpty())
+        // On a textured tray the fallback stands aside — always for the learned tray's texture, never by chance.
+        assertTrue("the fallback stands aside on the textured tray", textured.all { it.triggered && !it.evidence.trayClean && !it.accepted })
         val acceptedNon = non.filter { it.accepted }.map { "${it.name}: ${it.evidence.describe()}" }
         assertTrue("nothing that is not a card accepted:\n" + acceptedNon.joinToString("\n"), acceptedNon.isEmpty())
         assertTrue("the non-card set really asks the gate (it triggers)", non.count { it.triggered } >= 80)
         // Margins, not just a pass: the thresholds sit well inside the measured gap.
-        assertTrue(cards.minOf { it.evidence.print } >= 2 * PrintEvidence.MIN_PRINT)
+        assertTrue(smooth.minOf { it.evidence.print } >= 2 * PrintEvidence.MIN_PRINT)
         assertTrue(non.filter { it.triggered }.maxOf { it.evidence.print } <= PrintEvidence.MIN_PRINT / 2)
+        assertTrue("a smooth tray reads smooth, well inside the limit", smooth.maxOf { it.evidence.trayTexture } <= PrintEvidence.MAX_TRAY_TEXTURE / 4)
+        assertTrue("a card's print stands out of its ring with room to spare",
+            smooth.all { it.evidence.ring == null || it.evidence.print >= 1.5 * PrintEvidence.RING_FACTOR * it.evidence.ring!! })
+    }
+
+    /**
+     * THE REVIEW OF 1.1.11: an empty textured tray against a stale reference —
+     * the card it was learned with lifted, a light under AE lock, a sharper focus,
+     * a nudge — reads as "print" over a box that is the whole Area (always
+     * card-shaped and big enough). None may be accepted; the table shows which
+     * test caught each, and that the old three tests would have shot them.
+     */
+    @Test fun anEmptyTrayAgainstAStaleReferenceIsNeverACard() {
+        val results = staleNonCards().map(::run)
+        table(results)
+        val trig = results.filter { it.triggered }
+        val old = trig.filter { oldRule(it.evidence) }
+        println("\nSTALE: ${results.size} scenes, ${trig.size} triggered; the old three tests accepted ${old.size} " +
+            "(${old.groupBy { it.s.cls }.entries.joinToString { "${it.key} ${it.value.size}" }}); now accepted ${results.count { it.accepted }}. " +
+            "Caught by the learned tray's texture ${old.count { !it.evidence.trayClean }} (the ring alone would also refuse ${old.count { !it.evidence.standsOut }}; " +
+            "it alone caught ${old.count { it.evidence.trayClean && !it.evidence.standsOut }}); " +
+            "the outline found ${results.count { it.outline }} of them (a false card the outline sees is shot with or without the fallback).")
+        for (r in old) println("  OLD WOULD SHOOT: ${r.name} ${r.evidence.describe()}")
+        val accepted = results.filter { it.accepted }.map { "${it.name}: ${it.evidence.describe()}" }
+        assertTrue("an empty tray against a stale reference accepted:\n" + accepted.joinToString("\n"), accepted.isEmpty())
+        // The scenes really are the hazard: the old tests would have shot plenty, in every class but the flat-tray lift.
+        assertTrue("the stale set exercises the old rule (${old.size})", old.size >= 100)
+        for (cls in listOf("AE-lock light", "focus", "nudge", "lifted card", "lifted smooth thing"))
+            assertTrue("$cls: the old rule shot some", old.any { it.s.cls == cls })
     }
 
     // ── the function itself ──
@@ -225,6 +350,49 @@ class PrintEvidenceTest {
         val empty = Gray(w, h, checker)
         val p = PrintEvidence.measure(Gray(w, h, checker.copyOf()), Detection.gradMap(empty), Box(10, 6, 20, 28, 0.3))
         assertEquals(0.0, p.print, 1e-9)
+    }
+
+    /**
+     * A learned tray with faint texture (gradient 8–14: under the mask's "textured",
+     * over [PrintEvidence.TRAY_GRAD]) and the same texture now a little stronger —
+     * a light under AE lock: every pixel reads as new "print", the box is the whole
+     * sample. The learned tray's texture stands the fallback aside.
+     */
+    @Test fun aTexturedLearnedTrayStandsTheFallbackAside() {
+        val w = 60; val h = 80
+        val faint = IntArray(w * h) { i -> val x = i % w; val y = i / w; if ((x / 2 + y / 2) % 2 == 0) 110 else 104 }   // gradient 12
+        val brighter = IntArray(w * h) { faint[it] * 2 - 100 }                                                    // ×2 contrast: 24
+        val eg = Detection.gradMap(Gray(w, h, faint))
+        val e = PrintEvidence.measure(Gray(w, h, brighter), eg, Box(0, 0, w, h, 1.0))
+        assertTrue(e.describe(), e.printed && e.cardShaped && e.bigEnough)          // the old three tests: a card
+        assertTrue(e.describe(), e.trayTexture > 0.9 && !e.trayClean)
+        assertNull("the box fills the sample: no ring", e.ring)
+        assertFalse(e.looksLikeACard)
+        assertTrue(e.describe(), e.describe().contains("tray texture") && e.describe().contains("no ring"))
+    }
+
+    /**
+     * A smooth thing learned into a textured mat and lifted: the box's core was
+     * smooth in the learned tray and is all "new" mat texture now — exactly as
+     * textured as the mat round the box.
+     */
+    @Test fun printNoMoreTexturedThanRoundTheBoxIsNotACard() {
+        val w = 100; val h = 120
+        val mat = IntArray(w * h) { i -> val x = i % w; val y = i / w; if ((x / 3 + y / 3) % 2 == 0) 160 else 110 }
+        val box = Box(30, 25, 40, 56, 0.2)
+        val learned = IntArray(w * h) { i -> val x = i % w; val y = i / w
+            if (x in box.x until box.x + box.w && y in box.y until box.y + box.h) 225 else mat[i] }
+        val e = PrintEvidence.measure(Gray(w, h, mat), Detection.gradMap(Gray(w, h, learned)), box)
+        assertTrue(e.describe(), e.printed && e.cardShaped && e.bigEnough)
+        assertTrue(e.describe(), e.ring != null && e.ring!! > 0.5 && !e.standsOut)
+        assertFalse(e.looksLikeACard)
+        // The same print on a smooth tray stands out: a card.
+        val flat = IntArray(w * h) { i -> val x = i % w; val y = i / w
+            if (x in box.x until box.x + box.w && y in box.y until box.y + box.h) mat[i] else 100 }
+        val c = PrintEvidence.measure(Gray(w, h, flat), Detection.gradMap(Gray(w, h, IntArray(w * h) { 100 })), box)
+        assertEquals(c.describe(), 0.0, c.ring!!, 1e-9)
+        assertEquals(0.0, c.trayTexture, 1e-9)
+        assertTrue(c.describe(), c.looksLikeACard)
     }
 
     @Test fun theBoxShapeAndSizeRulesHoldInEitherOrientation() {

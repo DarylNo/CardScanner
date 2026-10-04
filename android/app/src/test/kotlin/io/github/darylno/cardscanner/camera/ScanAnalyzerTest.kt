@@ -739,6 +739,78 @@ class ScanAnalyzerTest {
         }
     }
 
+    // ── …against a STALE reference on a textured tray (the review of 1.1.11) ──
+
+    /** A playmat: 8-frame-px blocks (4 sample px) of random grey round 130 (± 30). */
+    private val matBlocks = java.util.Random(9).let { r -> IntArray(64 * 64) { 130 + r.nextInt(61) - 30 } }
+    private fun mat(x: Int, y: Int) = matBlocks[(y / 8).coerceIn(0, 63) * 64 + (x / 8).coerceIn(0, 63)]
+    private val playmat = FakePlanes.nv21(w, h, { x, y -> mat(x, y) })
+    private val inCard = { x: Int, y: Int -> x in 120..231 && y in 60..215 }
+    /** A smooth card-sized thing on the mat (a face-down sleeve, a blank) — learned into the tray. */
+    private val smoothOnMat = FakePlanes.nv21(w, h, { x, y -> if (inCard(x, y)) 225 else mat(x, y) })
+    private val printedOnMat = FakePlanes.nv21(w, h, { x, y -> if (inCard(x, y)) (if ((x / 6 + y / 6) % 2 == 0) 250 else 120) else mat(x, y) })
+
+    /**
+     * 1.1.11 before the review shot an EMPTY textured tray whenever the learned
+     * tray was stale — "TRIGGER accepted without an outline — printed detail 42 %
+     * … card-shaped box 1.38, 20 % of the Area", a burst of nothing (the tray is
+     * re-learned on every rebind, new Area and zoom change, card or no card).
+     * Now the fallback stands aside there: refused, adopted after five, as 1.1.10.
+     */
+    @Test fun anEmptyTexturedTrayAgainstAStaleReferenceIsRefusedAndAdoptedNotShot() {
+        val dim = FakePlanes.nv21(w, h, { x, y -> (mat(x, y) - 130) / 3 + 100 })
+        val bright = FakePlanes.nv21(w, h, { x, y -> (((mat(x, y) - 130) / 3 + 100) * 1.8).toInt().coerceIn(0, 255) })
+        val cases = listOf(
+            Triple("a printed card lifted off the mat it was learned with", printedOnMat, playmat),
+            Triple("a smooth card lifted off the mat it was learned with", smoothOnMat, playmat),
+            Triple("the room light ×1.8 on a dim mat under AE lock", dim, bright),
+        )
+        for ((name, learned, now) in cases) {
+            val rec = Recorder()
+            val log = DebugLog(300, clock = { 0L })
+            val a = ScanAnalyzer(direct, rec, outlineFinder = { _, _, _, _ -> null }, shadowMode = false, log = log)
+            feedTo(a, learned, 12)
+            feedTo(a, now, 40)
+            val lines = log.all().filter { it.tag == "detect" }.map { it.msg }
+            assertTrue("$name: nothing shot — $lines", rec.bursts.isEmpty())
+            assertTrue("$name: $lines", lines.none { it.startsWith("TRIGGER accepted") })
+            assertTrue("$name: refused at least five times", rec.updates.count { it.triggerRefused } >= ScanAnalyzer.RELEARN_AFTER_REFUSALS)
+            val last = rec.updates.last().event
+            assertTrue("$name: adopted as the empty tray: $last", last is AutoScanner.Event.Watching && !last.occupied)
+            val refusal = lines.first { it.startsWith("TRIGGER refused") }
+            assertTrue("$name: the refusal says why — $refusal",
+                refusal.contains("the learned tray is textured there") || refusal.contains("no more textured than round the box"))
+            assertTrue("$name: $refusal", refusal.contains("tray texture"))
+            assertTrue(rec.errors.isEmpty())
+        }
+    }
+
+    /**
+     * The self-heal is back: with the fallback shooting the stale tray, every later
+     * lift read as a swap and was shot again (3 real cards → 7 bursts, 4 of them of
+     * the empty mat). Now the stale view is refused and adopted, and each real card
+     * is shot once.
+     */
+    @Test fun aStaleTexturedTrayHealsAndEachRealCardIsShotOnce() {
+        val rec = Recorder()
+        val log = DebugLog(300, clock = { 0L })
+        // A finder that sees the printed card and nothing on the bare mat — as CardQuad would.
+        val seesPrinted: (Gray, Int, Int, RoiFrac?) -> CardOutline.Outline? = { g, fw, fh, roi ->
+            if (g.px.count { it > 240 } < 100) null else {
+                val sq = floatArrayOf(60f, 30f, 115f, 30f, 115f, 107f, 60f, 107f)
+                val area = roi?.toPixels(fw, fh) ?: RoiPx(0, 0, fw, fh)
+                CardOutline.Outline(CardOutline.toFrameFractions(sq, g.w, g.h, area, fw, fh), sq, 0, 0)
+            }
+        }
+        val a = ScanAnalyzer(direct, rec, outlineFinder = seesPrinted, shadowMode = false, log = log)
+        feedTo(a, smoothOnMat, 12)                       // learned with a smooth thing on the mat
+        feedTo(a, playmat, 20)                           // lifted: an empty mat
+        assertEquals("the empty mat is not shot", 0, rec.bursts.size)
+        repeat(3) { feedTo(a, printedOnMat, 15); feedTo(a, playmat, 15) }
+        assertEquals("three real cards, three bursts", 3, rec.bursts.size)
+        assertTrue(rec.errors.isEmpty())
+    }
+
     /**
      * The owner's other 1.1.10 report: "old bordered cards didn't see the change
      * of cards". Every Tray wait (shadow mode or not) ends with the swap test's
@@ -886,6 +958,66 @@ class ScanAnalyzerTest {
         assertTrue(recB.bursts.all { it.zoom == 1.0 && it.cropRoi == roi })
         assertEquals(0, recB.resyncs)
         assertTrue(b.stats(), !b.stats().contains("zoom"))
+    }
+
+    /**
+     * Review of 1.1.11: drawing an Area on the phone while zoomed keeps the gate
+     * closed (right — no tick, copy or capture, so Cancel comes back with no
+     * re-learn) but it also stopped `snapshot.jpg` for the whole drawing (503: the
+     * desktop said "open the scan screen on the phone") and reported "1.90×
+     * (settling…)" with the camera at 1×. The real coordinator wired to the real
+     * analyzer, as CameraController wires them.
+     */
+    @Test fun drawingAnAreaWhileZoomedStillServesTheBrowsersPicture() {
+        val rec = Recorder()
+        lateinit var a: ScanAnalyzer
+        lateinit var coord: io.github.darylno.cardscanner.core.ZoomCoordinator
+        val sink = object : ScanAnalyzer.Sink by rec {
+            override fun onZoomResync() { rec.resyncs++; coord.cameraStarted("frames arriving at the closed zoom gate") }
+        }
+        a = ScanAnalyzer(direct, sink, outlineFinder = boxFinder, shadowMode = false, log = DebugLog(300))
+        val requests = mutableListOf<Pair<Int, Double>>()
+        coord = io.github.darylno.cardscanner.core.ZoomCoordinator(object : io.github.darylno.cardscanner.core.ZoomCoordinator.Port {
+            override fun request(gen: Int, ratio: Double) { requests += gen to ratio }
+            override fun closeGate(why: String) = a.closeZoomGate(why)
+            override fun map(ratio: Double, view: RoiFrac?, settle: Boolean, why: String) = a.zoomMapped(ratio, view, settle, why)
+            override fun drawingReady(ratio: Double) = a.snapshotsAt(ratio)
+            override fun later(ms: Long, block: () -> Unit) {}
+            override fun readBack(): Double? = null
+        })
+        coord.setEnabled(true); coord.setArea(RoiFrac(0.25, 0.25, 0.75, 0.75)); coord.cameraBound(2.6, 8.0)
+        coord.onApplied(requests.last().first, 1.9)
+        feedTo(a, tray, 12)                                          // zoomed in, the tray learned
+        val snaps = mutableListOf<Double>()
+        a.requestSnapshotAt { _, z -> snaps += z }
+        feedTo(a, tray, 1)
+        assertEquals(listOf(1.9), snaps)
+        // MainActivity.startDrawingArea: pause the scanner, zoom out; the camera answers 1×.
+        a.setPaused(true)
+        coord.setDrawing(true)
+        coord.onApplied(requests.last().first, 1.0)
+        val st = coord.state()
+        assertEquals("what the panel is told: the camera's 1×", 1.0, st.ratio, 0.0)
+        assertFalse("…not settling", st.settling)
+        assertTrue(st.drawing)
+        val ticks = rec.updates.size
+        val copied = copies(a)
+        feedTo(a, tray, 30)                                          // 3 s of drawing
+        a.requestSnapshotAt { _, z -> snaps += z }                   // the desktop's ↻ New picture
+        feedTo(a, tray, 25)
+        assertEquals("the picture is served, at 1×", listOf(1.9, 1.0), snaps)
+        assertEquals("still no ticks", ticks, rec.updates.size)
+        assertEquals("still no ring copies", copied, copies(a))
+        assertTrue(rec.bursts.isEmpty())
+        // Cancel: back at 1.9× — the same mapping, no re-learn.
+        coord.setDrawing(false)
+        coord.onApplied(requests.last().first, 1.9)
+        a.setPaused(false)
+        val before = rec.updates.size
+        feedTo(a, tray, 8)
+        assertTrue("ticking again", rec.updates.size > before)
+        assertTrue("no re-learn", rec.updates.drop(before).none { it.event is AutoScanner.Event.Learning })
+        assertTrue(rec.errors.isEmpty())
     }
 
     /** A first-card capture held for focus when the gate closes is dropped, and the still card is asked about again — Tray never stays SCANNING. */

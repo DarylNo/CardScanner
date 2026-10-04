@@ -1965,7 +1965,7 @@ function sigOf(scan){
 
 // Version banner — page version · server git hash. Same rationale as the
 // phone: without it, "is this the old page?" is undebuggable.
-const UI_VERSION = "d45";
+const UI_VERSION = "d46";
 
 // Who is asking: the phone server says "guest" for the 6-digit code (admin =
 // the paired computer); the computer's own server always says admin. Guests
@@ -2535,7 +2535,11 @@ function devRender(){
 function devZoomText(d){
   const z = d.zoom, x = v => v == null ? "?" : (+v).toFixed(2) + "×";
   if (!z) return d.zoom_fit ? "Zoom: on — open the scan screen on the phone to see it." : "";
-  if (!d.zoom_fit && z.ratio <= 1 && !z.settling) return "";
+  if (!d.zoom_fit && z.ratio <= 1 && !z.settling && !z.applying) return "";
+  // A zoom / Area / lens change just sent: the PATCH answer may predate it (an older phone
+  // app, or a busy phone) — say so until /api/device is read again (devPatch).
+  if (z.applying) return "Zoom: <b>applying the change on the phone…</b>";
+  if (z.drawing) return `Zoom <b>${x(z.ratio)}</b> — an Area is being drawn on the phone (zoomed out to the whole frame)`;
   return `Zoom <b>${x(z.ratio)}</b>${z.settling ? " (settling…)" : ""} · target ${x(z.target)} — ${esc(z.limit || "")}` +
     `<br>Area fit ${x(z.fit)} · lossless ${x(z.lossless)} · lens max ${x(z.max)}`;
 }
@@ -2555,9 +2559,22 @@ async function devPatch(body){
   try {
     const r = await jsend("/api/device", "PATCH", body);
     if (r.error || r.detail) { devMsg(r.error || r.detail, true); return false; }
+    // A zoom / Area / lens change: the answer's zoom may be from BEFORE it (the phone applies
+    // it on its own UI thread; 1.1.11 before its review answered at once). Show "applying…"
+    // instead of a zoom line that contradicts the box just ticked, and read the phone again.
+    const camChange = ["roi", "zoom_fit", "camera", "high_res"].some(k => k in body);
+    const zoomInPlay = r.zoom_fit || dev?.zoom_fit || (dev?.zoom?.ratio > 1);
+    if (camChange && r.zoom && zoomInPlay) r.zoom = Object.assign({}, dev?.zoom || r.zoom, { applying: true });
     dev = r; devRender(); devMsg("Saved — applied on the phone.");
-    // What the camera shows changed (a new Area / zoom / lens): take a new picture once it settles.
-    if (["roi", "zoom_fit", "camera", "high_res"].some(k => k in body)) setTimeout(() => { if ($("#devModal").classList.contains("open")) devSnapshot(); }, 1500);
+    if (camChange) {
+      setTimeout(async () => {
+        if (!$("#devModal").classList.contains("open")) return;
+        const n = await devLoad();
+        if (n && $("#devModal").classList.contains("open")) { dev = n; devRender(); }
+      }, 600);
+      // What the camera shows changed: take a new picture once it settles.
+      setTimeout(() => { if ($("#devModal").classList.contains("open")) devSnapshot(); }, 1500);
+    }
     return true;
   } catch(e){ devMsg("Could not reach the phone.", true); return false; }
 }

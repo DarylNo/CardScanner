@@ -531,7 +531,13 @@ lens on testers' phones), minSdk 29, arm64-v8a.
   reach a closed gate (`onZoomResync`, once per closure). "Camera is not active"
   is retried 5 × 200 ms, then the mapping falls back to 1× and scanning carries
   on (the next start asks again); a refused ratio is not asked again in a loop;
-  no answer in 2 s maps what the newest result reports. **The tray is re-learned
+  no answer in 2 s maps what a result NEWER than the request reports (a
+  result counter in the controller; the read-back is cleared at ON_STOP and
+  CLOSING/CLOSED — the last pre-stop frame says what the camera WAS), else the
+  request, and a LATE answer that differs re-maps behind the gate (review of
+  1.1.11: a slow reopen after a Settings round trip mapped the stale 1× and
+  dropped the camera's 1.9× answer — the Area stayed mapped at the wrong zoom;
+  `aLateAnswerAfterTheTimeoutReMaps…`). **The tray is re-learned
   only when (z, view Area) changed** (`ScanAnalyzer.zoomMapped` = setRoi's
   re-learn + the ring cleared on a new ratio): a re-apply after the camera comes
   back keeps the empty tray, and a still card across a real change is learned
@@ -540,7 +546,11 @@ lens on testers' phones), minSdk 29, arm64-v8a.
   the phone** zooms OUT to 1× first and arms the drag only once the camera is
   there ("Zooming out to the whole frame…"); release stores the BASE Area and
   zooms in (one re-learn, at its own zoom); Cancel zooms back with no re-learn
-  (the analyzer is left alone while drawing). **With the switch off none of
+  (the analyzer is left alone while drawing — its gate stays closed, but the
+  browser's `snapshot.jpg` is served at the camera's 1× via
+  `ScanAnalyzer.snapshotsAt`, and `/api/device` reports the camera's 1× with
+  `drawing: true`, not "1.90× settling…"; before the review it answered 503
+  for the whole drawing). **With the switch off none of
   this runs** — no zoom call, no gate, no settle: the Area reaches the analyzer
   as `zoomMapped(1.0, Area, settle = false)`, the pre-zoom setRoi path event for
   event (`zoomOffIsTheOldPathEventForEvent`). **What shows it:** the Area chip
@@ -556,13 +566,19 @@ lens on testers' phones), minSdk 29, arm64-v8a.
   target … (limited by …) · applied … · Area fit … · lossless … · lens max … ·
   MAX_ZOOM …" plus the read-back; the analyzer line counts changes, gate
   closures and frames dropped. **The desktop:** `/api/device` carries
-  `zoom_fit` and `zoom {ratio, target, limit, fit, lossless, max, settling}`
+  `zoom_fit` and `zoom {ratio, target, limit, fit, lossless, max, settling, drawing}`
   (null with the scan screen closed); `roi` stays base, and `snapshot.jpg` stays
   a BASE-space picture while zoomed (`core/ZoomSnapshot`: the zoomed frame
   scaled by 1/z, centred on grey — marks land at their base fractions ±1 px at
   1, 1.6 and 2×, `ZoomSnapshotTest`), so drawing the Area there stays 1:1. The
-  📱 Scanner panel (d45) has the checkbox and a zoom line (hidden for an older
-  phone app) and re-takes the picture after a zoom / Area / lens PATCH —
+  📱 Scanner panel (d46) has the checkbox and a zoom line (hidden for an older
+  phone app) and re-takes the picture after a zoom / Area / lens PATCH. A PATCH
+  is answered only after the scan screen's UI thread applied it
+  (`DeviceBridge.write` waits ≤ 500 ms on the screen's future — before, the
+  answer's zoom predated the change: "Zoom to fit is off" right after ticking
+  it); the panel still shows "applying the change on the phone…" for a zoom /
+  Area / lens PATCH and reads `/api/device` again 600 ms later, so an older or
+  busy phone never shows a contradicting line —
   `scripts/check_device_ui.py` drives it in headless Chromium. Tested in code
   (ZoomFitTest, ZoomCoordinatorTest, ZoomSnapshotTest, the ScanAnalyzerTest
   gate tests, DeviceApiTest, ScreensSmokeTest at the N200's size for the
@@ -705,7 +721,26 @@ lens on testers' phones), minSdk 29, arm64-v8a.
   869/900 — the 31 misses are cards that FILL the Area (an Area drawn tight on
   the card); it also took 24 of 30 smooth hand blobs for cards (pre-existing,
   not the fallback's doing). Real art is smoother than the synthetic blocks —
-  hence the low 6 %; not measured on the rig. **Log lines (tag `detect`, ≤ 1 per
+  hence the low 6 %; not measured on the rig. **Stale references (review of
+  1.1.11):** "new texture vs the learned tray" is print only while the learned
+  tray is TRUE — on a textured tray (playmat, wood) a tray learned with a card
+  on it (rebind / new Area / zoom change / double-tap), learned slightly out of
+  focus, lit brighter under AE lock or nudged reads as print over a box that is
+  the whole Area (always card-shaped, always big enough): the fallback shot 142
+  of 348 such empty trays and lost the 1.1.7 self-heal (3 real cards → 7
+  bursts). Two more tests, independent of how fresh the reference is: the
+  learned tray must be SMOOTH in the box and its core (≤ 4 % above
+  `TRAY_GRAD` 7 = GRAD_THR / 2), and the print must stand out from a ring just
+  outside the box (ring texture ≤ print ÷ 2; no ring when the box fills the
+  Area). Measured: smooth-tray cards 720/720 still accepted (tray texture ≤
+  0.5 %, print ≥ 3.5 × ring); stale empty trays 0/348 accepted (the tray test
+  refuses all 142, 8–88 % texture); on a textured tray the fallback stands
+  aside for every card (the outline found 173/180 there — 1.1.10's
+  behaviour). Limits: sample noise above σ ≈ 1.6 makes a flat tray read
+  textured (the fallback then stands aside), and a textured tray learned > 2
+  sample px out of focus reads smooth (est. beyond the lens at the mount).
+  `ScanAnalyzerTest` holds the lifted-card / AE-lock cases at analyzer level
+  and that each real card is shot once after a stale view is adopted. **Log lines (tag `detect`, ≤ 1 per
   event):** a refusal states its evidence once per scene ("TRIGGER refused — no
   card shape · no printed detail · print 0% (need 6%) · box 1.38 (1.15–1.90) ·
   20% of the Area (≥ 3%) · box … mask …"); "TRIGGER accepted without an outline
@@ -867,7 +902,9 @@ Open threads:
   debug report) of a Tray session with white-bordered and old-bordered cards,
   including card SWAPS without lifting: the `detect` lines say whether the
   outline found each card ("TRIGGER box … outline found") or the printed-detail
-  fallback took it ("accepted without an outline — printed detail N%"), and
+  fallback took it ("accepted without an outline — printed detail N% … learned
+  tray smooth there (texture N%) · ring round the box N%"; a refusal on a
+  textured tray says "the learned tray is textured there"), and
   each wait's "wait over" line says why a swap was or wasn't seen. That report
   decides the real fix (the fallback is a hedge, tested in code, not on the
   phone); also say how tightly the Area is drawn round the card (an Area the

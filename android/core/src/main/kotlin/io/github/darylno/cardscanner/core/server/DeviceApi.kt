@@ -22,8 +22,9 @@ import io.github.darylno.cardscanner.core.ZoomCoordinator
  * null for the full frame.
  *
  * "Zoom to fit the Area" (1.1.11): `zoom_fit` (true / false) is the switch;
- * `zoom` = `{ratio, target, limit, fit, lossless, max, settling}` while the scan
- * screen has its camera, else null. `roi` stays BASE (1×) fractions at any zoom,
+ * `zoom` = `{ratio, target, limit, fit, lossless, max, settling, drawing}` while
+ * the scan screen has its camera, else null (`drawing`: an Area is being drawn on
+ * the phone, the camera zoomed out to 1× for it). `roi` stays BASE (1×) fractions at any zoom,
  * and the snapshot stays a base-space picture (the zoomed view on grey), so a
  * box drawn on it still maps 1:1.
  */
@@ -101,6 +102,8 @@ class DeviceApi(private val device: DeviceControl) {
             "lossless" to r2(t.lossless),
             "max" to r2(t.lensMax),
             "settling" to z.settling,
+            // An Area being drawn on the phone: the camera is zoomed out to 1× for it (the panel says so).
+            "drawing" to z.drawing,
         )
     }
 

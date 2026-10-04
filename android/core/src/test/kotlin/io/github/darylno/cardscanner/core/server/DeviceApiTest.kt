@@ -53,7 +53,7 @@ class DeviceApiTest {
             override fun request(gen: Int, ratio: Double) { asked = gen }
             override fun closeGate(why: String) {}
             override fun map(ratio: Double, view: RoiFrac?, settle: Boolean, why: String) {}
-            override fun drawingReady() {}
+            override fun drawingReady(ratio: Double) {}
             override fun later(ms: Long, block: () -> Unit) {}
             override fun readBack(): Double? = null
         })
@@ -74,6 +74,13 @@ class DeviceApiTest {
         assertEquals(2.6, (z["lossless"] as Number).toDouble(), 0.0)
         assertEquals(10.0, (z["max"] as Number).toDouble(), 0.0)
         assertEquals(false, z["settling"])
+        assertEquals(false, z["drawing"])
+        // An Area drawn on the phone: zoomed out to 1× for it — said so, not "settling" at 1.9×.
+        coord.setDrawing(true); coord.onApplied(asked, 1.0)
+        zoom = coord.state()
+        val d = json(patch("""{"torch":false}""")) ["zoom"] as Map<*, *>
+        assertEquals(true, d["drawing"]); assertEquals(false, d["settling"])
+        assertEquals(1.0, (d["ratio"] as Number).toDouble(), 0.0)
     }
 
     @Test fun appliesWhatIsGivenInOneWrite() {

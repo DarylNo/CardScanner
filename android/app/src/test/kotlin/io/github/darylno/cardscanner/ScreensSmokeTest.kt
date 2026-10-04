@@ -472,6 +472,45 @@ class ScreensSmokeTest {
         assertNotNull(findText(bottom, label))
     }
 
+    /**
+     * Review of 1.1.11: the phone server answers a PATCH /api/device on ITS thread
+     * right after storing the settings, and the scan screen applies them on the UI
+     * thread — so the answer's `zoom` was the one from BEFORE the change ("Zoom to
+     * fit is off" right after ticking it, the old 1.90× after unticking it) until the
+     * panel's next poll. The bridge now waits (≤ 500 ms) for the screen to apply.
+     * The PATCH runs on a background thread, as NanoHTTPD's does; this thread is the
+     * UI thread, running what the bridge waits for.
+     */
+    @Test
+    fun deviceApi_patchAnswersWithTheZoomAfterTheChange() {
+        app.settings.roi = io.github.darylno.cardscanner.core.RoiFrac(0.25, 0.25, 0.75, 0.75)
+        app.settings.auto = false
+        app.settings.zoomFit = false
+        grantCamera(true)
+        launch(MainActivity::class.java)
+        val api = io.github.darylno.cardscanner.core.server.DeviceApi(app.phoneServer.device)
+        fun patchFromTheServerThread(body: String): Map<*, *> {
+            var answer: io.github.darylno.cardscanner.core.server.ApiResponse? = null
+            val t = Thread {
+                answer = api.handle(io.github.darylno.cardscanner.core.server.ApiRequest("PATCH", "/api/device", body = body.toByteArray()))
+            }
+            t.start()
+            while (t.isAlive) { ShadowLooper.idleMainLooper(); t.join(5) }
+            val r = answer!!
+            assertEquals(200, r.status)
+            return io.github.darylno.cardscanner.core.MiniJson.parse(String(r.body)) as Map<*, *>
+        }
+        fun zoomOf(m: Map<*, *>) = m["zoom"] as Map<*, *>
+        val on = patchFromTheServerThread("""{"zoom_fit":true}""")
+        assertEquals(true, on["zoom_fit"])
+        assertEquals("the answer is the zoom AFTER the change: $on", 1.9, (zoomOf(on)["target"] as Number).toDouble(), 0.0)
+        assertEquals("the Area fit", zoomOf(on)["limit"])
+        val off = patchFromTheServerThread("""{"zoom_fit":false}""")
+        assertEquals(false, off["zoom_fit"])
+        assertEquals("$off", 1.0, (zoomOf(off)["target"] as Number).toDouble(), 0.0)
+        assertEquals("Zoom to fit is off", zoomOf(off)["limit"])
+    }
+
     /** Settings → Delete all scans: the count is shown, the dialog says it, and OK deletes every scan and photo. */
     @Test
     fun settings_deleteAllScans_asksThenDeletesEverything() {

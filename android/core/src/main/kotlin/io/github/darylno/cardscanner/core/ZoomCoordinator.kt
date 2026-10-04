@@ -27,12 +27,19 @@ import kotlin.math.abs
  * - "Camera is not active" (a request before the use cases attach) is retried
  *   [MAX_TRIES] times [RETRY_MS] apart, then the mapping falls back to 1× (what
  *   an inactive camera comes back at) and scanning carries on.
- * - A request with no answer after [SETTLE_TIMEOUT_MS] maps with whatever the
- *   newest capture result says ([Port.readBack]), else the request.
+ * - A request with no answer after [SETTLE_TIMEOUT_MS] maps with what a capture
+ *   result NEWER than the request says ([Port.readBack] — never one left over
+ *   from before a stop), else the request. The camera's answer may still come
+ *   (a slow reopen): if it differs from what the timeout mapped, the gate
+ *   closes and the Area is re-mapped at it (review of 1.1.11 — before, the late
+ *   answer was dropped and the Area stayed mapped at the wrong zoom until the
+ *   next stop).
  * - Drawing an Area zooms OUT to 1× first (the drag is armed by
  *   [Port.drawingReady]); the analyzer is left alone (its gate stays closed,
  *   its mapping and empty tray kept), so Cancel zooms back with no re-learn and
- *   a new Area re-learns once, at its own zoom.
+ *   a new Area re-learns once, at its own zoom. Only the browser's picture of
+ *   the tray is served meanwhile, at the camera's ratio; [state] reports the
+ *   camera's ratio, not settling, while the drawing waits for nothing.
  */
 class ZoomCoordinator(private val port: Port, private val log: (String) -> Unit = {}) {
 
@@ -47,11 +54,18 @@ class ZoomCoordinator(private val port: Port, private val log: (String) -> Unit 
          * open it once the frames that may predate the zoom are dropped.
          */
         fun map(ratio: Double, view: RoiFrac?, settle: Boolean, why: String)
-        /** Drawing an Area: the camera is at 1× now (the whole frame) — the drag may be armed. */
-        fun drawingReady()
+        /**
+         * Drawing an Area: the camera is at [ratio] now (1×, the whole frame) — the drag
+         * may be armed, and the analyzer may serve snapshots at [ratio] (its gate stays closed).
+         */
+        fun drawingReady(ratio: Double)
         /** Run [block] after [ms] (the main thread). */
         fun later(ms: Long, block: () -> Unit)
-        /** The zoom the newest capture result reports, or null (no result yet). */
+        /**
+         * The zoom the newest capture result reports — only a result that arrived
+         * AFTER the latest [request] (a read-back left over from before a stop
+         * says what the camera WAS) — or null.
+         */
         fun readBack(): Double?
     }
 
@@ -105,6 +119,8 @@ class ZoomCoordinator(private val port: Port, private val log: (String) -> Unit 
         private set
     @Volatile private var gateClosed = false
     @Volatile private var pending: Pending? = null
+    /** The last request the timeout gave up on: its late answer may still re-map ([onApplied]). */
+    private var lastTimedOut: Pending? = null
     private var gen = 0
     @Volatile private var problem: String? = null
 
@@ -120,7 +136,14 @@ class ZoomCoordinator(private val port: Port, private val log: (String) -> Unit 
 
     private fun want(): Double = if (drawing) 1.0 else target().z
 
-    fun state(): State = State(enabled, mapped, target(), pending != null || gateClosed, drawing, problem)
+    /**
+     * While an Area is drawn and the camera has answered, the camera's ratio (1×) is
+     * what pictures are taken at and nothing is settling — the gate is closed on
+     * purpose (the analyzer is left alone), not waiting for the camera.
+     */
+    fun state(): State =
+        if (drawing && pending == null) State(enabled, camera, target(), false, true, problem)
+        else State(enabled, mapped, target(), pending != null || gateClosed, drawing, problem)
 
     // ── inputs ──
 
@@ -154,6 +177,7 @@ class ZoomCoordinator(private val port: Port, private val log: (String) -> Unit 
         this.lensMax = lensMax
         gen++
         pending = null
+        lastTimedOut = null
         active = true
         requested = 1.0; camera = 1.0
         if (enabled) log("camera bound: lossless ${lossless?.let { "%.2f×".format(it) } ?: "unknown"}, lens max " +
@@ -171,6 +195,7 @@ class ZoomCoordinator(private val port: Port, private val log: (String) -> Unit 
         val inUse = pending != null || requested != 1.0 || camera != 1.0 || mapped != 1.0
         gen++
         pending = null
+        lastTimedOut = null
         requested = 1.0; camera = 1.0
         if (inUse) {
             closeGate("$why — the camera drops the zoom; it is re-applied when the camera is back")
@@ -201,7 +226,7 @@ class ZoomCoordinator(private val port: Port, private val log: (String) -> Unit 
 
     /** Request [g] completed; [readBack] = the ratio the newest capture result reports (null = none). */
     fun onApplied(g: Int, readBack: Double?) {
-        val p = pending ?: return
+        val p = pending ?: return lateAnswer(g, readBack)
         if (p.gen != g) return
         pending = null
         requested = p.ratio
@@ -214,7 +239,7 @@ class ZoomCoordinator(private val port: Port, private val log: (String) -> Unit 
 
     /** Request [g] failed: [notActive] = CameraX's "Camera is not active" (retried), else given up at once. */
     fun onFailed(g: Int, notActive: Boolean, message: String) {
-        val p = pending ?: return
+        val p = pending ?: return lateFailure(g, notActive, message)
         if (p.gen != g) return
         if (notActive && p.tries < MAX_TRIES) {
             p.tries++
@@ -232,6 +257,43 @@ class ZoomCoordinator(private val port: Port, private val log: (String) -> Unit 
         }
         log("${problem} — scanning at %.2f×".format(camera))
         settle(p.why, chase = false)      // never re-ask in a loop: the next start / Area / switch asks again
+    }
+
+    /**
+     * The answer to a request the timeout already settled (a slow reopen): if the
+     * camera is at a different ratio than the timeout assumed, close the gate and
+     * map what it reports (or re-arm a drawing) — else nothing (it was right).
+     */
+    private fun lateAnswer(g: Int, readBack: Double?) {
+        val p = lastTimedOut ?: return
+        if (p.gen != g) return
+        lastTimedOut = null
+        val now = agreed(p.ratio, readBack)
+        log("%.2f× answered after the %d ms timeout (%s) · read back %s · %s".format(p.ratio, SETTLE_TIMEOUT_MS, p.why,
+            readBack?.let { "%.3f×".format(it) } ?: "nothing — the request is assumed",
+            if (now == camera) "the timeout assumed %.2f× — right".format(camera)
+            else "the timeout assumed %.2f× — re-mapping at %.2f×".format(camera, now)))
+        if (now == camera) return
+        camera = now
+        problem = "no answer for %.2f× within %d ms; it came later at %.2f× and the Area was re-mapped".format(p.ratio, SETTLE_TIMEOUT_MS, now)
+        closeGate("the camera answered %.2f× after the timeout".format(now))
+        settle(p.why)
+    }
+
+    /** A request the timeout already mapped failed after all: map what the camera is left at. */
+    private fun lateFailure(g: Int, notActive: Boolean, message: String) {
+        val p = lastTimedOut ?: return
+        if (p.gen != g) return
+        lastTimedOut = null
+        // An inactive camera comes back at 1.0 (the next start asks again); a refusal kept what it had.
+        val now = if (notActive) 1.0 else port.readBack()?.let { agreed(p.ratio, it) } ?: camera
+        if (notActive) requested = 1.0
+        problem = "%.2f× could not be applied (%s), answered after the %d ms timeout".format(p.ratio, message, SETTLE_TIMEOUT_MS)
+        log("$problem — scanning at %.2f×".format(now))
+        if (now == camera) return
+        camera = now
+        closeGate("the camera refused %.2f× after the timeout".format(p.ratio))
+        settle(p.why, chase = false)
     }
 
     // ── the machine ──
@@ -258,7 +320,7 @@ class ZoomCoordinator(private val port: Port, private val log: (String) -> Unit 
             // The camera is already there (a stopped camera is at 1.0): only the mapping
             // (or the drawing) moves. With the zoom off this is the ONLY path — the Area
             // reaches the analyzer at once, exactly as before zoom existed.
-            if (drawing) { port.drawingReady(); return }
+            if (drawing) { port.drawingReady(camera); return }
             val view = ZoomFit.toView(base, camera)
             if (forceMap || gateClosed || view != mappedView || camera != mapped) mapTo(camera, view, why)
             return
@@ -271,6 +333,7 @@ class ZoomCoordinator(private val port: Port, private val log: (String) -> Unit 
         val g = ++gen
         val p = Pending(g, t, why)
         pending = p
+        lastTimedOut = null
         closeGate("zoom → %.2f× ($why)".format(t))
         log("→ %.2f× requested ($why)%s".format(t, if (t != 1.0 && !drawing) " · ${target().describe()}" else ""))
         port.request(g, t)
@@ -282,6 +345,7 @@ class ZoomCoordinator(private val port: Port, private val log: (String) -> Unit 
         if (p.gen != g) return
         val rb = port.readBack()
         pending = null
+        lastTimedOut = p
         requested = p.ratio
         camera = agreed(p.ratio, rb)
         problem = "no answer for %.2f× within %d ms (read back %s)".format(p.ratio, SETTLE_TIMEOUT_MS, rb?.let { "%.2f×".format(it) } ?: "nothing")
@@ -296,7 +360,7 @@ class ZoomCoordinator(private val port: Port, private val log: (String) -> Unit 
     private fun settle(why: String, chase: Boolean = true) {
         val t = want()
         if (chase && t != requested && active) { request(t, "$why, then the target moved on"); return }
-        if (drawing) { port.drawingReady(); return }
+        if (drawing) { port.drawingReady(camera); return }
         mapTo(camera, ZoomFit.toView(base, camera), why)
     }
 

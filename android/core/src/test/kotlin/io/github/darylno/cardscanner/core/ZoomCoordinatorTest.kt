@@ -30,7 +30,8 @@ class ZoomCoordinatorTest {
         override fun request(gen: Int, ratio: Double) { requests += gen to ratio }
         override fun closeGate(why: String) { closes += why }
         override fun map(ratio: Double, view: RoiFrac?, settle: Boolean, why: String) { maps += Map(ratio, view, settle) }
-        override fun drawingReady() { drawingReady++ }
+        val drawingRatios = mutableListOf<Double>()
+        override fun drawingReady(ratio: Double) { drawingReady++; drawingRatios += ratio }
         override fun later(ms: Long, block: () -> Unit) { timers += ms to block }
         override fun readBack(): Double? = readBack
         /** Run the timers of exactly [ms] that are due (a fake clock that only knows the delays). */
@@ -115,9 +116,16 @@ class ZoomCoordinatorTest {
         z.setDrawing(true)
         assertEquals(1.0, port.requests.last().second, 0.0)
         assertEquals(0, port.drawingReady)
+        assertTrue("zooming out: settling", z.state().settling)
         answer()
         assertEquals("the drag is armed once the camera is at 1×", 1, port.drawingReady)
+        assertEquals("…and pictures are taken at 1×", listOf(1.0), port.drawingRatios)
         assertEquals("the analyzer is left alone while drawing", mapsBefore, port.maps.size)
+        // What /api/device reports while the phone draws: the camera's 1×, not "1.90× settling…".
+        assertEquals(1.0, z.state().ratio, 0.0)
+        assertFalse(z.state().settling)
+        assertTrue(z.state().drawing)
+        assertEquals("the mapping is kept", 1.9, z.mapped, 0.0)
         z.setDrawing(false)                                       // Cancel
         assertEquals(1.9, port.requests.last().second, 0.0)
         answer()
@@ -191,6 +199,71 @@ class ZoomCoordinatorTest {
         val n = port.maps.size
         port.fire(ZoomCoordinator.SETTLE_TIMEOUT_MS)
         assertEquals(n, port.maps.size)
+    }
+
+    /**
+     * Review of 1.1.11, case 1: Settings → the switch ON → back. The request goes out
+     * at onResume, before the camera has reopened; a reopen slower than the timeout
+     * finds only the read-back from BEFORE the stop (1×) and maps it. The camera's
+     * real answer (1.9×) then came and was dropped — the Area stayed mapped at 1×
+     * while frames were at 1.9×. Now the late answer re-maps, behind the gate.
+     */
+    @Test fun aLateAnswerAfterTheTimeoutReMapsWhatTheCameraDid() {
+        z.setEnabled(false); z.setArea(area); z.cameraBound(2.6, 8.0)
+        port.readBack = 1.0                                        // the last frame before the stop
+        z.cameraStopped("the scan screen stopped")
+        z.cameraStarted("the scan screen started")
+        z.setEnabled(true)                                         // onResume: the switch is on now
+        val g = port.lastGen
+        port.fire(ZoomCoordinator.SETTLE_TIMEOUT_MS)               // the camera takes > 2 s to reopen
+        assertEquals("the timeout mapped the stale read-back", 1.0, z.mapped, 0.0)
+        val closes = port.closes.size
+        z.onApplied(g, 1.9)                                        // …and then it answers
+        assertEquals(1.9, z.mapped, 0.0)
+        assertEquals(ZoomFit.toView(area, 1.9), port.maps.last().view)
+        assertTrue("the gate closed for the re-map", port.closes.size == closes + 1 && port.maps.last().settle)
+        z.cameraStarted("camera open")
+        assertEquals(1.9, z.mapped, 0.0)
+        assertEquals("one request: nothing re-asked", listOf(1.9), port.requests.map { it.second })
+        assertTrue(log.any { it.contains("after the 2000 ms timeout") && it.contains("re-mapping at 1.90×") })
+    }
+
+    /** Case 2: the switch turned OFF while zoomed; the timeout read the stale 1.9× — the switch-off camera is at 1×. */
+    @Test fun aLateAnswerAfterTheTimeoutReMapsTheSwitchOff() {
+        z.setEnabled(true); z.setArea(area); z.cameraBound(2.6, 8.0); answer()
+        port.readBack = 1.9                                        // the last frame before the stop
+        z.cameraStopped("the scan screen stopped")
+        z.cameraStarted("the scan screen started")                 // ON_START re-asks 1.9×…
+        val g1 = port.lastGen
+        z.setEnabled(false)                                        // …onResume: the switch is off → 1×
+        val g2 = port.lastGen
+        port.fire(ZoomCoordinator.SETTLE_TIMEOUT_MS)
+        assertEquals("the timeout mapped the stale read-back", 1.9, z.mapped, 0.0)
+        z.onFailed(g1, notActive = false, "Cancelled by another setZoomRatio()")   // the superseded one: ignored
+        assertEquals(1.9, z.mapped, 0.0)
+        z.onApplied(g2, 1.0)
+        assertEquals("switch off = 1×", 1.0, z.mapped, 0.0)
+        assertEquals(area, port.maps.last().view)
+        assertFalse(z.state().settling)
+    }
+
+    /** A late answer that agrees with what the timeout mapped changes nothing; one after a stop is not answered at all. */
+    @Test fun aLateAnswerThatAgreesOrComesAfterAStopIsIgnored() {
+        z.setEnabled(true); z.setArea(area); z.cameraBound(2.6, 8.0)
+        val g = port.lastGen
+        port.fire(ZoomCoordinator.SETTLE_TIMEOUT_MS)               // no read-back: the request is assumed
+        assertEquals(1.9, z.mapped, 0.0)
+        val n = port.maps.size; val closes = port.closes.size
+        z.onApplied(g, 1.9)
+        assertEquals(n, port.maps.size); assertEquals(closes, port.closes.size)
+        // Another timeout, then a stop: the late answer belongs to a camera that is gone.
+        z.setArea(other)
+        val g2 = port.lastGen
+        port.fire(ZoomCoordinator.SETTLE_TIMEOUT_MS)
+        z.cameraStopped("the scan screen stopped")
+        val n2 = port.maps.size
+        z.onApplied(g2, 1.2)
+        assertEquals(n2, port.maps.size)
     }
 
     @Test fun switchingOffWhileZoomedGoesBackToOneOnce() {

@@ -130,11 +130,14 @@ class CaptureBurst(
  *     THE FALLBACK (1.1.11, owner on 1.1.10: "White bordered cards didn't get
  *     picked up as cards"): before refusing, the same trigger box is asked for a
  *     card's PRINTED DETAIL ([PrintEvidence]: new texture through the box's
- *     core, a card-shaped box, a minimum share of the Area). A yes fires the
- *     capture without an outline; glare, shadows, exposure and the bare tray
- *     are smooth and are still refused — and still adopted after
- *     [RELEARN_AFTER_REFUSALS]. It can only ever say yes more often. Every
- *     refusal, fallback accept and adoption states its evidence (tag "detect").
+ *     core, a card-shaped box, a minimum share of the Area, a learned tray that
+ *     was smooth there, print that stands out from round the box). A yes fires
+ *     the capture without an outline; glare, shadows, exposure and the bare
+ *     tray are smooth and are still refused — and still adopted after
+ *     [RELEARN_AFTER_REFUSALS]; on a textured tray the fallback stands aside (a
+ *     stale reference reads as print there). It can only ever say yes more
+ *     often. Every refusal, fallback accept and adoption states its evidence
+ *     (tag "detect").
  *  5. The WATCH WINDOW: at a capture, the padded (15 %) card polygon in sample
  *     pixels — the live outline at the Trigger tick, else the mask box; when the
  *     capture's own quad arrives ([onCaptureResult], tagged with the burst id,
@@ -165,7 +168,9 @@ class CaptureBurst(
  * the watch window and the focus points all follow the zoom with no other
  * change. While the camera's zoom changes the SETTLE GATE is closed
  * ([closeZoomGate]): no tick, no ring copy, no snapshot, no capture (a pending
- * shutter waits; a held first-card capture is dropped and asked for again). It
+ * shutter waits; a held first-card capture is dropped and asked for again;
+ * while an Area is drawn at 1× only the browser's snapshot is served,
+ * [snapshotsAt]). It
  * opens once the coordinator maps the ratio READ BACK from the camera and
  * [SETTLE_DROP_FRAMES] more frames (which may predate it) are dropped; the
  * ring is emptied then, so no burst ever mixes zooms. The tray is re-learned
@@ -246,6 +251,13 @@ class ScanAnalyzer(
     private var zoomDropLeft = 0
     private var zoomResyncAsked = false
     private var zoomDroppedThis = 0
+    /**
+     * Drawing an Area while zoomed: the camera reports [snapZ] (1×) but the gate stays
+     * closed (no tick, copy or capture — Cancel must come back with no re-learn); the
+     * browser's picture may still be taken at [snapZ], after [snapDropLeft] frames.
+     */
+    private var snapZ: Double? = null
+    private var snapDropLeft = 0
 
     // --- display + shadow-mode state (analysis thread; never read by the scanner) ---
     /**
@@ -369,7 +381,8 @@ class ScanAnalyzer(
     fun process(p: YuvPlanes, rotation: Int, timestampNs: Long) {
         frames++
         // THE ZOOM SETTLE GATE: while the camera's zoom changes, a frame may be at the old
-        // zoom or the new one — nothing looks at it (no tick, copy, snapshot or capture).
+        // zoom or the new one — nothing looks at it (no tick, copy, snapshot or capture;
+        // drawing an Area at 1×, a snapshot only).
         if (zoomGateClosed) {
             zoomDropped++; zoomDroppedThis++
             if (zoomDropLeft > 0) {
@@ -381,13 +394,15 @@ class ScanAnalyzer(
                 zoomResyncAsked = true
                 runCatching { sink.onZoomResync() }
             }
+            // Drawing an Area at 1× ([snapshotsAt]): the picture of the tray is still served.
+            val sz = snapZ
+            if (sz != null) {
+                if (snapDropLeft > 0) snapDropLeft-- else serveSnapshot(p, rotation, timestampNs, sz)
+            }
             return
         }
         // A browser asked for a picture of the tray (scan-Area drawing): hand over this frame.
-        snapshotWaiter.getAndSet(null)?.let { give ->
-            snapRing.copyFrom(p, rotation, timestampNs)
-            runCatching { give(snapRing.snapshotLast(1).first(), zoomZ) }
-        }
+        serveSnapshot(p, rotation, timestampNs, zoomZ)
         // A timestamp going backwards = a new camera session: accept it.
         if (lastFrameTs != NONE && timestampNs >= lastFrameTs && timestampNs - lastFrameTs < FRAME_GATE_NS) {
             gated++
@@ -475,16 +490,22 @@ class ScanAnalyzer(
             // THE FALLBACK (1.1.11): the finder can miss a real card (owner: white-
             // bordered cards on 1.1.10). Before refusing, ask the trigger box itself
             // for a card's printed detail — measured, it separates every synthetic
-            // card from glare / shadow / exposure / smooth hands. A failure to
-            // measure is "no evidence": refused as before.
+            // card from glare / shadow / exposure / smooth hands — but only where the
+            // learned tray was smooth and the print stands out from round the box: on
+            // a textured tray a stale reference (learned with a card on it, out of
+            // focus, a light under AE lock, a nudged mat) reads as print (review of
+            // 1.1.11), and there the fallback stands aside. A failure to measure is
+            // "no evidence": refused as before.
             val b = trigger.box
             val ev = runCatching { scanner.emptyGradient()?.let { PrintEvidence.measure(g0, it, b) } }.getOrNull()
             val where = { "box ${b.x},${b.y} ${b.w}×${b.h} of ${g0.w}×${g0.h}, mask %.1f%%".format(b.maskFrac * 100) }
             if (ev != null && ev.looksLikeACard) {
                 printAccepts++
                 detectLog {
-                    "TRIGGER accepted without an outline — printed detail %.0f%% (need %.0f%%) in a card-shaped box %.2f, %.0f%% of the Area · %s"
-                        .format(ev.print * 100, PrintEvidence.MIN_PRINT * 100, ev.aspect, ev.share * 100, where())
+                    ("TRIGGER accepted without an outline — printed detail %.0f%% (need %.0f%%) in a card-shaped box %.2f, %.0f%% of the Area · " +
+                        "learned tray smooth there (texture %.0f%%) · %s · %s")
+                        .format(ev.print * 100, PrintEvidence.MIN_PRINT * 100, ev.aspect, ev.share * 100, ev.trayTexture * 100,
+                            ev.ring?.let { "ring round the box %.0f%%".format(it * 100) } ?: "no ring (the box fills the Area)", where())
                 }
             } else {
                 triggerRefused = true
@@ -590,6 +611,14 @@ class ScanAnalyzer(
                 DetectionUpdate(ev, lastBox, g.w, g.h, uw, uh, roi, scanner.autoEnabled, scanner.hasEmptyRef, g,
                     outline?.quad, wf, outlineNs, triggerRefused, zoomZ),
             )
+        }
+    }
+
+    /** Hand this frame to a waiting snapshot request, taken at zoom [z]. */
+    private fun serveSnapshot(p: YuvPlanes, rotation: Int, timestampNs: Long, z: Double) {
+        snapshotWaiter.getAndSet(null)?.let { give ->
+            snapRing.copyFrom(p, rotation, timestampNs)
+            runCatching { give(snapRing.snapshotLast(1).first(), z) }
         }
     }
 
@@ -788,6 +817,9 @@ class ScanAnalyzer(
         if (!e.printed) "no printed detail" else null,
         if (!e.cardShaped) "box not card-shaped" else null,
         if (!e.bigEnough) "box too small" else null,
+        // A textured tray: "new texture" may be the tray itself against a stale reference.
+        if (!e.trayClean) "the learned tray is textured there" else null,
+        if (!e.standsOut) "no more textured than round the box" else null,
     ).joinToString(", ").ifEmpty { "evidence ok" }
 
     /**
@@ -932,6 +964,7 @@ class ScanAnalyzer(
     fun zoomMapped(ratio: Double, view: RoiFrac?, settle: Boolean, why: String) = post { applyMapping(ratio, view, settle, why) }
 
     private fun applyMapping(ratio: Double, view: RoiFrac?, settle: Boolean, why: String) {
+        snapZ = null
         val newRatio = ratio != zoomZ
         if (newRatio || view != roi) {
             roi = view
@@ -967,10 +1000,26 @@ class ScanAnalyzer(
         }
         zoomDropLeft = 0
         zoomResyncAsked = false
+        snapZ = null
         manualStartTs = NONE
         if (deferring) {
             cancelHold("the camera's zoom is changing")
             scanner.triggerRefused()
+        }
+    }
+
+    /**
+     * Drawing an Area while zoomed: the camera reports [ratio] now (1×). The gate stays
+     * closed — no tick, ring copy or capture, the mapping and the empty tray kept, so
+     * Cancel comes back with no re-learn — but a browser's snapshot request is served
+     * again, at [ratio], once [SETTLE_DROP_FRAMES] frames that may predate it are
+     * dropped (before, `snapshot.jpg` answered 503 for the whole drawing). Undone by the
+     * next [closeZoomGate] / [zoomMapped].
+     */
+    fun snapshotsAt(ratio: Double) = post {
+        if (snapZ != ratio) {
+            snapZ = ratio
+            snapDropLeft = SETTLE_DROP_FRAMES
         }
     }
 

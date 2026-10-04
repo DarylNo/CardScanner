@@ -223,8 +223,8 @@ with sync_playwright() as pw:
     pg.on("console", lambda m: m.type == "error" and "404" not in m.text and errs.append(m.text))
     pg.goto(BASE + "/")
     pg.wait_for_selector("#dver")
-    pg.wait_for_function("document.querySelector('#dver').textContent.startsWith('d45')")
-    check(pg.locator("#dver").text_content().startswith("d45"), "banner reads d45")
+    pg.wait_for_function("document.querySelector('#dver').textContent.startsWith('d46')")
+    check(pg.locator("#dver").text_content().startswith("d46"), "banner reads d46")
 
     def focus(i):
         pg.locator(f'.row[data-id="{i}"]').click()

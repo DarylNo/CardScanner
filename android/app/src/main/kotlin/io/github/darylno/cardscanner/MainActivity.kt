@@ -296,8 +296,17 @@ class MainActivity : AppCompatActivity() {
      * the browser draws the scan Area on [snapshotJpeg]'s picture of the tray.
      */
     private val remoteScreen = object : io.github.darylno.cardscanner.phoneserver.DeviceBridge.Screen {
-        override fun applyRemoteSettings() = runOnUiThread {
-            if (isFinishing || isDestroyed) return@runOnUiThread
+        /** Applied on the UI thread; the future completes once it ran (the bridge waits for it ≤ 500 ms). */
+        override fun applyRemoteSettings(): java.util.concurrent.Future<*> {
+            val done = java.util.concurrent.CompletableFuture<Unit>()
+            runOnUiThread {
+                try { applyRemote() } finally { done.complete(Unit) }
+            }
+            return done
+        }
+
+        private fun applyRemote() {
+            if (isFinishing || isDestroyed) return
             if (drawing) cancelArea()
             if (settings.roi != appliedRoi) {   // a new Area re-learns the tray — only when it changed
                 appliedRoi = settings.roi

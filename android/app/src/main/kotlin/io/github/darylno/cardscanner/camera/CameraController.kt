@@ -266,6 +266,14 @@ class CameraController(
     /** The camera's own zoom report for the newest frame (API 30+), and its crop region. */
     @Volatile private var metaZoomRatio: Float? = null
     @Volatile private var metaCrop: android.graphics.Rect? = null
+    /**
+     * Capture results seen (camera thread). The zoom's read-back only counts a result
+     * that arrived after the request ([zoomAskedAt]): one left over from before a stop
+     * says what the camera WAS (review of 1.1.11: a slow reopen timed out onto it).
+     */
+    private val metaSeq = java.util.concurrent.atomic.AtomicLong()
+    /** [metaSeq] when the latest zoom request was made (main thread). */
+    @Volatile private var zoomAskedAt = Long.MAX_VALUE
     /** The last ~2 s of frames' reports by SENSOR_TIMESTAMP (= the analysis frame's timestamp): what a capture's frames said. */
     private val frameMeta = FrameMetaRing()
     private val metaCallback = object : CameraCaptureSession.CaptureCallback() {
@@ -277,6 +285,7 @@ class CameraController(
             metaStab = result.get(android.hardware.camera2.CaptureResult.CONTROL_VIDEO_STABILIZATION_MODE)
             if (Build.VERSION.SDK_INT >= 30) metaZoomRatio = result.get(android.hardware.camera2.CaptureResult.CONTROL_ZOOM_RATIO)
             metaCrop = result.get(android.hardware.camera2.CaptureResult.SCALER_CROP_REGION)
+            metaSeq.incrementAndGet()
             result.get(android.hardware.camera2.CaptureResult.SENSOR_TIMESTAMP)?.let { ts ->
                 frameMeta.put(FrameMetaRing.Meta(ts, metaAfState, metaFocusDist, metaExposureNs, metaIso))
             }
@@ -318,16 +327,19 @@ class CameraController(
             }
             listener.onZoom(ratio, view, false)
         }
-        override fun drawingReady() = listener.onZoom(1.0, roi, true)
+        override fun drawingReady(ratio: Double) {
+            analyzer.snapshotsAt(ratio)          // the browser's picture while the phone draws an Area
+            listener.onZoom(1.0, roi, true)
+        }
         override fun later(ms: Long, block: () -> Unit) { main.postDelayed({ if (!released) block() }, ms) }
-        override fun readBack(): Double? = readBackZoom()
+        override fun readBack(): Double? = freshReadBack()
     }, log = { DebugLog.global.i("zoom", it) })
 
     /** The screen's lifecycle: CameraX drops the zoom when the camera detaches (ON_STOP) and the zoom is re-applied at ON_START. */
     private val lifecycleWatch = LifecycleEventObserver { _, e ->
         if (camera == null || released) return@LifecycleEventObserver
         when (e) {
-            Lifecycle.Event.ON_STOP -> zoom.cameraStopped("the scan screen stopped")
+            Lifecycle.Event.ON_STOP -> { clearZoomMeta(); zoom.cameraStopped("the scan screen stopped") }
             Lifecycle.Event.ON_START -> zoom.cameraStarted("the scan screen started")
             else -> Unit
         }
@@ -337,6 +349,7 @@ class CameraController(
     /** CameraX setZoomRatio for request [gen]; the answer goes back to the coordinator with the camera's own read-back. */
     private fun applyZoomRatio(gen: Int, ratio: Double) {
         val cam = camera ?: run { zoom.onFailed(gen, notActive = true, message = "no camera bound"); return }
+        zoomAskedAt = metaSeq.get()
         val f = try {
             cam.cameraControl.setZoomRatio(ratio.toFloat())
         } catch (e: Exception) {
@@ -347,7 +360,7 @@ class CameraController(
             try {
                 f.get()
                 runCatching { DebugLog.global.i("zoom", "camera reports " + describeReadBack()) }
-                zoom.onApplied(gen, readBackZoom())
+                zoom.onApplied(gen, freshReadBack())
             } catch (e: Exception) {
                 val c = e.cause ?: e
                 val msg = c.message ?: c.javaClass.simpleName
@@ -372,6 +385,12 @@ class CameraController(
             else -> r
         }
     }
+
+    /** [readBackZoom], but only from a capture result that arrived after the latest zoom request; else null. */
+    private fun freshReadBack(): Double? = if (metaSeq.get() > zoomAskedAt) readBackZoom() else null
+
+    /** The camera detached / closed: its last report is not what the reopened camera does. */
+    private fun clearZoomMeta() { metaZoomRatio = null; metaCrop = null }
 
     /** "CONTROL_ZOOM_RATIO 1.90 · crop 0,0 4160×3120 of the 4160×3120 active array (centred)" — the zoom log's evidence. */
     private fun describeReadBack(): String {
@@ -511,7 +530,7 @@ class CameraController(
         }.getOrNull()
         focusCalibrated = calibration != null && calibration != CameraCharacteristics.LENS_INFO_FOCUS_DISTANCE_CALIBRATION_UNCALIBRATED
         frameMeta.clear()
-        metaZoomRatio = null; metaCrop = null
+        clearZoomMeta()
         DebugLog.global.i("camera", readZoomFacts(cam).summary())
         staticDiagnostics = runCatching { readStaticDiagnostics() }.getOrElse { "camera details: $it\n" }
         lastStateType = null
@@ -570,7 +589,7 @@ class CameraController(
         // The zoom: a closed camera has dropped it (the analyzer's gate closes while one is in
         // use); an opening one may stream at an unknown moment; an open one gets it re-applied.
         when (st.type) {
-            CameraState.Type.CLOSING, CameraState.Type.CLOSED -> zoom.cameraStopped("camera ${st.type}")
+            CameraState.Type.CLOSING, CameraState.Type.CLOSED -> { clearZoomMeta(); zoom.cameraStopped("camera ${st.type}") }
             CameraState.Type.PENDING_OPEN, CameraState.Type.OPENING -> zoom.cameraOpening("camera ${st.type}")
             CameraState.Type.OPEN -> if (lastStateType != CameraState.Type.OPEN) zoom.cameraStarted("camera open")
         }
