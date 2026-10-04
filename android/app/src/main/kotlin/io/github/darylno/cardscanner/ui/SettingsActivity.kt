@@ -222,8 +222,3 @@ class SettingsActivity : AppCompatActivity() {
     /** The debug report (diagnostics + the live log) through the share sheet — paste it anywhere. */
     private fun shareDebugReport() = DebugShare.share(this, app)
 }
-
-/** Latest CameraController.diagnostics() text, captured by the camera screen (Settings has no camera). */
-object CameraDiagnostics {
-    @Volatile var last: String? = null
-}

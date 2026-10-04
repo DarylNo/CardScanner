@@ -889,8 +889,12 @@ class MainActivity : AppCompatActivity() {
             }
             val size = if (capture.quad != null) "card ${capture.cardHeightPx()} px tall × ${capture.cardWidthPx()} wide of ${capture.frameW}×${capture.frameH}"
                 else "card 0 px tall (no quad)"
-            dlog.i("capture", "done (${if (manual) "manual" else "auto"}, $how, " +
-                "${capture.primary.size / 1024} KB + ${capture.fallbacks.size} fallback frames) · $size · ${capture.timings}")
+            // "Is it focusing?" (1.1.11): the chosen frame's AF state + lens position ride the line,
+            // and the three frames' sharpness is in the summary ("sharpness a / [b] / c").
+            dlog.i("capture", "done${if (capture.burstId > 0) " #${capture.burstId}" else ""} " +
+                "(${if (manual) "manual" else "auto"}, $how, " +
+                "${capture.primary.size / 1024} KB + ${capture.fallbacks.size} fallback frames) · $size · " +
+                (capture.lens?.let { "$it · " } ?: "") + capture.timings)
             runOnUiThread { handleCaptured(capture, manual) }
         }
 

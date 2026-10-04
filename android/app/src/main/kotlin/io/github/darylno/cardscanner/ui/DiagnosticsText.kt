@@ -19,7 +19,8 @@ object DiagnosticsText {
             .append(" · check ").append(app.settings.checkMs).append(" ms\n")
         app.updates.latest?.let { append("latest release ").append(it.version).append(if (app.updates.locked) " — UPDATE REQUIRED" else "").append('\n') }
         append("queue pending ").append(app.uploads.pending).append("\n\n")
-        append(CameraDiagnostics.last ?: "camera: open the scanner screen once to collect camera details").append("\n\n")
+        // Live while the scan screen has its camera; else the last snapshot, with its age.
+        append(CameraDiagnostics.current()).append("\n\n")
         append("recent captures (ms):\n").append(app.settings.recentTimings.ifBlank { "—" })
     }
 }

@@ -25,7 +25,7 @@ android/core/        pure Kotlin (JVM-testable): AutoScanner/Detection (the
                      trigger), CardQuad/Flatten, ScanPhoto, CardOutline +
                      OutlineTracker (the live outline / card-shape gate),
                      TextureChange (shadow mode), CameraChoice (the Camera
-                     setting), PHash/ArtHasher/ArtMatcher (bit-exact
+                     setting), FocusPoint (where AF meters), PHash/ArtHasher/ArtMatcher (bit-exact
                      fingerprint), IdentifyPipeline, PrintingRanker,
                      OcrMatch, Popularity, and core/server/ — ScanStore,
                      PhoneApi (the /api surface), PriceSweep/PriceWorker,
@@ -451,7 +451,47 @@ lens on testers' phones), minSdk 29, arm64-v8a.
   15% pad — back from the card so the phone's shadow stays off it; a starting
   point, not measured). A drawn Area is never replaced; in Tap to scan the
   Area button draws, it never clears. Mount focus: locks on the Area centre,
-  then on the first card; tap the preview to lock elsewhere.
+  then on the first card's own centre (below); tap the preview to lock elsewhere.
+- **Focus — "is it focusing?" (owner on 1.1.10: "No zoom? Focus working?";
+  1.1.11).** What the code does: every bind / camera re-open / new Area / mode
+  switch locks AF (CameraX AUTO + one trigger, the lens then stays put) at the
+  AREA CENTRE on the first frame — there is no card yet; Tray then holds the
+  FIRST card's capture (≤ `FOCUS_WAIT_NS` 1.5 s) for a pass metered ON THE
+  CARD: the Trigger box's centre mapped out of the sample (`core/FocusPoint`,
+  `FocusRequest` from the analyzer; before 1.1.11 that pass metered the Area
+  centre too, and the card-box branch was dead code). A failed pass retries on
+  the next card, 3 in all, then gives up until a tap / new Area / re-open / the
+  soft-capture watchdog (a flattened Tray capture < 0.5 × the median of the
+  last ≥ 5 re-arms the card pass — it never catches a session soft from the
+  start). Taps lock where tapped. CameraX completes a pass that never
+  converges NOT focused after 5 s (`FocusMeteringControl.AUTO_FOCUS_TIMEOUT_DURATION`,
+  1.5.3 bytecode) — longer than the 1.5 s hold. **Nothing of this reached the
+  log before 1.1.11; now, tag `focus`:** each pass numbered, start
+  ("#n why → Area/card centre (u, v) = sensor x,y of W×H · now AF state ·
+  lens N dpt (≈ cm when the lens is calibrated)") and result ("#n why:
+  focused / NOT focused / timed out / cancelled / superseded in N ms · AF … ·
+  lens …", `FocusLog`); the analyzer's hold ("Trigger held", "focus answered N
+  ms after the Trigger — capture #k shot from the 3 frames after it", "focus
+  hold timed out after 1.5 s — no focus answer; capture #k shot from the last
+  frames", a late answer re-taking the scene, a hold cancelled by a re-learn /
+  new Area / camera restart); every watchdog re-arm with its value and the
+  median; the 3-tries give-up. Each capture's `done #k` line carries the
+  three frames' sharpness ("sharpness a / [b] / c", the bracketed one used —
+  `CaptureResult.sharpnessText`) and the CHOSEN frame's own AF state, lens
+  position, exposure and ISO (`FrameMetaRing`: per-frame CaptureResults by
+  SENSOR_TIMESTAMP, looked up when the burst is handed over). **Diagnostics'
+  camera block is LIVE** (`ui/CameraDiagnostics`): read from the scan screen's
+  controller whenever Diagnostics opens or a report is built (off the main
+  thread it waits ≤ 1 s, else the snapshot), snapshotted at bind, after every
+  capture and when the screen lets go — shown with its age when the scan
+  screen is gone. Before 1.1.11 it was a bind-time copy, so `focus`, `last
+  frame`, `analyzer` and `last capture` were stale. New line `focus:` = passes
+  this session (focused / NOT focused / timed out / cancelled), the last
+  result and its age, watchdog re-arms, the AF state and lens now, and whether
+  a card pass is due (the old note is `focus note:`). The device /
+  characteristics lines are read once per bind. Tested in code, not on the
+  phone; dioptres → cm only when LENS_INFO_FOCUS_DISTANCE_CALIBRATION is not
+  UNCALIBRATED.
 - **The review WebView shows the page's `confirm()`/`alert()`** (`ui/JsDialogs`,
   a `WebChromeClient`): an Android WebView drops JavaScript dialogs unless the
   app shows them, so `confirm()` returned false and phone.html's "Clear all" /
@@ -466,9 +506,13 @@ lens on testers' phones), minSdk 29, arm64-v8a.
   `PanelActivity.onPause` deletes them itself (`PhoneServer.deleteScansAsOwner`)
   — without that, swiped scans came back.
 - **The live log** (`core/DebugLog.global`, a 3000-line ring, mirrored to
-  logcat as `CardScanner`): triggers (box, mask %), captures (flattened or
-  not, timings), each identification (name, printings, top, OCR ✓, stage
-  ms), queue outcomes and retry errors, F2F requests, server start/stop/idle
+  logcat as `CardScanner`): triggers (box, mask %), captures (`done #k`:
+  flattened or not, card px, the three frames' sharpness, the chosen frame's
+  AF state / lens dpt / exposure / ISO, timings), every focus pass and hold
+  (tag `focus`, above), each identification (name, printings, top, OCR ✓, stage
+  ms), "capture #k → job n (nonce8) queued" and the job's outcome under the
+  same name (1.1.10 printed every job as `00000000`: the first 8 of 12 digits
+  of "%012d"), retry errors, F2F requests, server start/stop/idle
   and joins, card-database and update checks, remote setting changes, crashes
   (an uncaught exception writes the log to `last-crash.txt`; the next report
   carries it). Read it live on the paired computer (🐞 → App log, admin-only
@@ -747,6 +791,14 @@ Open threads:
   decides the real fix (the fallback is a hedge, tested in code, not on the
   phone); also say how tightly the Area is drawn round the card (an Area the
   card fills is where the outline measurably gives up).
+- Owner to confirm on the rig (1.1.11, tested in code, not on the phone): "is
+  it focusing?" — read the `focus` lines of a Tray session (does the first-card
+  pass answer FOCUSED inside the 1.5 s hold, or time out? how far does the lens
+  move — the dpt before vs after?), the `done #k` lines' three sharpness values
+  and AF state (a soft burst, a burst shot mid-sweep in ACTIVE_SCAN), and that
+  Diagnostics' camera block now says "live" with a `focus:` line. That data
+  decides the Phase-3 focus work (a periodic Tray re-lock, a better watchdog)
+  and the zoom probe.
 - Proposed, not approved: "Fit to cards + zoom" (auto-fit the scan Area).
 - Ranking time for heavily reprinted names (cache candidate images).
 - Proposed, awaiting the owner: a measured card-detection goal — score the

@@ -29,6 +29,13 @@ class Captured(
     val quad: FloatArray? = null,
     val frameW: Int = 0,
     val frameH: Int = 0,
+    /** The burst's id (the capture lines' "#n"), 0 when unknown. */
+    val burstId: Long = 0L,
+    /**
+     * The camera's own report for the frame the pipeline chose — "AF … · lens …
+     * dpt · exposure … · ISO …" (CameraController.lensAtCapture) — or null. Log only.
+     */
+    val lens: String? = null,
 ) {
     /** The quad as frame FRACTIONS (the overlay's space), or null without one. */
     fun quadFractions(): FloatArray? {
@@ -107,7 +114,6 @@ interface CameraPort {
     fun noCard(scene: io.github.darylno.cardscanner.core.Gray?)
     fun setTorch(on: Boolean)
     fun setAeLock(on: Boolean)
-    fun setFocusLock(on: Boolean)
     fun setHighRes(high: Boolean)
     /** The Camera setting (a Camera2 id, null = Automatic); rebinds — and re-learns the tray — when it changes. */
     fun setCamera(id: String?) {}

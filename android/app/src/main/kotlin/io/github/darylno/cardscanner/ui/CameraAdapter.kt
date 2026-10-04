@@ -20,6 +20,8 @@ import io.github.darylno.cardscanner.core.RoiFrac
  */
 class CameraAdapter(private val context: Context, private val settings: AppSettings) : CameraPort {
     private var controller: CameraController? = null
+    /** Settings → Diagnostics reads the camera block live through this while the controller exists. */
+    private var diagnosticsSource: (() -> String)? = null
     private var auto = true
     private var roi: RoiFrac? = null
     private var preview: PreviewView? = null
@@ -53,9 +55,12 @@ class CameraAdapter(private val context: Context, private val settings: AppSetti
                     Captured(
                         r.primary, r.fallbacks, r.flattened, r.summary(), if (outcome.mode == ScanMode.MOUNT) outcome.scene else null,
                         quad = r.quad, frameW = r.frameWidth, frameH = r.frameHeight,
+                        burstId = outcome.id, lens = outcome.lens,
                     ),
                     outcome.trigger == CaptureTrigger.MANUAL,
                 )
+                // The snapshot Diagnostics falls back on once this screen is gone: current as of this capture.
+                runCatching { CameraDiagnostics.snapshot(controller?.diagnostics()) }
             }
 
             override fun onCameraError(message: String, fatal: Boolean) {
@@ -66,10 +71,13 @@ class CameraAdapter(private val context: Context, private val settings: AppSetti
             }
 
             override fun onCameraReady(summary: String) {
-                CameraDiagnostics.last = controller?.diagnostics()
+                runCatching { CameraDiagnostics.snapshot(controller?.diagnostics()) }
             }
         })
         controller = c
+        val source = { c.diagnostics() }
+        diagnosticsSource = source
+        CameraDiagnostics.attach(source)
         this.preview = preview
         c.setScanMode(ScanMode.MOUNT)   // the app's only mode since 1.1.2 (Auto off = tap to scan)
         c.setRoi(roi)
@@ -93,6 +101,10 @@ class CameraAdapter(private val context: Context, private val settings: AppSetti
     }
 
     override fun unbind() {
+        // The last live values stay readable (with their age) after the screen is gone.
+        runCatching { CameraDiagnostics.snapshot(controller?.diagnostics()) }
+        diagnosticsSource?.let { CameraDiagnostics.detach(it) }
+        diagnosticsSource = null
         controller?.release()
         controller = null
         preview = null
@@ -115,14 +127,6 @@ class CameraAdapter(private val context: Context, private val settings: AppSetti
     override fun noCard(scene: Gray?) { controller?.onNoCard(scene) }
     override fun setTorch(on: Boolean) { controller?.setTorch(on) }
     override fun setAeLock(on: Boolean) { controller?.setAeAwbLock(on) }
-
-    /**
-     * The controller locks focus on the first card after every bind (Mount) and
-     * exposes no switch to turn that off; "on" re-locks on the card in view now.
-     */
-    override fun setFocusLock(on: Boolean) {
-        if (on) controller?.refocus()
-    }
 
     override fun setHighRes(high: Boolean) {
         controller?.setResolution(if (high) CameraController.Resolution.HIGH else CameraController.Resolution.STANDARD)

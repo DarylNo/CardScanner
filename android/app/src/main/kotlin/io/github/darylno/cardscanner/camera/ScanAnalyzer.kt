@@ -62,6 +62,14 @@ class DetectionUpdate(
  * [scene] = the scanner's scannedFrame at capture time — hand it back to
  * [ScanAnalyzer.onNoCard] if the server answers no_card.
  */
+/**
+ * A held first-card Trigger asking the camera to focus on ITS card: [box] in
+ * the [sampleW]×[sampleH] detection sample, which covers [roi] of the upright
+ * frame (null = the whole frame). The camera meters the box's centre
+ * ([io.github.darylno.cardscanner.core.FocusPoint]).
+ */
+class FocusRequest(val box: Box, val roi: RoiFrac?, val sampleW: Int, val sampleH: Int)
+
 class CaptureBurst(
     val id: Long,
     val trigger: CaptureTrigger,
@@ -166,11 +174,11 @@ class ScanAnalyzer(
         fun onAnalyzerError(error: Throwable)
         /**
          * An AUTO trigger is being held because [focusFirst] said the lens should
-         * focus on this card first. Answer with [focusDone] (any outcome); the
-         * capture then uses frames taken after focus settled, or fires anyway
-         * after [FOCUS_WAIT_NS].
+         * focus on this card first ([request] = where the card is). Answer with
+         * [focusDone] (any outcome); the capture then uses frames taken after
+         * focus settled, or fires anyway after [FOCUS_WAIT_NS].
          */
-        fun onFocusRequest() {}
+        fun onFocusRequest(request: FocusRequest) {}
     }
 
     private val planes = ImageProxyPlanes()
@@ -187,7 +195,10 @@ class ScanAnalyzer(
     /**
      * Asked on every AUTO trigger (analysis thread): hold this capture until the
      * lens has focused on the card? (Mount: the first card after a bind / area
-     * change / sharpness drop — see CameraController.)
+     * change / sharpness drop — see CameraController.) Every hold is logged
+     * under `focus` (1.1.11): held, answered after N ms → capture #k from the
+     * frames after it, TIMED OUT after [FOCUS_WAIT_NS] → shot from the last
+     * frames, a late answer, or cancelled — the controller logs the pass itself.
      */
     @Volatile var focusFirst: () -> Boolean = { false }
     private var deferring = false
@@ -450,7 +461,14 @@ class ScanAnalyzer(
                 deferredBox = trigger.box
                 deferStartTs = timestampNs
                 focusReadyTs = NONE
-                runCatching { sink.onFocusRequest() }
+                val b = trigger.box
+                val sw0 = g0?.w ?: lastGrayDims?.get(0) ?: 0
+                val sh0 = g0?.h ?: lastGrayDims?.get(1) ?: 0
+                safeLog("focus") {
+                    "first card: Trigger held (≤ %.1f s) for a focus pass on the card — box %d,%d %d×%d of %d×%d"
+                        .format(FOCUS_WAIT_NS / 1e9, b.x, b.y, b.w, b.h, sw0, sh0)
+                }
+                runCatching { sink.onFocusRequest(FocusRequest(b, roi, sw0, sh0)) }
             } else {
                 fire(CaptureTrigger.AUTO, trigger.box, uw, uh, AUTO_FRESH_NS)
             }
@@ -466,7 +484,22 @@ class ScanAnalyzer(
                 }
                 // focus never answered → shoot anyway, from the usual fresh window
                 heldTimedOut = !focused
+                val heldMs = (timestampNs - deferStartTs) / 1_000_000
+                val answeredMs = if (focusReadyTs == NONE) -1L else (focusReadyTs - deferStartTs) / 1_000_000
+                val clockReset = timestampNs < deferStartTs
+                val id = nextId
                 fire(CaptureTrigger.AUTO, deferredBox, uw, uh, if (focused) sinceFocus else AUTO_FRESH_NS)
+                val shot = if (nextId > id) "capture #$id" else "no capture (no frames)"
+                safeLog("focus") {
+                    when {
+                        focused -> "first card: focus answered $answeredMs ms after the Trigger — $shot shot from the $BURST frames after it ($heldMs ms after the Trigger)"
+                        clockReset -> "first card: focus hold ended — the camera's clock restarted; $shot shot from the last frames"
+                        answeredMs >= 0 -> "first card: focus hold timed out after %.1f s — focus answered after $answeredMs ms but fewer than $BURST frames came after it; $shot shot from the last frames"
+                            .format(FOCUS_WAIT_NS / 1e9)
+                        else -> "first card: focus hold timed out after %.1f s — no focus answer; $shot shot from the last frames (the lens may still have been moving)"
+                            .format(FOCUS_WAIT_NS / 1e9)
+                    }
+                }
             }
         } else if (manualPending) {
             if (manualStartTs == NONE || timestampNs < manualStartTs) manualStartTs = timestampNs
@@ -673,8 +706,18 @@ class ScanAnalyzer(
      * A "detect" line that can never throw into the decisions (fire() / captureDone()
      * must always run). A line that failed to build is counted in [stats], not lost silently.
      */
-    private inline fun detectLog(msg: () -> String) {
-        runCatching { log.i("detect", msg()) }.onFailure { logErrors++; lastLogError = it.toString() }
+    private inline fun detectLog(msg: () -> String) = safeLog("detect", msg)
+
+    /** Any analyzer log line, built and written so that it can never throw into the decisions. */
+    private inline fun safeLog(tag: String, msg: () -> String) {
+        runCatching { log.i(tag, msg()) }.onFailure { logErrors++; lastLogError = it.toString() }
+    }
+
+    /** A command dropped a held first-card capture (nothing is shot for it). */
+    private fun cancelHold(why: String) {
+        if (!deferring) return
+        deferring = false
+        safeLog("focus") { "first card: focus hold cancelled ($why) — nothing shot" }
     }
 
     /** Which of the fallback's three tests failed, in words. */
@@ -788,14 +831,17 @@ class ScanAnalyzer(
     }
 
     /** Double-tap: re-learn the empty tray. */
-    fun reset() = post { scanner.reset(); lastBox = null; deferring = false; refusals = 0; clearWatch("reset") }
+    fun reset() = post { scanner.reset(); lastBox = null; cancelHold("re-learn"); refusals = 0; clearWatch("reset") }
 
     /** The focus asked for by [Sink.onFocusRequest] finished (success or not). */
     fun focusDone() = post {
         if (deferring && focusReadyTs == NONE) focusReadyTs = maxOf(lastFrameTs, deferStartTs)
         // The hold gave up waiting and shot while the lens was still moving: the
         // scene it kept is a blur. Now the lens has settled, re-take it.
-        else if (!deferring && heldTimedOut) { heldTimedOut = false; rebaseNext = true }
+        else if (!deferring && heldTimedOut) {
+            heldTimedOut = false; rebaseNext = true
+            safeLog("focus") { "first card: focus answered after the hold gave up — the scanned scene is re-taken from the next sample" }
+        }
     }
 
     fun setAuto(enabled: Boolean) = post { scanner.setAuto(enabled) }
@@ -814,7 +860,7 @@ class ScanAnalyzer(
         if (newRoi != roi) {
             roi = newRoi
             scanner.reset()
-            deferring = false
+            cancelHold("new Area")
             lastSample = null; lastBox = null; lastBoxInfo = null
             clearWatch("new area")
         }
@@ -827,7 +873,7 @@ class ScanAnalyzer(
         if (newMode != mode) {
             mode = newMode
             lastBox = null; lastBoxInfo = null
-            deferring = false
+            cancelHold("mode change")
             if (newMode == ScanMode.MOUNT) { scanner.reset(); lastSampleTs = NONE }
             clearWatch("mode change")
         }
@@ -843,7 +889,8 @@ class ScanAnalyzer(
         // A rebind mid-hold: the held capture will never fire, so the scanner
         // would stay SCANNING (capturing, owed a captureDone) — Auto dead.
         if (deferring) scanner.reset()
-        deferring = false; rebaseNext = false; heldTimedOut = false
+        cancelHold("camera restarted")
+        rebaseNext = false; heldTimedOut = false
         scanner.cameraRestarted()
         ring.clear()
         clearWatch("camera restarted")
@@ -865,7 +912,7 @@ class ScanAnalyzer(
                 " · ${tracker.outliers} outlier(s) dropped")
             if (triggersRefused > 0) append(" · triggers refused (no card shape) $triggersRefused")
             if (printAccepts > 0) append(" · accepted on printed detail (no outline) $printAccepts")
-            if (logErrors > 0) append(" · detect log errors $logErrors (last: $lastLogError)")
+            if (logErrors > 0) append(" · log line errors (detect/focus) $logErrors (last: $lastLogError)")
             if (outlineErrors > 0) append(" · outline errors $outlineErrors (last: $lastOutlineError)")
             val x = textureRuns
             if (x > 0) append(" · texture $x avg ${"%.2f".format(textureNsTotal / 1e6 / x)} ms")

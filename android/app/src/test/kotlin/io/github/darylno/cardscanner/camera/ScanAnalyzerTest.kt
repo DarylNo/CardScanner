@@ -34,7 +34,8 @@ class ScanAnalyzerTest {
         val bursts = mutableListOf<CaptureBurst>()
         val errors = mutableListOf<Throwable>()
         var focusRequests = 0
-        override fun onFocusRequest() { focusRequests++ }
+        val focusTargets = mutableListOf<FocusRequest>()
+        override fun onFocusRequest(request: FocusRequest) { focusRequests++; focusTargets += request }
         override fun onDetection(update: DetectionUpdate) { updates += update }
         override fun onCaptureRequest(request: CaptureBurst) { bursts += request }
         override fun onAnalyzerError(error: Throwable) { errors += error }
@@ -171,6 +172,74 @@ class ScanAnalyzerTest {
         feed(card, (ScanAnalyzer.FOCUS_WAIT_NS / 100_000_000L).toInt() + 1)   // no focusDone()
         assertEquals(1, rec.bursts.size)
         assertEquals(3, rec.bursts[0].frames.size)
+    }
+
+    // ── "is it focusing?" (1.1.11): the hold says what happened, and asks to meter the CARD ──
+
+    /** The focus pass is asked for the TRIGGER's card (its box, in the sample of the Area), and the answered hold is logged with its timing. */
+    @Test fun theFocusRequestCarriesTheCardAndTheAnsweredHoldIsLogged() {
+        val rec = Recorder()
+        val log = DebugLog(200, clock = { 0L })
+        val roi = RoiFrac(0.1, 0.1, 0.9, 0.9)
+        val a = ScanAnalyzer(direct, rec, outlineFinder = boxFinder, shadowMode = false, log = log)
+        a.setRoi(roi)
+        var due = true
+        a.focusFirst = { due }
+        feedTo(a, tray, 12); feedTo(a, card, 12)
+        assertEquals(1, rec.focusRequests)
+        val req = rec.focusTargets.single()
+        val trig = rec.updates.first { it.event is AutoScanner.Event.Trigger }.event as AutoScanner.Event.Trigger
+        assertEquals(trig.box, req.box)
+        assertEquals(roi, req.roi)
+        val u = rec.updates.last()
+        assertEquals(u.grayW, req.sampleW); assertEquals(u.grayH, req.sampleH)
+        // The point it meters is the card's centre in the frame (the card spans x 120..231, y 60..215 of 352×264).
+        val p = io.github.darylno.cardscanner.core.FocusPoint.choose(req.roi, req.box, req.sampleW, req.sampleH)
+        assertTrue(p.onCard)
+        assertEquals((120 + 232) / 2.0 / w, p.u, 0.03)
+        assertEquals((60 + 216) / 2.0 / h, p.v, 0.03)
+        due = false
+        a.focusDone()
+        feedTo(a, card, 3)
+        assertEquals(1, rec.bursts.size)
+        val focus = log.all().filter { it.tag == "focus" }.map { it.msg }
+        assertTrue(focus.joinToString("\n"), focus.any { it.startsWith("first card: Trigger held (≤ 1.5 s)") })
+        assertTrue(focus.joinToString("\n"), focus.any {
+            it.startsWith("first card: focus answered ") && it.contains("capture #${rec.bursts[0].id} shot from the 3 frames after it")
+        })
+        assertTrue(focus.none { it.contains("timed out") })
+    }
+
+    /** The hold that runs out (no focus answer within FOCUS_WAIT_NS) says so — the silent case of the 1.1.10 report. */
+    @Test fun aTimedOutHoldIsLoggedAndALateAnswerReTakesTheScene() {
+        val rec = Recorder()
+        val log = DebugLog(200, clock = { 0L })
+        val a = ScanAnalyzer(direct, rec, outlineFinder = boxFinder, shadowMode = false, log = log)
+        a.focusFirst = { true }
+        feedTo(a, tray, 12); feedTo(a, card, 12)
+        feedTo(a, card, (ScanAnalyzer.FOCUS_WAIT_NS / 100_000_000L).toInt() + 1)   // no focusDone()
+        assertEquals(1, rec.bursts.size)
+        val focus = { log.all().filter { it.tag == "focus" }.map { it.msg } }
+        assertTrue(focus().joinToString("\n"), focus().any {
+            it.startsWith("first card: focus hold timed out after 1.5 s — no focus answer; capture #${rec.bursts[0].id} shot from the last frames")
+        })
+        a.focusDone()                                       // the lens settles later
+        assertTrue(focus().joinToString("\n"), focus().any { it.contains("answered after the hold gave up") })
+    }
+
+    /** A held capture that a re-learn / new Area / camera restart drops is logged, not silently lost. */
+    @Test fun aCancelledHoldIsLogged() {
+        val rec = Recorder()
+        val log = DebugLog(200, clock = { 0L })
+        val a = ScanAnalyzer(direct, rec, outlineFinder = boxFinder, shadowMode = false, log = log)
+        a.focusFirst = { true }
+        feedTo(a, tray, 12); feedTo(a, card, 12)
+        assertEquals(1, rec.focusRequests)
+        a.cameraRestarted()
+        assertTrue(rec.bursts.isEmpty())
+        assertTrue(log.all().any { it.tag == "focus" && it.msg == "first card: focus hold cancelled (camera restarted) — nothing shot" })
+        a.reset()                                           // nothing held any more: no second line
+        assertEquals(1, log.all().count { it.tag == "focus" && it.msg.contains("cancelled") })
     }
 
     @Test fun roiIsCarriedIntoTheBurstAndDetectionDims() {

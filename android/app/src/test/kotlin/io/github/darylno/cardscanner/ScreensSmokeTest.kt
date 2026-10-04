@@ -428,6 +428,30 @@ class ScreensSmokeTest {
         assertNotNull(findText(a.window.decorView, a.getString(R.string.pv_pack_check)))
     }
 
+    /**
+     * "Is it focusing?" (1.1.11): Settings → Diagnostics reads the scan screen's camera LIVE
+     * (it was a bind-time copy — focus / last frame / analyzer / last capture were stale),
+     * with the session's focus line; once the scan screen is gone, its last snapshot and age.
+     */
+    @Test
+    fun diagnostics_readTheScanScreensCameraLive_thenItsSnapshot() {
+        grantCamera(true)
+        val c = Robolectric.buildActivity(MainActivity::class.java)
+        controllers += c
+        c.setup()
+        ShadowLooper.idleMainLooper()
+        val live = io.github.darylno.cardscanner.ui.DiagnosticsText.build(app)
+        assertTrue(live, live.contains("camera (live — read from the scan screen's camera now):"))
+        assertTrue(live, live.contains("focus: passes this session: "))
+        assertTrue(live, live.contains("analyzer: frames "))
+        c.pause().stop().destroy()
+        ShadowLooper.idleMainLooper()
+        val after = io.github.darylno.cardscanner.ui.DiagnosticsText.build(app)
+        assertTrue(after, after.contains("camera (snapshot from "))
+        assertTrue(after, after.contains("the scan screen is closed"))
+        assertTrue(after, after.contains("focus: passes this session: "))
+    }
+
     @Test
     fun diagnosticsActivity_resumes_withoutStartingAnything() {
         val a = launch(DiagnosticsActivity::class.java)
