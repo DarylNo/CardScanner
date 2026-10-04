@@ -32,6 +32,7 @@ import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.LifecycleOwner
 import io.github.darylno.cardscanner.capture.CapturePipeline
 import io.github.darylno.cardscanner.capture.CaptureResult
@@ -40,6 +41,9 @@ import io.github.darylno.cardscanner.core.DebugLog
 import io.github.darylno.cardscanner.core.FocusPoint
 import io.github.darylno.cardscanner.core.Gray
 import io.github.darylno.cardscanner.core.RoiFrac
+import io.github.darylno.cardscanner.core.ZoomCoordinator
+import io.github.darylno.cardscanner.core.ZoomFit
+import io.github.darylno.cardscanner.core.ZoomSnapshot
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
@@ -61,6 +65,8 @@ class CaptureOutcome(
     val result: CaptureResult?,
     val error: Throwable?,
     val lens: String? = null,
+    /** The camera zoom the burst was taken at (the capture line's "@ z×"). */
+    val zoom: Double = 1.0,
 )
 
 /**
@@ -97,6 +103,15 @@ class CaptureOutcome(
  * card pass giving up. Each capture carries its chosen frame's AF state and
  * lens position ([FrameMetaRing], by sensor timestamp).
  *
+ * "Zoom to fit the Area" (1.1.11, Settings → Camera, OFF by default in this
+ * build): [ZoomCoordinator] decides, this class is its CameraX glue. The Area it
+ * is given ([setRoi]) is BASE (1×) fractions; the analyzer, the focus points and
+ * the overlay get the VIEW Area at the ratio READ BACK from the capture results
+ * (CONTROL_ZOOM_RATIO on API 30+, else the crop region). CameraX resets zoom on
+ * every detach, so the zoom is re-applied after every bind, camera re-open and
+ * screen start; the analyzer's settle gate is closed meanwhile. Logged under
+ * `zoom`: what was asked, what the camera reports, what bound the ratio.
+ *
  * Threading: construct, command and [start] on the main thread. [Listener]
  * callbacks arrive on the main thread. Analyzer commands are forwarded to the
  * analysis thread by [ScanAnalyzer].
@@ -121,6 +136,12 @@ class CameraController(
         fun onCameraError(message: String, fatal: Boolean) {}
         /** Bound (after every bind): a one-line description of what was bound. */
         fun onCameraReady(summary: String) {}
+        /**
+         * The analyzer now maps frames at zoom [ratio] with the Area at [view] (its
+         * fractions of the zoomed frame — what the overlay draws), or, with
+         * [drawingReady], the camera is at 1× for drawing an Area ([view] = the base Area).
+         */
+        fun onZoom(ratio: Double, view: RoiFrac?, drawingReady: Boolean) {}
     }
 
     private val main = Handler(Looper.getMainLooper())
@@ -160,6 +181,7 @@ class CameraController(
                 }
                 val outcome = CaptureOutcome(
                     request.id, request.trigger, request.mode, request.scene, r.getOrNull(), r.exceptionOrNull(), lens,
+                    request.zoom,
                 )
                 main.post { listener.onCapture(outcome) }
             }
@@ -173,6 +195,10 @@ class CameraController(
 
         override fun onAnalyzerError(error: Throwable) {
             main.post { listener.onCameraError("analyzer: $error", false) }
+        }
+
+        override fun onZoomResync() {
+            main.post { if (camera != null && !released) zoom.cameraStarted("frames arriving at the closed zoom gate") }
         }
     })
 
@@ -193,7 +219,13 @@ class CameraController(
         private set
     var aeAwbLock = false
         private set
+    /** The stored scan Area: BASE (1×) fractions of the upright frame. */
     private var roi: RoiFrac? = null
+    /** The Area as fractions of the frames as they arrive now (the zoom coordinator's mapping). */
+    @Volatile private var viewRoi: RoiFrac? = null
+    @Volatile private var viewRatio = 1.0
+    /** The sensor's active array (the read-back's crop region is relative to it). */
+    @Volatile private var activeArray: android.graphics.Rect? = null
     /**
      * Mount: focus on the NEXT card before shooting it. Set after a bind, a
      * switch to Mount, an area change, or a sharpness drop; cleared once that
@@ -231,6 +263,9 @@ class CameraController(
     @Volatile private var metaExposureNs: Long? = null
     @Volatile private var metaIso: Int? = null
     @Volatile private var metaStab: Int? = null
+    /** The camera's own zoom report for the newest frame (API 30+), and its crop region. */
+    @Volatile private var metaZoomRatio: Float? = null
+    @Volatile private var metaCrop: android.graphics.Rect? = null
     /** The last ~2 s of frames' reports by SENSOR_TIMESTAMP (= the analysis frame's timestamp): what a capture's frames said. */
     private val frameMeta = FrameMetaRing()
     private val metaCallback = object : CameraCaptureSession.CaptureCallback() {
@@ -240,6 +275,8 @@ class CameraController(
             metaExposureNs = result.get(android.hardware.camera2.CaptureResult.SENSOR_EXPOSURE_TIME)
             metaIso = result.get(android.hardware.camera2.CaptureResult.SENSOR_SENSITIVITY)
             metaStab = result.get(android.hardware.camera2.CaptureResult.CONTROL_VIDEO_STABILIZATION_MODE)
+            if (Build.VERSION.SDK_INT >= 30) metaZoomRatio = result.get(android.hardware.camera2.CaptureResult.CONTROL_ZOOM_RATIO)
+            metaCrop = result.get(android.hardware.camera2.CaptureResult.SCALER_CROP_REGION)
             result.get(android.hardware.camera2.CaptureResult.SENSOR_TIMESTAMP)?.let { ts ->
                 frameMeta.put(FrameMetaRing.Meta(ts, metaAfState, metaFocusDist, metaExposureNs, metaIso))
             }
@@ -258,6 +295,106 @@ class CameraController(
         val newest = frameMeta.latest() ?: return null
         return newest.describe(focusCalibrated) + " (the newest frame's report — the chosen frame's was not kept)"
     }
+
+    // ---------------- zoom to fit the Area (core ZoomCoordinator; this is its CameraX glue) ----------------
+
+    private val zoom = ZoomCoordinator(object : ZoomCoordinator.Port {
+        override fun request(gen: Int, ratio: Double) = applyZoomRatio(gen, ratio)
+        override fun closeGate(why: String) = analyzer.closeZoomGate(why)
+        override fun map(ratio: Double, view: RoiFrac?, settle: Boolean, why: String) {
+            val changed = ratio != viewRatio
+            viewRoi = view
+            viewRatio = ratio
+            analyzer.zoomMapped(ratio, view, settle, why)
+            if (changed) {
+                // The metering regions were set in the old zoom's sensor crop: lock again at the
+                // new view's Area centre, and focus on the next card (like a new Area).
+                if (scanMode == ScanMode.MOUNT) {
+                    pendingAreaLock = true
+                    pendingLockWhy = "zoom change"
+                    armCardFocus("first card after the zoom change")
+                }
+                synchronized(recentSharpness) { recentSharpness.clear() }
+            }
+            listener.onZoom(ratio, view, false)
+        }
+        override fun drawingReady() = listener.onZoom(1.0, roi, true)
+        override fun later(ms: Long, block: () -> Unit) { main.postDelayed({ if (!released) block() }, ms) }
+        override fun readBack(): Double? = readBackZoom()
+    }, log = { DebugLog.global.i("zoom", it) })
+
+    /** The screen's lifecycle: CameraX drops the zoom when the camera detaches (ON_STOP) and the zoom is re-applied at ON_START. */
+    private val lifecycleWatch = LifecycleEventObserver { _, e ->
+        if (camera == null || released) return@LifecycleEventObserver
+        when (e) {
+            Lifecycle.Event.ON_STOP -> zoom.cameraStopped("the scan screen stopped")
+            Lifecycle.Event.ON_START -> zoom.cameraStarted("the scan screen started")
+            else -> Unit
+        }
+    }
+    private var lifecycleWatched = false
+
+    /** CameraX setZoomRatio for request [gen]; the answer goes back to the coordinator with the camera's own read-back. */
+    private fun applyZoomRatio(gen: Int, ratio: Double) {
+        val cam = camera ?: run { zoom.onFailed(gen, notActive = true, message = "no camera bound"); return }
+        val f = try {
+            cam.cameraControl.setZoomRatio(ratio.toFloat())
+        } catch (e: Exception) {
+            zoom.onFailed(gen, notActive = false, message = e.message ?: e.javaClass.simpleName); return
+        }
+        f.addListener({
+            if (released) return@addListener
+            try {
+                f.get()
+                runCatching { DebugLog.global.i("zoom", "camera reports " + describeReadBack()) }
+                zoom.onApplied(gen, readBackZoom())
+            } catch (e: Exception) {
+                val c = e.cause ?: e
+                val msg = c.message ?: c.javaClass.simpleName
+                zoom.onFailed(gen, notActive = msg.contains("not active", ignoreCase = true), message = msg)
+            }
+        }, ContextCompat.getMainExecutor(context))
+    }
+
+    /**
+     * The zoom the newest capture result reports: CONTROL_ZOOM_RATIO (API 30+, what
+     * CameraX sets there) when it is not 1, else the active array over the crop
+     * region's width (the pre-30 way, also how a HAL may report it), else null.
+     */
+    private fun readBackZoom(): Double? {
+        val r = metaZoomRatio?.toDouble()
+        val crop = metaCrop
+        val act = activeArray
+        val fromCrop = if (crop != null && act != null && crop.width() > 0) act.width().toDouble() / crop.width() else null
+        return when {
+            r != null && Math.abs(r - 1.0) > 0.005 -> r
+            fromCrop != null -> fromCrop
+            else -> r
+        }
+    }
+
+    /** "CONTROL_ZOOM_RATIO 1.90 · crop 0,0 4160×3120 of the 4160×3120 active array (centred)" — the zoom log's evidence. */
+    private fun describeReadBack(): String {
+        val crop = metaCrop; val act = activeArray
+        val cropText = if (crop == null) "no crop region" else {
+            val centred = act?.let {
+                val dx = (crop.centerX() - it.centerX()).toDouble() / it.width()
+                val dy = (crop.centerY() - it.centerY()).toDouble() / it.height()
+                if (Math.abs(dx) <= 0.01 && Math.abs(dy) <= 0.01) "centred" else "NOT centred: off by %+.1f%%, %+.1f%%".format(dx * 100, dy * 100)
+            } ?: "active array unknown"
+            "crop ${crop.left},${crop.top} ${crop.width()}×${crop.height()} of the ${act?.let { "${it.width()}×${it.height()}" } ?: "?"} active array ($centred)"
+        }
+        return "CONTROL_ZOOM_RATIO ${metaZoomRatio?.let { "%.3f".format(it) } ?: "—"} · $cropText"
+    }
+
+    /** "Zoom to fit the Area" (Settings → Camera). */
+    fun setZoomFit(on: Boolean) = zoom.setEnabled(on)
+
+    /** Drawing an Area on the phone: zoom out to 1× first ([Listener.onZoom] drawingReady), back to the Area's zoom after. */
+    fun setDrawing(on: Boolean) = zoom.setDrawing(on)
+
+    /** The zoom now (Diagnostics, `/api/device`). Any thread (racy reads of a few fields). */
+    fun zoomState(): ZoomCoordinator.State = zoom.state()
 
     /** Bind the camera into [view] (idempotent; rebinds with the current settings). */
     fun start(view: PreviewView, res: Resolution = resolution) {
@@ -305,6 +442,7 @@ class CameraController(
     /** Unbind and stop the worker threads (Activity onDestroy). */
     fun release() {
         released = true
+        if (lifecycleWatched) runCatching { owner.lifecycle.removeObserver(lifecycleWatch) }
         analysis?.clearAnalyzer()
         camera?.cameraInfo?.cameraState?.removeObservers(owner)
         // Only OUR use cases: the provider is a process singleton, and a
@@ -373,11 +511,23 @@ class CameraController(
         }.getOrNull()
         focusCalibrated = calibration != null && calibration != CameraCharacteristics.LENS_INFO_FOCUS_DISTANCE_CALIBRATION_UNCALIBRATED
         frameMeta.clear()
+        metaZoomRatio = null; metaCrop = null
         DebugLog.global.i("camera", readZoomFacts(cam).summary())
         staticDiagnostics = runCatching { readStaticDiagnostics() }.getOrElse { "camera details: $it\n" }
         lastStateType = null
         cam.cameraInfo.cameraState.observe(owner) { st -> onCameraState(st) }
         analyzer.cameraRestarted()
+        // The zoom: CameraX starts a bound camera at 1×; the coordinator maps the Area (zoom off)
+        // or asks for this lens's ratio (lossless = active array ÷ analysis stream).
+        val active = runCatching {
+            Camera2CameraInfo.from(cam.cameraInfo).getCameraCharacteristic(CameraCharacteristics.SENSOR_INFO_ACTIVE_ARRAY_SIZE)
+        }.getOrNull()
+        activeArray = active
+        val stream = an.resolutionInfo?.resolution ?: resolution.size
+        val lossless = active?.let { ZoomFit.lossless(it.width(), it.height(), stream.width, stream.height) }
+        val lensMax = runCatching { cam.cameraInfo.zoomState.value?.maxZoomRatio?.toDouble() }.getOrNull()
+        zoom.cameraBound(lossless, lensMax)
+        if (!lifecycleWatched) { owner.lifecycle.addObserver(lifecycleWatch); lifecycleWatched = true }
         pendingLockWhy = "camera bind"
         applySettings()
         listener.onCameraReady(
@@ -416,6 +566,13 @@ class CameraController(
         if (st.type == CameraState.Type.OPEN && lastStateType != null && lastStateType != CameraState.Type.OPEN) {
             pendingLockWhy = "camera re-open"
             applySettings()
+        }
+        // The zoom: a closed camera has dropped it (the analyzer's gate closes while one is in
+        // use); an opening one may stream at an unknown moment; an open one gets it re-applied.
+        when (st.type) {
+            CameraState.Type.CLOSING, CameraState.Type.CLOSED -> zoom.cameraStopped("camera ${st.type}")
+            CameraState.Type.PENDING_OPEN, CameraState.Type.OPENING -> zoom.cameraOpening("camera ${st.type}")
+            CameraState.Type.OPEN -> if (lastStateType != CameraState.Type.OPEN) zoom.cameraStarted("camera open")
         }
         lastStateType = st.type
     }
@@ -484,9 +641,10 @@ class CameraController(
     fun manualScan() = analyzer.manualScan()
     fun setPaused(paused: Boolean) = analyzer.setPaused(paused)
 
+    /** The stored (BASE) Area; the analyzer gets it through the zoom coordinator (as it is, with the zoom off). */
     fun setRoi(r: RoiFrac?) {
         roi = r
-        analyzer.setRoi(r)
+        zoom.setArea(r)
         // New area: re-lock on ITS centre, and focus on its first card.
         pendingAreaLock = scanMode == ScanMode.MOUNT
         pendingLockWhy = "new Area"
@@ -531,7 +689,7 @@ class CameraController(
     /** Mount: lock AF at the scan-area centre (frame centre without an area) — no card to aim at yet. */
     private fun lockAtAreaCentre() {
         if (scanMode != ScanMode.MOUNT) { pendingAreaLock = false; return }
-        val p = FocusPoint.areaCentre(roi)
+        val p = FocusPoint.areaCentre(viewRoi)     // the Area in the frames' own (zoomed) fractions
         val c = sensorPoint(p) ?: return          // no frame yet: stay pending
         pendingAreaLock = false
         focusAtSensor(c, lock = true, what = "locked on area centre", why = pendingLockWhy, where = p.describe())
@@ -670,10 +828,13 @@ class CameraController(
      * arrives within [timeoutMs] (camera not bound). Blocks the caller; never the UI thread.
      */
     fun snapshotJpeg(maxSide: Int = 1280, timeoutMs: Long = 2_000): ByteArray? {
-        val got = java.util.concurrent.ArrayBlockingQueue<io.github.darylno.cardscanner.core.Nv21Frame>(1)
-        analyzer.requestSnapshot { got.offer(it) }
-        val frame = got.poll(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS) ?: return null
-        val bgr = io.github.darylno.cardscanner.core.Nv21Bgr.toUprightBgr(frame)
+        val got = java.util.concurrent.ArrayBlockingQueue<Pair<io.github.darylno.cardscanner.core.Nv21Frame, Double>>(1)
+        analyzer.requestSnapshotAt { f, z -> got.offer(f to z) }
+        val (frame, z) = got.poll(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS) ?: return null
+        val upright = io.github.darylno.cardscanner.core.Nv21Bgr.toUprightBgr(frame)
+        // Zoomed: the BASE-space picture (the zoomed view scaled by 1/z on grey) — the browser
+        // draws the stored base Area on it 1:1.
+        val bgr = if (z > 1.0) ZoomSnapshot.composeBase(upright, z).also { upright.release() } else upright
         try {
             val scale = maxSide.toDouble() / maxOf(bgr.cols(), bgr.rows())
             if (scale < 1.0) {
@@ -744,6 +905,7 @@ class CameraController(
         appendLine("analysis: ${analysis?.resolutionInfo?.resolution} · preview: ${preview?.resolutionInfo?.resolution}")
         appendLine("mode: $scanMode · focus note: $focusNote · torch: $torchOn · AE/AWB lock: $aeAwbLock")
         appendLine(focusSummary())
+        appendLine(zoom.state().describe() + " · " + describeReadBack())
         appendLine("camera state: ${camera?.cameraInfo?.cameraState?.value?.type}")
         val z = readZoomFacts(camera)
         appendLine("zoom (CameraX): min ${z.minRatio} · max ${z.maxRatio} · current ${z.ratio} · linear ${z.linear}")

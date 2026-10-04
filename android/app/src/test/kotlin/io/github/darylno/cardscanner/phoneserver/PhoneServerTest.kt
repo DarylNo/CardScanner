@@ -284,6 +284,13 @@ class PhoneServerTest {
         assertEquals("tap", st["mode"]); assertEquals(null, st["auto"]); assertEquals(true, st["camera_live"])
         // 1.1.2: the two modes are Tray and Tap to scan — there is no Handheld any more
         assertEquals(400, req(base, admin, "PATCH", "/api/device", """{"mode":"handheld"}"""))
+        // 1.1.11: "Zoom to fit the Area" from the browser — stored, the screen told, off by default.
+        assertEquals(false, st["zoom_fit"])
+        assertEquals(200, req(base, admin, "PATCH", "/api/device", """{"zoom_fit":true}"""))
+        assertEquals(true, settings.zoomFit)
+        assertEquals(2, applied)
+        assertEquals(400, req(base, admin, "PATCH", "/api/device", """{"zoom_fit":"on"}"""))
+        settings.zoomFit = false
         client.newCall(Request.Builder().url("$base/api/device/snapshot.jpg").header("Cookie", admin).build())
             .execute().use { r -> assertEquals(200, r.code); assertEquals("image/jpeg", r.header("Content-Type")) }
         bridge.screen = null                                            // scan screen closed

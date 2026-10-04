@@ -138,6 +138,12 @@ class SettingsActivity : AppCompatActivity() {
         cam.addView(chrome.valueRow(getString(R.string.settings_lens), getString(R.string.settings_lens_desc),
             s.cameraId?.let { getString(R.string.settings_lens_value, it) } ?: getString(R.string.settings_lens_auto)) { chooseCamera() })
         cam.addView(chrome.divider(), chrome.dividerParams())
+        // "Zoom to fit the Area" (owner on 1.1.10: "No zoom?"; 1.1.11, off by default — tried on the rig first).
+        cam.addView(chrome.switchRow(getString(R.string.settings_zoomfit), getString(R.string.settings_zoomfit_desc), s.zoomFit) {
+            if (it != s.zoomFit) DebugLog.global.i("device", "zoom to fit the Area → ${if (it) "on" else "off"}")
+            s.zoomFit = it
+        })
+        cam.addView(chrome.divider(), chrome.dividerParams())
         cam.addView(chrome.switchRow(getString(R.string.settings_highres), getString(R.string.settings_highres_desc), s.highRes) { s.highRes = it })
         // No focus-lock switch: Mount always locks focus on the first card after
         // each bind (CameraController) — a switch that couldn't turn it off

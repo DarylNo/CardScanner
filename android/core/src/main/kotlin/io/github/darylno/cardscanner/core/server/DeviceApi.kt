@@ -2,6 +2,7 @@ package io.github.darylno.cardscanner.core.server
 
 import io.github.darylno.cardscanner.core.MiniJson
 import io.github.darylno.cardscanner.core.RoiFrac
+import io.github.darylno.cardscanner.core.ZoomCoordinator
 
 /**
  * The scanner phone's own settings, from the browser (owner request
@@ -19,6 +20,12 @@ import io.github.darylno.cardscanner.core.RoiFrac
  * `roi` is the scan Area as fractions of the upright frame
  * `{"x0","y0","x1","y1"}` (the app's [RoiFrac]; each side ≥ its minimum), or
  * null for the full frame.
+ *
+ * "Zoom to fit the Area" (1.1.11): `zoom_fit` (true / false) is the switch;
+ * `zoom` = `{ratio, target, limit, fit, lossless, max, settling}` while the scan
+ * screen has its camera, else null. `roi` stays BASE (1×) fractions at any zoom,
+ * and the snapshot stays a base-space picture (the zoomed view on grey), so a
+ * box drawn on it still maps 1:1.
  */
 class DeviceApi(private val device: DeviceControl) {
 
@@ -33,6 +40,8 @@ class DeviceApi(private val device: DeviceControl) {
         fun cameraLive(): Boolean
         /** The cameras the Camera setting offers on this phone, as (id, label); empty = unknown. */
         fun cameras(): List<Pair<String, String>> = emptyList()
+        /** The live zoom (the scan screen's camera), or null when it isn't open. */
+        fun zoom(): ZoomCoordinator.State? = null
     }
 
     /** [auto] = the mode: true = "tray" (hands-free), false = "tap" (tap to scan). */
@@ -43,6 +52,8 @@ class DeviceApi(private val device: DeviceControl) {
         val checkMs: Int = CHECK_MS_DEFAULT,
         /** The camera that scans: a Camera2 id, or null = Automatic ([CAMERA_AUTO] on the wire). */
         val cameraId: String? = null,
+        /** "Zoom to fit the Area" (off by default). */
+        val zoomFit: Boolean = false,
     )
 
     companion object {
@@ -73,6 +84,23 @@ class DeviceApi(private val device: DeviceControl) {
             "camera" to (s.cameraId ?: CAMERA_AUTO),
             "cameras" to device.cameras().map { (id, label) -> linkedMapOf("id" to id, "label" to label) },
             "camera_live" to device.cameraLive(),
+            "zoom_fit" to s.zoomFit,
+            "zoom" to device.zoom()?.let(::zoomJson),
+        )
+    }
+
+    /** The live zoom for the desktop's Scanner panel: what is applied, what the Area asks for, what bound it. */
+    private fun zoomJson(z: ZoomCoordinator.State): Map<String, Any?> {
+        val t = z.target
+        fun r2(v: Double?) = v?.takeIf { it.isFinite() }?.let { Math.round(it * 100) / 100.0 }
+        return linkedMapOf(
+            "ratio" to r2(z.ratio),
+            "target" to r2(t.z),
+            "limit" to (if (t.belowMin) "below ${"%.2f".format(java.util.Locale.ROOT, io.github.darylno.cardscanner.core.ZoomFit.MIN_USEFUL)}× (${t.limit.words})" else t.limit.words),
+            "fit" to r2(t.fit),
+            "lossless" to r2(t.lossless),
+            "max" to r2(t.lensMax),
+            "settling" to z.settling,
         )
     }
 
@@ -92,6 +120,7 @@ class DeviceApi(private val device: DeviceControl) {
                 "vibration" -> s.copy(vibration = v as? Boolean ?: return bad("vibration must be true or false"))
                 "high_res" -> s.copy(highRes = v as? Boolean ?: return bad("high_res must be true or false"))
                 "ae_lock" -> s.copy(aeLock = v as? Boolean ?: return bad("ae_lock must be true or false"))
+                "zoom_fit" -> s.copy(zoomFit = v as? Boolean ?: return bad("zoom_fit must be true or false"))
                 "check_ms" -> s.copy(checkMs = (v as? Number)?.toDouble()
                     ?.takeIf { it == Math.floor(it) && it >= CHECK_MS_MIN && it <= CHECK_MS_MAX }?.toInt()
                     ?: return bad("check_ms must be a whole number of ms from $CHECK_MS_MIN to $CHECK_MS_MAX"))

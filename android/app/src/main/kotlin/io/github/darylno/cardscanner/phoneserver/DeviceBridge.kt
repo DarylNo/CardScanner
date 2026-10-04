@@ -22,6 +22,8 @@ class DeviceBridge(
         fun applyRemoteSettings()
         /** The current upright frame as JPEG, or null. Called off the UI thread. */
         fun snapshotJpeg(): ByteArray?
+        /** The camera's zoom now (any thread), or null. */
+        fun zoomState(): io.github.darylno.cardscanner.core.ZoomCoordinator.State? = null
     }
 
     @Volatile var screen: Screen? = null
@@ -30,6 +32,7 @@ class DeviceBridge(
         auto = settings.auto, roi = settings.roi,
         torch = settings.torch, vibration = settings.vibration, highRes = settings.highRes,
         aeLock = settings.aeLock, checkMs = settings.checkMs, cameraId = settings.cameraId,
+        zoomFit = settings.zoomFit,
     )
 
     override fun cameras(): List<Pair<String, String>> =
@@ -47,6 +50,7 @@ class DeviceBridge(
                 "vibration → ${s.vibration}".takeIf { before.vibration != s.vibration },
                 "check → ${s.checkMs} ms".takeIf { before.checkMs != s.checkMs },
                 "camera → ${s.cameraId?.let { "camera $it" } ?: "Automatic"}".takeIf { before.cameraId != s.cameraId },
+                "zoom to fit the Area → ${s.zoomFit}".takeIf { before.zoomFit != s.zoomFit },
             ).joinToString(", "))
         settings.auto = s.auto
         settings.roi = s.roi
@@ -56,10 +60,13 @@ class DeviceBridge(
         settings.aeLock = s.aeLock
         settings.checkMs = s.checkMs
         settings.cameraId = s.cameraId
+        settings.zoomFit = s.zoomFit
         screen?.applyRemoteSettings()
     }
 
     override fun snapshot(): ByteArray? = screen?.snapshotJpeg()
+
+    override fun zoom() = screen?.zoomState()
 
     override fun cameraLive(): Boolean = screen != null
 }

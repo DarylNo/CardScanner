@@ -35,7 +35,9 @@ class ScanAnalyzerTest {
         val errors = mutableListOf<Throwable>()
         var focusRequests = 0
         val focusTargets = mutableListOf<FocusRequest>()
+        var resyncs = 0
         override fun onFocusRequest(request: FocusRequest) { focusRequests++; focusTargets += request }
+        override fun onZoomResync() { resyncs++ }
         override fun onDetection(update: DetectionUpdate) { updates += update }
         override fun onCaptureRequest(request: CaptureBurst) { bursts += request }
         override fun onAnalyzerError(error: Throwable) { errors += error }
@@ -768,5 +770,140 @@ class ScanAnalyzerTest {
         assertEquals("the removal tick is in the mask's minimum", 0.0, maskMin.toDouble(), 1e-9)
         assertFalse("no texture numbers without shadow mode", waits[0].contains("texture"))
         assertTrue(log.all().map { it.msg }.single { it.startsWith("next card: removed") }.isNotEmpty())
+    }
+
+    // ── "Zoom to fit the Area" (1.1.11): the settle gate and the zoom's mapping ──
+
+    /** The base Area the zoom tests use (fit 1/(2·0.3) = 1.67: 1.5× keeps it inside the view). */
+    private val zBase = RoiFrac(0.25, 0.2, 0.75, 0.8)
+    private val zView = io.github.darylno.cardscanner.core.ZoomFit.toView(zBase, 1.5)!!
+
+    /** The same tray + card as the camera shows them at 1.5× (scaled about the frame centre). */
+    private val cardZoomed = FakePlanes.nv21(w, h, { x, y ->
+        val bx = 176 + (x - 176) / 1.5; val by = 132 + (y - 132) / 1.5
+        if (bx in 120.0..231.0 && by in 60.0..215.0) 230 else 100 })
+
+    private fun copies(a: ScanAnalyzer) = Regex("copies (\\d+)").find(a.stats())!!.groupValues[1].toInt()
+
+    /** While the camera's zoom changes nothing is ticked, copied, snapshot or shot; a pending shutter waits for the new zoom. */
+    @Test fun whileTheZoomSettlesNothingIsTickedCopiedOrShot() {
+        val rec = Recorder()
+        val log = DebugLog(300, clock = { 0L })
+        val a = ScanAnalyzer(direct, rec, outlineFinder = boxFinder, shadowMode = false, log = log)
+        a.setAuto(false)                                            // Tap to scan: the shutter
+        a.setRoi(zBase)
+        feedTo(a, tray, 6)
+        val ticks = rec.updates.size
+        val copied = copies(a)
+        a.closeZoomGate("test: zoom → 1.50×")
+        a.manualScan()                                             // tapped while settling
+        val snaps = mutableListOf<Double>()
+        a.requestSnapshotAt { _, z -> snaps += z }
+        feedTo(a, card, 10)                                         // frames at an unknown zoom
+        assertEquals("no ticks", ticks, rec.updates.size)
+        assertEquals("no ring copies", copied, copies(a))
+        assertTrue("no capture", rec.bursts.isEmpty())
+        assertTrue("no snapshot", snaps.isEmpty())
+        assertEquals("frames at a closed gate ask the camera once", 1, rec.resyncs)
+        a.zoomMapped(1.5, zView, settle = true, why = "test")
+        val opened = ts
+        feedTo(a, cardZoomed, ScanAnalyzer.SETTLE_DROP_FRAMES)
+        assertTrue("the frames that may predate the zoom are dropped too", rec.bursts.isEmpty() && snaps.isEmpty())
+        feedTo(a, cardZoomed, 12)
+        assertEquals(1, rec.bursts.size)
+        val b = rec.bursts[0]
+        assertEquals(CaptureTrigger.MANUAL, b.trigger)
+        assertEquals(1.5, b.zoom, 0.0)
+        assertEquals("the crop is the Area in the zoomed frame", zView, b.cropRoi)
+        assertTrue("every frame is from after the zoom settled",
+            b.frames.all { it.timestampNs >= opened + ScanAnalyzer.SETTLE_DROP_FRAMES * 100_000_000L })
+        assertEquals("the snapshot is the next open frame, with its zoom", listOf(1.5), snaps)
+        assertTrue(rec.updates.last().zoom == 1.5 && rec.updates.last().roi == zView)
+        val zoomLines = log.all().filter { it.tag == "zoom" }.map { it.msg }
+        assertTrue(zoomLines.toString(), zoomLines.any { it.startsWith("analyzer paused") } &&
+            zoomLines.any { it.startsWith("analyzer resumed at 1.50×") } && zoomLines.any { it.startsWith("frames now at 1.50×") })
+        assertTrue(a.stats(), a.stats().contains("zoom 1.50×"))
+    }
+
+    /** A still card across a zoom change is learned into the new empty tray — never scanned a second time. */
+    @Test fun aStillCardAcrossAZoomChangeIsNotScannedTwice() {
+        val rec = Recorder()
+        val a = ScanAnalyzer(direct, rec, outlineFinder = boxFinder, shadowMode = false, log = DebugLog(300))
+        a.setRoi(zBase)
+        feedTo(a, tray, 12); feedTo(a, card, 12)
+        assertEquals("scanned once at 1×", 1, rec.bursts.size)
+        a.closeZoomGate("test: the switch turned on")
+        feedTo(a, card, 3)
+        a.zoomMapped(1.5, zView, settle = true, why = "test")
+        val before = rec.updates.size
+        feedTo(a, cardZoomed, 60)                                   // the card never moved
+        assertEquals("the same still card is not scanned again", 1, rec.bursts.size)
+        assertTrue("the new view was learned", rec.updates.drop(before).any { (it.event as? AutoScanner.Event.Learning)?.learned == true })
+        assertTrue(rec.updates.drop(before).none { it.event is AutoScanner.Event.Trigger && !it.triggerRefused })
+    }
+
+    /** A re-apply (the camera came back at the same zoom and Area) keeps the learned tray: a card scans at once. */
+    @Test fun theSameViewAfterTheGateKeepsTheEmptyTray() {
+        val rec = Recorder()
+        val a = ScanAnalyzer(direct, rec, outlineFinder = boxFinder, shadowMode = false, log = DebugLog(300))
+        a.zoomMapped(1.5, zView, settle = false, why = "bind")
+        feedTo(a, tray, 12)
+        assertTrue(rec.updates.any { (it.event as? AutoScanner.Event.Learning)?.learned == true })
+        a.closeZoomGate("test: the scan screen stopped")
+        feedTo(a, tray, 4)
+        a.zoomMapped(1.5, zView, settle = true, why = "camera re-open")
+        val before = rec.updates.size
+        feedTo(a, tray, 6)
+        assertTrue("no re-learn", rec.updates.drop(before).none { it.event is AutoScanner.Event.Learning })
+        feedTo(a, cardZoomed, 12)
+        assertEquals(1, rec.bursts.size)
+        assertEquals(1.5, rec.bursts[0].zoom, 0.0)
+    }
+
+    /** With the zoom off the controller maps (1.0, the Area) without a gate: the exact pre-zoom setRoi path. */
+    @Test fun zoomOffIsTheOldPathEventForEvent() {
+        val recA = Recorder(); val recB = Recorder()
+        val a = ScanAnalyzer(direct, recA, outlineFinder = boxFinder, shadowMode = false, log = DebugLog(10))
+        val b = ScanAnalyzer(direct, recB, outlineFinder = boxFinder, shadowMode = false, log = DebugLog(10))
+        val roi = RoiFrac(0.1, 0.1, 0.9, 0.9)
+        val t0 = ts
+        a.setRoi(roi)
+        b.zoomMapped(1.0, roi, settle = false, why = "camera bind")
+        for (an in listOf(a, b)) {
+            ts = t0
+            feedTo(an, tray, 12); feedTo(an, card, 12); feedTo(an, tray, 4)
+            if (an === b) b.zoomMapped(1.0, roi, settle = false, why = "camera re-open")   // a re-map that changes nothing
+            feedTo(an, card, 12); feedTo(an, tray, 4)
+        }
+        fun describe(e: AutoScanner.Event) = when (e) {
+            is AutoScanner.Event.Watching -> "W${if (e.occupied) 1 else 0}/${e.stableCount}"
+            is AutoScanner.Event.NextCard -> "N${if (e.removed) "r" else "s"}"
+            else -> e.javaClass.simpleName
+        }
+        assertEquals(recA.updates.map { describe(it.event) }, recB.updates.map { describe(it.event) })
+        assertEquals(recA.bursts.map { it.frames.map { f -> f.timestampNs } }, recB.bursts.map { it.frames.map { f -> f.timestampNs } })
+        assertEquals(2, recA.bursts.size)
+        assertTrue(recB.bursts.all { it.zoom == 1.0 && it.cropRoi == roi })
+        assertEquals(0, recB.resyncs)
+        assertTrue(b.stats(), !b.stats().contains("zoom"))
+    }
+
+    /** A first-card capture held for focus when the gate closes is dropped, and the still card is asked about again — Tray never stays SCANNING. */
+    @Test fun aHeldCaptureDroppedByTheGateIsAskedAgain() {
+        val rec = Recorder()
+        val log = DebugLog(300, clock = { 0L })
+        val a = ScanAnalyzer(direct, rec, outlineFinder = boxFinder, shadowMode = false, log = log)
+        var due = true
+        a.focusFirst = { due }
+        feedTo(a, tray, 12); feedTo(a, card, 12)
+        assertEquals(1, rec.focusRequests)
+        assertTrue(rec.bursts.isEmpty())
+        a.closeZoomGate("test: the camera closed")
+        feedTo(a, card, 3)
+        a.zoomMapped(1.0, null, settle = true, why = "camera re-open")       // same view: no re-learn
+        due = false
+        feedTo(a, card, 20)
+        assertEquals("the card was asked about again and shot", 1, rec.bursts.size)
+        assertTrue(log.all().any { it.tag == "focus" && it.msg.contains("hold cancelled (the camera's zoom is changing)") })
     }
 }

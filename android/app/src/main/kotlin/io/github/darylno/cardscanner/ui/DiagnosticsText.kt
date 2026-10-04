@@ -16,7 +16,8 @@ object DiagnosticsText {
             .append('\n')
         append("mode ").append(if (app.settings.auto) "Tray" else "Tap to scan")
             .append(" · area ").append(app.settings.roi?.encode() ?: "full frame")
-            .append(" · check ").append(app.settings.checkMs).append(" ms\n")
+            .append(" · check ").append(app.settings.checkMs).append(" ms")
+            .append(" · zoom to fit ").append(if (app.settings.zoomFit) "on" else "off").append('\n')
         app.updates.latest?.let { append("latest release ").append(it.version).append(if (app.updates.locked) " — UPDATE REQUIRED" else "").append('\n') }
         append("queue pending ").append(app.uploads.pending).append("\n\n")
         // Live while the scan screen has its camera; else the last snapshot, with its age.

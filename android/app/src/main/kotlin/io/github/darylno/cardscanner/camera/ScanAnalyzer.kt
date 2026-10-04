@@ -54,6 +54,8 @@ class DetectionUpdate(
     val outlineNanos: Long? = null,
     /** This Trigger was REFUSED by the card-shape gate (nothing shot; the scanner keeps watching). */
     val triggerRefused: Boolean = false,
+    /** The camera zoom the frame was taken at ([roi] is the Area in THAT frame's fractions — the view Area). */
+    val zoom: Double = 1.0,
 )
 
 /**
@@ -80,6 +82,8 @@ class CaptureBurst(
     val box: Box?,
     val uprightW: Int,
     val uprightH: Int,
+    /** The camera zoom the frames were taken at (the capture line's "@ z×"); [cropRoi] is in their fractions. */
+    val zoom: Double = 1.0,
 )
 
 /**
@@ -154,6 +158,21 @@ class CaptureBurst(
  *     which also carries the texture maximum. The numbers
  *     never re-arm, trigger or change any scanner state (ScanAnalyzerTest:
  *     identical outcomes with it on and off).
+ *
+ * ZOOM (1.1.11, "Zoom to fit the Area" — core ZoomFit / ZoomCoordinator): [roi]
+ * is always the Area in the fractions of the frames as they ARRIVE — the VIEW
+ * Area at the camera's zoom [zoomMapped] says, so the sample, the capture crop,
+ * the watch window and the focus points all follow the zoom with no other
+ * change. While the camera's zoom changes the SETTLE GATE is closed
+ * ([closeZoomGate]): no tick, no ring copy, no snapshot, no capture (a pending
+ * shutter waits; a held first-card capture is dropped and asked for again). It
+ * opens once the coordinator maps the ratio READ BACK from the camera and
+ * [SETTLE_DROP_FRAMES] more frames (which may predate it) are dropped; the
+ * ring is emptied then, so no burst ever mixes zooms. The tray is re-learned
+ * only when (zoom, view Area) really changed — a re-apply after the camera
+ * comes back is not a change, and a still card across a real change is learned
+ * as part of the new empty tray (never scanned twice). With the zoom off none
+ * of this runs: the Area arrives at 1× exactly as [setRoi] always did.
  */
 class ScanAnalyzer(
     private val commands: Executor,
@@ -179,6 +198,12 @@ class ScanAnalyzer(
          * focus settled, or fires anyway after [FOCUS_WAIT_NS].
          */
         fun onFocusRequest(request: FocusRequest) {}
+        /**
+         * Frames are arriving while the zoom gate is closed and nothing has
+         * re-opened it (asked once per closure): the camera is evidently back —
+         * the controller re-applies the zoom ([io.github.darylno.cardscanner.core.ZoomCoordinator.cameraStarted]).
+         */
+        fun onZoomResync() {}
     }
 
     private val planes = ImageProxyPlanes()
@@ -211,6 +236,16 @@ class ScanAnalyzer(
     private var focusReadyTs = NONE
     private var manualStartTs = NONE
     private var nextId = 1L
+
+    // --- the zoom (analysis thread) ---
+    /** The camera zoom the frames arrive at ([roi] is in their fractions). */
+    private var zoomZ = 1.0
+    /** The settle gate: frames are dropped while the camera's zoom changes. */
+    private var zoomGateClosed = false
+    /** Frames still to drop before the gate opens (set when the coordinator maps the read-back ratio). */
+    private var zoomDropLeft = 0
+    private var zoomResyncAsked = false
+    private var zoomDroppedThis = 0
 
     // --- display + shadow-mode state (analysis thread; never read by the scanner) ---
     /**
@@ -260,11 +295,18 @@ class ScanAnalyzer(
     private var waitLogged = 0
 
     // --- stats (written on the analysis thread, read racily by diagnostics) ---
-    private val snapshotWaiter = java.util.concurrent.atomic.AtomicReference<((Nv21Frame) -> Unit)?>(null)
+    private val snapshotWaiter = java.util.concurrent.atomic.AtomicReference<((Nv21Frame, Double) -> Unit)?>(null)
     private val snapRing = FrameRing(1)
 
     /** Hand the NEXT analyzed frame (a copy, NV21) to [give] on the analysis thread. */
-    fun requestSnapshot(give: (Nv21Frame) -> Unit) { snapshotWaiter.set(give) }
+    fun requestSnapshot(give: (Nv21Frame) -> Unit) = requestSnapshotAt { f, _ -> give(f) }
+
+    /**
+     * Hand the NEXT analyzed frame and the zoom it was taken at to [give] (analysis
+     * thread). Never a frame from inside the zoom settle gate: the browser's base-space
+     * picture ([io.github.darylno.cardscanner.core.ZoomSnapshot]) needs the right zoom.
+     */
+    fun requestSnapshotAt(give: (Nv21Frame, Double) -> Unit) { snapshotWaiter.set(give) }
 
     @Volatile private var frames = 0L
     @Volatile private var gated = 0L
@@ -291,6 +333,12 @@ class ScanAnalyzer(
     @Volatile private var outlineNsTotal = 0L
     @Volatile private var outlineErrors = 0L
     @Volatile private var lastOutlineError: String? = null
+    @Volatile private var zoomDropped = 0L
+    @Volatile private var zoomClosures = 0L
+    @Volatile private var zoomChanges = 0L
+    /** The zoom ticks are mapped at now (Diagnostics; written on the analysis thread). */
+    @Volatile var currentZoom = 1.0
+        private set
     @Volatile private var textureRuns = 0L
     @Volatile private var textureNsTotal = 0L
     @Volatile private var frameDesc = "no frame yet"
@@ -320,10 +368,25 @@ class ScanAnalyzer(
     /** One camera frame (the testable core of [analyze]). Analysis thread only. */
     fun process(p: YuvPlanes, rotation: Int, timestampNs: Long) {
         frames++
+        // THE ZOOM SETTLE GATE: while the camera's zoom changes, a frame may be at the old
+        // zoom or the new one — nothing looks at it (no tick, copy, snapshot or capture).
+        if (zoomGateClosed) {
+            zoomDropped++; zoomDroppedThis++
+            if (zoomDropLeft > 0) {
+                if (--zoomDropLeft == 0) {
+                    zoomGateClosed = false
+                    safeLog("zoom") { "analyzer resumed at %.2f× — %d frame(s) dropped while the zoom settled".format(zoomZ, zoomDroppedThis) }
+                }
+            } else if (!zoomResyncAsked) {
+                zoomResyncAsked = true
+                runCatching { sink.onZoomResync() }
+            }
+            return
+        }
         // A browser asked for a picture of the tray (scan-Area drawing): hand over this frame.
         snapshotWaiter.getAndSet(null)?.let { give ->
             snapRing.copyFrom(p, rotation, timestampNs)
-            runCatching { give(snapRing.snapshotLast(1).first()) }
+            runCatching { give(snapRing.snapshotLast(1).first(), zoomZ) }
         }
         // A timestamp going backwards = a new camera session: accept it.
         if (lastFrameTs != NONE && timestampNs >= lastFrameTs && timestampNs - lastFrameTs < FRAME_GATE_NS) {
@@ -525,7 +588,7 @@ class ScanAnalyzer(
             val wf = runCatching { watchFractions(uw, uh) }.getOrNull()
             sink.onDetection(
                 DetectionUpdate(ev, lastBox, g.w, g.h, uw, uh, roi, scanner.autoEnabled, scanner.hasEmptyRef, g,
-                    outline?.quad, wf, outlineNs, triggerRefused),
+                    outline?.quad, wf, outlineNs, triggerRefused, zoomZ),
             )
         }
     }
@@ -819,7 +882,7 @@ class ScanAnalyzer(
             CaptureBurst(
                 id = id, trigger = trigger, mode = mode, frames = burst,
                 cropRoi = if (mode == ScanMode.MOUNT) roi else HandheldGuide.frac(uw, uh),
-                scene = scanner.scannedFrame, box = box, uprightW = uw, uprightH = uh,
+                scene = scanner.scannedFrame, box = box, uprightW = uw, uprightH = uh, zoom = zoomZ,
             ),
         )
     }
@@ -855,14 +918,59 @@ class ScanAnalyzer(
         }
     }
 
-    /** New scan area (fractions of the upright frame; null = whole frame): re-learn the tray. */
-    fun setRoi(newRoi: RoiFrac?) = post {
-        if (newRoi != roi) {
-            roi = newRoi
+    /** New scan area (fractions of the frames as they arrive; null = whole frame): re-learn the tray. */
+    fun setRoi(newRoi: RoiFrac?) = post { applyMapping(zoomZ, newRoi, settle = false, why = "new Area") }
+
+    /**
+     * The zoom coordinator's mapping: frames arrive at [ratio] and the Area is [view]
+     * (fractions of THOSE frames). Re-learns the tray only when (ratio, view) changed —
+     * exactly [setRoi]'s re-learn, plus the ring emptied on a new ratio. [settle] = the
+     * gate is closed for a camera change: drop [SETTLE_DROP_FRAMES] more frames (they may
+     * predate the zoom), then open. With the zoom off the controller sends (1.0, the Area,
+     * no settle): the pre-zoom setRoi path, bit for bit.
+     */
+    fun zoomMapped(ratio: Double, view: RoiFrac?, settle: Boolean, why: String) = post { applyMapping(ratio, view, settle, why) }
+
+    private fun applyMapping(ratio: Double, view: RoiFrac?, settle: Boolean, why: String) {
+        val newRatio = ratio != zoomZ
+        if (newRatio || view != roi) {
+            roi = view
+            zoomZ = ratio
+            currentZoom = ratio
             scanner.reset()
-            cancelHold("new Area")
+            cancelHold(if (newRatio) "zoom change" else "new Area")
+            if (newRatio) { rebaseNext = false; heldTimedOut = false; zoomChanges++ }
             lastSample = null; lastBox = null; lastBoxInfo = null
-            clearWatch("new area")
+            clearWatch(if (newRatio) "zoom change" else "new area")
+            if (newRatio) safeLog("zoom") { "frames now at %.2f× ($why) — the Area is %s of the zoomed frame; re-learning the empty tray"
+                .format(ratio, view?.encode() ?: "the whole frame") }
+        }
+        if (settle || newRatio) ring.clear()          // no burst ever mixes zooms
+        if (settle && zoomGateClosed) {
+            zoomDropLeft = SETTLE_DROP_FRAMES
+            zoomResyncAsked = true                     // settling: frames are expected, not a reason to ask
+        }
+    }
+
+    /**
+     * The camera's zoom is about to change (or the camera went away while zoomed):
+     * drop every frame until [zoomMapped] settles it. A pending shutter waits (its
+     * settle time restarts); a held first-card capture is dropped and the card asked
+     * about again on its next steady ticks (never left SCANNING).
+     */
+    fun closeZoomGate(why: String) = post {
+        if (!zoomGateClosed) {
+            zoomGateClosed = true
+            zoomClosures++
+            zoomDroppedThis = 0
+            safeLog("zoom") { "analyzer paused — $why" }
+        }
+        zoomDropLeft = 0
+        zoomResyncAsked = false
+        manualStartTs = NONE
+        if (deferring) {
+            cancelHold("the camera's zoom is changing")
+            scanner.triggerRefused()
         }
     }
 
@@ -916,6 +1024,8 @@ class ScanAnalyzer(
             if (outlineErrors > 0) append(" · outline errors $outlineErrors (last: $lastOutlineError)")
             val x = textureRuns
             if (x > 0) append(" · texture $x avg ${"%.2f".format(textureNsTotal / 1e6 / x)} ms")
+            if (zoomClosures > 0 || currentZoom != 1.0) append(" · zoom %.2f× (%d change(s), gate closed %d time(s), %d frame(s) dropped settling)"
+                .format(currentZoom, zoomChanges, zoomClosures, zoomDropped))
         }
     }
 
@@ -934,6 +1044,8 @@ class ScanAnalyzer(
         const val MANUAL_WAIT_NS = 700_000_000L
         /** Let the tap's jolt pass before the frames a manual scan uses. */
         const val MANUAL_SETTLE_NS = 150_000_000L
+        /** Frames dropped after the zoom is read back before the gate opens (they may predate it). */
+        const val SETTLE_DROP_FRAMES = 2
         /** Longest a first-card capture waits for focus before shooting anyway. */
         const val FOCUS_WAIT_NS = 1_500_000_000L
         /** Shadow mode: "WOULD re-arm" when logHP p75 ≥ START_THRESHOLD this many ticks running (~0.4 s). */

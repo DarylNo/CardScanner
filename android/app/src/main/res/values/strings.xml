@@ -8,6 +8,7 @@
     <string name="banner_pack_missing">no card database yet — needs internet</string>
     <string name="area">Area</string>
     <string name="area_set">Area ✓</string>
+    <string name="area_zoomed">Area ✓ · %1$s×</string>
     <string name="scans">Scans</string>
     <string name="share">Share</string>
     <string name="settings">Settings</string>
@@ -50,6 +51,8 @@
     <string name="camera_pill_desc">Camera: %1$s. Swipe or tap to change.</string>
     <string name="camera_pill_changed">Camera: %1$s — re-learning the empty tray…</string>
     <string name="camera_pill_changed_tap">Camera: %1$s</string>
+    <string name="settings_zoomfit">Zoom to fit the Area</string>
+    <string name="settings_zoomfit_desc">Zooms the camera in so your scan Area fills the view (up to 2×, never past what the sensor resolves): more pixels on each card. Changing the zoom re-learns the empty tray. Off by default while it is tried on the rig.</string>
     <string name="settings_highres">High resolution</string>
     <string name="settings_highres_desc">2048×1536 (Standard is 1600×1200)</string>
     <string name="settings_aelock">Lock exposure + white balance</string>

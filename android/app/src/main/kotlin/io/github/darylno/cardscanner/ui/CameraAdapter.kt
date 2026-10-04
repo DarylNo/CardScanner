@@ -24,6 +24,8 @@ class CameraAdapter(private val context: Context, private val settings: AppSetti
     private var diagnosticsSource: (() -> String)? = null
     private var auto = true
     private var roi: RoiFrac? = null
+    private var zoomFit = false
+    private var drawing = false
     private var preview: PreviewView? = null
 
     override fun bind(owner: LifecycleOwner, preview: PreviewView, listener: CameraPort.Listener) {
@@ -55,7 +57,7 @@ class CameraAdapter(private val context: Context, private val settings: AppSetti
                     Captured(
                         r.primary, r.fallbacks, r.flattened, r.summary(), if (outcome.mode == ScanMode.MOUNT) outcome.scene else null,
                         quad = r.quad, frameW = r.frameWidth, frameH = r.frameHeight,
-                        burstId = outcome.id, lens = outcome.lens,
+                        burstId = outcome.id, lens = outcome.lens, zoom = outcome.zoom,
                     ),
                     outcome.trigger == CaptureTrigger.MANUAL,
                 )
@@ -73,6 +75,10 @@ class CameraAdapter(private val context: Context, private val settings: AppSetti
             override fun onCameraReady(summary: String) {
                 runCatching { CameraDiagnostics.snapshot(controller?.diagnostics()) }
             }
+
+            override fun onZoom(ratio: Double, view: RoiFrac?, drawingReady: Boolean) {
+                listener.onZoom(ratio, view, drawingReady)
+            }
         })
         controller = c
         val source = { c.diagnostics() }
@@ -80,6 +86,8 @@ class CameraAdapter(private val context: Context, private val settings: AppSetti
         CameraDiagnostics.attach(source)
         this.preview = preview
         c.setScanMode(ScanMode.MOUNT)   // the app's only mode since 1.1.2 (Auto off = tap to scan)
+        c.setZoomFit(zoomFit)
+        c.setDrawing(drawing)
         c.setRoi(roi)
         c.setAuto(auto)
         c.setTorch(settings.torch)
@@ -119,6 +127,22 @@ class CameraAdapter(private val context: Context, private val settings: AppSetti
         this.roi = roi
         controller?.setRoi(roi)
     }
+
+    override fun setZoomFit(on: Boolean) {
+        zoomFit = on
+        controller?.setZoomFit(on)
+    }
+
+    override fun setDrawing(on: Boolean): Boolean {
+        drawing = on
+        val c = controller ?: return false
+        // The controller always answers a drawing request through onZoom(drawingReady) —
+        // at once when the camera is at 1× already, after the zoom-out otherwise.
+        c.setDrawing(on)
+        return true
+    }
+
+    override fun zoomState(): io.github.darylno.cardscanner.core.ZoomCoordinator.State? = controller?.zoomState()
 
     override fun relearn() { controller?.reset() }
     override fun pause(paused: Boolean) { controller?.setPaused(paused) }

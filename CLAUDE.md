@@ -25,7 +25,9 @@ android/core/        pure Kotlin (JVM-testable): AutoScanner/Detection (the
                      trigger), CardQuad/Flatten, ScanPhoto, CardOutline +
                      OutlineTracker (the live outline / card-shape gate),
                      TextureChange (shadow mode), CameraChoice (the Camera
-                     setting), FocusPoint (where AF meters), PHash/ArtHasher/ArtMatcher (bit-exact
+                     setting), FocusPoint (where AF meters), ZoomFit +
+                     ZoomCoordinator + ZoomSnapshot ("Zoom to fit the Area"),
+                     PHash/ArtHasher/ArtMatcher (bit-exact
                      fingerprint), IdentifyPipeline, PrintingRanker,
                      OcrMatch, Popularity, and core/server/ — ScanStore,
                      PhoneApi (the /api surface), PriceSweep/PriceWorker,
@@ -492,6 +494,83 @@ lens on testers' phones), minSdk 29, arm64-v8a.
   characteristics lines are read once per bind. Tested in code, not on the
   phone; dioptres → cm only when LENS_INFO_FOCUS_DISTANCE_CALIBRATION is not
   UNCALIBRATED.
+- **Zoom to fit the Area (owner on 1.1.10: "No zoom?" → "Go"; 1.1.11).**
+  Settings → Camera → "Zoom to fit the Area", **OFF by default in this build**
+  (the owner turns it on to try it), both Tray and Tap to scan, also from the
+  desktop 📱 Scanner panel (`zoom_fit`). The camera zooms so the drawn Area fills
+  the view — no new control, the zoom comes from the box already drawn.
+  **Coordinate spaces:** the stored `roi` (AppSettings, `/api/device`) is BASE,
+  1× fractions — no zoom was ever applied before, so every stored Area already
+  is one: no migration. CameraX zooms about the frame centre, so the VIEW Area =
+  ½ + (b − ½)·z per axis (`core/ZoomFit.toView`, computed at use, EXACT identity
+  at z == 1.0 — MainActivity compares Areas by equality); it keeps the aspect,
+  so MH never changes. Everything that works on frames uses the view Area: the
+  detection sample, the capture crop + margins (the full frame is the zoomed
+  frame), the overlay, the focus points (`areaCentre(viewRoi)`, the card box's
+  `FocusRequest.roi`), the watch window. The Tap default Area is base like any
+  stored Area. **The ratio** (`ZoomFit.choose`): z = floor-to-0.05 of min(0.95 ·
+  fit(A), lossless, the lens's maxZoomRatio, `MAX_ZOOM` 2.0 — provisional until
+  the rig's lossless knee), fit(A) = 1 / (2 · max|edge − ½|) (so the Area never
+  leaves the view), lossless = the sensor active array ÷ the analysis stream
+  (per side, the smaller), and z = 1 below 1.10×, with the switch off, while an
+  Area is drawn, or with no Area. The default Tap Area gives 1.20×.
+  **The lifecycle** (`core/ZoomCoordinator`, pure, `ZoomCoordinatorTest`; the
+  CameraX glue is `CameraController`): every camera change CLOSES the
+  analyzer's settle gate first (`ScanAnalyzer.closeZoomGate`: no tick, no ring
+  copy, no snapshot, no capture; a pending shutter waits; a held first-card
+  capture is dropped and the still card asked again via `triggerRefused`),
+  calls `setZoomRatio`, and maps with the ratio READ BACK from the capture
+  results (CONTROL_ZOOM_RATIO on API 30+, else active array ÷ crop width —
+  CameraX's ZoomState moves when asked, not when frames carry it; a read-back
+  within 1 % IS the request, so a re-apply maps bit-identically). The gate
+  opens after 2 more frames are dropped and the ring is emptied — no burst mixes
+  zooms. CameraX resets zoom to 1.0 on EVERY detach (`ZoomControl.setActive(false)`
+  → `resetZoom`, 1.5.3 bytecode: every Scans / Settings / Tap-detail round
+  trip), so the gate closes at ON_STOP and on CLOSING/CLOSED (OPENING too while a
+  zoom is in use) and the zoom is re-applied on OPEN, at ON_START and when frames
+  reach a closed gate (`onZoomResync`, once per closure). "Camera is not active"
+  is retried 5 × 200 ms, then the mapping falls back to 1× and scanning carries
+  on (the next start asks again); a refused ratio is not asked again in a loop;
+  no answer in 2 s maps what the newest result reports. **The tray is re-learned
+  only when (z, view Area) changed** (`ScanAnalyzer.zoomMapped` = setRoi's
+  re-learn + the ring cleared on a new ratio): a re-apply after the camera comes
+  back keeps the empty tray, and a still card across a real change is learned
+  into the new tray, never scanned twice. Focus re-arms after an applied change
+  (Area-centre lock at the new view + the first-card pass). **Drawing an Area on
+  the phone** zooms OUT to 1× first and arms the drag only once the camera is
+  there ("Zooming out to the whole frame…"); release stores the BASE Area and
+  zooms in (one re-learn, at its own zoom); Cancel zooms back with no re-learn
+  (the analyzer is left alone while drawing). **With the switch off none of
+  this runs** — no zoom call, no gate, no settle: the Area reaches the analyzer
+  as `zoomMapped(1.0, Area, settle = false)`, the pre-zoom setRoi path event for
+  event (`zoomOffIsTheOldPathEventForEvent`). **What shows it:** the Area chip
+  reads "Area ✓ · 1.55×" while zoomed; the capture line ends "… @ 1.55×"; tag
+  `zoom` logs each request ("→ 1.55× requested (why) · 1.55× (limited by the
+  Area fit)"), what the camera reports (CONTROL_ZOOM_RATIO, the crop region and
+  whether it is centred), the gate ("analyzer paused — why" / "resumed at
+  1.55× — n frame(s) dropped"), each re-learn, any failure, and the POST-FIT
+  CHECK (`ZoomFit.PostFit`: the first Tray capture at a new zoom compares the
+  card's height in frame px with the median at the previous zoom — it should
+  scale with z; beyond ±3 % the centred-crop maths does not hold on that
+  phone, e.g. a logical multi-camera). Diagnostics: "zoom to fit the Area: on ·
+  target … (limited by …) · applied … · Area fit … · lossless … · lens max … ·
+  MAX_ZOOM …" plus the read-back; the analyzer line counts changes, gate
+  closures and frames dropped. **The desktop:** `/api/device` carries
+  `zoom_fit` and `zoom {ratio, target, limit, fit, lossless, max, settling}`
+  (null with the scan screen closed); `roi` stays base, and `snapshot.jpg` stays
+  a BASE-space picture while zoomed (`core/ZoomSnapshot`: the zoomed frame
+  scaled by 1/z, centred on grey — marks land at their base fractions ±1 px at
+  1, 1.6 and 2×, `ZoomSnapshotTest`), so drawing the Area there stays 1:1. The
+  📱 Scanner panel (d45) has the checkbox and a zoom line (hidden for an older
+  phone app) and re-takes the picture after a zoom / Area / lens PATCH —
+  `scripts/check_device_ui.py` drives it in headless Chromium. Tested in code
+  (ZoomFitTest, ZoomCoordinatorTest, ZoomSnapshotTest, the ScanAnalyzerTest
+  gate tests, DeviceApiTest, ScreensSmokeTest at the N200's size for the
+  Settings switch and the "Area ✓ · 1.55×" chip), NOT on the phone: whether the
+  N200 reports CONTROL_ZOOM_RATIO, the lossless knee, the frames at the wrong
+  zoom after a settle, and whether the photos get sharper are all rig
+  questions. Not built yet: the zoom probe (a measured ratio ladder), the
+  MeasureSession A/B steps, `snapshot.jpg?view=camera`, an off-centre hint.
 - **The review WebView shows the page's `confirm()`/`alert()`** (`ui/JsDialogs`,
   a `WebChromeClient`): an Android WebView drops JavaScript dialogs unless the
   app shows them, so `confirm()` returned false and phone.html's "Clear all" /
@@ -713,8 +792,10 @@ lens on testers' phones), minSdk 29, arm64-v8a.
   after 20 bad codes from anywhere in 5 min.
 - **Scanner settings from the browser** (`core/server/DeviceApi`, admin only):
   GET/PATCH `/api/device` (mode, roi, torch, vibration, high_res, ae_lock,
-  check_ms, camera — with the phone's `cameras` listed) + `/api/device/snapshot.jpg` (the current UPRIGHT analysis frame —
-  the space the Area fractions live in). `DeviceBridge` writes `AppSettings`
+  check_ms, camera — with the phone's `cameras` listed — and zoom_fit, with the
+  live `zoom`) + `/api/device/snapshot.jpg` (the current UPRIGHT analysis frame —
+  the space the Area fractions live in; while zoomed, the zoomed frame placed
+  on a grey base-size picture, so it is still base space). `DeviceBridge` writes `AppSettings`
   and the scan screen applies a change live (a new Area only when it changed —
   it re-learns the tray). The desktop "📱 Scanner" panel shows only when
   `/api/device` answers.
@@ -799,7 +880,21 @@ Open threads:
   Diagnostics' camera block now says "live" with a `focus:` line. That data
   decides the Phase-3 focus work (a periodic Tray re-lock, a better watchdog)
   and the zoom probe.
-- Proposed, not approved: "Fit to cards + zoom" (auto-fit the scan Area).
+- Owner to try "Zoom to fit the Area" on the rig (1.1.11, OFF by default,
+  Settings → Camera; tested in code, not on the phone). With it on, in a Tray
+  session: does the Area chip read "Area ✓ · N×" and the preview fill the box?
+  The `zoom` lines — "→ N× requested", "camera reports CONTROL_ZOOM_RATIO …"
+  (does the N200 report it, and is the crop centred?), "analyzer paused /
+  resumed — n frame(s) dropped" (settle time), the "post-fit check" residual
+  (within ±3 %?); no phantom scans and no re-learn after 3× Scans and 3×
+  Settings round trips (a re-apply must not re-learn: no "frames now at" line
+  after a round trip); a card left on the tray across switching it on is NOT
+  scanned again; drawing a new Area zooms out first and Cancel zooms back with
+  the tray kept; the desktop panel's picture stays 1:1 with the Area drawn
+  there. Then compare photos at 1× and zoomed (`done … @ N×` with the three
+  sharpness values and card H px): that, plus a zoom probe, decides
+  `MAX_ZOOM` and turning it on by default. "Fit to cards" (suggesting an Area
+  from where cards land) stays proposed, not approved.
 - Ranking time for heavily reprinted names (cache candidate images).
 - Proposed, awaiting the owner: a measured card-detection goal — score the
   current detector from real debug reports (phantom triggers, captures with no
