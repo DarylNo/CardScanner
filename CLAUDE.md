@@ -556,6 +556,46 @@ lens on testers' phones), minSdk 29, arm64-v8a.
   shutter / Tap to scan is never gated. The UI says "Something in the Area —
   no card shape yet…" instead of "Card detected" while the mask is occupied
   without an outline; the Diagnostics line counts "triggers refused".
+  **THE PRINTED-DETAIL FALLBACK (1.1.11; owner on 1.1.10: "Old bordered cards
+  didn't see the change of cards. White bordered cards didn't get picked up as
+  cards").** A HEDGE, not a diagnosed fix: synthetic white-bordered cards are
+  found by the outline at 176 px, so the rig's cause is unknown. If the finder
+  misses a real card, that card is refused and after 5 refusals becomes "the
+  tray", so the next card is judged against it — both reports at once. Before
+  refusing, the gate now asks the SAME trigger box for a card's printed detail
+  (`core/PrintEvidence`, app-only; read-only `AutoScanner.emptyGradient()`, a
+  copy): in the box's CORE (inset 25 % per side — a flat patch's edges, a glare
+  flank, a hand's outline stay out) the share of pixels textured now (gradient
+  > `PRINT_GRAD` 21 = 1.5 × GRAD_THR) that were smooth in the learned tray
+  (≤ 14) must be ≥ 6 %, the box long/short 1.15–1.9, ≥ 3 % of the Area. Yes →
+  the capture fires without an outline; it can only ever say yes MORE often.
+  Measured (`PrintEvidenceTest`, synthetic 176×235 samples through the real
+  AutoScanner, table printed): 900 cards (black / white / white + dark frame ×
+  trays 190 / 215 / 240 / dark 40 / textured × sleeved / bare × blur 0/1/2 px ×
+  4 sizes incl. filling the Area × upright / 10° / sideways) all accepted, print
+  ≥ 18 %, box 1.21–1.42, ≥ 8 % of the Area; 200 non-card scenes (glare ±40–80,
+  shadows −30–60, exposure steps, smooth hand blobs, σ 2.5 noise, a textured
+  tray), 93 of which the occupancy trigger fires on — none accepted, print
+  ≤ 1 %. Why 21, not GRAD_THR: at 14 noise on a textured tray read 11 % vs a
+  card minimum of 26 %; at 21, 1 % vs 18 %. Why the core: with the whole box a
+  defocused smooth fist on a dark tray read 21 %. The outline itself found
+  869/900 — the 31 misses are cards that FILL the Area (an Area drawn tight on
+  the card); it also took 24 of 30 smooth hand blobs for cards (pre-existing,
+  not the fallback's doing). Real art is smoother than the synthetic blocks —
+  hence the low 6 %; not measured on the rig. **Log lines (tag `detect`, ≤ 1 per
+  event):** a refusal states its evidence once per scene ("TRIGGER refused — no
+  card shape · no printed detail · print 0% (need 6%) · box 1.38 (1.15–1.90) ·
+  20% of the Area (≥ 3%) · box … mask …"); "TRIGGER accepted without an outline
+  — printed detail N% …"; the adoption repeats the last evidence and the
+  scene's peak print; every NextCard is "next card: removed — mask N%" or
+  "next card: swapped — change N% vs the scanned card (needs > 6%)" (the
+  analyzer's line replaced MainActivity's); and EVERY Tray wait (shadow mode or
+  not) ends with one "wait over" line: the swap test's own number — the max
+  change vs the scanned card over occupied ticks, and over the ticks a card sat
+  still (where a swap could fire) — the still ticks, and the mask's minimum, so
+  a missed swap shows why (two passes over the sample per waiting tick). The
+  Diagnostics line counts "accepted on printed detail" (and any detect line
+  that failed to build — `detectLog` never throws into the decisions).
 - **SHADOW MODE — the shadow-proof "texture change" signal, computed and
   logged, NEVER acting** (owner: "Can't trigger on silly things like shadows";
   a shadow is a brief, smooth, multiplicative change, a new card changes the
@@ -572,7 +612,8 @@ lens on testers' phones), minSdk 29, arm64-v8a.
   provisional until the rig's numbers are in. While the scanner awaits the next
   card, `ScanAnalyzer` measures it every tick inside the watch window and logs
   EVENTS only under tag `shadow` (≤ ~1 line/s, 3000-line ring): the maximum per
-  wait when the wait ends (with its tick count), every crossing of 8 with its
+  wait when the wait ends (with its tick count — since 1.1.11 it rides the
+  `detect` "wait over" line), every crossing of 8 with its
   duration and logGrad, and "WOULD re-arm (texture)" when ≥ 8 holds 2 ticks —
   plus one `outline` line per capture (live outline vs capture quad, card
   height in frame px) and the Diagnostics analyzer line's avg outline / texture
@@ -697,6 +738,15 @@ Open threads:
   only if Android exposes >1 back camera on the N200; is a 24 dp swipe
   comfortable?); the compare block's Scan size slider; and the Camera setting
   on a tester's phone.
+- Owner to send a DEBUG REPORT from 1.1.11 (Settings → Diagnostics → Share
+  debug report) of a Tray session with white-bordered and old-bordered cards,
+  including card SWAPS without lifting: the `detect` lines say whether the
+  outline found each card ("TRIGGER box … outline found") or the printed-detail
+  fallback took it ("accepted without an outline — printed detail N%"), and
+  each wait's "wait over" line says why a swap was or wasn't seen. That report
+  decides the real fix (the fallback is a hedge, tested in code, not on the
+  phone); also say how tightly the Area is drawn round the card (an Area the
+  card fills is where the outline measurably gives up).
 - Proposed, not approved: "Fit to cards + zoom" (auto-fit the scan Area).
 - Ranking time for heavily reprinted names (cache candidate images).
 - Proposed, awaiting the owner: a measured card-detection goal — score the

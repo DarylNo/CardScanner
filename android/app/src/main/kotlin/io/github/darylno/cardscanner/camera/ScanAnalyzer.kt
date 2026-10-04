@@ -7,9 +7,12 @@ import io.github.darylno.cardscanner.core.Box
 import io.github.darylno.cardscanner.core.CardOutline
 import io.github.darylno.cardscanner.core.OutlineTracker
 import io.github.darylno.cardscanner.core.DebugLog
+import io.github.darylno.cardscanner.core.DetectConst
+import io.github.darylno.cardscanner.core.Detection
 import io.github.darylno.cardscanner.core.Gray
 import io.github.darylno.cardscanner.core.GraySampler
 import io.github.darylno.cardscanner.core.Nv21Frame
+import io.github.darylno.cardscanner.core.PrintEvidence
 import io.github.darylno.cardscanner.core.RoiFrac
 import io.github.darylno.cardscanner.core.RoiPx
 import io.github.darylno.cardscanner.core.Rotation
@@ -112,20 +115,35 @@ class CaptureBurst(
  *     stillness trigger itself is untouched; the gate sits after it, in the
  *     app, and only says no. A finder that THREW is unknown, not "no card",
  *     and the capture goes ahead. The shutter is never gated.
+ *     THE FALLBACK (1.1.11, owner on 1.1.10: "White bordered cards didn't get
+ *     picked up as cards"): before refusing, the same trigger box is asked for a
+ *     card's PRINTED DETAIL ([PrintEvidence]: new texture through the box's
+ *     core, a card-shaped box, a minimum share of the Area). A yes fires the
+ *     capture without an outline; glare, shadows, exposure and the bare tray
+ *     are smooth and are still refused — and still adopted after
+ *     [RELEARN_AFTER_REFUSALS]. It can only ever say yes more often. Every
+ *     refusal, fallback accept and adoption states its evidence (tag "detect").
  *  5. The WATCH WINDOW: at a capture, the padded (15 %) card polygon in sample
  *     pixels — the live outline at the Trigger tick, else the mask box; when the
  *     capture's own quad arrives ([onCaptureResult], tagged with the burst id,
  *     ignored after a newer trigger) it replaces both. A shutter scan has no box
  *     (the scanner is SCANNING / Auto off, so its ticks are Idle): its window is
  *     the capture quad alone. It is drawn while awaiting the next card.
- *  6. SHADOW MODE (logging only, tag "shadow"): while awaiting the next card every
+ *  6. THE WAIT (every Tray wait, logging only, tag "detect"): while awaiting the
+ *     next card each tick measures the swap test's own number — the change vs
+ *     the scanned card — and whether the card sat still, plus the mask's
+ *     smallest share; the wait's "wait over" line reports the maxima (so a swap
+ *     that was missed shows WHY: never crossed SWAP_FRAC, never still, …), and
+ *     every NextCard says "removed" or "swapped — change N %".
+ *  7. SHADOW MODE (logging only, tag "shadow"): while awaiting the next card every
  *     tick measures [TextureChange] (logHP p75 + logGrad) between the sample and
  *     the scanner's scanned frame inside the window, and logs EVENTS only — the
  *     maximum per wait, each crossing of [TextureChange.START_THRESHOLD] with its
  *     duration, and "WOULD re-arm (texture)" when it holds 2 ticks — at most
  *     ~1 line/s and [SHADOW_LOG_MAX_PER_WAIT] per wait (a signal hovering at the
  *     threshold for an hour would otherwise push every capture line out of the
- *     3000-line ring); the rest are counted in the per-wait summary. The numbers
+ *     3000-line ring); the rest are counted in the wait's "wait over" line,
+ *     which also carries the texture maximum. The numbers
  *     never re-arm, trigger or change any scanner state (ScanAnalyzerTest:
  *     identical outcomes with it on and off).
  */
@@ -204,9 +222,20 @@ class ScanAnalyzer(
     /** The outline's cost on the Trigger tick, for the per-capture "outline" line. */
     private var triggerOutlineNanos = -1L
 
-    // shadow-mode wait bookkeeping (one "wait" = one AWAIT_NEXT stretch)
+    // wait bookkeeping (one "wait" = one AWAIT_NEXT stretch) — the swap test's numbers, every Tray wait
     private var inWait = false
     private var waitTicks = 0
+    /** Ticks the card sat still (vs the previous tick, the swap test's own stillness). */
+    private var waitStillTicks = 0
+    /** Largest change vs the scanned card (Detection.changedFrac, the swap test's number): occupied ticks / occupied AND still ticks. */
+    private var waitMaxChange = 0.0
+    private var waitMaxChangeStill = 0.0
+    /** Smallest mask share seen (removed = below EMPTY_FRAC). */
+    private var waitMinMask = 1.0
+    /** The previous tick's sample (the swap test's stillness is against it). */
+    private var prevTickSample: Gray? = null
+    // shadow-mode texture bookkeeping, per wait
+    private var textureTicks = 0
     private var waitMax = Double.NEGATIVE_INFINITY
     private var waitMaxGrad = 0.0
     private var waitMaxGrey = 0.0
@@ -239,7 +268,13 @@ class ScanAnalyzer(
     private val tracker = OutlineTracker()
     /** Consecutive Triggers the card-shape gate refused on the current still scene. */
     private var refusals = 0
+    /** The highest printed-detail share among this scene's refusals (for the adoption line). */
+    private var refusalPeakPrint = 0.0
     @Volatile private var triggersRefused = 0L
+    /** Triggers with no outline that the printed-detail fallback let through. */
+    @Volatile private var printAccepts = 0L
+    @Volatile private var logErrors = 0L
+    @Volatile private var lastLogError: String? = null
     @Volatile private var outlineRuns = 0L
     @Volatile private var outlinesFound = 0L
     @Volatile private var outlineNsTotal = 0L
@@ -356,28 +391,46 @@ class ScanAnalyzer(
 
         var trigger = event as? AutoScanner.Event.Trigger
         var triggerRefused = false
-        if (trigger != null && mode == ScanMode.MOUNT && outline == null && !outlineThrew) {
+        if (trigger != null && mode == ScanMode.MOUNT && outline == null && !outlineThrew && g0 != null) {
             // THE CARD-SHAPE GATE (owner, 2026-10-02, a video of the tray "trying to
             // scan nothing"): the mask says something still is in the Area, but no
             // card-shaped, card-textured quad (CardQuad: ratio 1.15–1.75, rectangular,
             // printed interior) was found on this tick or held from the last two —
-            // glare, a shadow, a hand's edge. Nothing is shot; the scanner keeps
-            // watching and asks again after the next steady ticks. A finder that
-            // THREW is "unknown", not "no card": the capture goes ahead as before.
-            triggerRefused = true
-            triggersRefused++
-            refusals++
-            scanner.triggerRefused()
+            // glare, a shadow, a hand's edge. A finder that THREW is "unknown", not
+            // "no card": the capture goes ahead as before.
+            // THE FALLBACK (1.1.11): the finder can miss a real card (owner: white-
+            // bordered cards on 1.1.10). Before refusing, ask the trigger box itself
+            // for a card's printed detail — measured, it separates every synthetic
+            // card from glare / shadow / exposure / smooth hands. A failure to
+            // measure is "no evidence": refused as before.
             val b = trigger.box
-            if (refusals == 1) {
-                log.i("detect", "TRIGGER refused — no card shape in the Area (box ${b.x},${b.y} ${b.w}×${b.h}, mask %.1f%%) · still watching".format(b.maskFrac * 100))
+            val ev = runCatching { scanner.emptyGradient()?.let { PrintEvidence.measure(g0, it, b) } }.getOrNull()
+            val where = { "box ${b.x},${b.y} ${b.w}×${b.h} of ${g0.w}×${g0.h}, mask %.1f%%".format(b.maskFrac * 100) }
+            if (ev != null && ev.looksLikeACard) {
+                printAccepts++
+                detectLog {
+                    "TRIGGER accepted without an outline — printed detail %.0f%% (need %.0f%%) in a card-shaped box %.2f, %.0f%% of the Area · %s"
+                        .format(ev.print * 100, PrintEvidence.MIN_PRINT * 100, ev.aspect, ev.share * 100, where())
+                }
+            } else {
+                triggerRefused = true
+                triggersRefused++
+                refusals++
+                scanner.triggerRefused()
+                if (refusals == 1) refusalPeakPrint = 0.0
+                if (ev != null) refusalPeakPrint = maxOf(refusalPeakPrint, ev.print)
+                val evidence = { ev?.let { "${whyNot(it)} · ${it.describe()}" } ?: "printed detail not measured" }
+                if (refusals == 1) detectLog { "TRIGGER refused — no card shape · ${evidence()} · ${where()} · still watching" }
+                if (refusals >= RELEARN_AFTER_REFUSALS) {
+                    scanner.adoptEmpty(g0)
+                    detectLog {
+                        val peak = "%.0f%%".format(refusalPeakPrint * 100)
+                        "no card shape after $refusals refused triggers — adopted the view as the empty tray · last: ${evidence()} · print peaked at $peak over the $refusals"
+                    }
+                    refusals = 0
+                }
+                trigger = null
             }
-            if (refusals >= RELEARN_AFTER_REFUSALS && g0 != null) {
-                scanner.adoptEmpty(g0)
-                log.i("detect", "no card shape after $refusals refused triggers — adopted the view as the empty tray")
-                refusals = 0
-            }
-            trigger = null
         }
 
         val needCopy = mode == ScanMode.HANDHELD || manualPending || trigger != null ||
@@ -435,6 +488,7 @@ class ScanAnalyzer(
                 runCatching { instrument(ev, g, outline, outlineNs, timestampNs) }
                     .onFailure { outlineErrors++; lastOutlineError = it.toString() }
             }
+            prevTickSample = g
             val wf = runCatching { watchFractions(uw, uh) }.getOrNull()
             sink.onDetection(
                 DetectionUpdate(ev, lastBox, g.w, g.h, uw, uh, roi, scanner.autoEnabled, scanner.hasEmptyRef, g,
@@ -481,14 +535,15 @@ class ScanAnalyzer(
     }
 
     /** Reset / new Area / mode change / camera restart: no burst owns a window any more. */
-    private fun clearWatch(ts: Long, why: String) {
-        if (inWait) endWait(ts, why)
+    private fun clearWatch(why: String) {
+        if (inWait) endWait(why)
+        prevTickSample = null
         watch = null; heldTriggerQuad = null; lastFiredId = 0L
         preparedRef = null; preparedRefOf = null
         tracker.reset()
     }
 
-    /** Per tick, after the decisions: the watch window upkeep and the shadow-mode measurement. */
+    /** Per tick, after the decisions: the watch window upkeep, the wait's swap numbers and the shadow-mode measurement. */
     private fun instrument(ev: AutoScanner.Event, g: Gray, outline: CardOutline.Outline?, outlineNs: Long?, ts: Long) {
         when (ev) {
             is AutoScanner.Event.Trigger -> {
@@ -501,14 +556,69 @@ class ScanAnalyzer(
                     setWatch(outline.sampleQuad, "outline", lastFiredId)
                 }
             }
-            is AutoScanner.Event.AwaitingNext -> if (shadowMode) measureWait(g, ts)
-            is AutoScanner.Event.NextCard -> if (inWait) endWait(ts, if (ev.removed) "card removed" else "a different card settled")
-            else -> if (inWait) endWait(ts, "no longer waiting (${ev.javaClass.simpleName})")
+            is AutoScanner.Event.AwaitingNext -> {
+                trackWait(ev.box, g)
+                if (shadowMode) measureTexture(g, ts)
+            }
+            is AutoScanner.Event.NextCard -> {
+                logNextCard(ev, g)
+                // The deciding tick belongs to the wait's numbers (a swap's change, a removal's empty mask).
+                if (inWait) { trackWait(ev.box, g); endWait(if (ev.removed) "card removed" else "a different card settled") }
+            }
+            else -> if (inWait) endWait("no longer waiting (${ev.javaClass.simpleName})")
         }
     }
 
-    private fun measureWait(g: Gray, ts: Long) {
-        if (!inWait) { inWait = true; waitTicks = 0; waitMax = Double.NEGATIVE_INFINITY; aboveTicks = 0; abovePeak = 0.0; shadowSuppressed = 0; waitLogged = 0 }
+    /** The scanned scene, when it is comparable with [g] (same sample geometry). */
+    private fun scannedLike(g: Gray): Gray? = scanner.scannedFrame?.takeIf { it.w == g.w && it.h == g.h }
+
+    /**
+     * Every Tray wait, every tick (at most two passes over the 176×MH sample):
+     * the swap test's own number — the change vs the scanned card — on the ticks
+     * something occupied the Area (a swap needs that; the tick a card is lifted
+     * away would only inflate it) and on those of them where it also sat still vs
+     * the previous tick (where a swap could have fired); the still ticks; and
+     * the smallest mask share (removed = below EMPTY_FRAC). Reported once, in the
+     * wait's "wait over" line.
+     */
+    private fun trackWait(box: Box?, g: Gray) {
+        if (!inWait) startWait()
+        waitTicks++
+        val mask = box?.maskFrac ?: 0.0
+        if (mask < waitMinMask) waitMinMask = mask
+        val prev = prevTickSample?.takeIf { it.w == g.w && it.h == g.h }
+        val still = prev != null && Detection.changedFrac(g, prev) < DetectConst.STABLE_FRAC
+        if (still) waitStillTicks++
+        if (mask <= DetectConst.OCCUPIED_FRAC) return
+        val ref = scannedLike(g) ?: return
+        val change = Detection.changedFrac(g, ref)
+        if (change > waitMaxChange) waitMaxChange = change
+        if (still && change > waitMaxChangeStill) waitMaxChangeStill = change
+    }
+
+    private fun startWait() {
+        inWait = true
+        waitTicks = 0; waitStillTicks = 0; waitMaxChange = 0.0; waitMaxChangeStill = 0.0; waitMinMask = 1.0
+        textureTicks = 0; waitMax = Double.NEGATIVE_INFINITY; aboveTicks = 0; abovePeak = 0.0; shadowSuppressed = 0; waitLogged = 0
+    }
+
+    /** One line per NextCard: why the scanner moved on. */
+    private fun logNextCard(ev: AutoScanner.Event.NextCard, g: Gray) {
+        val mask = ev.box?.maskFrac ?: 0.0
+        if (ev.removed) {
+            detectLog { "next card: removed — mask %.1f%% (< %.1f%%) · watching".format(mask * 100, DetectConst.EMPTY_FRAC * 100) }
+        } else {
+            detectLog {
+                // The change goes in as an argument: a "%" pasted into a format string throws.
+                val change = scannedLike(g)?.let { "%.1f%%".format(Detection.changedFrac(g, it) * 100) } ?: "?"
+                "next card: swapped — change %s vs the scanned card (needs > %.0f%%), still, mask %.1f%%"
+                    .format(change, DetectConst.SWAP_FRAC * 100, mask * 100)
+            }
+        }
+    }
+
+    /** SHADOW MODE: the texture-change signal inside the watch window (logs events only). */
+    private fun measureTexture(g: Gray, ts: Long) {
         val wt = watch ?: return
         val ref = scanner.scannedFrame ?: return
         if (wt.w != g.w || wt.h != g.h || ref.w != g.w || ref.h != g.h) return
@@ -517,7 +627,7 @@ class ScanAnalyzer(
         val sig = TextureChange.measure(g, preparedRef!!, wt.mask) ?: return
         textureNsTotal += System.nanoTime() - t0
         textureRuns++
-        waitTicks++
+        textureTicks++
         var sum = 0L
         for (v in g.px) sum += v
         val grey = sum.toDouble() / g.size
@@ -536,17 +646,43 @@ class ScanAnalyzer(
         }
     }
 
-    private fun endWait(ts: Long, why: String) {
+    /**
+     * The wait's one summary line (tag "detect", never rate-limited — once per
+     * wait): the swap test's numbers, so a missed swap shows why, plus the
+     * shadow-mode texture maximum when it ran.
+     */
+    private fun endWait(why: String) {
         inWait = false
         if (waitTicks == 0) return
-        val open = if (aboveTicks > 0) " · still ≥ %.0f for %d tick(s) at the end (peak %.1f)".format(TextureChange.START_THRESHOLD, aboveTicks, abovePeak) else ""
-        val dropped = if (shadowSuppressed > 0) " · $shadowSuppressed event line(s) held back (1/s, $SHADOW_LOG_MAX_PER_WAIT per wait)" else ""
-        // Once per wait, never rate-limited: the one line that summarises what the window saw.
-        log.i("shadow", "wait over (%s) after %d ticks: max logHP p75 %.1f (logGrad %.1f, mean grey %.0f)%s%s"
-            .format(why, waitTicks, waitMax, waitMaxGrad, waitMaxGrey, open, dropped))
-        lastShadowLogTs = ts
-        waitTicks = 0; aboveTicks = 0; abovePeak = 0.0; shadowSuppressed = 0; waitLogged = 0
+        detectLog {
+            val swap = "change vs the scanned card max %.1f%%, %.1f%% while a card sat still (a swap needs > %.0f%% while still) · still %d/%d ticks · mask min %.1f%% (removed < %.1f%%)"
+                .format(waitMaxChange * 100, waitMaxChangeStill * 100, DetectConst.SWAP_FRAC * 100, waitStillTicks, waitTicks,
+                    waitMinMask * 100, DetectConst.EMPTY_FRAC * 100)
+            val texture = if (textureTicks == 0) "" else {
+                val open = if (aboveTicks > 0) ", still ≥ %.0f for %d tick(s) at the end (peak %.1f)".format(TextureChange.START_THRESHOLD, aboveTicks, abovePeak) else ""
+                val dropped = if (shadowSuppressed > 0) ", $shadowSuppressed shadow event line(s) held back (1/s, $SHADOW_LOG_MAX_PER_WAIT per wait)" else ""
+                " · texture over %d ticks: max logHP p75 %.1f (logGrad %.1f, mean grey %.0f)%s%s"
+                    .format(textureTicks, waitMax, waitMaxGrad, waitMaxGrey, open, dropped)
+            }
+            "wait over (%s) after %d ticks: %s%s".format(why, waitTicks, swap, texture)
+        }
+        waitTicks = 0; textureTicks = 0; aboveTicks = 0; abovePeak = 0.0; shadowSuppressed = 0; waitLogged = 0
     }
+
+    /**
+     * A "detect" line that can never throw into the decisions (fire() / captureDone()
+     * must always run). A line that failed to build is counted in [stats], not lost silently.
+     */
+    private inline fun detectLog(msg: () -> String) {
+        runCatching { log.i("detect", msg()) }.onFailure { logErrors++; lastLogError = it.toString() }
+    }
+
+    /** Which of the fallback's three tests failed, in words. */
+    private fun whyNot(e: PrintEvidence.Evidence): String = listOfNotNull(
+        if (!e.printed) "no printed detail" else null,
+        if (!e.cardShaped) "box not card-shaped" else null,
+        if (!e.bigEnough) "box too small" else null,
+    ).joinToString(", ").ifEmpty { "evidence ok" }
 
     /**
      * Shadow-mode event lines: at most one per [SHADOW_LOG_GAP_NS] and
@@ -652,7 +788,7 @@ class ScanAnalyzer(
     }
 
     /** Double-tap: re-learn the empty tray. */
-    fun reset() = post { scanner.reset(); lastBox = null; deferring = false; refusals = 0; clearWatch(lastFrameTs, "reset") }
+    fun reset() = post { scanner.reset(); lastBox = null; deferring = false; refusals = 0; clearWatch("reset") }
 
     /** The focus asked for by [Sink.onFocusRequest] finished (success or not). */
     fun focusDone() = post {
@@ -680,7 +816,7 @@ class ScanAnalyzer(
             scanner.reset()
             deferring = false
             lastSample = null; lastBox = null; lastBoxInfo = null
-            clearWatch(lastFrameTs, "new area")
+            clearWatch("new area")
         }
     }
 
@@ -693,7 +829,7 @@ class ScanAnalyzer(
             lastBox = null; lastBoxInfo = null
             deferring = false
             if (newMode == ScanMode.MOUNT) { scanner.reset(); lastSampleTs = NONE }
-            clearWatch(lastFrameTs, "mode change")
+            clearWatch("mode change")
         }
     }
 
@@ -710,7 +846,7 @@ class ScanAnalyzer(
         deferring = false; rebaseNext = false; heldTimedOut = false
         scanner.cameraRestarted()
         ring.clear()
-        clearWatch(lastFrameTs, "camera restarted")
+        clearWatch("camera restarted")
         lastFrameTs = NONE; lastSampleTs = NONE
         lastSample = null; lastBox = null; lastBoxInfo = null
     }
@@ -728,6 +864,8 @@ class ScanAnalyzer(
             if (o > 0) append(" · outlines $outlinesFound/$o avg outline ${"%.2f".format(outlineNsTotal / 1e6 / o)} ms" +
                 " · ${tracker.outliers} outlier(s) dropped")
             if (triggersRefused > 0) append(" · triggers refused (no card shape) $triggersRefused")
+            if (printAccepts > 0) append(" · accepted on printed detail (no outline) $printAccepts")
+            if (logErrors > 0) append(" · detect log errors $logErrors (last: $lastLogError)")
             if (outlineErrors > 0) append(" · outline errors $outlineErrors (last: $lastOutlineError)")
             val x = textureRuns
             if (x > 0) append(" · texture $x avg ${"%.2f".format(textureNsTotal / 1e6 / x)} ms")

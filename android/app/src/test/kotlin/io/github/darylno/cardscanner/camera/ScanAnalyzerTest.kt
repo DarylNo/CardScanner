@@ -422,6 +422,11 @@ class ScanAnalyzerTest {
         val lines = log.all().filter { it.tag == "detect" }.map { it.msg }
         assertEquals("one refusal line per scene", 1, lines.count { it.startsWith("TRIGGER refused") })
         assertEquals(1, lines.count { it.contains("adopted the view as the empty tray") })
+        // A flat bright patch: its edges sit outside the box's core, so no printed detail — said so, with the numbers.
+        val refusal = lines.first { it.startsWith("TRIGGER refused") }
+        assertTrue(refusal, refusal.contains("no printed detail") && refusal.contains("print 0% (need 6%)") && refusal.contains("of the Area"))
+        val adopted = lines.first { it.contains("adopted the view") }
+        assertTrue(adopted, adopted.contains("last: no printed detail") && adopted.contains("print peaked at 0% over the 5"))
         assertTrue(a.stats(), a.stats().contains("triggers refused (no card shape) 5"))
         assertTrue(rec.errors.isEmpty())
         // A real card placed afterwards (the finder sees it) is still scanned.
@@ -485,9 +490,10 @@ class ScanAnalyzerTest {
         assertEquals(recA.bursts.map { it.frames.map { f -> f.timestampNs } }, recB.bursts.map { it.frames.map { f -> f.timestampNs } })
         assertTrue(recA.errors.isEmpty() && recB.errors.isEmpty())
         val shadow = log.all().filter { it.tag == "shadow" }
+        val waits = log.all().filter { it.tag == "detect" && it.msg.startsWith("wait over") }
         println(log.all().joinToString("\n") { it.line() })
         println("stats A: ${a.stats()}")
-        assertTrue("shadow mode logged its waits", shadow.any { it.msg.startsWith("wait over") })
+        assertTrue("every wait is summarised, with the shadow-mode texture maximum", waits.isNotEmpty() && waits.all { it.msg.contains("texture over") })
         assertTrue("…but nothing per tick (events only)", shadow.size < recA.updates.count { it.event is AutoScanner.Event.AwaitingNext })
         assertTrue(a.stats(), a.stats().contains("texture"))
     }
@@ -561,13 +567,12 @@ class ScanAnalyzerTest {
         repeat(cycles) { feedTo(a, hand, 2); feedTo(a, card, 10) }   // 1.2 s per cycle: outside the 1/s gap
         assertTrue("still one wait", rec.updates.takeLast(cycles * 6).all { it.event is AutoScanner.Event.AwaitingNext })
         feedTo(a, tray, 4)                                            // card removed: the wait ends
-        val shadow = log.all().filter { it.tag == "shadow" }.map { it.msg }
-        val events = shadow.filter { !it.startsWith("wait over") }
-        val over = shadow.filter { it.startsWith("wait over") }
-        assertTrue(shadow.joinToString("\n"), events.any { it.startsWith("crossed") })
-        assertEquals(shadow.joinToString("\n"), ScanAnalyzer.SHADOW_LOG_MAX_PER_WAIT, events.size)
+        val events = log.all().filter { it.tag == "shadow" }.map { it.msg }
+        val over = log.all().filter { it.tag == "detect" && it.msg.startsWith("wait over") }.map { it.msg }
+        assertTrue(events.joinToString("\n"), events.any { it.startsWith("crossed") })
+        assertEquals(events.joinToString("\n"), ScanAnalyzer.SHADOW_LOG_MAX_PER_WAIT, events.size)
         assertEquals(1, over.size)
-        assertTrue(over[0], over[0].contains("${cycles - ScanAnalyzer.SHADOW_LOG_MAX_PER_WAIT} event line(s) held back"))
+        assertTrue(over[0], over[0].contains("${cycles - ScanAnalyzer.SHADOW_LOG_MAX_PER_WAIT} shadow event line(s) held back"))
     }
 
     @Test fun aLateFocusHoldKeepsTheTriggerTicksOutlineForItsWindow() {
@@ -585,5 +590,114 @@ class ScanAnalyzerTest {
         val wq = rec.updates.last().watch
         assertNotNull("the held trigger's outline became the window", wq)
         assertEquals(176.0 / 352, centroid(wq!!).first.toDouble(), 0.02)
+    }
+
+    // ── the card-shape gate's printed-detail FALLBACK (1.1.11: white-bordered cards the finder missed) ──
+
+    /** A card with printed detail through its middle: a 6-px checker — 3 sample px — over the card. */
+    private val printed = FakePlanes.nv21(w, h, { x, y -> if (x in 120..231 && y in 60..215) (if ((x / 6 + y / 6) % 2 == 0) 250 else 120) else 100 })
+    /** Another printed card in the same place (a different pattern): a swap. */
+    private val printed2 = FakePlanes.nv21(w, h, { x, y -> if (x in 120..231 && y in 60..215) (if ((x / 10 + y / 4) % 2 == 0) 40 else 200) else 100 })
+
+    /** Smooth things that are not cards (frame px; the sample halves them). */
+    private fun gaussianFrame(base: Int, amp: Double, sx: Double, sy: Double) = FakePlanes.nv21(w, h, { x, y ->
+        (base + amp * Math.exp(-((x - 176.0) * (x - 176.0) / (2 * sx * sx) + (y - 138.0) * (y - 138.0) / (2 * sy * sy)))).toInt().coerceIn(0, 255) })
+
+    /**
+     * The owner's 1.1.10 report: white-bordered cards "didn't get picked up as
+     * cards". When the outline finder misses a card, its printed detail still
+     * fires the capture — and the card is NOT adopted as the empty tray.
+     */
+    @Test fun aPrintedCardTheFinderMissesIsScannedOnItsPrintedDetail() {
+        val rec = Recorder()
+        val log = DebugLog(200, clock = { 0L })
+        val a = ScanAnalyzer(direct, rec, outlineFinder = { _, _, _, _ -> null }, log = log)
+        feedTo(a, tray, 12); feedTo(a, printed, 12)
+        assertEquals("captured without an outline", 1, rec.bursts.size)
+        assertEquals(CaptureTrigger.AUTO, rec.bursts[0].trigger)
+        val trig = rec.updates.indexOfFirst { it.event is AutoScanner.Event.Trigger }
+        assertFalse("not refused", rec.updates[trig].triggerRefused)
+        assertTrue("awaiting the next card — not adopted as the tray",
+            rec.updates.drop(trig + 1).all { it.event is AutoScanner.Event.AwaitingNext })
+        val lines = log.all().filter { it.tag == "detect" }.map { it.msg }
+        val accepted = lines.single { it.startsWith("TRIGGER accepted without an outline") }
+        assertTrue(accepted, accepted.contains("printed detail") && accepted.contains("card-shaped box") && accepted.contains("need 6%"))
+        assertTrue(lines.none { it.startsWith("TRIGGER refused") || it.contains("adopted the view") })
+        assertTrue(a.stats(), a.stats().contains("accepted on printed detail (no outline) 1"))
+        // A swap to another printed card: moved on, scanned — and said why.
+        feedTo(a, printed2, 12)
+        assertEquals(2, rec.bursts.size)
+        val swapped = log.all().map { it.msg }.single { it.startsWith("next card: swapped") }
+        assertTrue(swapped, Regex("change \\d+\\.\\d% vs the scanned card \\(needs > 6%\\), still").containsMatchIn(swapped))
+        val swapWait = log.all().map { it.msg }.single { it.startsWith("wait over (a different card settled)") }
+        val still = Regex("(\\d+\\.\\d)% while a card sat still").find(swapWait)!!.groupValues[1].toDouble()
+        assertTrue("the swap tick is in the wait's numbers: $swapWait", still > 6.0)
+        // Removed: said so, and the wait is summarised with the swap test's numbers.
+        feedTo(a, tray, 4)
+        val removed = log.all().map { it.msg }.single { it.startsWith("next card: removed") }
+        assertTrue(removed, removed.contains("mask 0.0% (< 1.5%)"))
+        assertTrue(rec.errors.isEmpty())
+        assertFalse("every detect line was built: ${a.stats()}", a.stats().contains("log errors"))
+    }
+
+    /** Glare, a shadow and an exposure change are smooth: refused with the evidence, adopted as the tray after five, nothing shot. */
+    @Test fun smoothThingsWithNoOutlineAreStillRefusedAndAdopted() {
+        val cases = mapOf(
+            "glare" to gaussianFrame(100, 80.0, 40.0, 56.0),              // a card-shaped glare: 1.4, 10 % of the Area
+            "shadow" to gaussianFrame(160, -60.0, 60.0, 84.0),
+            "exposure" to FakePlanes.nv21(w, h, { _, _ -> 160 }),          // the whole Area +60: a 1.33 box, 100 % of it
+        )
+        for ((name, frame) in cases) {
+            val rec = Recorder()
+            val log = DebugLog(200, clock = { 0L })
+            val a = ScanAnalyzer(direct, rec, outlineFinder = { _, _, _, _ -> null }, log = log)
+            val base = if (name == "shadow") FakePlanes.nv21(w, h, { _, _ -> 160 }) else tray
+            feedTo(a, base, 12)
+            feedTo(a, frame, 40)
+            assertTrue("$name: nothing shot", rec.bursts.isEmpty())
+            val refused = rec.updates.filter { it.triggerRefused }
+            assertTrue("$name: refused at least five times (${refused.size})", refused.size >= ScanAnalyzer.RELEARN_AFTER_REFUSALS)
+            val last = rec.updates.last().event
+            assertTrue("$name: adopted as the empty tray: $last", last is AutoScanner.Event.Watching && !last.occupied)
+            val lines = log.all().filter { it.tag == "detect" }.map { it.msg }
+            val refusal = lines.first { it.startsWith("TRIGGER refused") }
+            assertTrue("$name: $refusal", refusal.contains("no printed detail") && refusal.contains("print 0% (need 6%)"))
+            assertTrue("$name: $lines", lines.any { it.contains("adopted the view as the empty tray") })
+            assertTrue("$name: $lines", lines.none { it.startsWith("TRIGGER accepted") })
+            assertTrue(rec.errors.isEmpty())
+        }
+    }
+
+    /**
+     * The owner's other 1.1.10 report: "old bordered cards didn't see the change
+     * of cards". Every Tray wait (shadow mode or not) ends with the swap test's
+     * own numbers, so a missed swap shows WHY — here a "different" card that
+     * changes too little of the Area never crosses SWAP_FRAC.
+     */
+    @Test fun everyWaitReportsTheSwapTestsNumbers() {
+        val rec = Recorder()
+        val log = DebugLog(200, clock = { 0L })
+        val a = ScanAnalyzer(direct, rec, outlineFinder = boxFinder, shadowMode = false, log = log)
+        // Nearly the same card: a 24×24 frame-px patch changed (0.6 % of the Area).
+        val nearly = FakePlanes.nv21(w, h, { x, y -> if (x in 150..173 && y in 100..123) 30 else if (x in 120..231 && y in 60..215) 230 else 100 })
+        feedTo(a, tray, 12); feedTo(a, card, 12)
+        assertEquals(1, rec.bursts.size)
+        feedTo(a, nearly, 12)
+        assertEquals("too small a change: no swap", 1, rec.bursts.size)
+        feedTo(a, tray, 4)
+        val waits = log.all().filter { it.tag == "detect" && it.msg.startsWith("wait over") }.map { it.msg }
+        assertEquals(waits.toString(), 1, waits.size)
+        val m = Regex("change vs the scanned card max (\\d+\\.\\d)%, (\\d+\\.\\d)% while a card sat still \\(a swap needs > 6% while still\\) · still (\\d+)/(\\d+) ticks · mask min (\\d+\\.\\d)%")
+            .find(waits[0])
+        assertNotNull(waits[0], m)
+        val (max, still, stillTicks, ticks, maskMin) = m!!.destructured
+        assertTrue(waits[0], waits[0].startsWith("wait over (card removed)"))
+        assertEquals("the patch: 12×12 of 176×132 sample px", 0.6, still.toDouble(), 0.15)
+        // The tick the card was lifted away is not a swap candidate: it never inflates the maximum.
+        assertEquals(waits[0], still.toDouble(), max.toDouble(), 1e-9)
+        assertTrue(waits[0], stillTicks.toInt() in 1..ticks.toInt())
+        assertEquals("the removal tick is in the mask's minimum", 0.0, maskMin.toDouble(), 1e-9)
+        assertFalse("no texture numbers without shadow mode", waits[0].contains("texture"))
+        assertTrue(log.all().map { it.msg }.single { it.startsWith("next card: removed") }.isNotEmpty())
     }
 }

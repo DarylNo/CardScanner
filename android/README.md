@@ -316,7 +316,12 @@ Run on the Nord N200 after installing a new build:
 - [ ] Draw an Area; detection and capture stay inside it. Double-tap re-learns.
 - [ ] Sleeved card, dark card, foil under glare and a white-bordered card all
       trigger (the card-shape gate refuses none of them; the `detect` log
-      shows no "TRIGGER refused" for a real card).
+      shows no "TRIGGER refused" for a real card — a card the outline missed
+      reads "TRIGGER accepted without an outline — printed detail N%").
+- [ ] Swap one white-bordered card for another (and an old-bordered one): each
+      is scanned; the `detect` log says "next card: swapped — change N%" or
+      "removed". A swap it missed shows why in that wait's "wait over" line
+      (the change while a card sat still never passed 6 %, never still, …).
 - [ ] Empty tray / glare / hand in frame → nothing filed as a card; the status
       reads "no card shape yet", then the view is adopted as the empty tray.
 - [ ] The outline sits on the card, turns blue with the ✓ on capture, and stays

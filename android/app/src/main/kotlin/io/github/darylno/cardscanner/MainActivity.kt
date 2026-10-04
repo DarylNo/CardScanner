@@ -942,7 +942,7 @@ class MainActivity : AppCompatActivity() {
             is AutoScanner.Event.AwaitingNext ->
                 overlay.setBox(event.box, sw, sh, OverlayView.BoxState.AWAIT_NEXT, outline, watch)
             is AutoScanner.Event.NextCard -> {
-                dlog.i("detect", if (event.removed) "card removed — watching" else "a different card settled — next")
+                // Logged by the analyzer ("next card: removed / swapped — change N% …"), with its numbers.
                 overlay.setBox(event.box, sw, sh, OverlayView.BoxState.SETTLING, outline, watch)
                 // The failed card left the tray — a retry now would replace the old row with the WRONG card.
                 hideRetry()
