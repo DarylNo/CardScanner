@@ -394,6 +394,123 @@ class ScreensSmokeTest {
         assertEquals("no lenses listed → no pill", View.GONE, pill!!.visibility)
     }
 
+    /**
+     * "Zoom to fit the Area" (1.1.11): the Settings → Camera switch is there, OFF by
+     * default, sized and on screen at the N200's size (scrolled to), and saves the setting.
+     */
+    @Test
+    @Config(qualifiers = "w411dp-h914dp-xxhdpi")
+    fun settings_zoomToFitSwitch_isOnScreenAndSaves() {
+        app.settings.zoomFit = false
+        val a = launch(SettingsActivity::class.java)
+        val root = a.window.decorView
+        val title = findText(root, a.getString(R.string.settings_zoomfit))
+        assertNotNull("the switch row", title)
+        var row: View = title!!
+        while (!row.isClickable) row = row.parent as View
+        val sw = findSwitch(row)
+        assertNotNull("a switch in the row", sw)
+        assertFalse("off by default", sw!!.isChecked)
+        // Scroll it into view, then it must have a size and sit inside the screen.
+        val scroll = generateSequence(row.parent) { it.parent }.filterIsInstance<android.widget.ScrollView>().first()
+        val loc = IntArray(2); row.getLocationInWindow(loc)
+        val sloc = IntArray(2); scroll.getLocationInWindow(sloc)
+        scroll.scrollTo(0, loc[1] - sloc[1] - 100)
+        ShadowLooper.idleMainLooper()
+        val screenH = root.height; val screenW = root.width
+        for ((name, v) in listOf("row" to row, "switch" to sw)) {
+            val l = IntArray(2); v.getLocationInWindow(l)
+            assertTrue("$name has a size (${v.width}×${v.height})", v.width > 0 && v.height > 0)
+            assertTrue("$name is inside the screen (y ${l[1]}..${l[1] + v.height} of $screenH, x ${l[0]}..${l[0] + v.width} of $screenW)",
+                l[1] >= 0 && l[1] + v.height <= screenH && l[0] >= 0 && l[0] + v.width <= screenW)
+        }
+        row.performClick()
+        assertEquals(true, app.settings.zoomFit)
+        row.performClick()
+        assertEquals(false, app.settings.zoomFit)
+    }
+
+    /**
+     * The Area chip says when the camera is zoomed ("Area ✓ · 1.55×", the longest label)
+     * and still fits on screen at the N200's size; drawing a new Area reads Cancel, and
+     * Cancel comes back to the zoomed label.
+     */
+    @Test
+    @Config(qualifiers = "w411dp-h914dp-xxhdpi")
+    fun mainActivity_zoomedAreaChip_isOnScreen() {
+        app.settings.roi = io.github.darylno.cardscanner.core.RoiFrac(0.25, 0.2, 0.75, 0.8)
+        app.settings.auto = false
+        grantCamera(true)
+        val a = launch(MainActivity::class.java)
+        val root = a.window.decorView
+        val bottom = root.findViewWithTag<View>(TAG_BOTTOM_BAR)
+        assertNotNull(findText(bottom, a.getString(R.string.area_set)))
+        val view = io.github.darylno.cardscanner.core.ZoomFit.toView(app.settings.roi, 1.55)
+        a.cameraListenerForTest.onZoom(1.55, view, false)
+        ShadowLooper.idleMainLooper()
+        root.measure(View.MeasureSpec.makeMeasureSpec(root.width, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(root.height, View.MeasureSpec.EXACTLY))
+        root.layout(0, 0, root.width, root.height)
+        val label = a.getString(R.string.area_zoomed, "1.55")
+        val chip = findText(bottom, label)
+        assertNotNull("the chip reads $label", chip)
+        val l = IntArray(2); chip!!.getLocationInWindow(l)
+        assertTrue("the chip has a size (${chip.width}×${chip.height})", chip.width > 0 && chip.height > 0)
+        assertTrue("the chip is inside the screen (x ${l[0]}..${l[0] + chip.width} of ${root.width}, y ${l[1]}..${l[1] + chip.height} of ${root.height})",
+            l[0] >= 0 && l[0] + chip.width <= root.width && l[1] >= 0 && l[1] + chip.height <= root.height)
+        assertTrue("the whole label fits (${chip.paint.measureText(label)} px in ${chip.width - chip.totalPaddingLeft - chip.totalPaddingRight})",
+            chip.paint.measureText(label) <= chip.width - chip.totalPaddingLeft - chip.totalPaddingRight + 1)
+        // Drawing a new Area (Tap to scan: the chip draws): Cancel, then back to the zoomed label.
+        chip.performClick()
+        ShadowLooper.idleMainLooper()
+        assertNotNull("drawing reads Cancel", findText(bottom, a.getString(R.string.cancel)))
+        findText(bottom, a.getString(R.string.cancel))!!.performClick()
+        ShadowLooper.idleMainLooper()
+        assertEquals("no longer drawing", null, findText(bottom, a.getString(R.string.cancel)))
+        a.cameraListenerForTest.onZoom(1.55, view, false)        // the camera is back at the Area's zoom
+        ShadowLooper.idleMainLooper()
+        assertNotNull(findText(bottom, label))
+    }
+
+    /**
+     * Review of 1.1.11: the phone server answers a PATCH /api/device on ITS thread
+     * right after storing the settings, and the scan screen applies them on the UI
+     * thread — so the answer's `zoom` was the one from BEFORE the change ("Zoom to
+     * fit is off" right after ticking it, the old 1.90× after unticking it) until the
+     * panel's next poll. The bridge now waits (≤ 500 ms) for the screen to apply.
+     * The PATCH runs on a background thread, as NanoHTTPD's does; this thread is the
+     * UI thread, running what the bridge waits for.
+     */
+    @Test
+    fun deviceApi_patchAnswersWithTheZoomAfterTheChange() {
+        app.settings.roi = io.github.darylno.cardscanner.core.RoiFrac(0.25, 0.25, 0.75, 0.75)
+        app.settings.auto = false
+        app.settings.zoomFit = false
+        grantCamera(true)
+        launch(MainActivity::class.java)
+        val api = io.github.darylno.cardscanner.core.server.DeviceApi(app.phoneServer.device)
+        fun patchFromTheServerThread(body: String): Map<*, *> {
+            var answer: io.github.darylno.cardscanner.core.server.ApiResponse? = null
+            val t = Thread {
+                answer = api.handle(io.github.darylno.cardscanner.core.server.ApiRequest("PATCH", "/api/device", body = body.toByteArray()))
+            }
+            t.start()
+            while (t.isAlive) { ShadowLooper.idleMainLooper(); t.join(5) }
+            val r = answer!!
+            assertEquals(200, r.status)
+            return io.github.darylno.cardscanner.core.MiniJson.parse(String(r.body)) as Map<*, *>
+        }
+        fun zoomOf(m: Map<*, *>) = m["zoom"] as Map<*, *>
+        val on = patchFromTheServerThread("""{"zoom_fit":true}""")
+        assertEquals(true, on["zoom_fit"])
+        assertEquals("the answer is the zoom AFTER the change: $on", 1.9, (zoomOf(on)["target"] as Number).toDouble(), 0.0)
+        assertEquals("the Area fit", zoomOf(on)["limit"])
+        val off = patchFromTheServerThread("""{"zoom_fit":false}""")
+        assertEquals(false, off["zoom_fit"])
+        assertEquals("$off", 1.0, (zoomOf(off)["target"] as Number).toDouble(), 0.0)
+        assertEquals("Zoom to fit is off", zoomOf(off)["limit"])
+    }
+
     /** Settings → Delete all scans: the count is shown, the dialog says it, and OK deletes every scan and photo. */
     @Test
     fun settings_deleteAllScans_asksThenDeletesEverything() {
@@ -428,6 +545,30 @@ class ScreensSmokeTest {
         assertNotNull(findText(a.window.decorView, a.getString(R.string.pv_pack_check)))
     }
 
+    /**
+     * "Is it focusing?" (1.1.11): Settings → Diagnostics reads the scan screen's camera LIVE
+     * (it was a bind-time copy — focus / last frame / analyzer / last capture were stale),
+     * with the session's focus line; once the scan screen is gone, its last snapshot and age.
+     */
+    @Test
+    fun diagnostics_readTheScanScreensCameraLive_thenItsSnapshot() {
+        grantCamera(true)
+        val c = Robolectric.buildActivity(MainActivity::class.java)
+        controllers += c
+        c.setup()
+        ShadowLooper.idleMainLooper()
+        val live = io.github.darylno.cardscanner.ui.DiagnosticsText.build(app)
+        assertTrue(live, live.contains("camera (live — read from the scan screen's camera now):"))
+        assertTrue(live, live.contains("focus: passes this session: "))
+        assertTrue(live, live.contains("analyzer: frames "))
+        c.pause().stop().destroy()
+        ShadowLooper.idleMainLooper()
+        val after = io.github.darylno.cardscanner.ui.DiagnosticsText.build(app)
+        assertTrue(after, after.contains("camera (snapshot from "))
+        assertTrue(after, after.contains("the scan screen is closed"))
+        assertTrue(after, after.contains("focus: passes this session: "))
+    }
+
     @Test
     fun diagnosticsActivity_resumes_withoutStartingAnything() {
         val a = launch(DiagnosticsActivity::class.java)
@@ -442,6 +583,12 @@ class ScreensSmokeTest {
         assertNotNull("DIAGNOSTICS header not found", header)
         assertTrue(header!!.performLongClick())
         assertEquals(DiagnosticsActivity::class.java.name, nextStarted()?.component?.className)
+    }
+
+    private fun findSwitch(v: View): androidx.appcompat.widget.SwitchCompat? {
+        if (v is androidx.appcompat.widget.SwitchCompat) return v
+        if (v is ViewGroup) for (i in 0 until v.childCount) findSwitch(v.getChildAt(i))?.let { return it }
+        return null
     }
 
     private fun findDesc(v: View, desc: String): View? {

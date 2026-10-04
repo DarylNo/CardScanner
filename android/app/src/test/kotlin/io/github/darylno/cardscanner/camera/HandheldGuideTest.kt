@@ -59,4 +59,13 @@ class HandheldGuideTest {
         assertEquals(null, HandheldGuide.areaToDraw(false, mine, 1200, 1600))     // never replaces the owner's
         assertEquals(null, HandheldGuide.areaToDraw(false, null, 0, 0))           // frame size not known yet
     }
+
+    /** "Zoom to fit the Area": the default Tap Area (base fractions) allows 1.20× on a 4:3 portrait frame, limited by its fit. */
+    @Test fun theDefaultAreaZoomsToOnePointTwo() {
+        for ((w, h) in listOf(1200 to 1600, 1536 to 2048)) {
+            val c = io.github.darylno.cardscanner.core.ZoomFit.choose(HandheldGuide.defaultArea(w, h), lossless = 2.6, lensMax = 10.0)
+            assertEquals("$w×$h", 1.20, c.z, 1e-12)
+            assertEquals(io.github.darylno.cardscanner.core.ZoomFit.Limit.FIT, c.limit)
+        }
+    }
 }

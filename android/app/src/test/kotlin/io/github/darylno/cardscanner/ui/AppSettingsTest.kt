@@ -33,4 +33,15 @@ class AppSettingsTest {
         s.auto = true                                   // the owner turns Auto back on…
         assertEquals(true, AppSettings(ctx).auto)       // …and a later start leaves it on
     }
+
+    /** "Zoom to fit the Area" (1.1.11) ships OFF; it persists; a stored Area is untouched by it (base fractions, no migration). */
+    @Test fun zoomToFitIsOffByDefaultAndTheAreaStaysAsStored() {
+        prefs().edit().clear().putString("roi", "0.2,0.25,0.8,0.75").commit()
+        val s = AppSettings(ctx)
+        assertEquals(false, s.zoomFit)
+        s.zoomFit = true
+        assertEquals(true, AppSettings(ctx).zoomFit)
+        assertEquals(io.github.darylno.cardscanner.core.RoiFrac(0.2, 0.25, 0.8, 0.75), AppSettings(ctx).roi)
+        assertEquals("0.2,0.25,0.8,0.75", prefs().getString("roi", null))
+    }
 }

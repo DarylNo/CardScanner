@@ -29,7 +29,10 @@ class AppSettings(context: Context) {
         get() = prefs.getBoolean(K_AUTO, false)   // a fresh install starts in Tap to scan (owner)
         set(v) = prefs.edit().putBoolean(K_AUTO, v).apply()
 
-    /** The user-drawn scan Area; null = full frame. */
+    /**
+     * The user-drawn scan Area; null = full frame. Always BASE (1×) fractions of the
+     * upright frame — the camera maps it into its zoomed frames ("Zoom to fit the Area").
+     */
     var roi: RoiFrac?
         get() = RoiFrac.parse(prefs.getString(K_ROI, null))
         set(v) {
@@ -49,6 +52,15 @@ class AppSettings(context: Context) {
     var cameraId: String?
         get() = prefs.getString(K_CAMERA, null)
         set(v) { if (v == null) prefs.edit().remove(K_CAMERA).apply() else prefs.edit().putString(K_CAMERA, v).apply() }
+
+    /**
+     * "Zoom to fit the Area" (1.1.11, owner: "No zoom?"): the camera zooms in so the
+     * scan Area fills the view (core ZoomFit). OFF by default in this build — the owner
+     * turns it on to try it. [roi] stays BASE (1×) fractions either way.
+     */
+    var zoomFit: Boolean
+        get() = prefs.getBoolean(K_ZOOM_FIT, false)
+        set(v) = prefs.edit().putBoolean(K_ZOOM_FIT, v).apply()
 
     /** Mount mode: lock focus once a card is present (default on — the tray never moves). */
     var focusLock: Boolean
@@ -119,6 +131,7 @@ class AppSettings(context: Context) {
         const val K_ROI = "roi"
         const val K_HIGH_RES = "high_res"
         const val K_CAMERA = "camera_id"
+        const val K_ZOOM_FIT = "zoom_fit"
         const val K_FOCUS_LOCK = "focus_lock"
         const val K_AE_LOCK = "ae_lock"
         const val K_TORCH = "torch"

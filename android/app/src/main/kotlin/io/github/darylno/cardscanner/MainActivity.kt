@@ -29,6 +29,8 @@ import androidx.lifecycle.Lifecycle
 import io.github.darylno.cardscanner.camera.HandheldGuide
 import io.github.darylno.cardscanner.core.AutoScanner
 import io.github.darylno.cardscanner.core.DebugLog
+import io.github.darylno.cardscanner.core.RoiFrac
+import io.github.darylno.cardscanner.core.ZoomFit
 import io.github.darylno.cardscanner.gateway.GatewayService
 import io.github.darylno.cardscanner.ui.AppSettings
 import io.github.darylno.cardscanner.ui.BatteryEstimate
@@ -121,6 +123,23 @@ class MainActivity : AppCompatActivity() {
     /** The upright camera frame size (the space the Area fractions live in); 0 until the camera reports it. */
     private var frameW = 0
     private var frameH = 0
+
+    /**
+     * "Zoom to fit the Area" (1.1.11): the zoom the preview and the analyzer are at now
+     * (what the camera reported). settings.roi stays BASE (1×) fractions; the overlay
+     * draws it in the zoomed frame's fractions ([ZoomFit.toView]).
+     */
+    private var zoomShown = 1.0
+    /**
+     * An Area is being drawn (the Area button reads Cancel, detection is paused). The drag
+     * itself is armed ([OverlayView.settingArea]) only once the camera is at 1× — a zoomed
+     * preview shows less than the whole frame the Area is drawn in.
+     */
+    private var drawRequested = false
+    private var drawPrompt = ""
+    private val drawing get() = drawRequested || overlay.settingArea
+    /** Card height vs zoom across Tray captures: the zoom's "post-fit check" log line. */
+    private val postFit = ZoomFit.PostFit()
     /**
      * Upload job id → detector scene at capture (for the no_card re-seed guard). In-memory only.
      * Concurrent: filled on [io] right after enqueue returns, read on the UI thread when the
@@ -241,6 +260,7 @@ class MainActivity : AppCompatActivity() {
             camera?.setAeLock(settings.aeLock)
             camera?.setHighRes(settings.highRes)
             camera?.setCamera(settings.cameraId)
+            camera?.setZoomFit(settings.zoomFit)
             refreshCameraPill()
             // Belt-and-braces: another screen may have unbound the shared CameraProvider
             // while we were stopped; re-bind so the preview/scanning isn't dead.
@@ -276,9 +296,18 @@ class MainActivity : AppCompatActivity() {
      * the browser draws the scan Area on [snapshotJpeg]'s picture of the tray.
      */
     private val remoteScreen = object : io.github.darylno.cardscanner.phoneserver.DeviceBridge.Screen {
-        override fun applyRemoteSettings() = runOnUiThread {
-            if (isFinishing || isDestroyed) return@runOnUiThread
-            if (overlay.settingArea) cancelArea()
+        /** Applied on the UI thread; the future completes once it ran (the bridge waits for it ≤ 500 ms). */
+        override fun applyRemoteSettings(): java.util.concurrent.Future<*> {
+            val done = java.util.concurrent.CompletableFuture<Unit>()
+            runOnUiThread {
+                try { applyRemote() } finally { done.complete(Unit) }
+            }
+            return done
+        }
+
+        private fun applyRemote() {
+            if (isFinishing || isDestroyed) return
+            if (drawing) cancelArea()
             if (settings.roi != appliedRoi) {   // a new Area re-learns the tray — only when it changed
                 appliedRoi = settings.roi
                 camera?.setRoi(settings.roi)
@@ -288,10 +317,13 @@ class MainActivity : AppCompatActivity() {
             camera?.setAeLock(settings.aeLock)
             camera?.setHighRes(settings.highRes)
             camera?.setCamera(settings.cameraId)
+            camera?.setZoomFit(settings.zoomFit)
             refreshCameraPill()
         }
 
         override fun snapshotJpeg(): ByteArray? = camera?.snapshotJpeg()
+
+        override fun zoomState() = camera?.zoomState()
     }
     private var appliedRoi: io.github.darylno.cardscanner.core.RoiFrac? = null
 
@@ -549,7 +581,7 @@ class MainActivity : AppCompatActivity() {
         setContentView(root)
         refreshCameraPill()
 
-        overlay.setRoi(settings.roi)
+        showArea()
         overlay.onAreaDrawn = { r -> onAreaDrawn(r) }
         overlay.onDoubleTap = {
             camera?.relearn()
@@ -594,7 +626,7 @@ class MainActivity : AppCompatActivity() {
     private fun applyMode() {
         styleAuto()
         val drew = ensureArea()
-        overlay.setRoi(settings.roi)
+        showArea()
         overlay.setBox(null, 176, 132, OverlayView.BoxState.SETTLING)
         updateAreaBtn()
         camera?.setAuto(settings.auto)
@@ -614,11 +646,13 @@ class MainActivity : AppCompatActivity() {
      * True when it just drew one.
      */
     private fun ensureArea(): Boolean {
-        if (overlay.settingArea) return false
+        if (drawing) return false
+        // The default Area is BASE (1×) fractions like every stored Area: frameW×frameH is the
+        // same at any zoom, and the camera maps it into its zoomed frames itself.
         val r = HandheldGuide.areaToDraw(settings.auto, settings.roi, frameW, frameH) ?: return false
         dlog.i("ui", "no scan area in Tap to scan — drew the default ${r.encode()} (frame ${frameW}×${frameH})")
         settings.roi = r
-        overlay.setRoi(r)
+        showArea()
         camera?.setRoi(r)
         appliedRoi = r
         updateAreaBtn()
@@ -636,7 +670,7 @@ class MainActivity : AppCompatActivity() {
     private fun setAutoMode(auto: Boolean) {
         if (settings.auto == auto) return
         dlog.i("ui", "mode → ${if (auto) "Tray" else "Tap to scan"}")
-        if (overlay.settingArea) cancelArea()
+        if (drawing) cancelArea()
         settings.auto = auto
         styleAuto()
         camera?.setAuto(settings.auto)
@@ -650,31 +684,62 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * Draw a new Area: detection pauses and, when zoomed, the camera first goes back to
+     * 1× (the whole frame the Area is stored in) — the drag is armed once it is there
+     * ([armDrawing], from the camera's onZoom). Unzoomed, that is immediate.
+     */
     private fun startDrawingArea(prompt: String) {
         camera?.pause(true)
-        overlay.settingArea = true
+        drawRequested = true
+        drawPrompt = prompt
         updateAreaBtn()
         setStatus(prompt)
+        if (camera?.setDrawing(true) != true) armDrawing()
+        else if (!overlay.settingArea) setStatus(StatusText.AREA_ZOOMING_OUT)
+    }
+
+    /** The camera shows the whole 1× frame: arm the drag (idempotent; only while a drawing is wanted). */
+    private fun armDrawing() {
+        if (!drawRequested || overlay.settingArea) return
+        zoomShown = 1.0
+        overlay.settingArea = true
+        showArea()
+        updateAreaBtn()
+        setStatus(drawPrompt)
+    }
+
+    /** The stored (base) Area in the fractions of what the preview shows now — 1× while drawing. */
+    private fun showArea() {
+        overlay.setRoi(if (drawing) settings.roi else ZoomFit.toView(settings.roi, zoomShown))
     }
 
     private fun updateAreaBtn() {
         areaBtn.text = when {
-            overlay.settingArea -> getString(R.string.cancel)
+            drawing -> getString(R.string.cancel)
+            settings.roi != null && zoomShown > 1.0 -> getString(R.string.area_zoomed, zoomWords(zoomShown))
             settings.roi != null -> getString(R.string.area_set)
             else -> getString(R.string.area)
         }
     }
 
+    /** 1.9 → "1.9", 1.55 → "1.55", 2.0 → "2". */
+    private fun zoomWords(z: Double): String = "%.2f".format(java.util.Locale.ROOT, z).trimEnd('0').trimEnd('.')
+
+    /** Stop drawing: the drag is disarmed and the camera zooms back to the Area's zoom (no re-learn). */
     private fun cancelArea() {
+        drawRequested = false
         overlay.settingArea = false
+        camera?.setDrawing(false)
         syncPause()
         updateAreaBtn()
+        showArea()
     }
 
     /** phone.html areaBtn: Cancel while drawing; clear an existing area; else start drawing. */
     private fun onAreaButton() {
         when {
-            overlay.settingArea -> {
+            drawing -> {
                 cancelArea(); setStatus(StatusText.AREA_UNCHANGED)
             }
             // Auto on: tap clears to the full frame. Auto off always has an Area, so the
@@ -682,7 +747,7 @@ class MainActivity : AppCompatActivity() {
             settings.roi != null && settings.auto -> {
                 dlog.i("ui", "scan area cleared — full frame")
                 settings.roi = null
-                overlay.setRoi(null)
+                showArea()
                 camera?.setRoi(null)
                 appliedRoi = null
                 updateAreaBtn()
@@ -692,17 +757,22 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun onAreaDrawn(r: io.github.darylno.cardscanner.core.RoiFrac?) {
+    /** The drag ended ([r] = BASE fractions: it was drawn on the 1× preview), or was too small (null). */
+    private fun onAreaDrawn(r: RoiFrac?) {
+        drawRequested = false
         syncPause()
         if (r == null) {
+            camera?.setDrawing(false)    // back to the old Area's zoom — nothing re-learned
             updateAreaBtn()
+            showArea()
             setStatus(StatusText.AREA_TOO_SMALL, Tone.ERR)
             return
         }
         dlog.i("ui", "scan area set ${r.encode()}")
         settings.roi = r
-        overlay.setRoi(r)
+        showArea()
         camera?.setRoi(r)          // the adapter resets detection (re-learn under the new area)
+        camera?.setDrawing(false)  // …at the new Area's zoom
         appliedRoi = r
         updateAreaBtn()
         setStatus(StatusText.AREA_SET)
@@ -774,6 +844,7 @@ class MainActivity : AppCompatActivity() {
         if (camera != null) return
         val cam = app.newCamera()
         camera = cam
+        cam.setZoomFit(settings.zoomFit)
         cam.setRoi(settings.roi)
         appliedRoi = settings.roi
         cam.setAuto(settings.auto)
@@ -786,7 +857,7 @@ class MainActivity : AppCompatActivity() {
 
     /** Detection runs only while no Area is being drawn and the update lock is off. */
     private fun syncPause() {
-        camera?.pause(overlay.settingArea || app.updates.locked)
+        camera?.pause(drawing || app.updates.locked)
     }
 
     private fun applyLock() {
@@ -889,9 +960,34 @@ class MainActivity : AppCompatActivity() {
             }
             val size = if (capture.quad != null) "card ${capture.cardHeightPx()} px tall × ${capture.cardWidthPx()} wide of ${capture.frameW}×${capture.frameH}"
                 else "card 0 px tall (no quad)"
-            dlog.i("capture", "done (${if (manual) "manual" else "auto"}, $how, " +
-                "${capture.primary.size / 1024} KB + ${capture.fallbacks.size} fallback frames) · $size · ${capture.timings}")
+            // "Is it focusing?" (1.1.11): the chosen frame's AF state + lens position ride the line,
+            // and the three frames' sharpness is in the summary ("sharpness a / [b] / c").
+            dlog.i("capture", "done${if (capture.burstId > 0) " #${capture.burstId}" else ""} " +
+                "(${if (manual) "manual" else "auto"}, $how, " +
+                "${capture.primary.size / 1024} KB + ${capture.fallbacks.size} fallback frames) · $size " +
+                "@ %.2f× · ".format(java.util.Locale.ROOT, capture.zoom) +
+                (capture.lens?.let { "$it · " } ?: "") + capture.timings)
+            // The post-fit check (Tray captures: the mount does not move, every card is 88 mm tall,
+            // so its height in frame px should scale with the zoom).
+            if (!manual && capture.quad != null) {
+                runCatching { synchronized(postFit) { postFit.note(capture.zoom, capture.cardHeightPx().toDouble()) } }
+                    .getOrNull()?.let { dlog.i("zoom", it) }
+            }
             runOnUiThread { handleCaptured(capture, manual) }
+        }
+
+        override fun onZoom(ratio: Double, viewRoi: RoiFrac?, drawingReady: Boolean) {
+            runOnUiThread {
+                if (isFinishing || isDestroyed) return@runOnUiThread
+                if (drawingReady) {
+                    zoomShown = 1.0
+                    armDrawing()
+                } else {
+                    zoomShown = ratio
+                    if (!drawing) overlay.setRoi(viewRoi)
+                }
+                updateAreaBtn()
+            }
         }
 
         override fun onCaptureFailed(id: Long, message: String) {
@@ -911,7 +1007,7 @@ class MainActivity : AppCompatActivity() {
     private fun handleDetection(event: AutoScanner.Event, sw: Int, sh: Int, debug: String?,
                                 outline: FloatArray?, watch: FloatArray?, triggerRefused: Boolean = false) {
         overlay.setDebugText(if (settings.debugOverlay) debug else null)
-        if (overlay.settingArea) return
+        if (drawing) return
         when (event) {
             is AutoScanner.Event.Idle -> Unit
             is AutoScanner.Event.Learning -> {
@@ -942,7 +1038,7 @@ class MainActivity : AppCompatActivity() {
             is AutoScanner.Event.AwaitingNext ->
                 overlay.setBox(event.box, sw, sh, OverlayView.BoxState.AWAIT_NEXT, outline, watch)
             is AutoScanner.Event.NextCard -> {
-                dlog.i("detect", if (event.removed) "card removed — watching" else "a different card settled — next")
+                // Logged by the analyzer ("next card: removed / swapped — change N% …"), with its numbers.
                 overlay.setBox(event.box, sw, sh, OverlayView.BoxState.SETTLING, outline, watch)
                 // The failed card left the tray — a retry now would replace the old row with the WRONG card.
                 hideRetry()
@@ -1054,6 +1150,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     private val resumed get() = lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
+
+    /** Tests drive the camera's callbacks (Robolectric has no camera to bind). */
+    internal val cameraListenerForTest: CameraPort.Listener get() = cameraListener
 
     private fun handleOutcome(jobId: String, manual: Boolean, openScan: Boolean, replaceScanId: Long?, outcome: Outcome) {
         val scene = sceneByJob.remove(jobId)

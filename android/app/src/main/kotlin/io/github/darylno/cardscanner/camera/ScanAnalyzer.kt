@@ -7,9 +7,12 @@ import io.github.darylno.cardscanner.core.Box
 import io.github.darylno.cardscanner.core.CardOutline
 import io.github.darylno.cardscanner.core.OutlineTracker
 import io.github.darylno.cardscanner.core.DebugLog
+import io.github.darylno.cardscanner.core.DetectConst
+import io.github.darylno.cardscanner.core.Detection
 import io.github.darylno.cardscanner.core.Gray
 import io.github.darylno.cardscanner.core.GraySampler
 import io.github.darylno.cardscanner.core.Nv21Frame
+import io.github.darylno.cardscanner.core.PrintEvidence
 import io.github.darylno.cardscanner.core.RoiFrac
 import io.github.darylno.cardscanner.core.RoiPx
 import io.github.darylno.cardscanner.core.Rotation
@@ -51,6 +54,8 @@ class DetectionUpdate(
     val outlineNanos: Long? = null,
     /** This Trigger was REFUSED by the card-shape gate (nothing shot; the scanner keeps watching). */
     val triggerRefused: Boolean = false,
+    /** The camera zoom the frame was taken at ([roi] is the Area in THAT frame's fractions — the view Area). */
+    val zoom: Double = 1.0,
 )
 
 /**
@@ -59,6 +64,14 @@ class DetectionUpdate(
  * [scene] = the scanner's scannedFrame at capture time — hand it back to
  * [ScanAnalyzer.onNoCard] if the server answers no_card.
  */
+/**
+ * A held first-card Trigger asking the camera to focus on ITS card: [box] in
+ * the [sampleW]×[sampleH] detection sample, which covers [roi] of the upright
+ * frame (null = the whole frame). The camera meters the box's centre
+ * ([io.github.darylno.cardscanner.core.FocusPoint]).
+ */
+class FocusRequest(val box: Box, val roi: RoiFrac?, val sampleW: Int, val sampleH: Int)
+
 class CaptureBurst(
     val id: Long,
     val trigger: CaptureTrigger,
@@ -69,6 +82,8 @@ class CaptureBurst(
     val box: Box?,
     val uprightW: Int,
     val uprightH: Int,
+    /** The camera zoom the frames were taken at (the capture line's "@ z×"); [cropRoi] is in their fractions. */
+    val zoom: Double = 1.0,
 )
 
 /**
@@ -112,22 +127,57 @@ class CaptureBurst(
  *     stillness trigger itself is untouched; the gate sits after it, in the
  *     app, and only says no. A finder that THREW is unknown, not "no card",
  *     and the capture goes ahead. The shutter is never gated.
+ *     THE FALLBACK (1.1.11, owner on 1.1.10: "White bordered cards didn't get
+ *     picked up as cards"): before refusing, the same trigger box is asked for a
+ *     card's PRINTED DETAIL ([PrintEvidence]: new texture through the box's
+ *     core, a card-shaped box, a minimum share of the Area, a learned tray that
+ *     was smooth there, print that stands out from round the box). A yes fires
+ *     the capture without an outline; glare, shadows, exposure and the bare
+ *     tray are smooth and are still refused — and still adopted after
+ *     [RELEARN_AFTER_REFUSALS]; on a textured tray the fallback stands aside (a
+ *     stale reference reads as print there). It can only ever say yes more
+ *     often. Every refusal, fallback accept and adoption states its evidence
+ *     (tag "detect").
  *  5. The WATCH WINDOW: at a capture, the padded (15 %) card polygon in sample
  *     pixels — the live outline at the Trigger tick, else the mask box; when the
  *     capture's own quad arrives ([onCaptureResult], tagged with the burst id,
  *     ignored after a newer trigger) it replaces both. A shutter scan has no box
  *     (the scanner is SCANNING / Auto off, so its ticks are Idle): its window is
  *     the capture quad alone. It is drawn while awaiting the next card.
- *  6. SHADOW MODE (logging only, tag "shadow"): while awaiting the next card every
+ *  6. THE WAIT (every Tray wait, logging only, tag "detect"): while awaiting the
+ *     next card each tick measures the swap test's own number — the change vs
+ *     the scanned card — and whether the card sat still, plus the mask's
+ *     smallest share; the wait's "wait over" line reports the maxima (so a swap
+ *     that was missed shows WHY: never crossed SWAP_FRAC, never still, …), and
+ *     every NextCard says "removed" or "swapped — change N %".
+ *  7. SHADOW MODE (logging only, tag "shadow"): while awaiting the next card every
  *     tick measures [TextureChange] (logHP p75 + logGrad) between the sample and
  *     the scanner's scanned frame inside the window, and logs EVENTS only — the
  *     maximum per wait, each crossing of [TextureChange.START_THRESHOLD] with its
  *     duration, and "WOULD re-arm (texture)" when it holds 2 ticks — at most
  *     ~1 line/s and [SHADOW_LOG_MAX_PER_WAIT] per wait (a signal hovering at the
  *     threshold for an hour would otherwise push every capture line out of the
- *     3000-line ring); the rest are counted in the per-wait summary. The numbers
+ *     3000-line ring); the rest are counted in the wait's "wait over" line,
+ *     which also carries the texture maximum. The numbers
  *     never re-arm, trigger or change any scanner state (ScanAnalyzerTest:
  *     identical outcomes with it on and off).
+ *
+ * ZOOM (1.1.11, "Zoom to fit the Area" — core ZoomFit / ZoomCoordinator): [roi]
+ * is always the Area in the fractions of the frames as they ARRIVE — the VIEW
+ * Area at the camera's zoom [zoomMapped] says, so the sample, the capture crop,
+ * the watch window and the focus points all follow the zoom with no other
+ * change. While the camera's zoom changes the SETTLE GATE is closed
+ * ([closeZoomGate]): no tick, no ring copy, no snapshot, no capture (a pending
+ * shutter waits; a held first-card capture is dropped and asked for again;
+ * while an Area is drawn at 1× only the browser's snapshot is served,
+ * [snapshotsAt]). It
+ * opens once the coordinator maps the ratio READ BACK from the camera and
+ * [SETTLE_DROP_FRAMES] more frames (which may predate it) are dropped; the
+ * ring is emptied then, so no burst ever mixes zooms. The tray is re-learned
+ * only when (zoom, view Area) really changed — a re-apply after the camera
+ * comes back is not a change, and a still card across a real change is learned
+ * as part of the new empty tray (never scanned twice). With the zoom off none
+ * of this runs: the Area arrives at 1× exactly as [setRoi] always did.
  */
 class ScanAnalyzer(
     private val commands: Executor,
@@ -148,11 +198,17 @@ class ScanAnalyzer(
         fun onAnalyzerError(error: Throwable)
         /**
          * An AUTO trigger is being held because [focusFirst] said the lens should
-         * focus on this card first. Answer with [focusDone] (any outcome); the
-         * capture then uses frames taken after focus settled, or fires anyway
-         * after [FOCUS_WAIT_NS].
+         * focus on this card first ([request] = where the card is). Answer with
+         * [focusDone] (any outcome); the capture then uses frames taken after
+         * focus settled, or fires anyway after [FOCUS_WAIT_NS].
          */
-        fun onFocusRequest() {}
+        fun onFocusRequest(request: FocusRequest) {}
+        /**
+         * Frames are arriving while the zoom gate is closed and nothing has
+         * re-opened it (asked once per closure): the camera is evidently back —
+         * the controller re-applies the zoom ([io.github.darylno.cardscanner.core.ZoomCoordinator.cameraStarted]).
+         */
+        fun onZoomResync() {}
     }
 
     private val planes = ImageProxyPlanes()
@@ -169,7 +225,10 @@ class ScanAnalyzer(
     /**
      * Asked on every AUTO trigger (analysis thread): hold this capture until the
      * lens has focused on the card? (Mount: the first card after a bind / area
-     * change / sharpness drop — see CameraController.)
+     * change / sharpness drop — see CameraController.) Every hold is logged
+     * under `focus` (1.1.11): held, answered after N ms → capture #k from the
+     * frames after it, TIMED OUT after [FOCUS_WAIT_NS] → shot from the last
+     * frames, a late answer, or cancelled — the controller logs the pass itself.
      */
     @Volatile var focusFirst: () -> Boolean = { false }
     private var deferring = false
@@ -182,6 +241,23 @@ class ScanAnalyzer(
     private var focusReadyTs = NONE
     private var manualStartTs = NONE
     private var nextId = 1L
+
+    // --- the zoom (analysis thread) ---
+    /** The camera zoom the frames arrive at ([roi] is in their fractions). */
+    private var zoomZ = 1.0
+    /** The settle gate: frames are dropped while the camera's zoom changes. */
+    private var zoomGateClosed = false
+    /** Frames still to drop before the gate opens (set when the coordinator maps the read-back ratio). */
+    private var zoomDropLeft = 0
+    private var zoomResyncAsked = false
+    private var zoomDroppedThis = 0
+    /**
+     * Drawing an Area while zoomed: the camera reports [snapZ] (1×) but the gate stays
+     * closed (no tick, copy or capture — Cancel must come back with no re-learn); the
+     * browser's picture may still be taken at [snapZ], after [snapDropLeft] frames.
+     */
+    private var snapZ: Double? = null
+    private var snapDropLeft = 0
 
     // --- display + shadow-mode state (analysis thread; never read by the scanner) ---
     /**
@@ -204,9 +280,20 @@ class ScanAnalyzer(
     /** The outline's cost on the Trigger tick, for the per-capture "outline" line. */
     private var triggerOutlineNanos = -1L
 
-    // shadow-mode wait bookkeeping (one "wait" = one AWAIT_NEXT stretch)
+    // wait bookkeeping (one "wait" = one AWAIT_NEXT stretch) — the swap test's numbers, every Tray wait
     private var inWait = false
     private var waitTicks = 0
+    /** Ticks the card sat still (vs the previous tick, the swap test's own stillness). */
+    private var waitStillTicks = 0
+    /** Largest change vs the scanned card (Detection.changedFrac, the swap test's number): occupied ticks / occupied AND still ticks. */
+    private var waitMaxChange = 0.0
+    private var waitMaxChangeStill = 0.0
+    /** Smallest mask share seen (removed = below EMPTY_FRAC). */
+    private var waitMinMask = 1.0
+    /** The previous tick's sample (the swap test's stillness is against it). */
+    private var prevTickSample: Gray? = null
+    // shadow-mode texture bookkeeping, per wait
+    private var textureTicks = 0
     private var waitMax = Double.NEGATIVE_INFINITY
     private var waitMaxGrad = 0.0
     private var waitMaxGrey = 0.0
@@ -220,11 +307,18 @@ class ScanAnalyzer(
     private var waitLogged = 0
 
     // --- stats (written on the analysis thread, read racily by diagnostics) ---
-    private val snapshotWaiter = java.util.concurrent.atomic.AtomicReference<((Nv21Frame) -> Unit)?>(null)
+    private val snapshotWaiter = java.util.concurrent.atomic.AtomicReference<((Nv21Frame, Double) -> Unit)?>(null)
     private val snapRing = FrameRing(1)
 
     /** Hand the NEXT analyzed frame (a copy, NV21) to [give] on the analysis thread. */
-    fun requestSnapshot(give: (Nv21Frame) -> Unit) { snapshotWaiter.set(give) }
+    fun requestSnapshot(give: (Nv21Frame) -> Unit) = requestSnapshotAt { f, _ -> give(f) }
+
+    /**
+     * Hand the NEXT analyzed frame and the zoom it was taken at to [give] (analysis
+     * thread). Never a frame from inside the zoom settle gate: the browser's base-space
+     * picture ([io.github.darylno.cardscanner.core.ZoomSnapshot]) needs the right zoom.
+     */
+    fun requestSnapshotAt(give: (Nv21Frame, Double) -> Unit) { snapshotWaiter.set(give) }
 
     @Volatile private var frames = 0L
     @Volatile private var gated = 0L
@@ -239,12 +333,24 @@ class ScanAnalyzer(
     private val tracker = OutlineTracker()
     /** Consecutive Triggers the card-shape gate refused on the current still scene. */
     private var refusals = 0
+    /** The highest printed-detail share among this scene's refusals (for the adoption line). */
+    private var refusalPeakPrint = 0.0
     @Volatile private var triggersRefused = 0L
+    /** Triggers with no outline that the printed-detail fallback let through. */
+    @Volatile private var printAccepts = 0L
+    @Volatile private var logErrors = 0L
+    @Volatile private var lastLogError: String? = null
     @Volatile private var outlineRuns = 0L
     @Volatile private var outlinesFound = 0L
     @Volatile private var outlineNsTotal = 0L
     @Volatile private var outlineErrors = 0L
     @Volatile private var lastOutlineError: String? = null
+    @Volatile private var zoomDropped = 0L
+    @Volatile private var zoomClosures = 0L
+    @Volatile private var zoomChanges = 0L
+    /** The zoom ticks are mapped at now (Diagnostics; written on the analysis thread). */
+    @Volatile var currentZoom = 1.0
+        private set
     @Volatile private var textureRuns = 0L
     @Volatile private var textureNsTotal = 0L
     @Volatile private var frameDesc = "no frame yet"
@@ -274,11 +380,29 @@ class ScanAnalyzer(
     /** One camera frame (the testable core of [analyze]). Analysis thread only. */
     fun process(p: YuvPlanes, rotation: Int, timestampNs: Long) {
         frames++
-        // A browser asked for a picture of the tray (scan-Area drawing): hand over this frame.
-        snapshotWaiter.getAndSet(null)?.let { give ->
-            snapRing.copyFrom(p, rotation, timestampNs)
-            runCatching { give(snapRing.snapshotLast(1).first()) }
+        // THE ZOOM SETTLE GATE: while the camera's zoom changes, a frame may be at the old
+        // zoom or the new one — nothing looks at it (no tick, copy, snapshot or capture;
+        // drawing an Area at 1×, a snapshot only).
+        if (zoomGateClosed) {
+            zoomDropped++; zoomDroppedThis++
+            if (zoomDropLeft > 0) {
+                if (--zoomDropLeft == 0) {
+                    zoomGateClosed = false
+                    safeLog("zoom") { "analyzer resumed at %.2f× — %d frame(s) dropped while the zoom settled".format(zoomZ, zoomDroppedThis) }
+                }
+            } else if (!zoomResyncAsked) {
+                zoomResyncAsked = true
+                runCatching { sink.onZoomResync() }
+            }
+            // Drawing an Area at 1× ([snapshotsAt]): the picture of the tray is still served.
+            val sz = snapZ
+            if (sz != null) {
+                if (snapDropLeft > 0) snapDropLeft-- else serveSnapshot(p, rotation, timestampNs, sz)
+            }
+            return
         }
+        // A browser asked for a picture of the tray (scan-Area drawing): hand over this frame.
+        serveSnapshot(p, rotation, timestampNs, zoomZ)
         // A timestamp going backwards = a new camera session: accept it.
         if (lastFrameTs != NONE && timestampNs >= lastFrameTs && timestampNs - lastFrameTs < FRAME_GATE_NS) {
             gated++
@@ -356,28 +480,52 @@ class ScanAnalyzer(
 
         var trigger = event as? AutoScanner.Event.Trigger
         var triggerRefused = false
-        if (trigger != null && mode == ScanMode.MOUNT && outline == null && !outlineThrew) {
+        if (trigger != null && mode == ScanMode.MOUNT && outline == null && !outlineThrew && g0 != null) {
             // THE CARD-SHAPE GATE (owner, 2026-10-02, a video of the tray "trying to
             // scan nothing"): the mask says something still is in the Area, but no
             // card-shaped, card-textured quad (CardQuad: ratio 1.15–1.75, rectangular,
             // printed interior) was found on this tick or held from the last two —
-            // glare, a shadow, a hand's edge. Nothing is shot; the scanner keeps
-            // watching and asks again after the next steady ticks. A finder that
-            // THREW is "unknown", not "no card": the capture goes ahead as before.
-            triggerRefused = true
-            triggersRefused++
-            refusals++
-            scanner.triggerRefused()
+            // glare, a shadow, a hand's edge. A finder that THREW is "unknown", not
+            // "no card": the capture goes ahead as before.
+            // THE FALLBACK (1.1.11): the finder can miss a real card (owner: white-
+            // bordered cards on 1.1.10). Before refusing, ask the trigger box itself
+            // for a card's printed detail — measured, it separates every synthetic
+            // card from glare / shadow / exposure / smooth hands — but only where the
+            // learned tray was smooth and the print stands out from round the box: on
+            // a textured tray a stale reference (learned with a card on it, out of
+            // focus, a light under AE lock, a nudged mat) reads as print (review of
+            // 1.1.11), and there the fallback stands aside. A failure to measure is
+            // "no evidence": refused as before.
             val b = trigger.box
-            if (refusals == 1) {
-                log.i("detect", "TRIGGER refused — no card shape in the Area (box ${b.x},${b.y} ${b.w}×${b.h}, mask %.1f%%) · still watching".format(b.maskFrac * 100))
+            val ev = runCatching { scanner.emptyGradient()?.let { PrintEvidence.measure(g0, it, b) } }.getOrNull()
+            val where = { "box ${b.x},${b.y} ${b.w}×${b.h} of ${g0.w}×${g0.h}, mask %.1f%%".format(b.maskFrac * 100) }
+            if (ev != null && ev.looksLikeACard) {
+                printAccepts++
+                detectLog {
+                    ("TRIGGER accepted without an outline — printed detail %.0f%% (need %.0f%%) in a card-shaped box %.2f, %.0f%% of the Area · " +
+                        "learned tray smooth there (texture %.0f%%) · %s · %s")
+                        .format(ev.print * 100, PrintEvidence.MIN_PRINT * 100, ev.aspect, ev.share * 100, ev.trayTexture * 100,
+                            ev.ring?.let { "ring round the box %.0f%%".format(it * 100) } ?: "no ring (the box fills the Area)", where())
+                }
+            } else {
+                triggerRefused = true
+                triggersRefused++
+                refusals++
+                scanner.triggerRefused()
+                if (refusals == 1) refusalPeakPrint = 0.0
+                if (ev != null) refusalPeakPrint = maxOf(refusalPeakPrint, ev.print)
+                val evidence = { ev?.let { "${whyNot(it)} · ${it.describe()}" } ?: "printed detail not measured" }
+                if (refusals == 1) detectLog { "TRIGGER refused — no card shape · ${evidence()} · ${where()} · still watching" }
+                if (refusals >= RELEARN_AFTER_REFUSALS) {
+                    scanner.adoptEmpty(g0)
+                    detectLog {
+                        val peak = "%.0f%%".format(refusalPeakPrint * 100)
+                        "no card shape after $refusals refused triggers — adopted the view as the empty tray · last: ${evidence()} · print peaked at $peak over the $refusals"
+                    }
+                    refusals = 0
+                }
+                trigger = null
             }
-            if (refusals >= RELEARN_AFTER_REFUSALS && g0 != null) {
-                scanner.adoptEmpty(g0)
-                log.i("detect", "no card shape after $refusals refused triggers — adopted the view as the empty tray")
-                refusals = 0
-            }
-            trigger = null
         }
 
         val needCopy = mode == ScanMode.HANDHELD || manualPending || trigger != null ||
@@ -397,7 +545,14 @@ class ScanAnalyzer(
                 deferredBox = trigger.box
                 deferStartTs = timestampNs
                 focusReadyTs = NONE
-                runCatching { sink.onFocusRequest() }
+                val b = trigger.box
+                val sw0 = g0?.w ?: lastGrayDims?.get(0) ?: 0
+                val sh0 = g0?.h ?: lastGrayDims?.get(1) ?: 0
+                safeLog("focus") {
+                    "first card: Trigger held (≤ %.1f s) for a focus pass on the card — box %d,%d %d×%d of %d×%d"
+                        .format(FOCUS_WAIT_NS / 1e9, b.x, b.y, b.w, b.h, sw0, sh0)
+                }
+                runCatching { sink.onFocusRequest(FocusRequest(b, roi, sw0, sh0)) }
             } else {
                 fire(CaptureTrigger.AUTO, trigger.box, uw, uh, AUTO_FRESH_NS)
             }
@@ -413,7 +568,22 @@ class ScanAnalyzer(
                 }
                 // focus never answered → shoot anyway, from the usual fresh window
                 heldTimedOut = !focused
+                val heldMs = (timestampNs - deferStartTs) / 1_000_000
+                val answeredMs = if (focusReadyTs == NONE) -1L else (focusReadyTs - deferStartTs) / 1_000_000
+                val clockReset = timestampNs < deferStartTs
+                val id = nextId
                 fire(CaptureTrigger.AUTO, deferredBox, uw, uh, if (focused) sinceFocus else AUTO_FRESH_NS)
+                val shot = if (nextId > id) "capture #$id" else "no capture (no frames)"
+                safeLog("focus") {
+                    when {
+                        focused -> "first card: focus answered $answeredMs ms after the Trigger — $shot shot from the $BURST frames after it ($heldMs ms after the Trigger)"
+                        clockReset -> "first card: focus hold ended — the camera's clock restarted; $shot shot from the last frames"
+                        answeredMs >= 0 -> "first card: focus hold timed out after %.1f s — focus answered after $answeredMs ms but fewer than $BURST frames came after it; $shot shot from the last frames"
+                            .format(FOCUS_WAIT_NS / 1e9)
+                        else -> "first card: focus hold timed out after %.1f s — no focus answer; $shot shot from the last frames (the lens may still have been moving)"
+                            .format(FOCUS_WAIT_NS / 1e9)
+                    }
+                }
             }
         } else if (manualPending) {
             if (manualStartTs == NONE || timestampNs < manualStartTs) manualStartTs = timestampNs
@@ -435,11 +605,20 @@ class ScanAnalyzer(
                 runCatching { instrument(ev, g, outline, outlineNs, timestampNs) }
                     .onFailure { outlineErrors++; lastOutlineError = it.toString() }
             }
+            prevTickSample = g
             val wf = runCatching { watchFractions(uw, uh) }.getOrNull()
             sink.onDetection(
                 DetectionUpdate(ev, lastBox, g.w, g.h, uw, uh, roi, scanner.autoEnabled, scanner.hasEmptyRef, g,
-                    outline?.quad, wf, outlineNs, triggerRefused),
+                    outline?.quad, wf, outlineNs, triggerRefused, zoomZ),
             )
+        }
+    }
+
+    /** Hand this frame to a waiting snapshot request, taken at zoom [z]. */
+    private fun serveSnapshot(p: YuvPlanes, rotation: Int, timestampNs: Long, z: Double) {
+        snapshotWaiter.getAndSet(null)?.let { give ->
+            snapRing.copyFrom(p, rotation, timestampNs)
+            runCatching { give(snapRing.snapshotLast(1).first(), z) }
         }
     }
 
@@ -481,14 +660,15 @@ class ScanAnalyzer(
     }
 
     /** Reset / new Area / mode change / camera restart: no burst owns a window any more. */
-    private fun clearWatch(ts: Long, why: String) {
-        if (inWait) endWait(ts, why)
+    private fun clearWatch(why: String) {
+        if (inWait) endWait(why)
+        prevTickSample = null
         watch = null; heldTriggerQuad = null; lastFiredId = 0L
         preparedRef = null; preparedRefOf = null
         tracker.reset()
     }
 
-    /** Per tick, after the decisions: the watch window upkeep and the shadow-mode measurement. */
+    /** Per tick, after the decisions: the watch window upkeep, the wait's swap numbers and the shadow-mode measurement. */
     private fun instrument(ev: AutoScanner.Event, g: Gray, outline: CardOutline.Outline?, outlineNs: Long?, ts: Long) {
         when (ev) {
             is AutoScanner.Event.Trigger -> {
@@ -501,14 +681,69 @@ class ScanAnalyzer(
                     setWatch(outline.sampleQuad, "outline", lastFiredId)
                 }
             }
-            is AutoScanner.Event.AwaitingNext -> if (shadowMode) measureWait(g, ts)
-            is AutoScanner.Event.NextCard -> if (inWait) endWait(ts, if (ev.removed) "card removed" else "a different card settled")
-            else -> if (inWait) endWait(ts, "no longer waiting (${ev.javaClass.simpleName})")
+            is AutoScanner.Event.AwaitingNext -> {
+                trackWait(ev.box, g)
+                if (shadowMode) measureTexture(g, ts)
+            }
+            is AutoScanner.Event.NextCard -> {
+                logNextCard(ev, g)
+                // The deciding tick belongs to the wait's numbers (a swap's change, a removal's empty mask).
+                if (inWait) { trackWait(ev.box, g); endWait(if (ev.removed) "card removed" else "a different card settled") }
+            }
+            else -> if (inWait) endWait("no longer waiting (${ev.javaClass.simpleName})")
         }
     }
 
-    private fun measureWait(g: Gray, ts: Long) {
-        if (!inWait) { inWait = true; waitTicks = 0; waitMax = Double.NEGATIVE_INFINITY; aboveTicks = 0; abovePeak = 0.0; shadowSuppressed = 0; waitLogged = 0 }
+    /** The scanned scene, when it is comparable with [g] (same sample geometry). */
+    private fun scannedLike(g: Gray): Gray? = scanner.scannedFrame?.takeIf { it.w == g.w && it.h == g.h }
+
+    /**
+     * Every Tray wait, every tick (at most two passes over the 176×MH sample):
+     * the swap test's own number — the change vs the scanned card — on the ticks
+     * something occupied the Area (a swap needs that; the tick a card is lifted
+     * away would only inflate it) and on those of them where it also sat still vs
+     * the previous tick (where a swap could have fired); the still ticks; and
+     * the smallest mask share (removed = below EMPTY_FRAC). Reported once, in the
+     * wait's "wait over" line.
+     */
+    private fun trackWait(box: Box?, g: Gray) {
+        if (!inWait) startWait()
+        waitTicks++
+        val mask = box?.maskFrac ?: 0.0
+        if (mask < waitMinMask) waitMinMask = mask
+        val prev = prevTickSample?.takeIf { it.w == g.w && it.h == g.h }
+        val still = prev != null && Detection.changedFrac(g, prev) < DetectConst.STABLE_FRAC
+        if (still) waitStillTicks++
+        if (mask <= DetectConst.OCCUPIED_FRAC) return
+        val ref = scannedLike(g) ?: return
+        val change = Detection.changedFrac(g, ref)
+        if (change > waitMaxChange) waitMaxChange = change
+        if (still && change > waitMaxChangeStill) waitMaxChangeStill = change
+    }
+
+    private fun startWait() {
+        inWait = true
+        waitTicks = 0; waitStillTicks = 0; waitMaxChange = 0.0; waitMaxChangeStill = 0.0; waitMinMask = 1.0
+        textureTicks = 0; waitMax = Double.NEGATIVE_INFINITY; aboveTicks = 0; abovePeak = 0.0; shadowSuppressed = 0; waitLogged = 0
+    }
+
+    /** One line per NextCard: why the scanner moved on. */
+    private fun logNextCard(ev: AutoScanner.Event.NextCard, g: Gray) {
+        val mask = ev.box?.maskFrac ?: 0.0
+        if (ev.removed) {
+            detectLog { "next card: removed — mask %.1f%% (< %.1f%%) · watching".format(mask * 100, DetectConst.EMPTY_FRAC * 100) }
+        } else {
+            detectLog {
+                // The change goes in as an argument: a "%" pasted into a format string throws.
+                val change = scannedLike(g)?.let { "%.1f%%".format(Detection.changedFrac(g, it) * 100) } ?: "?"
+                "next card: swapped — change %s vs the scanned card (needs > %.0f%%), still, mask %.1f%%"
+                    .format(change, DetectConst.SWAP_FRAC * 100, mask * 100)
+            }
+        }
+    }
+
+    /** SHADOW MODE: the texture-change signal inside the watch window (logs events only). */
+    private fun measureTexture(g: Gray, ts: Long) {
         val wt = watch ?: return
         val ref = scanner.scannedFrame ?: return
         if (wt.w != g.w || wt.h != g.h || ref.w != g.w || ref.h != g.h) return
@@ -517,7 +752,7 @@ class ScanAnalyzer(
         val sig = TextureChange.measure(g, preparedRef!!, wt.mask) ?: return
         textureNsTotal += System.nanoTime() - t0
         textureRuns++
-        waitTicks++
+        textureTicks++
         var sum = 0L
         for (v in g.px) sum += v
         val grey = sum.toDouble() / g.size
@@ -536,17 +771,56 @@ class ScanAnalyzer(
         }
     }
 
-    private fun endWait(ts: Long, why: String) {
+    /**
+     * The wait's one summary line (tag "detect", never rate-limited — once per
+     * wait): the swap test's numbers, so a missed swap shows why, plus the
+     * shadow-mode texture maximum when it ran.
+     */
+    private fun endWait(why: String) {
         inWait = false
         if (waitTicks == 0) return
-        val open = if (aboveTicks > 0) " · still ≥ %.0f for %d tick(s) at the end (peak %.1f)".format(TextureChange.START_THRESHOLD, aboveTicks, abovePeak) else ""
-        val dropped = if (shadowSuppressed > 0) " · $shadowSuppressed event line(s) held back (1/s, $SHADOW_LOG_MAX_PER_WAIT per wait)" else ""
-        // Once per wait, never rate-limited: the one line that summarises what the window saw.
-        log.i("shadow", "wait over (%s) after %d ticks: max logHP p75 %.1f (logGrad %.1f, mean grey %.0f)%s%s"
-            .format(why, waitTicks, waitMax, waitMaxGrad, waitMaxGrey, open, dropped))
-        lastShadowLogTs = ts
-        waitTicks = 0; aboveTicks = 0; abovePeak = 0.0; shadowSuppressed = 0; waitLogged = 0
+        detectLog {
+            val swap = "change vs the scanned card max %.1f%%, %.1f%% while a card sat still (a swap needs > %.0f%% while still) · still %d/%d ticks · mask min %.1f%% (removed < %.1f%%)"
+                .format(waitMaxChange * 100, waitMaxChangeStill * 100, DetectConst.SWAP_FRAC * 100, waitStillTicks, waitTicks,
+                    waitMinMask * 100, DetectConst.EMPTY_FRAC * 100)
+            val texture = if (textureTicks == 0) "" else {
+                val open = if (aboveTicks > 0) ", still ≥ %.0f for %d tick(s) at the end (peak %.1f)".format(TextureChange.START_THRESHOLD, aboveTicks, abovePeak) else ""
+                val dropped = if (shadowSuppressed > 0) ", $shadowSuppressed shadow event line(s) held back (1/s, $SHADOW_LOG_MAX_PER_WAIT per wait)" else ""
+                " · texture over %d ticks: max logHP p75 %.1f (logGrad %.1f, mean grey %.0f)%s%s"
+                    .format(textureTicks, waitMax, waitMaxGrad, waitMaxGrey, open, dropped)
+            }
+            "wait over (%s) after %d ticks: %s%s".format(why, waitTicks, swap, texture)
+        }
+        waitTicks = 0; textureTicks = 0; aboveTicks = 0; abovePeak = 0.0; shadowSuppressed = 0; waitLogged = 0
     }
+
+    /**
+     * A "detect" line that can never throw into the decisions (fire() / captureDone()
+     * must always run). A line that failed to build is counted in [stats], not lost silently.
+     */
+    private inline fun detectLog(msg: () -> String) = safeLog("detect", msg)
+
+    /** Any analyzer log line, built and written so that it can never throw into the decisions. */
+    private inline fun safeLog(tag: String, msg: () -> String) {
+        runCatching { log.i(tag, msg()) }.onFailure { logErrors++; lastLogError = it.toString() }
+    }
+
+    /** A command dropped a held first-card capture (nothing is shot for it). */
+    private fun cancelHold(why: String) {
+        if (!deferring) return
+        deferring = false
+        safeLog("focus") { "first card: focus hold cancelled ($why) — nothing shot" }
+    }
+
+    /** Which of the fallback's three tests failed, in words. */
+    private fun whyNot(e: PrintEvidence.Evidence): String = listOfNotNull(
+        if (!e.printed) "no printed detail" else null,
+        if (!e.cardShaped) "box not card-shaped" else null,
+        if (!e.bigEnough) "box too small" else null,
+        // A textured tray: "new texture" may be the tray itself against a stale reference.
+        if (!e.trayClean) "the learned tray is textured there" else null,
+        if (!e.standsOut) "no more textured than round the box" else null,
+    ).joinToString(", ").ifEmpty { "evidence ok" }
 
     /**
      * Shadow-mode event lines: at most one per [SHADOW_LOG_GAP_NS] and
@@ -640,7 +914,7 @@ class ScanAnalyzer(
             CaptureBurst(
                 id = id, trigger = trigger, mode = mode, frames = burst,
                 cropRoi = if (mode == ScanMode.MOUNT) roi else HandheldGuide.frac(uw, uh),
-                scene = scanner.scannedFrame, box = box, uprightW = uw, uprightH = uh,
+                scene = scanner.scannedFrame, box = box, uprightW = uw, uprightH = uh, zoom = zoomZ,
             ),
         )
     }
@@ -652,14 +926,17 @@ class ScanAnalyzer(
     }
 
     /** Double-tap: re-learn the empty tray. */
-    fun reset() = post { scanner.reset(); lastBox = null; deferring = false; refusals = 0; clearWatch(lastFrameTs, "reset") }
+    fun reset() = post { scanner.reset(); lastBox = null; cancelHold("re-learn"); refusals = 0; clearWatch("reset") }
 
     /** The focus asked for by [Sink.onFocusRequest] finished (success or not). */
     fun focusDone() = post {
         if (deferring && focusReadyTs == NONE) focusReadyTs = maxOf(lastFrameTs, deferStartTs)
         // The hold gave up waiting and shot while the lens was still moving: the
         // scene it kept is a blur. Now the lens has settled, re-take it.
-        else if (!deferring && heldTimedOut) { heldTimedOut = false; rebaseNext = true }
+        else if (!deferring && heldTimedOut) {
+            heldTimedOut = false; rebaseNext = true
+            safeLog("focus") { "first card: focus answered after the hold gave up — the scanned scene is re-taken from the next sample" }
+        }
     }
 
     fun setAuto(enabled: Boolean) = post { scanner.setAuto(enabled) }
@@ -673,14 +950,76 @@ class ScanAnalyzer(
         }
     }
 
-    /** New scan area (fractions of the upright frame; null = whole frame): re-learn the tray. */
-    fun setRoi(newRoi: RoiFrac?) = post {
-        if (newRoi != roi) {
-            roi = newRoi
+    /** New scan area (fractions of the frames as they arrive; null = whole frame): re-learn the tray. */
+    fun setRoi(newRoi: RoiFrac?) = post { applyMapping(zoomZ, newRoi, settle = false, why = "new Area") }
+
+    /**
+     * The zoom coordinator's mapping: frames arrive at [ratio] and the Area is [view]
+     * (fractions of THOSE frames). Re-learns the tray only when (ratio, view) changed —
+     * exactly [setRoi]'s re-learn, plus the ring emptied on a new ratio. [settle] = the
+     * gate is closed for a camera change: drop [SETTLE_DROP_FRAMES] more frames (they may
+     * predate the zoom), then open. With the zoom off the controller sends (1.0, the Area,
+     * no settle): the pre-zoom setRoi path, bit for bit.
+     */
+    fun zoomMapped(ratio: Double, view: RoiFrac?, settle: Boolean, why: String) = post { applyMapping(ratio, view, settle, why) }
+
+    private fun applyMapping(ratio: Double, view: RoiFrac?, settle: Boolean, why: String) {
+        snapZ = null
+        val newRatio = ratio != zoomZ
+        if (newRatio || view != roi) {
+            roi = view
+            zoomZ = ratio
+            currentZoom = ratio
             scanner.reset()
-            deferring = false
+            cancelHold(if (newRatio) "zoom change" else "new Area")
+            if (newRatio) { rebaseNext = false; heldTimedOut = false; zoomChanges++ }
             lastSample = null; lastBox = null; lastBoxInfo = null
-            clearWatch(lastFrameTs, "new area")
+            clearWatch(if (newRatio) "zoom change" else "new area")
+            if (newRatio) safeLog("zoom") { "frames now at %.2f× ($why) — the Area is %s of the zoomed frame; re-learning the empty tray"
+                .format(ratio, view?.encode() ?: "the whole frame") }
+        }
+        if (settle || newRatio) ring.clear()          // no burst ever mixes zooms
+        if (settle && zoomGateClosed) {
+            zoomDropLeft = SETTLE_DROP_FRAMES
+            zoomResyncAsked = true                     // settling: frames are expected, not a reason to ask
+        }
+    }
+
+    /**
+     * The camera's zoom is about to change (or the camera went away while zoomed):
+     * drop every frame until [zoomMapped] settles it. A pending shutter waits (its
+     * settle time restarts); a held first-card capture is dropped and the card asked
+     * about again on its next steady ticks (never left SCANNING).
+     */
+    fun closeZoomGate(why: String) = post {
+        if (!zoomGateClosed) {
+            zoomGateClosed = true
+            zoomClosures++
+            zoomDroppedThis = 0
+            safeLog("zoom") { "analyzer paused — $why" }
+        }
+        zoomDropLeft = 0
+        zoomResyncAsked = false
+        snapZ = null
+        manualStartTs = NONE
+        if (deferring) {
+            cancelHold("the camera's zoom is changing")
+            scanner.triggerRefused()
+        }
+    }
+
+    /**
+     * Drawing an Area while zoomed: the camera reports [ratio] now (1×). The gate stays
+     * closed — no tick, ring copy or capture, the mapping and the empty tray kept, so
+     * Cancel comes back with no re-learn — but a browser's snapshot request is served
+     * again, at [ratio], once [SETTLE_DROP_FRAMES] frames that may predate it are
+     * dropped (before, `snapshot.jpg` answered 503 for the whole drawing). Undone by the
+     * next [closeZoomGate] / [zoomMapped].
+     */
+    fun snapshotsAt(ratio: Double) = post {
+        if (snapZ != ratio) {
+            snapZ = ratio
+            snapDropLeft = SETTLE_DROP_FRAMES
         }
     }
 
@@ -691,9 +1030,9 @@ class ScanAnalyzer(
         if (newMode != mode) {
             mode = newMode
             lastBox = null; lastBoxInfo = null
-            deferring = false
+            cancelHold("mode change")
             if (newMode == ScanMode.MOUNT) { scanner.reset(); lastSampleTs = NONE }
-            clearWatch(lastFrameTs, "mode change")
+            clearWatch("mode change")
         }
     }
 
@@ -707,10 +1046,11 @@ class ScanAnalyzer(
         // A rebind mid-hold: the held capture will never fire, so the scanner
         // would stay SCANNING (capturing, owed a captureDone) — Auto dead.
         if (deferring) scanner.reset()
-        deferring = false; rebaseNext = false; heldTimedOut = false
+        cancelHold("camera restarted")
+        rebaseNext = false; heldTimedOut = false
         scanner.cameraRestarted()
         ring.clear()
-        clearWatch(lastFrameTs, "camera restarted")
+        clearWatch("camera restarted")
         lastFrameTs = NONE; lastSampleTs = NONE
         lastSample = null; lastBox = null; lastBoxInfo = null
     }
@@ -728,9 +1068,13 @@ class ScanAnalyzer(
             if (o > 0) append(" · outlines $outlinesFound/$o avg outline ${"%.2f".format(outlineNsTotal / 1e6 / o)} ms" +
                 " · ${tracker.outliers} outlier(s) dropped")
             if (triggersRefused > 0) append(" · triggers refused (no card shape) $triggersRefused")
+            if (printAccepts > 0) append(" · accepted on printed detail (no outline) $printAccepts")
+            if (logErrors > 0) append(" · log line errors (detect/focus) $logErrors (last: $lastLogError)")
             if (outlineErrors > 0) append(" · outline errors $outlineErrors (last: $lastOutlineError)")
             val x = textureRuns
             if (x > 0) append(" · texture $x avg ${"%.2f".format(textureNsTotal / 1e6 / x)} ms")
+            if (zoomClosures > 0 || currentZoom != 1.0) append(" · zoom %.2f× (%d change(s), gate closed %d time(s), %d frame(s) dropped settling)"
+                .format(currentZoom, zoomChanges, zoomClosures, zoomDropped))
         }
     }
 
@@ -749,6 +1093,8 @@ class ScanAnalyzer(
         const val MANUAL_WAIT_NS = 700_000_000L
         /** Let the tap's jolt pass before the frames a manual scan uses. */
         const val MANUAL_SETTLE_NS = 150_000_000L
+        /** Frames dropped after the zoom is read back before the gate opens (they may predate it). */
+        const val SETTLE_DROP_FRAMES = 2
         /** Longest a first-card capture waits for focus before shooting anyway. */
         const val FOCUS_WAIT_NS = 1_500_000_000L
         /** Shadow mode: "WOULD re-arm" when logHP p75 ≥ START_THRESHOLD this many ticks running (~0.4 s). */

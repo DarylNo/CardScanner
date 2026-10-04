@@ -25,7 +25,9 @@ android/core/        pure Kotlin (JVM-testable): AutoScanner/Detection (the
                      trigger), CardQuad/Flatten, ScanPhoto, CardOutline +
                      OutlineTracker (the live outline / card-shape gate),
                      TextureChange (shadow mode), CameraChoice (the Camera
-                     setting), PHash/ArtHasher/ArtMatcher (bit-exact
+                     setting), FocusPoint (where AF meters), ZoomFit +
+                     ZoomCoordinator + ZoomSnapshot ("Zoom to fit the Area"),
+                     PHash/ArtHasher/ArtMatcher (bit-exact
                      fingerprint), IdentifyPipeline, PrintingRanker,
                      OcrMatch, Popularity, and core/server/ — ScanStore,
                      PhoneApi (the /api surface), PriceSweep/PriceWorker,
@@ -451,7 +453,140 @@ lens on testers' phones), minSdk 29, arm64-v8a.
   15% pad — back from the card so the phone's shadow stays off it; a starting
   point, not measured). A drawn Area is never replaced; in Tap to scan the
   Area button draws, it never clears. Mount focus: locks on the Area centre,
-  then on the first card; tap the preview to lock elsewhere.
+  then on the first card's own centre (below); tap the preview to lock elsewhere.
+- **Focus — "is it focusing?" (owner on 1.1.10: "No zoom? Focus working?";
+  1.1.11).** What the code does: every bind / camera re-open / new Area / mode
+  switch locks AF (CameraX AUTO + one trigger, the lens then stays put) at the
+  AREA CENTRE on the first frame — there is no card yet; Tray then holds the
+  FIRST card's capture (≤ `FOCUS_WAIT_NS` 1.5 s) for a pass metered ON THE
+  CARD: the Trigger box's centre mapped out of the sample (`core/FocusPoint`,
+  `FocusRequest` from the analyzer; before 1.1.11 that pass metered the Area
+  centre too, and the card-box branch was dead code). A failed pass retries on
+  the next card, 3 in all, then gives up until a tap / new Area / re-open / the
+  soft-capture watchdog (a flattened Tray capture < 0.5 × the median of the
+  last ≥ 5 re-arms the card pass — it never catches a session soft from the
+  start). Taps lock where tapped. CameraX completes a pass that never
+  converges NOT focused after 5 s (`FocusMeteringControl.AUTO_FOCUS_TIMEOUT_DURATION`,
+  1.5.3 bytecode) — longer than the 1.5 s hold. **Nothing of this reached the
+  log before 1.1.11; now, tag `focus`:** each pass numbered, start
+  ("#n why → Area/card centre (u, v) = sensor x,y of W×H · now AF state ·
+  lens N dpt (≈ cm when the lens is calibrated)") and result ("#n why:
+  focused / NOT focused / timed out / cancelled / superseded in N ms · AF … ·
+  lens …", `FocusLog`); the analyzer's hold ("Trigger held", "focus answered N
+  ms after the Trigger — capture #k shot from the 3 frames after it", "focus
+  hold timed out after 1.5 s — no focus answer; capture #k shot from the last
+  frames", a late answer re-taking the scene, a hold cancelled by a re-learn /
+  new Area / camera restart); every watchdog re-arm with its value and the
+  median; the 3-tries give-up. Each capture's `done #k` line carries the
+  three frames' sharpness ("sharpness a / [b] / c", the bracketed one used —
+  `CaptureResult.sharpnessText`) and the CHOSEN frame's own AF state, lens
+  position, exposure and ISO (`FrameMetaRing`: per-frame CaptureResults by
+  SENSOR_TIMESTAMP, looked up when the burst is handed over). **Diagnostics'
+  camera block is LIVE** (`ui/CameraDiagnostics`): read from the scan screen's
+  controller whenever Diagnostics opens or a report is built (off the main
+  thread it waits ≤ 1 s, else the snapshot), snapshotted at bind, after every
+  capture and when the screen lets go — shown with its age when the scan
+  screen is gone. Before 1.1.11 it was a bind-time copy, so `focus`, `last
+  frame`, `analyzer` and `last capture` were stale. New line `focus:` = passes
+  this session (focused / NOT focused / timed out / cancelled), the last
+  result and its age, watchdog re-arms, the AF state and lens now, and whether
+  a card pass is due (the old note is `focus note:`). The device /
+  characteristics lines are read once per bind. Tested in code, not on the
+  phone; dioptres → cm only when LENS_INFO_FOCUS_DISTANCE_CALIBRATION is not
+  UNCALIBRATED.
+- **Zoom to fit the Area (owner on 1.1.10: "No zoom?" → "Go"; 1.1.11).**
+  Settings → Camera → "Zoom to fit the Area", **OFF by default in this build**
+  (the owner turns it on to try it), both Tray and Tap to scan, also from the
+  desktop 📱 Scanner panel (`zoom_fit`). The camera zooms so the drawn Area fills
+  the view — no new control, the zoom comes from the box already drawn.
+  **Coordinate spaces:** the stored `roi` (AppSettings, `/api/device`) is BASE,
+  1× fractions — no zoom was ever applied before, so every stored Area already
+  is one: no migration. CameraX zooms about the frame centre, so the VIEW Area =
+  ½ + (b − ½)·z per axis (`core/ZoomFit.toView`, computed at use, EXACT identity
+  at z == 1.0 — MainActivity compares Areas by equality); it keeps the aspect,
+  so MH never changes. Everything that works on frames uses the view Area: the
+  detection sample, the capture crop + margins (the full frame is the zoomed
+  frame), the overlay, the focus points (`areaCentre(viewRoi)`, the card box's
+  `FocusRequest.roi`), the watch window. The Tap default Area is base like any
+  stored Area. **The ratio** (`ZoomFit.choose`): z = floor-to-0.05 of min(0.95 ·
+  fit(A), lossless, the lens's maxZoomRatio, `MAX_ZOOM` 2.0 — provisional until
+  the rig's lossless knee), fit(A) = 1 / (2 · max|edge − ½|) (so the Area never
+  leaves the view), lossless = the sensor active array ÷ the analysis stream
+  (per side, the smaller), and z = 1 below 1.10×, with the switch off, while an
+  Area is drawn, or with no Area. The default Tap Area gives 1.20×.
+  **The lifecycle** (`core/ZoomCoordinator`, pure, `ZoomCoordinatorTest`; the
+  CameraX glue is `CameraController`): every camera change CLOSES the
+  analyzer's settle gate first (`ScanAnalyzer.closeZoomGate`: no tick, no ring
+  copy, no snapshot, no capture; a pending shutter waits; a held first-card
+  capture is dropped and the still card asked again via `triggerRefused`),
+  calls `setZoomRatio`, and maps with the ratio READ BACK from the capture
+  results (CONTROL_ZOOM_RATIO on API 30+, else active array ÷ crop width —
+  CameraX's ZoomState moves when asked, not when frames carry it; a read-back
+  within 1 % IS the request, so a re-apply maps bit-identically). The gate
+  opens after 2 more frames are dropped and the ring is emptied — no burst mixes
+  zooms. CameraX resets zoom to 1.0 on EVERY detach (`ZoomControl.setActive(false)`
+  → `resetZoom`, 1.5.3 bytecode: every Scans / Settings / Tap-detail round
+  trip), so the gate closes at ON_STOP and on CLOSING/CLOSED (OPENING too while a
+  zoom is in use) and the zoom is re-applied on OPEN, at ON_START and when frames
+  reach a closed gate (`onZoomResync`, once per closure). "Camera is not active"
+  is retried 5 × 200 ms, then the mapping falls back to 1× and scanning carries
+  on (the next start asks again); a refused ratio is not asked again in a loop;
+  no answer in 2 s maps what a result NEWER than the request reports (a
+  result counter in the controller; the read-back is cleared at ON_STOP and
+  CLOSING/CLOSED — the last pre-stop frame says what the camera WAS), else the
+  request, and a LATE answer that differs re-maps behind the gate (review of
+  1.1.11: a slow reopen after a Settings round trip mapped the stale 1× and
+  dropped the camera's 1.9× answer — the Area stayed mapped at the wrong zoom;
+  `aLateAnswerAfterTheTimeoutReMaps…`). **The tray is re-learned
+  only when (z, view Area) changed** (`ScanAnalyzer.zoomMapped` = setRoi's
+  re-learn + the ring cleared on a new ratio): a re-apply after the camera comes
+  back keeps the empty tray, and a still card across a real change is learned
+  into the new tray, never scanned twice. Focus re-arms after an applied change
+  (Area-centre lock at the new view + the first-card pass). **Drawing an Area on
+  the phone** zooms OUT to 1× first and arms the drag only once the camera is
+  there ("Zooming out to the whole frame…"); release stores the BASE Area and
+  zooms in (one re-learn, at its own zoom); Cancel zooms back with no re-learn
+  (the analyzer is left alone while drawing — its gate stays closed, but the
+  browser's `snapshot.jpg` is served at the camera's 1× via
+  `ScanAnalyzer.snapshotsAt`, and `/api/device` reports the camera's 1× with
+  `drawing: true`, not "1.90× settling…"; before the review it answered 503
+  for the whole drawing). **With the switch off none of
+  this runs** — no zoom call, no gate, no settle: the Area reaches the analyzer
+  as `zoomMapped(1.0, Area, settle = false)`, the pre-zoom setRoi path event for
+  event (`zoomOffIsTheOldPathEventForEvent`). **What shows it:** the Area chip
+  reads "Area ✓ · 1.55×" while zoomed; the capture line ends "… @ 1.55×"; tag
+  `zoom` logs each request ("→ 1.55× requested (why) · 1.55× (limited by the
+  Area fit)"), what the camera reports (CONTROL_ZOOM_RATIO, the crop region and
+  whether it is centred), the gate ("analyzer paused — why" / "resumed at
+  1.55× — n frame(s) dropped"), each re-learn, any failure, and the POST-FIT
+  CHECK (`ZoomFit.PostFit`: the first Tray capture at a new zoom compares the
+  card's height in frame px with the median at the previous zoom — it should
+  scale with z; beyond ±3 % the centred-crop maths does not hold on that
+  phone, e.g. a logical multi-camera). Diagnostics: "zoom to fit the Area: on ·
+  target … (limited by …) · applied … · Area fit … · lossless … · lens max … ·
+  MAX_ZOOM …" plus the read-back; the analyzer line counts changes, gate
+  closures and frames dropped. **The desktop:** `/api/device` carries
+  `zoom_fit` and `zoom {ratio, target, limit, fit, lossless, max, settling, drawing}`
+  (null with the scan screen closed); `roi` stays base, and `snapshot.jpg` stays
+  a BASE-space picture while zoomed (`core/ZoomSnapshot`: the zoomed frame
+  scaled by 1/z, centred on grey — marks land at their base fractions ±1 px at
+  1, 1.6 and 2×, `ZoomSnapshotTest`), so drawing the Area there stays 1:1. The
+  📱 Scanner panel (d46) has the checkbox and a zoom line (hidden for an older
+  phone app) and re-takes the picture after a zoom / Area / lens PATCH. A PATCH
+  is answered only after the scan screen's UI thread applied it
+  (`DeviceBridge.write` waits ≤ 500 ms on the screen's future — before, the
+  answer's zoom predated the change: "Zoom to fit is off" right after ticking
+  it); the panel still shows "applying the change on the phone…" for a zoom /
+  Area / lens PATCH and reads `/api/device` again 600 ms later, so an older or
+  busy phone never shows a contradicting line —
+  `scripts/check_device_ui.py` drives it in headless Chromium. Tested in code
+  (ZoomFitTest, ZoomCoordinatorTest, ZoomSnapshotTest, the ScanAnalyzerTest
+  gate tests, DeviceApiTest, ScreensSmokeTest at the N200's size for the
+  Settings switch and the "Area ✓ · 1.55×" chip), NOT on the phone: whether the
+  N200 reports CONTROL_ZOOM_RATIO, the lossless knee, the frames at the wrong
+  zoom after a settle, and whether the photos get sharper are all rig
+  questions. Not built yet: the zoom probe (a measured ratio ladder), the
+  MeasureSession A/B steps, `snapshot.jpg?view=camera`, an off-centre hint.
 - **The review WebView shows the page's `confirm()`/`alert()`** (`ui/JsDialogs`,
   a `WebChromeClient`): an Android WebView drops JavaScript dialogs unless the
   app shows them, so `confirm()` returned false and phone.html's "Clear all" /
@@ -466,9 +601,13 @@ lens on testers' phones), minSdk 29, arm64-v8a.
   `PanelActivity.onPause` deletes them itself (`PhoneServer.deleteScansAsOwner`)
   — without that, swiped scans came back.
 - **The live log** (`core/DebugLog.global`, a 3000-line ring, mirrored to
-  logcat as `CardScanner`): triggers (box, mask %), captures (flattened or
-  not, timings), each identification (name, printings, top, OCR ✓, stage
-  ms), queue outcomes and retry errors, F2F requests, server start/stop/idle
+  logcat as `CardScanner`): triggers (box, mask %), captures (`done #k`:
+  flattened or not, card px, the three frames' sharpness, the chosen frame's
+  AF state / lens dpt / exposure / ISO, timings), every focus pass and hold
+  (tag `focus`, above), each identification (name, printings, top, OCR ✓, stage
+  ms), "capture #k → job n (nonce8) queued" and the job's outcome under the
+  same name (1.1.10 printed every job as `00000000`: the first 8 of 12 digits
+  of "%012d"), retry errors, F2F requests, server start/stop/idle
   and joins, card-database and update checks, remote setting changes, crashes
   (an uncaught exception writes the log to `last-crash.txt`; the next report
   carries it). Read it live on the paired computer (🐞 → App log, admin-only
@@ -556,6 +695,65 @@ lens on testers' phones), minSdk 29, arm64-v8a.
   shutter / Tap to scan is never gated. The UI says "Something in the Area —
   no card shape yet…" instead of "Card detected" while the mask is occupied
   without an outline; the Diagnostics line counts "triggers refused".
+  **THE PRINTED-DETAIL FALLBACK (1.1.11; owner on 1.1.10: "Old bordered cards
+  didn't see the change of cards. White bordered cards didn't get picked up as
+  cards").** A HEDGE, not a diagnosed fix: synthetic white-bordered cards are
+  found by the outline at 176 px, so the rig's cause is unknown. If the finder
+  misses a real card, that card is refused and after 5 refusals becomes "the
+  tray", so the next card is judged against it — both reports at once. Before
+  refusing, the gate now asks the SAME trigger box for a card's printed detail
+  (`core/PrintEvidence`, app-only; read-only `AutoScanner.emptyGradient()`, a
+  copy): in the box's CORE (inset 25 % per side — a flat patch's edges, a glare
+  flank, a hand's outline stay out) the share of pixels textured now (gradient
+  > `PRINT_GRAD` 21 = 1.5 × GRAD_THR) that were smooth in the learned tray
+  (≤ 14) must be ≥ 6 %, the box long/short 1.15–1.9, ≥ 3 % of the Area. Yes →
+  the capture fires without an outline; it can only ever say yes MORE often.
+  Measured (`PrintEvidenceTest`, synthetic 176×235 samples through the real
+  AutoScanner, table printed): 900 cards (black / white / white + dark frame ×
+  trays 190 / 215 / 240 / dark 40 / textured × sleeved / bare × blur 0/1/2 px ×
+  4 sizes incl. filling the Area × upright / 10° / sideways) all accepted, print
+  ≥ 18 %, box 1.21–1.42, ≥ 8 % of the Area; 200 non-card scenes (glare ±40–80,
+  shadows −30–60, exposure steps, smooth hand blobs, σ 2.5 noise, a textured
+  tray), 93 of which the occupancy trigger fires on — none accepted, print
+  ≤ 1 %. Why 21, not GRAD_THR: at 14 noise on a textured tray read 11 % vs a
+  card minimum of 26 %; at 21, 1 % vs 18 %. Why the core: with the whole box a
+  defocused smooth fist on a dark tray read 21 %. The outline itself found
+  869/900 — the 31 misses are cards that FILL the Area (an Area drawn tight on
+  the card); it also took 24 of 30 smooth hand blobs for cards (pre-existing,
+  not the fallback's doing). Real art is smoother than the synthetic blocks —
+  hence the low 6 %; not measured on the rig. **Stale references (review of
+  1.1.11):** "new texture vs the learned tray" is print only while the learned
+  tray is TRUE — on a textured tray (playmat, wood) a tray learned with a card
+  on it (rebind / new Area / zoom change / double-tap), learned slightly out of
+  focus, lit brighter under AE lock or nudged reads as print over a box that is
+  the whole Area (always card-shaped, always big enough): the fallback shot 142
+  of 348 such empty trays and lost the 1.1.7 self-heal (3 real cards → 7
+  bursts). Two more tests, independent of how fresh the reference is: the
+  learned tray must be SMOOTH in the box and its core (≤ 4 % above
+  `TRAY_GRAD` 7 = GRAD_THR / 2), and the print must stand out from a ring just
+  outside the box (ring texture ≤ print ÷ 2; no ring when the box fills the
+  Area). Measured: smooth-tray cards 720/720 still accepted (tray texture ≤
+  0.5 %, print ≥ 3.5 × ring); stale empty trays 0/348 accepted (the tray test
+  refuses all 142, 8–88 % texture); on a textured tray the fallback stands
+  aside for every card (the outline found 173/180 there — 1.1.10's
+  behaviour). Limits: sample noise above σ ≈ 1.6 makes a flat tray read
+  textured (the fallback then stands aside), and a textured tray learned > 2
+  sample px out of focus reads smooth (est. beyond the lens at the mount).
+  `ScanAnalyzerTest` holds the lifted-card / AE-lock cases at analyzer level
+  and that each real card is shot once after a stale view is adopted. **Log lines (tag `detect`, ≤ 1 per
+  event):** a refusal states its evidence once per scene ("TRIGGER refused — no
+  card shape · no printed detail · print 0% (need 6%) · box 1.38 (1.15–1.90) ·
+  20% of the Area (≥ 3%) · box … mask …"); "TRIGGER accepted without an outline
+  — printed detail N% …"; the adoption repeats the last evidence and the
+  scene's peak print; every NextCard is "next card: removed — mask N%" or
+  "next card: swapped — change N% vs the scanned card (needs > 6%)" (the
+  analyzer's line replaced MainActivity's); and EVERY Tray wait (shadow mode or
+  not) ends with one "wait over" line: the swap test's own number — the max
+  change vs the scanned card over occupied ticks, and over the ticks a card sat
+  still (where a swap could fire) — the still ticks, and the mask's minimum, so
+  a missed swap shows why (two passes over the sample per waiting tick). The
+  Diagnostics line counts "accepted on printed detail" (and any detect line
+  that failed to build — `detectLog` never throws into the decisions).
 - **SHADOW MODE — the shadow-proof "texture change" signal, computed and
   logged, NEVER acting** (owner: "Can't trigger on silly things like shadows";
   a shadow is a brief, smooth, multiplicative change, a new card changes the
@@ -572,7 +770,8 @@ lens on testers' phones), minSdk 29, arm64-v8a.
   provisional until the rig's numbers are in. While the scanner awaits the next
   card, `ScanAnalyzer` measures it every tick inside the watch window and logs
   EVENTS only under tag `shadow` (≤ ~1 line/s, 3000-line ring): the maximum per
-  wait when the wait ends (with its tick count), every crossing of 8 with its
+  wait when the wait ends (with its tick count — since 1.1.11 it rides the
+  `detect` "wait over" line), every crossing of 8 with its
   duration and logGrad, and "WOULD re-arm (texture)" when ≥ 8 holds 2 ticks —
   plus one `outline` line per capture (live outline vs capture quad, card
   height in frame px) and the Diagnostics analyzer line's avg outline / texture
@@ -628,8 +827,10 @@ lens on testers' phones), minSdk 29, arm64-v8a.
   after 20 bad codes from anywhere in 5 min.
 - **Scanner settings from the browser** (`core/server/DeviceApi`, admin only):
   GET/PATCH `/api/device` (mode, roi, torch, vibration, high_res, ae_lock,
-  check_ms, camera — with the phone's `cameras` listed) + `/api/device/snapshot.jpg` (the current UPRIGHT analysis frame —
-  the space the Area fractions live in). `DeviceBridge` writes `AppSettings`
+  check_ms, camera — with the phone's `cameras` listed — and zoom_fit, with the
+  live `zoom`) + `/api/device/snapshot.jpg` (the current UPRIGHT analysis frame —
+  the space the Area fractions live in; while zoomed, the zoomed frame placed
+  on a grey base-size picture, so it is still base space). `DeviceBridge` writes `AppSettings`
   and the scan screen applies a change live (a new Area only when it changed —
   it re-learns the tray). The desktop "📱 Scanner" panel shows only when
   `/api/device` answers.
@@ -697,7 +898,40 @@ Open threads:
   only if Android exposes >1 back camera on the N200; is a 24 dp swipe
   comfortable?); the compare block's Scan size slider; and the Camera setting
   on a tester's phone.
-- Proposed, not approved: "Fit to cards + zoom" (auto-fit the scan Area).
+- Owner to send a DEBUG REPORT from 1.1.11 (Settings → Diagnostics → Share
+  debug report) of a Tray session with white-bordered and old-bordered cards,
+  including card SWAPS without lifting: the `detect` lines say whether the
+  outline found each card ("TRIGGER box … outline found") or the printed-detail
+  fallback took it ("accepted without an outline — printed detail N% … learned
+  tray smooth there (texture N%) · ring round the box N%"; a refusal on a
+  textured tray says "the learned tray is textured there"), and
+  each wait's "wait over" line says why a swap was or wasn't seen. That report
+  decides the real fix (the fallback is a hedge, tested in code, not on the
+  phone); also say how tightly the Area is drawn round the card (an Area the
+  card fills is where the outline measurably gives up).
+- Owner to confirm on the rig (1.1.11, tested in code, not on the phone): "is
+  it focusing?" — read the `focus` lines of a Tray session (does the first-card
+  pass answer FOCUSED inside the 1.5 s hold, or time out? how far does the lens
+  move — the dpt before vs after?), the `done #k` lines' three sharpness values
+  and AF state (a soft burst, a burst shot mid-sweep in ACTIVE_SCAN), and that
+  Diagnostics' camera block now says "live" with a `focus:` line. That data
+  decides the Phase-3 focus work (a periodic Tray re-lock, a better watchdog)
+  and the zoom probe.
+- Owner to try "Zoom to fit the Area" on the rig (1.1.11, OFF by default,
+  Settings → Camera; tested in code, not on the phone). With it on, in a Tray
+  session: does the Area chip read "Area ✓ · N×" and the preview fill the box?
+  The `zoom` lines — "→ N× requested", "camera reports CONTROL_ZOOM_RATIO …"
+  (does the N200 report it, and is the crop centred?), "analyzer paused /
+  resumed — n frame(s) dropped" (settle time), the "post-fit check" residual
+  (within ±3 %?); no phantom scans and no re-learn after 3× Scans and 3×
+  Settings round trips (a re-apply must not re-learn: no "frames now at" line
+  after a round trip); a card left on the tray across switching it on is NOT
+  scanned again; drawing a new Area zooms out first and Cancel zooms back with
+  the tray kept; the desktop panel's picture stays 1:1 with the Area drawn
+  there. Then compare photos at 1× and zoomed (`done … @ N×` with the three
+  sharpness values and card H px): that, plus a zoom probe, decides
+  `MAX_ZOOM` and turning it on by default. "Fit to cards" (suggesting an Area
+  from where cards land) stays proposed, not approved.
 - Ranking time for heavily reprinted names (cache candidate images).
 - Proposed, awaiting the owner: a measured card-detection goal — score the
   current detector from real debug reports (phantom triggers, captures with no

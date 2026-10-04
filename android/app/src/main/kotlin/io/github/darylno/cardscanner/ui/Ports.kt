@@ -29,6 +29,15 @@ class Captured(
     val quad: FloatArray? = null,
     val frameW: Int = 0,
     val frameH: Int = 0,
+    /** The burst's id (the capture lines' "#n"), 0 when unknown. */
+    val burstId: Long = 0L,
+    /**
+     * The camera's own report for the frame the pipeline chose — "AF … · lens …
+     * dpt · exposure … · ISO …" (CameraController.lensAtCapture) — or null. Log only.
+     */
+    val lens: String? = null,
+    /** The camera zoom the burst was taken at (1.0 = none) — the capture line's "@ z×". */
+    val zoom: Double = 1.0,
 ) {
     /** The quad as frame FRACTIONS (the overlay's space), or null without one. */
     fun quadFractions(): FloatArray? {
@@ -85,6 +94,12 @@ interface CameraPort {
         fun onCaptureFailed(id: Long, message: String)
         /** Fatal AND non-fatal camera/analyzer errors (a non-fatal one can still end a capture). */
         fun onCameraError(message: String)
+        /**
+         * "Zoom to fit the Area": frames are now mapped at [ratio] and the Area sits at
+         * [viewRoi] of the zoomed frame (what the overlay draws); or, with [drawingReady],
+         * the camera is back at 1× for drawing an Area. Any thread.
+         */
+        fun onZoom(ratio: Double, viewRoi: RoiFrac?, drawingReady: Boolean) {}
     }
 
     fun bind(owner: LifecycleOwner, preview: PreviewView, listener: Listener)
@@ -96,7 +111,18 @@ interface CameraPort {
     fun rebind()
     fun unbind()
     fun setAuto(on: Boolean)
+    /** The stored scan Area — BASE (1×) fractions; the camera maps it into its zoomed frames itself. */
     fun setRoi(roi: RoiFrac?)
+    /** "Zoom to fit the Area" (Settings → Camera). */
+    fun setZoomFit(on: Boolean) {}
+    /**
+     * Drawing an Area: zoom out to 1× ([Listener.onZoom] drawingReady arms the drag —
+     * at once when the camera is at 1× already), then back to the Area's zoom. Answers
+     * false when no camera will answer (arm the drag yourself).
+     */
+    fun setDrawing(on: Boolean): Boolean = false
+    /** The zoom now, for the browser's `/api/device` (null = no camera). Any thread. */
+    fun zoomState(): io.github.darylno.cardscanner.core.ZoomCoordinator.State? = null
     /** Double-tap / area change: forget the empty tray and learn it again. */
     fun relearn()
     fun pause(paused: Boolean)
@@ -107,7 +133,6 @@ interface CameraPort {
     fun noCard(scene: io.github.darylno.cardscanner.core.Gray?)
     fun setTorch(on: Boolean)
     fun setAeLock(on: Boolean)
-    fun setFocusLock(on: Boolean)
     fun setHighRes(high: Boolean)
     /** The Camera setting (a Camera2 id, null = Automatic); rebinds — and re-learns the tray — when it changes. */
     fun setCamera(id: String?) {}
