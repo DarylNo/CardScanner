@@ -45,21 +45,30 @@ REAL = {
     # its INNER edge): ambiguous, so the edge finder keeps it loose — never a cut
     "real_white_dark": (664, 926, 26, 33, 638, 893, (60, 62, 66), (232, 230, 225), 1.2),
     "real_flat": (914, 1276, 78, 104, 836, 1172, (190, 190, 186), (20, 20, 24), 2.0),
+    # the finder's quad a few mm too BIG (a sleeve, a shadow): the card 4.5 mm inside the layout
+    # rect on the left, 4 mm at the bottom — past the edge finder's 3.3 mm rule 7, so the edge
+    # crop keeps tray; its printing (/print/card.png) is the same card, so the compare FITS the
+    # scan onto it (cardAlign, 1.1.11)
+    "real_offset": (664, 926, 62, 40, 628, 860, (200, 200, 198), (20, 20, 24), 1.2),
 }
+ALIGNED = {"real_offset"}
+
+
+def draw_card(d, x0, y0, x1, y1, border):
+    d.rectangle([x0, y0, x1 - 1, y1 - 1], fill=border)
+    bx, by = (x1 - x0) * 0.05, (y1 - y0) * 0.04
+    d.rectangle([x0 + bx, y0 + by, x1 - bx, y1 - by * 2], fill=(200, 170, 120))     # frame
+    d.rectangle([x0 + bx * 1.6, y0 + by * 2.5, x1 - bx * 1.6, y0 + (y1 - y0) * 0.55], fill=(60, 90, 160))
+    for k in range(6):                                                                # text lines
+        yy = y0 + (y1 - y0) * (0.62 + k * 0.045)
+        d.rectangle([x0 + bx * 2, yy, x1 - bx * 3, yy + 6 * (y1 - y0) / 820], fill=(40, 40, 40))
 
 
 def photo_png(kind):
     if kind in REAL:
         w, h, x0, y0, x1, y1, tray, border, blur = REAL[kind]
         im = Image.new("RGB", (w, h), tray)
-        d = ImageDraw.Draw(im)
-        d.rectangle([x0, y0, x1 - 1, y1 - 1], fill=border)
-        bx, by = (x1 - x0) * 0.05, (y1 - y0) * 0.04
-        d.rectangle([x0 + bx, y0 + by, x1 - bx, y1 - by * 2], fill=(200, 170, 120))     # frame
-        d.rectangle([x0 + bx * 1.6, y0 + by * 2.5, x1 - bx * 1.6, y0 + (y1 - y0) * 0.55], fill=(60, 90, 160))
-        for k in range(6):                                                                # text lines
-            yy = y0 + (y1 - y0) * (0.62 + k * 0.045)
-            d.rectangle([x0 + bx * 2, yy, x1 - bx * 3, yy + 6], fill=(40, 40, 40))
+        draw_card(ImageDraw.Draw(im), x0, y0, x1, y1, border)
         im = im.filter(ImageFilter.GaussianBlur(blur))
         b = io.BytesIO(); im.save(b, "JPEG", quality=90); return b.getvalue()
     w, h, x0, y0, x1, y1 = LAYOUTS[kind]
@@ -73,6 +82,9 @@ def photo_png(kind):
 
 
 def print_png(color):
+    if color == "card":            # the printing of the real_offset card: that card, edge to edge
+        im = Image.new("RGB", (488, 680)); draw_card(ImageDraw.Draw(im), 0, 0, 488, 680, (20, 20, 24))
+        b = io.BytesIO(); im.save(b, "PNG"); return b.getvalue()
     im = Image.new("RGB", (488, 680), color)
     ImageDraw.Draw(im).rectangle([20, 20, 467, 659], outline=(255, 255, 255), width=6)
     b = io.BytesIO(); im.save(b, "PNG"); return b.getvalue()
@@ -102,6 +114,7 @@ def make_scans():
         7: scan(7, "real_white", [cand("w1", "www", 1, 90, "red"), cand("w2", "xxx", 2, 130, "green")]),
         8: scan(8, "real_flat", [cand("p1", "ppp", 1, 90, "red"), cand("p2", "qqq", 2, 130, "green")]),
         9: scan(9, "real_white_dark", [cand("d1", "ddd", 1, 90, "red"), cand("d2", "eee", 2, 130, "green")]),
+        10: scan(10, "real_offset", [cand("o1", "ooo", 1, 90, "card"), cand("o2", "ppp", 2, 130, "green")]),
     }
 
 
@@ -125,7 +138,7 @@ class H(BaseHTTPRequestHandler):
         if p == "/": return self.send(200, (STATIC / "desktop.html").read_bytes(), "text/html")
         if p == "/phone": return self.send(200, (STATIC / "phone.html").read_bytes(), "text/html")
         if p.startswith("/print/"):
-            return self.send(200, print_png({"red": (170, 40, 40), "green": (40, 140, 60), "blue": (40, 60, 170)}[p[7:-4]]), "image/png")
+            return self.send(200, print_png({"red": (170, 40, 40), "green": (40, 140, 60), "blue": (40, 60, 170), "card": "card"}[p[7:-4]]), "image/png")
         if p == "/api/me": return self.send(200, {"role": STATE["role"]})
         if p == "/api/version": return self.send(200, {"version": "stub"})
         if p == "/api/price-status": return self.send(200, {"active": False, "done": 0, "total": 0, "cooldown_s": 0})
@@ -223,8 +236,8 @@ with sync_playwright() as pw:
     pg.on("console", lambda m: m.type == "error" and "404" not in m.text and errs.append(m.text))
     pg.goto(BASE + "/")
     pg.wait_for_selector("#dver")
-    pg.wait_for_function("document.querySelector('#dver').textContent.startsWith('d44')")
-    check(pg.locator("#dver").text_content().startswith("d44"), "banner reads d44")
+    pg.wait_for_function("document.querySelector('#dver').textContent.startsWith('d45')")
+    check(pg.locator("#dver").text_content().startswith("d45"), "banner reads d45")
 
     def focus(i):
         pg.locator(f'.row[data-id="{i}"]').click()
@@ -250,9 +263,16 @@ with sync_playwright() as pw:
             check(share > 0.05, f"scan {sid} ({kind}): raw crop in compare shown as it is (tray {share:.2%})")
 
     # photos as the phone leaves them: the card INSIDE the layout rect, blurred → cropped to ITS edges
-    for sid in (6, 7, 8, 9):
+    for sid in (6, 7, 8, 9, 10):
         focus(sid)
         kind = STATE["scans"][sid]["photo"]
+        if kind in ALIGNED:
+            pg.wait_for_function("document.querySelector('#cmp img.cmpscan').dataset.fill === 'aligned'", timeout=5000)
+            e = edge_errors_mm(pg, pg.locator("#cmp .cmpbody.side .cmpbox").first, kind)
+            check(all(-0.5 <= v <= 0.5 for v in e), f"scan {sid} ({kind}) compare: fitted onto its printing, mm L/T/R/B {[round(v, 2) for v in e]}")
+            e = edge_errors_mm(pg, pg.locator("#scanShot"), kind)
+            check(any(v > 1 for v in e), f"scan {sid} ({kind}) thumbnail (no printing beside it): the edge crop, tray shows, mm {[round(v, 2) for v in e]}")
+            continue
         for where, loc in (("compare", pg.locator("#cmp .cmpbody.side .cmpbox").first), ("thumbnail", pg.locator("#scanShot"))):
             e = edge_errors_mm(pg, loc, kind)
             if kind == "real_white_dark":
@@ -435,7 +455,7 @@ with sync_playwright() as pw:
     pg = ctx.new_page(); errs3 = []
     pg.on("pageerror", lambda e: errs3.append(str(e)))
     pg.goto(BASE + "/phone?panel=1"); pg.wait_for_timeout(1200)
-    want = "v51"; check(pg.evaluate("UI_VERSION") == want, f"phone banner {want}")
+    want = "v52"; check(pg.evaluate("UI_VERSION") == want, f"phone banner {want}")
     for sid, s in STATE["scans"].items():
         if s["photo"] in REAL: continue       # measured geometrically below
         pg.evaluate(f"openDetail({sid})"); pg.wait_for_timeout(500)
@@ -447,8 +467,17 @@ with sync_playwright() as pw:
         else:
             check(share > 0.05, f"phone scan {sid} ({kind}): raw crop shown as it is (tray {share:.2%})")
         pg.evaluate("closeDetail()"); pg.wait_for_timeout(200)
-    for sid in (6, 7, 8, 9):
+    for sid in (6, 7, 8, 9, 10):
         pg.evaluate(f"openDetail({sid})"); pg.wait_for_timeout(600)
+        if STATE["scans"][sid]["photo"] in ALIGNED:
+            pg.wait_for_function("document.querySelector('#cmp img.cmpscan').dataset.fill === 'aligned'", timeout=5000)
+            e = edge_errors_mm(pg, pg.locator("#cmp .cmpbody.side .cmpbox").first, "real_offset")
+            check(all(-0.5 <= v <= 0.5 for v in e), f"phone scan {sid}: fitted onto its printing, mm L/T/R/B {[round(v, 2) for v in e]}")
+            pg.evaluate("cmpIndex = 1; renderScanDetail()"); pg.wait_for_timeout(800)
+            fill = pg.evaluate("document.querySelector('#cmp img.cmpscan').dataset.fill")
+            check(fill == "edges", f"phone scan {sid}: another card's picture is not fitted onto ({fill})")
+            pg.evaluate("closeDetail()"); pg.wait_for_timeout(200)
+            continue
         e = edge_errors_mm(pg, pg.locator("#cmp .cmpbody.side .cmpbox").first, STATE["scans"][sid]["photo"])
         lo, hi = (-0.5, 99) if STATE["scans"][sid]["photo"] == "real_white_dark" else (-0.5, 0.25)
         check(all(lo <= v <= hi for v in e), f"phone scan {sid}: edges at the box edge (loose allowed only when ambiguous), mm L/T/R/B {[round(v, 2) for v in e]}")
