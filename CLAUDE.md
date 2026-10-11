@@ -380,6 +380,29 @@ lens on testers' phones), minSdk 29, arm64-v8a.
   (`tests/test_static_pages.py`, CI) — change it in both, then re-run the
   scorer and put the numbers in the commit. Synthetic photos only: not yet
   measured on real rig photos.
+  **In a compare the scan is FITTED onto the compared printing's picture
+  (owner, 2026-10-10, 1.1.11 — phone v52, desktop d45: "better cropped so I can
+  do the blend to see exact diff"; on the rig a Flux Channeler showed tray down
+  one side and the bottom).** The edge crop is only as good as the quad the photo
+  was warped from: a quad a few mm too BIG puts the card off its layout rect and
+  rule 7 keeps the layout rect (tray). `alignToPrint` (in the shared block) fits
+  x0/y0/x1/y1 by normalised cross-correlation of luma GRADIENTS (white balance,
+  lighting gradients and glare move colour, not frame lines), coarse to fine
+  (36×50 → 72×100 → 144×200), a pattern search that moves one side, the whole
+  box or its size, from the edge crop ±4 % / ±8 %; `cardAlign` runs it once per
+  photo × printing after the printing loads (a second CORS read — Scryfall's CDN
+  allows any origin; a tainted canvas just means no fit) and `fitScan` refits
+  when it lands (`data-fill="aligned"`). Taken only when clear (`alignTaken`:
+  score ≥ 0.6, ≥ the edge crop's own, 63:88 within 10 %) — else the edge crop.
+  Measured by `scripts/score_card_align.py` (REAL Scryfall faces rendered
+  rig-like: 3 trays, blur, lighting gradient + glare, finder quads ±0.5 mm or up
+  to 4 mm too big): same printing mean 0.11 mm (edges 0.39), tray > 0.25 mm on
+  1.9 % of sides (8.0 %), worst tray 0.70 mm where a fit was taken (6.6), fit on
+  99.7 %; another printing of the same art (WAR vs CMM frame) 0.14 mm;
+  ANOTHER card's picture fits 25 % of the time, never cutting > 0.54 mm (frames
+  share their geometry). ~110 ms per fit in desktop Chromium (phone est. 4×,
+  off the first paint). `check_compare_ui.py` scan 10 drives it on both pages.
+  Not the thumbnail or the desktop's ⇆ lightbox (no printing beside them).
   **The desktop's "Pick the printing" is the same compare block (d44):** the
   same modes, ‹ › (and ← →), Scan size and "Pick / Keep SET #n"; its head
   is the compared printing (set · SET #n · ✓ picked ×q · k of N · its price)

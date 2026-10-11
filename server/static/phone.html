@@ -464,7 +464,7 @@ function formatChipsHtml(scan, pop = popOf(scan)){
 }
 
 /* ── version banner — proves which page+server combo is running ────────────── */
-const UI_VERSION = 'v51';
+const UI_VERSION = 'v52';
 
 // Who is asking: the phone server says "guest" for the 6-digit code (admin =
 // the paired computer); the computer's own server always says admin. Guests
@@ -1570,10 +1570,7 @@ function cardCrop(img){
   if (L){
     crop = { x0: L[0], y0: L[1], x1: L[2], y1: L[3] };        // no answer → the layout rect
     try {
-      const cv = document.createElement("canvas"); cv.width = w; cv.height = h;
-      const cx = cv.getContext("2d", { willReadFrequently: true });
-      cx.drawImage(img, 0, 0);
-      const r = findCardEdges({ data: cx.getImageData(0, 0, w, h).data, width: w, height: h }, crop);
+      const r = findCardEdges(cardPixels(img), crop);
       // Only a sane answer: inside the photo, at least 80 % of the layout rect each way,
       // card-shaped (63:88 within 12 %).
       if (r && r.x0 >= 0 && r.y0 >= 0 && r.x1 <= w && r.y1 <= h
@@ -1598,6 +1595,181 @@ function cardCropTransform(img, crop, k){
   const tx = -sx * (cx - BW / 2) / BW * 100, ty = -sy * (cy - BH / 2) / BH * 100;
   return `translate(${tx.toFixed(3)}%, ${ty.toFixed(3)}%) scale(${sx.toFixed(4)}, ${sy.toFixed(4)})`;
 }
+// ── align to the printing ──
+// "I want the photo that was taken by the camera to be better cropped so I can do the
+// blend to see exact diff" (owner, 2026-10-10, 1.1.10 on the rig: a Flux Channeler showed
+// tray down one side and the bottom). The edge crop above is only as good as the outline
+// the photo was warped from: a quad the finder drew a few mm too big (a sleeve, a shadow,
+// "a much bigger card") puts the card off its layout rect, and rule 7 then keeps the
+// layout rect — tray in the crop. A compare has the truth beside it: the printing's own
+// picture. So in a compare the crop is fitted onto that picture (alignToPrint: x, y, width
+// and height, 4 numbers), once per photo × printing, off the main paint (the printing is
+// read once more, CORS — Scryfall's CDN allows any origin), and used when the fit is a
+// clear one. Measured by scripts/score_card_align.py (real card faces on rig-like photos:
+// lighting gradients, glare, quads up to 4 mm too big): mean error 0.11 mm (the edge crop
+// alone 0.39), tray > 0.25 mm on 1.9 % of sides (8.0 %); onto another printing of the same
+// art 0.14 mm; onto ANOTHER card's picture taken 25 % of the time, never cutting > 0.54 mm.
+const cardAlignCache = new Map();    // photo URL | printing URL → { crop } (crop null until fitted)
+const ALIGN_MIN_SCORE = 0.6;         // a clear fit: the same card scores 0.70-0.99 (median 0.95);
+                                     // another card's picture 0.18-0.72 (median 0.41)
+function cardPixels(img){
+  const w = img.naturalWidth, h = img.naturalHeight;
+  const cv = document.createElement("canvas"); cv.width = w; cv.height = h;
+  const cx = cv.getContext("2d", { willReadFrequently: true });
+  cx.drawImage(img, 0, 0);
+  return { data: cx.getImageData(0, 0, w, h).data, width: w, height: h };
+}
+// A fit is used when it is clear, no worse than the crop it started from, and card-shaped
+// (63:88 within 10 %: a quad 4 mm off on one axis leaves the photo's card ~4 % off 63:88; a
+// fit onto another card's frame that slid one side 12 mm in was 19 % off).
+function alignTaken(r){
+  if (!r || !(r.score >= ALIGN_MIN_SCORE) || !(r.score >= r.base)) return false;
+  const a = (r.x1 - r.x0) / (r.y1 - r.y0) / (63 / 88);
+  return a > 0.9 && a < 1.1;
+}
+// The fitted crop for this scan photo against printUrl, or null (not fitted yet, or no clear
+// fit: keep the edge crop). The first ask starts the fit; redo() runs when one lands.
+function cardAlign(img, crop, printUrl, redo){
+  if (!crop || !printUrl || !img.naturalWidth) return null;
+  const key = `${img.currentSrc || img.src}|${printUrl}`;
+  let e = cardAlignCache.get(key);
+  if (e) { e.redo = redo; return e.crop; }
+  e = { crop: null, redo };
+  cardAlignCache.set(key, e);
+  let photo = null;
+  try { photo = cardPixels(img); } catch (err) { return null; }
+  const pi = new Image();
+  pi.crossOrigin = "anonymous";
+  pi.onload = () => setTimeout(() => {
+    let r = null;
+    try { r = alignToPrint(photo, crop, cardPixels(pi)); } catch (err) { r = null; }   // a tainted canvas throws
+    if (alignTaken(r)) {
+      e.crop = { x0: r.x0, y0: r.y0, x1: r.x1, y1: r.y1 };
+      if (e.redo) e.redo();
+    }
+  }, 0);
+  pi.src = printUrl;
+  return null;
+}
+// alignToPrint(photo, start, print) — fit the scan photo's card onto the printing's picture.
+//   photo, print = {data: RGBA, width, height}; start = the crop to begin from (photo px).
+//   Returns {x0, y0, x1, y1, score, base} (score = the fit, base = start's own, both a
+//   normalised cross-correlation of the two cards' x / y luma gradients, rounded corners
+//   left out) or null. Coarse to fine — 36×50, 72×100, 144×200 cells over the card — a
+//   pattern search on centre and size (within 12 % / 20 % of start), from start and start
+//   moved ±4 % / scaled ±8 %. Gradients, not colour: the camera's white balance, a lighting
+//   gradient and glare move colour; the frame lines, text boxes and art edges stay put.
+function alignToPrint(photo, start, print) {
+  try { return alnRun(photo, start, print); } catch (e) { return null; }
+}
+const ALN_LEVELS = [[36, 50, 0.04, 0.005], [72, 100, 0.01, 0.002], [144, 200, 0.003, 0.0012]];
+function alnLuma(img) {
+  const n = img.width * img.height, L = new Float32Array(n), D = img.data;
+  for (let i = 0, j = 0; i < n; i++, j += 4) L[i] = 0.299 * D[j] + 0.587 * D[j + 1] + 0.114 * D[j + 2];
+  return { L, W: img.width, H: img.height, f: 1 };
+}
+// box-average by an integer factor f (an image level whose px ~ one target cell)
+function alnShrink(src, f) {
+  if (f <= 1) return src;
+  const W = Math.floor(src.W / f), H = Math.floor(src.H / f), L = new Float32Array(W * H), S = src.L, SW = src.W;
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    let s = 0;
+    for (let yy = y * f; yy < y * f + f; yy++) { const o = yy * SW + x * f; for (let k = 0; k < f; k++) s += S[o + k]; }
+    L[y * W + x] = s / (f * f);
+  }
+  return { L, W, H, f };
+}
+// rect (full-res px) → TW x TH luma grid, bilinear on the level, [1 2 1] blurred, then its x / y
+// gradients (zero on the outer ring)
+function alnGrid(lv, x0, y0, x1, y1, TW, TH, G, T) {
+  const sx = (x1 - x0) / TW, sy = (y1 - y0) / TH, f = lv.f, W = lv.W, H = lv.H, L = lv.L;
+  for (let j = 0; j < TH; j++) {
+    let fy = (y0 + (j + 0.5) * sy) / f - 0.5; fy = fy < 0 ? 0 : fy > H - 1 ? H - 1 : fy;
+    const yi = Math.min(H - 2, Math.floor(fy)), ay = fy - yi;
+    for (let i = 0; i < TW; i++) {
+      let fx = (x0 + (i + 0.5) * sx) / f - 0.5; fx = fx < 0 ? 0 : fx > W - 1 ? W - 1 : fx;
+      const xi = Math.min(W - 2, Math.floor(fx)), ax = fx - xi, o = yi * W + xi;
+      T[j * TW + i] = (L[o] * (1 - ax) + L[o + 1] * ax) * (1 - ay) + (L[o + W] * (1 - ax) + L[o + W + 1] * ax) * ay;
+    }
+  }
+  for (let j = 0; j < TH; j++) for (let i = 0; i < TW; i++) {       // blur along x into G
+    const a = i > 0 ? i - 1 : 0, b = i < TW - 1 ? i + 1 : TW - 1, o = j * TW;
+    G[o + i] = (T[o + a] + 2 * T[o + i] + T[o + b]) * 0.25;
+  }
+  for (let j = 0; j < TH; j++) for (let i = 0; i < TW; i++) {       // and along y back into T
+    const a = j > 0 ? j - 1 : 0, b = j < TH - 1 ? j + 1 : TH - 1;
+    T[j * TW + i] = (G[a * TW + i] + 2 * G[j * TW + i] + G[b * TW + i]) * 0.25;
+  }
+  const n = TW * TH;
+  for (let j = 0; j < TH; j++) for (let i = 0; i < TW; i++) {
+    const o = j * TW + i, edge = i === 0 || j === 0 || i === TW - 1 || j === TH - 1;
+    G[o] = edge ? 0 : T[o + 1] - T[o - 1];
+    G[n + o] = edge ? 0 : T[o + TW] - T[o - TW];
+  }
+}
+// normalised cross-correlation of two gradient grids over the mask
+function alnNcc(A, B, M) {
+  let ab = 0, aa = 0, bb = 0, sa = 0, sb = 0, n = 0;
+  for (let i = 0; i < A.length; i++) if (M[i]) { const a = A[i], b = B[i]; sa += a; sb += b; ab += a * b; aa += a * a; bb += b * b; n++; }
+  if (!n) return -1;
+  const ca = aa - sa * sa / n, cb = bb - sb * sb / n;
+  return ca > 0 && cb > 0 ? (ab - sa * sb / n) / Math.sqrt(ca * cb) : -1;
+}
+function alnRun(photo, start, print) {
+  const W = photo.width, H = photo.height;
+  if (!photo.data || !print || !print.data || !start || W < 64 || H < 64 || print.width < 36 || print.height < 50) return null;
+  const P = alnLuma(photo), Q = alnLuma(print);
+  const w0 = start.x1 - start.x0, h0 = start.y1 - start.y0;
+  if (!(w0 > 40 && h0 > 56)) return null;
+  const c0 = [(start.x0 + start.x1) / 2, (start.y0 + start.y1) / 2, w0, h0];
+  const inBounds = p => Math.abs(p[0] - c0[0]) <= 0.12 * w0 && Math.abs(p[1] - c0[1]) <= 0.12 * h0
+    && Math.abs(p[2] / w0 - 1) <= 0.2 && Math.abs(p[3] / h0 - 1) <= 0.2;
+  let p = null, best = -1, base = -1;
+  for (let li = 0; li < ALN_LEVELS.length; li++) {
+    const [TW, TH, step0, stepMin] = ALN_LEVELS[li], n = TW * TH;
+    const lv = alnShrink(P, Math.max(1, Math.floor(w0 / TW)));
+    const qv = alnShrink(Q, Math.max(1, Math.floor(print.width / TW)));
+    const G = new Float32Array(2 * n), T = new Float32Array(n), R = new Float32Array(2 * n);
+    alnGrid(qv, 0, 0, print.width, print.height, TW, TH, R, T);
+    const M = new Uint8Array(2 * n), cr = Math.round(0.05 * TW);       // not the rounded corners
+    for (let j = 0; j < TH; j++) for (let i = 0; i < TW; i++) {
+      const nearX = i < cr || i >= TW - cr, nearY = j < cr || j >= TH - cr;
+      M[j * TW + i] = M[n + j * TW + i] = nearX && nearY ? 0 : 1;
+    }
+    const score = q => {
+      if (!inBounds(q)) return -2;
+      alnGrid(lv, q[0] - q[2] / 2, q[1] - q[3] / 2, q[0] + q[2] / 2, q[1] + q[3] / 2, TW, TH, G, T);
+      return alnNcc(G, R, M);
+    };
+    if (li === 0) {
+      // starts: the given crop and that crop 8 % smaller / larger (a finder quad that took a
+      // sleeve or shadow for the card, or the border's inner edge)
+      for (const k of [1, 0.92, 1.08]) for (const dx of [0, -0.04, 0.04]) for (const dy of [0, -0.04, 0.04]) {
+        const q = [c0[0] + dx * w0, c0[1] + dy * h0, w0 * k, h0 * k], s = score(q);
+        if (s > best) { best = s; p = q; }
+      }
+    } else best = score(p);
+    if (li === ALN_LEVELS.length - 1) base = score(c0);
+    // moves: one side at a time (a quad wrong on one side), the whole box along x / y, and
+    // its size about the centre
+    for (let st = step0; st >= stepMin; st /= 2) {
+      const dx = st * w0, dy = st * h0;
+      const moves = [[dx, 0, 0, 0], [0, dy, 0, 0], [0, 0, dx, 0], [0, 0, 0, dy], [dx, 0, dx, 0], [0, dy, 0, dy],
+                     [-dx / 2, -dy / 2, dx / 2, dy / 2]];
+      for (let moved = true, guard = 0; moved && guard < 40; guard++) {
+        moved = false;
+        for (const m of moves) for (const d of [-1, 1]) {
+          const r = [p[0] - p[2] / 2 + d * m[0], p[1] - p[3] / 2 + d * m[1], p[0] + p[2] / 2 + d * m[2], p[1] + p[3] / 2 + d * m[3]];
+          const q = [(r[0] + r[2]) / 2, (r[1] + r[3]) / 2, r[2] - r[0], r[3] - r[1]];
+          const s = score(q);
+          if (s > best + 1e-6) { best = s; p = q; moved = true; }
+        }
+      }
+    }
+  }
+  return { x0: p[0] - p[2] / 2, y0: p[1] - p[3] / 2, x1: p[0] + p[2] / 2, y1: p[1] + p[3] / 2, score: best, base };
+}
+
 // findCardEdges(photo, expect) — crop a stored scan photo to the card's own edges.
 // Approach: tray-vs-card SEGMENTATION, one side at a time, plus the rules that keep it from
 // ever taking an inner line (the black border's inner edge, a frame, a text line) for the edge.
@@ -2201,10 +2373,14 @@ function segNextBoundary(M, U, ref, from, to, T, k) {
 }
 /* ═══ end card edges ═══ */
 // Just the card (cardCrop above): a loaded scan photo is cropped to its card's edges; in a
-// compare it also takes the viewer's Scan size.
+// compare it is then fitted onto the compared printing's picture (cardAlign — refit when the
+// fit lands) and takes the viewer's Scan size.
 function fitScan(img) {
-  const crop = cardCrop(img), k = img.closest('#cmp') ? cmpScale / 100 : 1;
-  img.dataset.fill = crop ? 'edges' : 'as-is';
+  const cmp = img.closest('#cmp'), k = cmp ? cmpScale / 100 : 1, pr = cmp && cmp.querySelector('.cmpprint');
+  const edges = cardCrop(img);
+  const fit = pr ? cardAlign(img, edges, pr.getAttribute('src'), () => { if (img.isConnected) fitScan(img); }) : null;
+  const crop = fit || edges;
+  img.dataset.fill = fit ? 'aligned' : crop ? 'edges' : 'as-is';
   img.style.transform = crop ? cardCropTransform(img, crop, k) : (k === 1 ? '' : `scale(${k})`);
 }
 function applyScanScale() {
