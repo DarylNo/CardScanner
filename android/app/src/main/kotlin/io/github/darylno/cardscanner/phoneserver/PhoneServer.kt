@@ -37,6 +37,8 @@ class PhoneServer(
     val device: DeviceBridge,
     private val updates: io.github.darylno.cardscanner.update.UpdateLock? = null,
     private val debugHeader: () -> String = { "" },
+    /** The external card list now (null = off) — list_tags on every scan read. */
+    private val cardList: () -> io.github.darylno.cardscanner.core.CardList.Parsed? = { null },
 ) :
     GatewayService.Host {
     private val root = File(ctx.filesDir, "phoneserver")
@@ -62,6 +64,7 @@ class PhoneServer(
             device = DeviceApi(device),
             debug = io.github.darylno.cardscanner.core.server.DebugApi(io.github.darylno.cardscanner.core.DebugLog.global, debugHeader),
             update = { updates?.let { u -> Triple(u.latest?.version, u.locked, u.latest?.apkUrl) } ?: Triple(null, false, null) },
+            cardList = cardList,
         )
     }
     private val f2f by lazy { PhoneF2f(ctx, File(ctx.cacheDir, "facetoface")) }

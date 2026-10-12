@@ -65,8 +65,10 @@ class PhoneBackend(
     private val update: () -> Triple<String?, Boolean, String?> = { Triple(null, false, null) },
     /** The live log + debug report (admin only). */
     private val debug: io.github.darylno.cardscanner.core.server.DebugApi? = null,
+    /** The external card list now (null = off): PhoneApi adds list_tags per read. */
+    cardList: () -> io.github.darylno.cardscanner.core.CardList.Parsed? = { null },
 ) {
-    val api = PhoneApi(store, photos)
+    val api = PhoneApi(store, photos, cardList)
     val sweep = PriceSweep(store, api, f2f, launch, now, interrupt, paceS)
     val server = ScanServer(api, sweep, layouts)
     val worker = PriceWorker(sweep, now, onError = { io.github.darylno.cardscanner.core.DebugLog.global.e("price", "sweep tick failed", it) })

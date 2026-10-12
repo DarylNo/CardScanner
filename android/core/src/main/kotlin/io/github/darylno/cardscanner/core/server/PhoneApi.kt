@@ -1,6 +1,7 @@
 package io.github.darylno.cardscanner.core.server
 
 import io.github.darylno.cardscanner.core.ArtworkSplit
+import io.github.darylno.cardscanner.core.CardList
 import io.github.darylno.cardscanner.core.MiniJson
 import io.github.darylno.cardscanner.core.Py
 
@@ -38,7 +39,7 @@ interface ScanImages {
  * [ScanStore]. PORT, never re-tune: `PhoneApiParityTest` replays the golden
  * session scripts/export_api_fixtures.py records from the REAL server.
  *
- *  GET    /api/scans              newest first, other_art derived per read
+ *  GET    /api/scans              newest first, other_art + list_tags derived per read
  *  GET    /api/scans/{id}         one row, other_art derived; 404 {"error":"not found"}
  *  GET    /api/scans/{id}/image   the scan photo (404 {"error":"no image"})
  *  POST   /api/scans/{id}/select  pick a printing
@@ -55,7 +56,12 @@ interface ScanImages {
  * [handle] returns null for any path it doesn't own, so the HTTP layer can
  * serve pages / other endpoints.
  */
-class PhoneApi(val store: ScanStore, private val images: ScanImages) {
+class PhoneApi(
+    val store: ScanStore,
+    private val images: ScanImages,
+    /** The external card list now (CardListSource.current): null = the feature off, no list_tags. */
+    private val cardList: () -> CardList.Parsed? = { null },
+) {
     /** `select_lock`: every selection read-modify-write — picks, edits, the sweep's writes, retro picks. */
     val selectLock = Any()
 
@@ -77,11 +83,14 @@ class PhoneApi(val store: ScanStore, private val images: ScanImages) {
         }
     }
 
-    private fun listScans() = ApiResponse.json(200, store.list().map { ArtworkSplit.flagOtherArt(it) })
+    private fun listScans(): ApiResponse {
+        val list = cardList()
+        return ApiResponse.json(200, store.list().map { CardList.flag(ArtworkSplit.flagOtherArt(it), list) })
+    }
 
     private fun getScan(id: Long): ApiResponse {
         val scan = store.get(id) ?: return notFound()
-        return ApiResponse.json(200, ArtworkSplit.flagOtherArt(scan))
+        return ApiResponse.json(200, CardList.flag(ArtworkSplit.flagOtherArt(scan), cardList()))
     }
 
     private fun select(id: Long, req: ApiRequest): ApiResponse {

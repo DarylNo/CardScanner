@@ -41,7 +41,7 @@ android/app/         Android: camera/ (CameraX, FrameRing, ScanAnalyzer,
 server/              reference FastAPI app, store.py, export.py, static pages
 mtg_card_scanner/    reference pipeline: card_detect, art_index, art_pack,
                      scryfall, visual_match, ocr_id, artwork, popularity,
-                     facetoface
+                     facetoface, card_list
 scripts/             export_*_fixtures.py (generate the Kotlin fixtures from the
                      reference; `--check` in CI), make_android_keystore.py
 tests/               pytest (~470, all fakes — no camera/network)
@@ -189,6 +189,38 @@ Lightning Bolt lands at 0.02 tix and Black Lotus at 61.08), and the open
 tournament dataset everyone cites, `Badaro/MTGODecklistCache`, **shut down in
 June 2025** (live successors: `fbettega/MTG_decklistcache`, and
 `davidfischer/modometa-mtgo-data` whose names are already Scryfall-normalized).
+
+**External card list (`card_list.py`, owner 2026-10-12) — generic, READ-ONLY.**
+Not the reverted MX-inventory integration: no store branding, nothing written
+back, one plain GET of a URL the owner pastes (Settings → External card list,
+`AppSettings.cardListUrl`; the reference server reads `CARD_LIST_URL`). The URL
+lives ONLY in settings (the repo is public), any key in its query string; it is
+never logged, never in `status()`, and Settings shows its host only. Empty =
+off: nothing fetched, NO `list_tags` key on any scan (the pages read "no key" as
+"feature off" and hide the chips and "Tagged only"). Contract and setup:
+README → External card list. Rules that must hold:
+- **Match by NAME, any printing:** `normalize_name` (NFD minus Mn marks, curly
+  quotes → straight, en/em dash → "-", lowercase, " // " between faces,
+  whitespace collapsed — the whitespace set is SPELLED OUT, not `\s`, so the
+  Kotlin port matches) on both sides; full name OR any face, both sides
+  (`name_keys`). The scan's name: its pick, else its top candidate, else the read.
+- **Evaluated at READ time** (`flag_list_tags` beside `flag_other_art` on
+  `/api/scans` + `/api/scans/{id}`), never stored — a refreshed list re-tags
+  every existing scan. Chips (Wanted / Sold out / any other tag as raw text) sit
+  right after the popularity chip; yes/no only, never mixed into a tier.
+- **Never block scanning, never lose the list:** fetched at app start and on
+  "Refresh now" on its own low-priority thread; the last GOOD list is cached on
+  disk (keyed by URL — another URL's cache is not this list); offline / HTTP
+  error / bad JSON keep the cache and record the error ("unreachable", "HTTP n",
+  "not JSON", "no cards list"), shown in Settings and Diagnostics. https only
+  (the network security config allows cleartext to loopback only).
+- **"Tagged only" is a VIEW chip, not a filter vote** — it narrows the list like
+  All / Pending (a "check" row still shows), so `passesFilters` and "Exclude
+  filtered" never drop an untagged card from the export. Persisted in
+  `listFilters.tagged`.
+Golden: `scripts/export_card_list_fixtures.py` (normalize/keys/parse/tags, a
+`CardListSource` session with a pinned clock, and the REAL app.py's reads) →
+`CardListParityTest`; `check_card_list_ui.py` drives both pages.
 
 **F2F client (`facetoface.py`) — each scanner prices from ITS OWN IP.** No
 proxy, no shared backend: the client reads the storefront's public Shopify

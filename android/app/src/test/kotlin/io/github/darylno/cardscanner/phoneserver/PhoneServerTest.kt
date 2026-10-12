@@ -54,6 +54,24 @@ class PhoneServerTest {
         store.close()
     }
 
+    /** The external card list on the phone's real store: list_tags per read, none while off, re-tagged on a new list. */
+    @Test fun scanReadsCarryTheExternalListTags() {
+        var list: io.github.darylno.cardscanner.core.CardList.Parsed? = null
+        val b = PhoneBackend(store, PhotoDir(tmp.newFolder("p-list")), pages = { null }, version = "t",
+            search = { emptyList() }, lanIp = { null }, packRows = { 0 },
+            f2f = { _, _, _, _, _ -> F2fAnswer.NotListed }, launch = { it.run() }, now = { 0.0 },
+            cardList = { list })
+        b.file(mapOf("identified" to true, "card_read" to mapOf("name" to "Jötun Grunt"), "confidence" to mapOf("name" to "high"),
+            "candidates" to listOf(mapOf("id" to "j1", "name" to "Jötun Grunt", "set" to "csp", "collector_number" to "8"))), null)
+        fun first(): Map<*, *> = (MiniJson.parse(String(b.handle(ApiRequest("GET", "/api/scans")).body)) as List<*>)[0] as Map<*, *>
+        assertTrue("off: no list_tags key", !first().containsKey("list_tags"))
+        list = io.github.darylno.cardscanner.core.CardList.parse(
+            """{"cards":[{"name":"Jotun Grunt","tags":["sold_out","wanted"]}]}""")
+        assertEquals(listOf("wanted", "sold_out"), first()["list_tags"])
+        list = io.github.darylno.cardscanner.core.CardList.parse("""{"cards":[]}""")
+        assertEquals(emptyList<String>(), first()["list_tags"])
+    }
+
     @Test fun theSqliteStoreAnswersTheGoldenSession() {
         var n = 0
         val result = GoldenApi.replay { clock ->
