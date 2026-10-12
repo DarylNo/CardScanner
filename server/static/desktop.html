@@ -72,6 +72,11 @@
      card being merely "played" is not news and must not compete with the
      pick/selected pills for attention. */
   .pill.pop { cursor: help; }
+  /* External card list tags (card_list.py): a yes/no fact, never a popularity colour. */
+  .pill.ltag { background: #1f2937; color: #d1d5db; }
+  .pill.ltag.wanted { background: #064e3b; color: #6ee7b7; }
+  .pill.ltag.sold_out { background: #4c0519; color: #fda4af; }
+  .mchip.on { background: #1e3a8a; color: #dbeafe; }
   .pill.pop.staple  { background: #3a2e08; color: #fcd34d; font-weight: 700; }
   .pill.pop.strong  { background: #2e1065; color: #c4b5fd; }
   .pill.pop.solid   { background: #0c2a4d; color: #93c5fd; }
@@ -424,6 +429,7 @@
           <option value="staple">Staples only</option>
         </select>
         <span class="mchip" id="fmode" title="ANY keeps a card that clears EITHER bar; ALL requires both">match <b>any</b></span>
+        <span class="mchip" id="tagged" style="display:none" title="Only cards the external card list tags (the export is unaffected)">Tagged only</span>
       </div>
       <div class="fhint" id="fhint" style="display:none"></div>
       <div class="chipbar">
@@ -565,6 +571,21 @@ function popPill(scan){
   return `<span class="pill pop ${esc(p.tier)}" title="${esc(popTitle(p))}">`
        + `${POP_ICON[p.tier]||""}${esc(p.label)}</span>`;
 }
+/* ── external card list (mtg_card_scanner/card_list.py) ──────────────────────
+   The server adds list_tags to every scan READ (never stored), only while a list
+   URL is set: no key at all = the feature is off. Yes/no chips beside the
+   popularity pill — never mixed into a tier. Known tags get their own label and
+   colour; anything else shows as a plain chip of its raw text. */
+const LIST_TAG_LABELS = { wanted: "Wanted", sold_out: "Sold out" };
+const listTags = scan => Array.isArray(scan?.list_tags) ? scan.list_tags : [];
+function tagChips(scan){
+  return listTags(scan).map(t => `<span class="pill ltag ${LIST_TAG_LABELS[t] ? esc(t) : "other"}" title="external card list">${esc(LIST_TAG_LABELS[t] || t)}</span>`).join("");
+}
+const tagSig = scan => listTags(scan).join(";");
+const listOn = () => scans.some(s => Array.isArray(s.list_tags));
+// "Tagged only": narrows the VIEW like the All / Needs pick chips — not a filter
+// vote, so "Exclude filtered" never drops an untagged card from the export.
+let taggedOnly = false;
 // Which formats a card may be PLAYED in — a different question from how much
 // it is played, so these never get a popularity colour. `not_legal` is dropped:
 // most cards are not legal in most formats and listing that buries the rest.
@@ -669,6 +690,7 @@ function visibleScans(){
   const q = filterText.toLowerCase();
   return scans.filter(s => {
     if (!passesFilters(s)) return false;
+    if (taggedOnly && listOn() && !isProblem(s) && !listTags(s).length) return false;
     if (view === "pending"  && s.status === "selected") return false;
     if (view === "selected" && s.status !== "selected") return false;
     if (view === "problem"  && !isProblem(s)) return false;
@@ -679,6 +701,8 @@ function visibleScans(){
 }
 
 function renderList(){
+  $("#tagged").style.display = listOn() ? "" : "none";
+  $("#tagged").classList.toggle("on", taggedOnly);
   const rows = visibleScans();
   // Sig must cover every rendered field: selection identity (re-picks swap
   // name/set/number), condition/finish edits (the phone can PATCH these), etc.
@@ -686,7 +710,7 @@ function renderList(){
     s.selection?.scryfall_id,s.selection?.condition,s.selection?.finish,
     s.card_read?.name,s.error?'e':'',
     s.selection?.auto_picked?'a':'',JSON.stringify(s.f2f?.conditions||{}),
-    printInfo(s).vals.join(";"),popSig(s),s.id===focusedId,s.flagged?'f':'',role].join("~")).join("|");
+    printInfo(s).vals.join(";"),popSig(s),tagSig(s),s.id===focusedId,s.flagged?'f':'',role].join("~")).join("|");
   if (sig === listSig) { updateStats(); return; }
   listSig = sig;
 
@@ -705,7 +729,7 @@ function renderList(){
       <div class="meta">
         <div class="nm">${esc(titleFor(s))}</div>
         <div class="sub">${esc(sub)}</div>
-        <div style="margin-top:4px">${s.flagged?`<span class="pill flag" title="a guest flagged this scan for deletion">🚩 flagged</span>`:''}${pill}${sel?`<span class="pill">×${s.selection.quantity}</span>`:''}${popPill(s)}</div>
+        <div style="margin-top:4px">${s.flagged?`<span class="pill flag" title="a guest flagged this scan for deletion">🚩 flagged</span>`:''}${pill}${sel?`<span class="pill">×${s.selection.quantity}</span>`:''}${popPill(s)}${tagChips(s)}</div>
       </div>
       <div class="right">
         ${pr?`<span class="price">${pr}</span>`:''}
@@ -1897,7 +1921,7 @@ function renderDetail(){
         cr.alternates.map(a=>`<a href="#" class="alt-name" data-name="${esc(a.name)}">${esc(a.name)}</a> <span class="muted">(Δ${a.distance})</span>`).join(" · ")
       }</div>` : ''}
       ${popDetailHtml(scan)}
-      ${formatChipsHtml(scan)}
+      ${formatChipsHtml(scan)}${listTags(scan).length ? `<div class="dfmt">${tagChips(scan)}</div>` : ""}
       ${scan.error ? `<div class="dsub" style="color:var(--bad)">⚠ ${esc(scan.error)}</div>` : ''}
       ${f2fBoxHtml(scan)}
       ${controlsHtml(scan)}
@@ -2131,14 +2155,14 @@ function sigOf(scan){
           scan.selection?.scryfall_id, scan.selection?.condition, scan.selection?.finish,
           scan.selection?.quantity, scan.selection?.auto_picked, scan.error,
           scan.f2f ? JSON.stringify(scan.f2f.conditions||{}) : "null",
-          printInfo(scan).vals.join(";"), popSig(scan), scan.included, scan.flagged, role,
+          printInfo(scan).vals.join(";"), popSig(scan), tagSig(scan), scan.included, scan.flagged, role,
           // the order and OCR marks the compare and the grid show (prices refresh in place: refreshCompare)
           (scan.candidates||[]).map(c => `${c.id}:${c.ocr_confirmed ? 1 : 0}`).join(",")].join("|");
 }
 
 // Version banner — page version · server git hash. Same rationale as the
 // phone: without it, "is this the old page?" is undebuggable.
-const UI_VERSION = "d45";
+const UI_VERSION = "d46";
 
 // Who is asking: the phone server says "guest" for the 6-digit code (admin =
 // the paired computer); the computer's own server always says admin. Guests
@@ -2248,6 +2272,9 @@ $("#popmin").addEventListener("change", e => {
   popMin = e.target.value === "" ? null : e.target.value;
   listSig=""; renderFilterHint(); renderList();
 });
+$("#tagged").addEventListener("click", () => {
+  taggedOnly = !taggedOnly; listSig = ""; renderList(); saveFilters();
+});
 $("#fmode").addEventListener("click", () => {
   filterMode = filterMode === "any" ? "all" : "any";
   $("#fmode").innerHTML = `match <b>${filterMode}</b>`;
@@ -2267,7 +2294,7 @@ const FILTER_KEY = "listFilters";
 function saveFilters(){
   try {
     localStorage.setItem(FILTER_KEY, JSON.stringify(
-      { min: priceMin, max: priceMax, pop: popMin, mode: filterMode, view }));
+      { min: priceMin, max: priceMax, pop: popMin, mode: filterMode, view, tagged: taggedOnly }));
   } catch (e) { /* storage blocked: filters just won't persist */ }
 }
 (function restoreFilters(){
@@ -2280,6 +2307,7 @@ function saveFilters(){
   const pop = $("#popmin");
   if (f.pop && [...pop.options].some(o => o.value === f.pop)) { popMin = f.pop; pop.value = f.pop; }
   if (f.mode === "all" || f.mode === "any") filterMode = f.mode;
+  taggedOnly = f.tagged === true;
   $("#fmode").innerHTML = `match <b>${filterMode}</b>`;
   const chip = [...document.querySelectorAll(".fchip")].find(c => c.dataset.view === f.view);
   if (chip) {

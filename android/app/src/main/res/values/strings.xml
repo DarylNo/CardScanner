@@ -58,6 +58,18 @@
     <string name="settings_torch_desc">Keep the flashlight on while scanning</string>
     <string name="settings_debug">Debug overlay</string>
     <string name="settings_debug_desc">Mask coverage, steadiness, timings</string>
+    <string name="settings_card_list">External card list</string>
+    <string name="settings_card_list_url">List URL</string>
+    <string name="settings_card_list_url_desc">A JSON list of card names with tags (wanted, sold out…). Matching scans get a chip in the review pages. Read-only, HTTPS only.</string>
+    <string name="settings_card_list_off">Off</string>
+    <string name="settings_card_list_hint">https://…/cards.json?key=…</string>
+    <string name="settings_card_list_dialog_msg">Paste the list\'s address exactly as given (any key stays in it). It is kept on this phone only. Empty = off.</string>
+    <string name="settings_card_list_save">Save</string>
+    <string name="settings_card_list_turn_off">Turn off</string>
+    <string name="settings_card_list_https">The address must start with https://</string>
+    <string name="settings_card_list_refresh">Refresh now</string>
+    <string name="settings_card_list_refreshing">Refreshing…</string>
+    <string name="settings_card_list_note">The list is fetched when the app starts and on Refresh now; the last good list is kept for when it can\'t be reached. Format and setup: README → External card list.</string>
     <string name="settings_scans">Scans</string>
     <string name="settings_delete_all">Delete all scans</string>
     <string name="settings_delete_all_desc">Removes every scan and its photo from this phone. There is no backup — export a copy from the paired computer first if you want one.</string>

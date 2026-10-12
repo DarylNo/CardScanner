@@ -158,6 +158,11 @@
   .spill.pop.staple { background:#3a2e08; color:#fcd34d; font-weight:700; }
   .spill.pop.strong { background:#2e1065; color:#c4b5fd; }
   .spill.pop.solid  { background:#0c2a4d; color:#93c5fd; }
+  /* External card list tags (card_list.py): a yes/no fact, never a popularity colour. */
+  .spill.ltag { background:#1f2937; color:#d1d5db; }
+  .spill.ltag.wanted { background:#064e3b; color:#6ee7b7; }
+  .spill.ltag.sold_out { background:#4c0519; color:#fda4af; }
+  .bar .mchip.on { background:#1e3a8a; color:#dbeafe; }
   /* Format legality — where the card may be PLAYED. Detail panel only: the
      scan list is read at arm's length and has no room for seven more chips. */
   .pfmt { display:flex; flex-wrap:wrap; gap:4px; margin-top:8px; align-items:center; }
@@ -320,6 +325,7 @@
           <option value="staple">Staples only</option>
         </select>
         <span class="mchip" id="p-fmode" role="button">match <b>any</b></span>
+        <span class="mchip" id="p-tagged" role="button" style="display:none" title="Only cards the external list tags">Tagged only</span>
       </div>
       <div class="fcap">Bulk actions</div>
       <div class="bar">
@@ -444,6 +450,17 @@ function popSig(scan){
   const p = popOf(scan);
   return p ? p.tier + ':' + p.label : '';
 }
+/* ── external card list (mtg_card_scanner/card_list.py) ──────────────────────
+   The server adds list_tags to every scan READ (never stored), only while a list
+   URL is set: no key at all = the feature is off. Yes/no chips beside the
+   popularity chip — never mixed into a tier. Known tags get their own label and
+   colour; anything else shows as a plain chip of its raw text. */
+const LIST_TAG_LABELS = { wanted: 'Wanted', sold_out: 'Sold out' };
+const listTags = scan => Array.isArray(scan?.list_tags) ? scan.list_tags : [];
+function tagChips(scan){
+  return listTags(scan).map(t => `<span class="spill ltag ${LIST_TAG_LABELS[t] ? escHtml(t) : 'other'}">${escHtml(LIST_TAG_LABELS[t] || t)}</span>`).join('');
+}
+const tagSig = scan => listTags(scan).join(';');
 // Which formats a card may be PLAYED in — a different question from how much
 // it is played, so these never get a popularity colour. `not_legal` is dropped:
 // most cards are not legal in most formats and listing that buries the rest.
@@ -464,7 +481,7 @@ function formatChipsHtml(scan, pop = popOf(scan)){
 }
 
 /* ── version banner — proves which page+server combo is running ────────────── */
-const UI_VERSION = 'v52';
+const UI_VERSION = 'v53';
 
 // Who is asking: the phone server says "guest" for the 6-digit code (admin =
 // the paired computer); the computer's own server always says admin. Guests
@@ -980,6 +997,10 @@ let swipeDragging = false;
 // is the default: the price floor is what keeps an expensive UNRANKED card
 // visible when a popularity floor would otherwise drop it).
 let popMin = null, filterMode = 'any';
+// "Tagged only" (external card list): narrows the VIEW like the All / Pending chips —
+// not a filter vote, so "Exclude filtered" never drops an untagged card from the export.
+let taggedOnly = false;
+const listOn = () => scans.some(s => Array.isArray(s.list_tags));
 let lastListSig = '', lastStatSig = '';
 let scansTimer = null;
 
@@ -1092,7 +1113,7 @@ function renderFilterHint() {
 // tri-state logic above is the single source of truth for what is shown.
 function renderFilterChip() {
   const on = activeFilters();
-  const n = (on.price ? 1 : 0) + (on.pop ? 1 : 0);
+  const n = (on.price ? 1 : 0) + (on.pop ? 1 : 0) + (taggedOnly && listOn() ? 1 : 0);
   $('#fltBtn').classList.toggle('active', n > 0);
   $('#fcount').textContent = n ? String(n) : '';
 }
@@ -1121,7 +1142,12 @@ function renderScansPanel() {
   $('#clr-flag').style.display = nf ? '' : 'none';
   $('#clr-flag').textContent = `Delete flagged (${nf})`;
 
-  const rows = scans.filter(s => passesFilters(s) && (
+  const tagBtn = $('#p-tagged');
+  tagBtn.style.display = listOn() ? '' : 'none';
+  tagBtn.classList.toggle('on', taggedOnly);
+  renderFilterChip();
+  const rows = scans.filter(s => passesFilters(s) &&
+    (!taggedOnly || !listOn() || isProblem(s) || listTags(s).length > 0) && (
     scansView === 'all' ? true :
     scansView === 'pending' ? s.status !== 'selected' :
     scansView === 'selected' ? s.status === 'selected' :
@@ -1130,7 +1156,7 @@ function renderScansPanel() {
   // name/set/number/thumb), condition/finish edits, qty, flags, prices,
   // popularity.
   const listSig = scansView + '~' + priceMin + '~' + priceMax +
-    '~' + popMin + '~' + filterMode + '~' +
+    '~' + popMin + '~' + filterMode + '~' + taggedOnly + '~' + listOn() + '~' +
     rows.map(s => [s.id, s.status, s.included,
                    s.selection?.scryfall_id, s.selection?.condition,
                    s.selection?.finish, s.selection?.quantity,
@@ -1138,7 +1164,7 @@ function renderScansPanel() {
                    s.card_read?.name, s.error ? 'e' : '',
                    (s.candidates||[]).length, (s.candidates||[])[0]?.id,
                    JSON.stringify(s.f2f?.conditions||0),
-                   printInfo(s).vals.join(';'), popSig(s), s.flagged ? 'f' : '', role].join(',')).join('|');
+                   printInfo(s).vals.join(';'), popSig(s), tagSig(s), s.flagged ? 'f' : '', role].join(',')).join('|');
   if (listSig === lastListSig || swipeDragging) return;
   lastListSig = listSig;
 
@@ -1154,7 +1180,7 @@ function renderScansPanel() {
     const pill = (isSel
       ? `<span class="spill sel">${s.selection?.auto_picked ? '⚠ auto' : 'selected'}</span>`
       : isProblem(s) ? `<span class="spill chk">check</span>`
-      : `<span class="spill">pending</span>`) + popPill(s) +
+      : `<span class="spill">pending</span>`) + popPill(s) + tagChips(s) +
       (s.flagged ? `<span class="spill flag" title="flagged for deletion">🚩</span>` : '');
     const swipeWord = role === 'guest' ? (s.flagged ? 'Unflag' : '🚩 Flag') : 'Delete';
     return `<div class="sitem"><div class="sdel" aria-hidden="true"><span>${swipeWord}</span><span>${swipeWord}</span></div><div class="srow" data-sid="${s.id}" role="button">
@@ -1327,6 +1353,10 @@ $('#p-popmin').addEventListener('change', e => {
   popMin = e.target.value === '' ? null : e.target.value;
   renderFilterHint(); renderScansPanel();
 });
+$('#p-tagged').addEventListener('click', () => {
+  taggedOnly = !taggedOnly;
+  lastListSig = ''; renderFilterChip(); renderScansPanel(); saveFilters();
+});
 $('#p-fmode').addEventListener('click', () => {
   filterMode = filterMode === 'any' ? 'all' : 'any';
   $('#p-fmode').innerHTML = `match <b>${filterMode}</b>`;
@@ -1349,7 +1379,7 @@ const FILTER_KEY = 'listFilters';
 function saveFilters() {
   try {
     localStorage.setItem(FILTER_KEY, JSON.stringify(
-      { min: priceMin, max: priceMax, pop: popMin, mode: filterMode, view: scansView }));
+      { min: priceMin, max: priceMax, pop: popMin, mode: filterMode, view: scansView, tagged: taggedOnly }));
   } catch (e) { /* storage blocked: filters just won't persist */ }
 }
 (function restoreFilters() {
@@ -1362,6 +1392,7 @@ function saveFilters() {
   const pop = $('#p-popmin');
   if (f.pop && [...pop.options].some(o => o.value === f.pop)) { popMin = f.pop; pop.value = f.pop; }
   if (f.mode === 'all' || f.mode === 'any') filterMode = f.mode;
+  taggedOnly = f.tagged === true;
   $('#p-fmode').innerHTML = `match <b>${filterMode}</b>`;
   const chip = [...document.querySelectorAll('.vchip')].find(c => c.dataset.view === f.view);
   if (chip) {
@@ -2416,7 +2447,7 @@ function compareHtml(scan, cands, sel) {
       <div class="psub" id="cmp-name">${escHtml(c.set_name||'')} · <b>${tag}</b>${picked?` <span class="picked">✓ picked</span> · ×${sel.quantity}`:''}${c.multi_distance!=null?` <span class="pd">Δ${c.multi_distance}</span>`:''} <span class="pd">${cmpIndex+1}/${cands.length}</span></div>
       ${price}
       ${scan.error ? `<div class="perr">${escHtml(scan.error)}</div>` : ''}
-      ${formatChipsHtml(scan, c.popularity || popOf(scan))}
+      ${formatChipsHtml(scan, c.popularity || popOf(scan))}${listTags(scan).length ? `<div class="pfmt">${tagChips(scan)}</div>` : ''}
     </div>
     <div class="cmphead"><span class="pd">${picked ? 'Compare the scan with the picked printing' : sel ? 'Compare with another printing' : 'Compare — pick the printing that matches'}</span>
       <div class="cmpmodes">${[['side','Side by side'],['wipe','Wipe'],['blend','Blend']].map(([m,t]) =>
@@ -2502,7 +2533,7 @@ async function renderScanDetail() {
       <div class="psub">${sel ? `${escHtml(sel.set_name)} · <b>${escHtml((sel.set||'').toUpperCase())} #${escHtml(sel.collector_number)}</b> · ×${sel.quantity}` : 'no printing found — search below'}</div>
       ${sel ? `<div class="pprice" id="p-headprice">${headPriceHtml(scan)}</div>` : ''}
       ${scan.error ? `<div class="perr">${escHtml(scan.error)}</div>` : ''}
-      ${formatChipsHtml(scan)}
+      ${formatChipsHtml(scan)}${listTags(scan).length ? `<div class="pfmt">${tagChips(scan)}</div>` : ''}
     </div>
     <div class="cmpbody side"><div class="cmpbox"><img class="cmpscan" src="/api/scans/${scan.id}/image" alt="Scan photo"
       onload="fitScan(this)" onerror="this.style.visibility='hidden'"><span class="cmpcap">scan</span></div></div>

@@ -17,6 +17,7 @@ object DiagnosticsText {
         append("mode ").append(if (app.settings.auto) "Tray" else "Tap to scan")
             .append(" · area ").append(app.settings.roi?.encode() ?: "full frame")
             .append(" · check ").append(app.settings.checkMs).append(" ms\n")
+        append("card list ").append(app.cardList.summary()).append('\n')
         app.updates.latest?.let { append("latest release ").append(it.version).append(if (app.updates.locked) " — UPDATE REQUIRED" else "").append('\n') }
         append("queue pending ").append(app.uploads.pending).append("\n\n")
         append(CameraDiagnostics.last ?: "camera: open the scanner screen once to collect camera details").append("\n\n")

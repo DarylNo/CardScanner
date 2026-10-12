@@ -31,6 +31,9 @@ class App : Application() {
         private set
     lateinit var phoneServer: PhoneServer
         private set
+    /** The external card list (Settings → External card list): tags scans by name, read-only. */
+    lateinit var cardList: io.github.darylno.cardscanner.phoneserver.ExternalCardList
+        private set
     lateinit var uploads: UploadPort
         private set
     /** The Share screen's view of the server (guest code, addresses, QR). */
@@ -52,7 +55,13 @@ class App : Application() {
             fetch = if (android.os.Build.FINGERPRINT == "robolectric") { { null } }
                 else io.github.darylno.cardscanner.update.UpdateLock::fetchLatest)
         identify = LocalIdentify(this)
-        phoneServer = PhoneServer(this, identify, DeviceBridge(settings) { io.github.darylno.cardscanner.camera.CameraCatalog.lenses(this) }, updates, debugHeader = { debugHeader() })
+        cardList = io.github.darylno.cardscanner.phoneserver.ExternalCardList(this, settings,
+            // Unit tests (Robolectric) never fetch a list.
+            fetch = if (android.os.Build.FINGERPRINT == "robolectric") { { throw java.io.IOException("tests") } }
+                else io.github.darylno.cardscanner.phoneserver.ExternalCardList::httpGet)
+        cardList.start()
+        phoneServer = PhoneServer(this, identify, DeviceBridge(settings) { io.github.darylno.cardscanner.camera.CameraCatalog.lenses(this) }, updates,
+            debugHeader = { debugHeader() }, cardList = { cardList.current() })
         GatewayService.hostProvider = { phoneServer }
         uploads = Adapters.uploads(this, phoneServer)
         gateway = Adapters.gateway(this)

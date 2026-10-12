@@ -50,6 +50,15 @@ class AppSettings(context: Context) {
         get() = prefs.getString(K_CAMERA, null)
         set(v) { if (v == null) prefs.edit().remove(K_CAMERA).apply() else prefs.edit().putString(K_CAMERA, v).apply() }
 
+    /**
+     * The external card list's URL (Settings → External card list; "" = off). Kept here
+     * only — never in the repo, which is public — and never logged: any key lives in
+     * its query string.
+     */
+    var cardListUrl: String
+        get() = prefs.getString(K_CARD_LIST_URL, "") ?: ""
+        set(v) = prefs.edit().putString(K_CARD_LIST_URL, v.trim()).apply()
+
     /** Mount mode: lock focus once a card is present (default on — the tray never moves). */
     var focusLock: Boolean
         get() = prefs.getBoolean(K_FOCUS_LOCK, true)
@@ -119,6 +128,7 @@ class AppSettings(context: Context) {
         const val K_ROI = "roi"
         const val K_HIGH_RES = "high_res"
         const val K_CAMERA = "camera_id"
+        const val K_CARD_LIST_URL = "card_list_url"
         const val K_FOCUS_LOCK = "focus_lock"
         const val K_AE_LOCK = "ae_lock"
         const val K_TORCH = "torch"
