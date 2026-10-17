@@ -337,7 +337,14 @@ lens on testers' phones), minSdk 29, arm64-v8a.
   flipped `> median`. `HashParityTest` checks every stage against
   `resources/arthash/expected.json` (`scripts/export_hash_fixtures.py`). Never
   loosen it to "close enough": the 110/140+20/210 thresholds only transfer on
-  equal bits.
+  equal bits. **Pillow is pinned < 13** (2026-10-17): Pillow 13.0.0 moved the
+  8-bit LANCZOS output for sources TALLER than wide (41 of the 168 resize-sweep
+  digests), so CI's hash `--check` went red the day it shipped. Every art crop
+  is wider than tall — 160 real crops (the arthash cards × 8 scales) hashed
+  bit-identically — but the port follows Pillow 12 and the weekly art pack is
+  built with whatever `pip install .` resolves, so the pin keeps the pack, CI
+  and the phone on one LANCZOS. Lift it only by porting 13's change and
+  regenerating the fixtures.
 - **Golden-tested server:** `scripts/export_api_fixtures.py` drives the REAL
   app.py through scripted sessions (`api/expected.json`, `sweep.json` — every
   body AND the exact F2F lookup sequence, `export.json` — every status,
