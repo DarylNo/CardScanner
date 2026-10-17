@@ -21,6 +21,7 @@ import subprocess
 import sys
 import threading
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Optional
 
@@ -32,6 +33,7 @@ from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, Res
 from fastapi.staticfiles import StaticFiles
 
 from mtg_card_scanner.artwork import flag_other_art
+from mtg_card_scanner.card_list import CardListSource, flag_list_tags
 from mtg_card_scanner.facetoface import F2FUnavailableError
 from server.export import (CSV_FIELDS, DEFAULT_LAYOUT, LayoutStore, build_csv,
                            build_mx_export, normalize_layout)
@@ -121,12 +123,30 @@ def _is_newer_release(latest: str, current: str) -> bool:
     return bool(latest) and latest != current      # unparseable — fall back
 
 
+def _default_card_list() -> CardListSource:
+    def fetch(url: str) -> tuple[int, str]:
+        import requests
+        try:
+            r = requests.get(url, timeout=20)
+        except requests.RequestException as e:
+            raise OSError(str(e)) from e
+        return r.status_code, r.text
+
+    src = CardListSource(os.getenv("CARD_LIST_URL", ""),
+                         Path(os.getenv("CARD_LIST_CACHE", "card_list_cache.json")), fetch,
+                         lambda: datetime.now(timezone.utc).isoformat(timespec="seconds"))
+    if src.url:
+        threading.Thread(target=src.refresh, daemon=True, name="card-list").start()
+    return src
+
+
 def create_app(
     pipeline_factory: Optional[Callable[[], Any]] = None,
     store: Optional[ScanStore] = None,
     f2f: Optional[Any] = None,
     scan_images_dir: Optional[Path] = None,
     auto_sweep_interval: Optional[float] = 60.0,
+    card_list: Optional[CardListSource] = None,
 ) -> FastAPI:
     app = FastAPI(title="MTG Card Scanner")
 
@@ -138,6 +158,11 @@ def create_app(
         from mtg_card_scanner.facetoface import FaceToFaceClient
         f2f = FaceToFaceClient()
     pipeline_factory = pipeline_factory or _default_pipeline_factory()
+    # The external card list (mtg_card_scanner/card_list.py): off unless
+    # CARD_LIST_URL is set; fetched once at start, in the background.
+    if card_list is None:
+        card_list = _default_card_list()
+    app.state.card_list = card_list
 
     _pipeline: dict[str, Any] = {"instance": None}
 
@@ -1094,14 +1119,16 @@ def create_app(
         # other_art is derived per read (artwork.py), never stored: both
         # pages fold those printings out of the picker and out of the
         # pending card's price range/filter, matching what the sweep prices.
-        return [flag_other_art(s) for s in store.list_scans()]
+        # list_tags likewise (card_list.py): a refreshed list re-tags every scan.
+        lst = card_list.current()
+        return [flag_list_tags(flag_other_art(s), lst) for s in store.list_scans()]
 
     @app.get("/api/scans/{scan_id}")
     def get_scan(scan_id: int):
         scan = store.get_scan(scan_id)
         if not scan:
             return JSONResponse({"error": "not found"}, status_code=404)
-        return flag_other_art(scan)
+        return flag_list_tags(flag_other_art(scan), card_list.current())
 
     def _apply_selection_core(scan_id: int, printing: dict, condition: str,
                               finish: str, quantity: int,

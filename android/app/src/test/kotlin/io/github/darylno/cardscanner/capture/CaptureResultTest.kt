@@ -7,7 +7,7 @@ import org.junit.Test
 
 /**
  * The capture line carries all three frames' sharpness with the one used
- * (1.1.11, "is it focusing?") — it used to say only "sharp #1 of 3", so a burst
+ * (1.1.14, "is it focusing?") — it used to say only "sharp #1 of 3", so a burst
  * that was soft throughout looked the same as a crisp one.
  */
 class CaptureResultTest {

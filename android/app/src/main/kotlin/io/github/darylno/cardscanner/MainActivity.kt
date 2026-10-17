@@ -125,7 +125,7 @@ class MainActivity : AppCompatActivity() {
     private var frameH = 0
 
     /**
-     * "Zoom to fit the Area" (1.1.11): the zoom the preview and the analyzer are at now
+     * "Zoom to fit the Area" (1.1.14): the zoom the preview and the analyzer are at now
      * (what the camera reported). settings.roi stays BASE (1×) fractions; the overlay
      * draws it in the zoomed frame's fractions ([ZoomFit.toView]).
      */
@@ -960,7 +960,7 @@ class MainActivity : AppCompatActivity() {
             }
             val size = if (capture.quad != null) "card ${capture.cardHeightPx()} px tall × ${capture.cardWidthPx()} wide of ${capture.frameW}×${capture.frameH}"
                 else "card 0 px tall (no quad)"
-            // "Is it focusing?" (1.1.11): the chosen frame's AF state + lens position ride the line,
+            // "Is it focusing?" (1.1.14): the chosen frame's AF state + lens position ride the line,
             // and the three frames' sharpness is in the summary ("sharpness a / [b] / c").
             dlog.i("capture", "done${if (capture.burstId > 0) " #${capture.burstId}" else ""} " +
                 "(${if (manual) "manual" else "auto"}, $how, " +

@@ -202,7 +202,7 @@ class ZoomCoordinatorTest {
     }
 
     /**
-     * Review of 1.1.11, case 1: Settings → the switch ON → back. The request goes out
+     * Review of 1.1.14, case 1: Settings → the switch ON → back. The request goes out
      * at onResume, before the camera has reopened; a reopen slower than the timeout
      * finds only the read-back from BEFORE the stop (1×) and maps it. The camera's
      * real answer (1.9×) then came and was dropped — the Area stayed mapped at 1×

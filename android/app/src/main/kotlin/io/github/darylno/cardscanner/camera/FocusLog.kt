@@ -2,7 +2,7 @@ package io.github.darylno.cardscanner.camera
 
 /**
  * "Is it focusing?" (owner on 1.1.10: "No zoom? Focus working?") — before
- * 1.1.11 nothing about focus reached the debug log: a lock's result lived
+ * 1.1.14 nothing about focus reached the debug log: a lock's result lived
  * only in a note the Diagnostics screen copied ONCE, at bind, before any
  * lock had run. Everything here is the words and numbers of the `focus` log
  * tag and the Diagnostics focus line. Pure Kotlin (JVM-tested), no camera.

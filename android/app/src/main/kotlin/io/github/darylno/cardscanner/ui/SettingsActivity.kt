@@ -99,6 +99,37 @@ class SettingsActivity : AppCompatActivity() {
             .show()
     }
 
+    /** Only the host is shown: the rest of the URL may carry a key, and screenshots get shared. */
+    private fun urlLabel(url: String): String =
+        if (url.isBlank()) getString(R.string.settings_card_list_off)
+        else runCatching { java.net.URI(url).host }.getOrNull() ?: "…"
+
+    /** The list URL: pasted exactly as given (any key stays in its query string); empty = off. */
+    private fun editCardListUrl() {
+        val s = app.settings
+        val input = EditText(this).apply {
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
+            setText(s.cardListUrl)
+            hint = getString(R.string.settings_card_list_hint)
+            setSelectAllOnFocus(true)
+        }
+        val box = LinearLayout(this).apply { setPadding(dp(20), dp(8), dp(20), 0); addView(input, LinearLayout.LayoutParams(match(), wrap())) }
+        val after = { runOnUiThread { if (!isFinishing && !isDestroyed) render() } }
+        AlertDialog.Builder(this)
+            .setTitle(R.string.settings_card_list_url)
+            .setMessage(R.string.settings_card_list_dialog_msg)
+            .setView(box)
+            .setPositiveButton(R.string.settings_card_list_save) { _, _ ->
+                val v = input.text.toString().trim()
+                if (v.isNotEmpty() && !v.startsWith("https://", ignoreCase = true)) {
+                    Toast.makeText(this, R.string.settings_card_list_https, Toast.LENGTH_LONG).show()
+                } else if (v != s.cardListUrl) { app.cardList.setUrl(v) { after() }; render() }
+            }
+            .setNeutralButton(R.string.settings_card_list_turn_off) { _, _ -> app.cardList.setUrl("") { after() }; render() }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
     /** The blue ✓'s hold time: typed in ms, refused outside DeviceApi's range (same rule as the browser). */
     private fun editCheckMs() {
         val s = app.settings
@@ -138,7 +169,7 @@ class SettingsActivity : AppCompatActivity() {
         cam.addView(chrome.valueRow(getString(R.string.settings_lens), getString(R.string.settings_lens_desc),
             s.cameraId?.let { getString(R.string.settings_lens_value, it) } ?: getString(R.string.settings_lens_auto)) { chooseCamera() })
         cam.addView(chrome.divider(), chrome.dividerParams())
-        // "Zoom to fit the Area" (owner on 1.1.10: "No zoom?"; 1.1.11, off by default — tried on the rig first).
+        // "Zoom to fit the Area" (owner on 1.1.10: "No zoom?"; 1.1.14, off by default — tried on the rig first).
         cam.addView(chrome.switchRow(getString(R.string.settings_zoomfit), getString(R.string.settings_zoomfit_desc), s.zoomFit) {
             if (it != s.zoomFit) DebugLog.global.i("device", "zoom to fit the Area → ${if (it) "on" else "off"}")
             s.zoomFit = it
@@ -161,6 +192,27 @@ class SettingsActivity : AppCompatActivity() {
         cam.addView(chrome.switchRow(getString(R.string.settings_debug), getString(R.string.settings_debug_desc), s.debugOverlay) { s.debugOverlay = it })
         col.addView(cam, lp())
         col.addView(note(getString(R.string.settings_camera_note)))
+
+        // ── External card list (owner, 2026-10-12): read-only tags by card name ──
+        col.addView(chrome.sectionHeader(getString(R.string.settings_card_list)))
+        val listCard = chrome.card().apply { setPadding(dp(16), dp(4), dp(16), dp(12)) }
+        listCard.addView(chrome.valueRow(getString(R.string.settings_card_list_url), getString(R.string.settings_card_list_url_desc),
+            urlLabel(s.cardListUrl)) { editCardListUrl() })
+        if (s.cardListUrl.isNotBlank()) {
+            listCard.addView(chrome.divider(), chrome.dividerParams())
+            listCard.addView(chrome.text(app.cardList.summary(), 13f, ScanChrome.Palette.TEXT_DIM).apply {
+                setPadding(dp(4), dp(10), dp(4), 0)
+            })
+            var refreshBtn: android.view.View? = null
+            refreshBtn = chrome.secondaryButton(getString(R.string.settings_card_list_refresh)) {
+                refreshBtn?.isEnabled = false
+                (refreshBtn as? android.widget.TextView)?.text = getString(R.string.settings_card_list_refreshing)
+                app.cardList.refresh { runOnUiThread { if (!isFinishing && !isDestroyed) render() } }
+            }
+            listCard.addView(refreshBtn, lp(10))
+        }
+        col.addView(listCard, lp())
+        col.addView(note(getString(R.string.settings_card_list_note)))
 
         // ── Scans (owner, 2026-10-01: "need a way to delete all scans") ──
         col.addView(chrome.sectionHeader(getString(R.string.settings_scans)))

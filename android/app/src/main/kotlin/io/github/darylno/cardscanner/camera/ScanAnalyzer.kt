@@ -127,7 +127,7 @@ class CaptureBurst(
  *     stillness trigger itself is untouched; the gate sits after it, in the
  *     app, and only says no. A finder that THREW is unknown, not "no card",
  *     and the capture goes ahead. The shutter is never gated.
- *     THE FALLBACK (1.1.11, owner on 1.1.10: "White bordered cards didn't get
+ *     THE FALLBACK (1.1.14, owner on 1.1.10: "White bordered cards didn't get
  *     picked up as cards"): before refusing, the same trigger box is asked for a
  *     card's PRINTED DETAIL ([PrintEvidence]: new texture through the box's
  *     core, a card-shaped box, a minimum share of the Area, a learned tray that
@@ -162,7 +162,7 @@ class CaptureBurst(
  *     never re-arm, trigger or change any scanner state (ScanAnalyzerTest:
  *     identical outcomes with it on and off).
  *
- * ZOOM (1.1.11, "Zoom to fit the Area" — core ZoomFit / ZoomCoordinator): [roi]
+ * ZOOM (1.1.14, "Zoom to fit the Area" — core ZoomFit / ZoomCoordinator): [roi]
  * is always the Area in the fractions of the frames as they ARRIVE — the VIEW
  * Area at the camera's zoom [zoomMapped] says, so the sample, the capture crop,
  * the watch window and the focus points all follow the zoom with no other
@@ -226,7 +226,7 @@ class ScanAnalyzer(
      * Asked on every AUTO trigger (analysis thread): hold this capture until the
      * lens has focused on the card? (Mount: the first card after a bind / area
      * change / sharpness drop — see CameraController.) Every hold is logged
-     * under `focus` (1.1.11): held, answered after N ms → capture #k from the
+     * under `focus` (1.1.14): held, answered after N ms → capture #k from the
      * frames after it, TIMED OUT after [FOCUS_WAIT_NS] → shot from the last
      * frames, a late answer, or cancelled — the controller logs the pass itself.
      */
@@ -487,14 +487,14 @@ class ScanAnalyzer(
             // printed interior) was found on this tick or held from the last two —
             // glare, a shadow, a hand's edge. A finder that THREW is "unknown", not
             // "no card": the capture goes ahead as before.
-            // THE FALLBACK (1.1.11): the finder can miss a real card (owner: white-
+            // THE FALLBACK (1.1.14): the finder can miss a real card (owner: white-
             // bordered cards on 1.1.10). Before refusing, ask the trigger box itself
             // for a card's printed detail — measured, it separates every synthetic
             // card from glare / shadow / exposure / smooth hands — but only where the
             // learned tray was smooth and the print stands out from round the box: on
             // a textured tray a stale reference (learned with a card on it, out of
             // focus, a light under AE lock, a nudged mat) reads as print (review of
-            // 1.1.11), and there the fallback stands aside. A failure to measure is
+            // 1.1.14), and there the fallback stands aside. A failure to measure is
             // "no evidence": refused as before.
             val b = trigger.box
             val ev = runCatching { scanner.emptyGradient()?.let { PrintEvidence.measure(g0, it, b) } }.getOrNull()

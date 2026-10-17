@@ -84,6 +84,8 @@ jobs:
       # session recorded from the real server/app.py.
       - name: Phone API fixtures match the server
         run: python scripts/export_api_fixtures.py --check
+      - name: External card list fixtures match the reference
+        run: python scripts/export_card_list_fixtures.py --check
       - uses: actions/setup-java@v4
         with:
           distribution: temurin

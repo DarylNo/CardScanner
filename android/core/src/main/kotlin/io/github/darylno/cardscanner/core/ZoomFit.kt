@@ -7,7 +7,7 @@ import kotlin.math.min
 import kotlin.math.roundToInt
 
 /**
- * "Zoom to fit the Area" (owner on 1.1.10: "No zoom?" → "Go"; 1.1.11). The
+ * "Zoom to fit the Area" (owner on 1.1.10: "No zoom?" → "Go"; 1.1.14). The
  * camera zooms in so the drawn scan Area fills the view, which gives a card that
  * sits small in the frame more sensor pixels (fewer upsampled photo pixels).
  *
@@ -16,7 +16,7 @@ import kotlin.math.roundToInt
  * unzoomed (1×, BASE) upright frame sits at `v = ½ + (b − ½)·z` of the zoomed
  * (VIEW) frame, per axis.
  * - The stored Area (`AppSettings.roi`, `/api/device` `roi`) is ALWAYS base, 1×
- *   fractions. Nothing was ever zoomed before 1.1.11, so every stored Area
+ *   fractions. Nothing was ever zoomed before 1.1.14, so every stored Area
  *   already is one: no migration.
  * - Everything that works on camera frames (the detection sample, the capture
  *   crop and its margins, the overlay, the focus metering points, the watch

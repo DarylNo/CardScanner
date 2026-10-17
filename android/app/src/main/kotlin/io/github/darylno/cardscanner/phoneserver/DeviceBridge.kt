@@ -71,7 +71,7 @@ class DeviceBridge(
         val applying = screen?.applyRemoteSettings() ?: return
         // DeviceApi answers the PATCH with state() right after this returns, and the zoom in it
         // is the camera's: wait for the scan screen's UI thread to have applied the change, or
-        // the answer carried the zoom from BEFORE it (review of 1.1.11: "Zoom to fit is off"
+        // the answer carried the zoom from BEFORE it (review of 1.1.14: "Zoom to fit is off"
         // right after ticking the box, until the panel's next poll). Bounded: a busy UI thread
         // only makes this one answer stale, never the setting.
         try {

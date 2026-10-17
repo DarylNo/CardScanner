@@ -176,7 +176,7 @@ class ScanAnalyzerTest {
         assertEquals(3, rec.bursts[0].frames.size)
     }
 
-    // ── "is it focusing?" (1.1.11): the hold says what happened, and asks to meter the CARD ──
+    // ── "is it focusing?" (1.1.14): the hold says what happened, and asks to meter the CARD ──
 
     /** The focus pass is asked for the TRIGGER's card (its box, in the sample of the Area), and the answered hold is logged with its timing. */
     @Test fun theFocusRequestCarriesTheCardAndTheAnsweredHoldIsLogged() {
@@ -663,7 +663,7 @@ class ScanAnalyzerTest {
         assertEquals(176.0 / 352, centroid(wq!!).first.toDouble(), 0.02)
     }
 
-    // ── the card-shape gate's printed-detail FALLBACK (1.1.11: white-bordered cards the finder missed) ──
+    // ── the card-shape gate's printed-detail FALLBACK (1.1.14: white-bordered cards the finder missed) ──
 
     /** A card with printed detail through its middle: a 6-px checker — 3 sample px — over the card. */
     private val printed = FakePlanes.nv21(w, h, { x, y -> if (x in 120..231 && y in 60..215) (if ((x / 6 + y / 6) % 2 == 0) 250 else 120) else 100 })
@@ -739,7 +739,7 @@ class ScanAnalyzerTest {
         }
     }
 
-    // ── …against a STALE reference on a textured tray (the review of 1.1.11) ──
+    // ── …against a STALE reference on a textured tray (the review of 1.1.14) ──
 
     /** A playmat: 8-frame-px blocks (4 sample px) of random grey round 130 (± 30). */
     private val matBlocks = java.util.Random(9).let { r -> IntArray(64 * 64) { 130 + r.nextInt(61) - 30 } }
@@ -751,7 +751,7 @@ class ScanAnalyzerTest {
     private val printedOnMat = FakePlanes.nv21(w, h, { x, y -> if (inCard(x, y)) (if ((x / 6 + y / 6) % 2 == 0) 250 else 120) else mat(x, y) })
 
     /**
-     * 1.1.11 before the review shot an EMPTY textured tray whenever the learned
+     * 1.1.14 before the review shot an EMPTY textured tray whenever the learned
      * tray was stale — "TRIGGER accepted without an outline — printed detail 42 %
      * … card-shaped box 1.38, 20 % of the Area", a burst of nothing (the tray is
      * re-learned on every rebind, new Area and zoom change, card or no card).
@@ -844,7 +844,7 @@ class ScanAnalyzerTest {
         assertTrue(log.all().map { it.msg }.single { it.startsWith("next card: removed") }.isNotEmpty())
     }
 
-    // ── "Zoom to fit the Area" (1.1.11): the settle gate and the zoom's mapping ──
+    // ── "Zoom to fit the Area" (1.1.14): the settle gate and the zoom's mapping ──
 
     /** The base Area the zoom tests use (fit 1/(2·0.3) = 1.67: 1.5× keeps it inside the view). */
     private val zBase = RoiFrac(0.25, 0.2, 0.75, 0.8)
@@ -961,7 +961,7 @@ class ScanAnalyzerTest {
     }
 
     /**
-     * Review of 1.1.11: drawing an Area on the phone while zoomed keeps the gate
+     * Review of 1.1.14: drawing an Area on the phone while zoomed keeps the gate
      * closed (right — no tick, copy or capture, so Cancel comes back with no
      * re-learn) but it also stopped `snapshot.jpg` for the whole drawing (503: the
      * desktop said "open the scan screen on the phone") and reported "1.90×

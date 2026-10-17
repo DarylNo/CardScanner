@@ -1,0 +1,1802 @@
+{
+ "known_tags": [
+  "wanted",
+  "sold_out"
+ ],
+ "normalize": [
+  {
+   "in": "Lightning Bolt",
+   "out": "lightning bolt"
+  },
+  {
+   "in": "  Jötun   Grunt ",
+   "out": "jotun grunt"
+  },
+  {
+   "in": "Lim-Dûl’s Vault",
+   "out": "lim-dul's vault"
+  },
+  {
+   "in": "“Ach! Hans, Run!”",
+   "out": "\"ach! hans, run!\""
+  },
+  {
+   "in": "Fire//Ice",
+   "out": "fire // ice"
+  },
+  {
+   "in": "Fire  //   Ice",
+   "out": "fire // ice"
+  },
+  {
+   "in": "Ætherize",
+   "out": "ætherize"
+  },
+  {
+   "in": "Smith – Steel — Hammer",
+   "out": "smith - steel - hammer"
+  },
+  {
+   "in": "A B C",
+   "out": "a b c"
+  },
+  {
+   "in": "Séance",
+   "out": "seance"
+  },
+  {
+   "in": "Delver of Secrets // Insectile Aberration",
+   "out": "delver of secrets // insectile aberration"
+  },
+  {
+   "in": "Bonecrusher Giant // Stomp",
+   "out": "bonecrusher giant // stomp"
+  },
+  {
+   "in": "Kongming, ‘Sleeping Dragon’",
+   "out": "kongming, 'sleeping dragon'"
+  },
+  {
+   "in": "Rhox Faithmender\t",
+   "out": "rhox faithmender"
+  },
+  {
+   "in": "ÉÈÊË àáâãäå çñ",
+   "out": "eeee aaaaaa cn"
+  },
+  {
+   "in": "Circle of Protection: Red",
+   "out": "circle of protection: red"
+  },
+  {
+   "in": "Will-o’-the-Wisp",
+   "out": "will-o'-the-wisp"
+  },
+  {
+   "in": "",
+   "out": ""
+  },
+  {
+   "in": "   ",
+   "out": ""
+  },
+  {
+   "in": "//",
+   "out": "//"
+  },
+  {
+   "in": "A // ",
+   "out": "a //"
+  },
+  {
+   "in": " // B",
+   "out": "// b"
+  },
+  {
+   "in": "Dandân",
+   "out": "dandan"
+  },
+  {
+   "in": "Mishra’s Factory",
+   "out": "mishra's factory"
+  },
+  {
+   "in": "Bösium Strip",
+   "out": "bosium strip"
+  },
+  {
+   "in": "Ifh-Bíff Efreet",
+   "out": "ifh-biff efreet"
+  },
+  {
+   "in": "Ｆｕｌｌｗｉｄｔｈ",
+   "out": "ｆｕｌｌｗｉｄｔｈ"
+  },
+  {
+   "in": "İstanbul",
+   "out": "istanbul"
+  },
+  {
+   "in": "Straße",
+   "out": "straße"
+  },
+  {
+   "in": "Name  /  Not a face",
+   "out": "name / not a face"
+  },
+  {
+   "in": "Who // What // When // Where // Why",
+   "out": "who // what // when // where // why"
+  }
+ ],
+ "keys": [
+  {
+   "in": "Lightning Bolt",
+   "out": [
+    "lightning bolt"
+   ]
+  },
+  {
+   "in": "  Jötun   Grunt ",
+   "out": [
+    "jotun grunt"
+   ]
+  },
+  {
+   "in": "Lim-Dûl’s Vault",
+   "out": [
+    "lim-dul's vault"
+   ]
+  },
+  {
+   "in": "“Ach! Hans, Run!”",
+   "out": [
+    "\"ach! hans, run!\""
+   ]
+  },
+  {
+   "in": "Fire//Ice",
+   "out": [
+    "fire // ice",
+    "fire",
+    "ice"
+   ]
+  },
+  {
+   "in": "Fire  //   Ice",
+   "out": [
+    "fire // ice",
+    "fire",
+    "ice"
+   ]
+  },
+  {
+   "in": "Ætherize",
+   "out": [
+    "ætherize"
+   ]
+  },
+  {
+   "in": "Smith – Steel — Hammer",
+   "out": [
+    "smith - steel - hammer"
+   ]
+  },
+  {
+   "in": "A B C",
+   "out": [
+    "a b c"
+   ]
+  },
+  {
+   "in": "Séance",
+   "out": [
+    "seance"
+   ]
+  },
+  {
+   "in": "Delver of Secrets // Insectile Aberration",
+   "out": [
+    "delver of secrets // insectile aberration",
+    "delver of secrets",
+    "insectile aberration"
+   ]
+  },
+  {
+   "in": "Bonecrusher Giant // Stomp",
+   "out": [
+    "bonecrusher giant // stomp",
+    "bonecrusher giant",
+    "stomp"
+   ]
+  },
+  {
+   "in": "Kongming, ‘Sleeping Dragon’",
+   "out": [
+    "kongming, 'sleeping dragon'"
+   ]
+  },
+  {
+   "in": "Rhox Faithmender\t",
+   "out": [
+    "rhox faithmender"
+   ]
+  },
+  {
+   "in": "ÉÈÊË àáâãäå çñ",
+   "out": [
+    "eeee aaaaaa cn"
+   ]
+  },
+  {
+   "in": "Circle of Protection: Red",
+   "out": [
+    "circle of protection: red"
+   ]
+  },
+  {
+   "in": "Will-o’-the-Wisp",
+   "out": [
+    "will-o'-the-wisp"
+   ]
+  },
+  {
+   "in": "",
+   "out": []
+  },
+  {
+   "in": "   ",
+   "out": []
+  },
+  {
+   "in": "//",
+   "out": [
+    "//"
+   ]
+  },
+  {
+   "in": "A // ",
+   "out": [
+    "a //"
+   ]
+  },
+  {
+   "in": " // B",
+   "out": [
+    "// b"
+   ]
+  },
+  {
+   "in": "Dandân",
+   "out": [
+    "dandan"
+   ]
+  },
+  {
+   "in": "Mishra’s Factory",
+   "out": [
+    "mishra's factory"
+   ]
+  },
+  {
+   "in": "Bösium Strip",
+   "out": [
+    "bosium strip"
+   ]
+  },
+  {
+   "in": "Ifh-Bíff Efreet",
+   "out": [
+    "ifh-biff efreet"
+   ]
+  },
+  {
+   "in": "Ｆｕｌｌｗｉｄｔｈ",
+   "out": [
+    "ｆｕｌｌｗｉｄｔｈ"
+   ]
+  },
+  {
+   "in": "İstanbul",
+   "out": [
+    "istanbul"
+   ]
+  },
+  {
+   "in": "Straße",
+   "out": [
+    "straße"
+   ]
+  },
+  {
+   "in": "Name  /  Not a face",
+   "out": [
+    "name / not a face"
+   ]
+  },
+  {
+   "in": "Who // What // When // Where // Why",
+   "out": [
+    "who // what // when // where // why",
+    "who",
+    "what",
+    "when",
+    "where",
+    "why"
+   ]
+  }
+ ],
+ "parse": [
+  {
+   "text": "{\"generated_at\": \"2026-10-12T09:00:00Z\", \"extra\": {\"x\": 1}, \"cards\": [{\"name\": \"Lightning Bolt\", \"tags\": [\"wanted\"]}, {\"name\": \"Jötun Grunt\", \"tags\": [\"sold_out\", \"wanted\"]}, {\"name\": \"Fire // Ice\", \"tags\": [\"wanted\"]}, {\"name\": \"Delver of Secrets\", \"tags\": [\"vip\", \"wanted\", \" vip \", \"  \"], \"qty\": 4}, {\"name\": \"Lightning Bolt\", \"tags\": [\"sold_out\", 7, null]}, {\"name\": \"Lim-Dul's Vault\", \"tags\": \"wanted\"}, {\"name\": \"Insectile Aberration\", \"tags\": [\" restock \"]}, {\"name\": \"\", \"tags\": [\"wanted\"]}, {\"name\": 5, \"tags\": [\"wanted\"]}, {\"tags\": [\"wanted\"]}, \"junk\", null, 3]}",
+   "result": {
+    "generated_at": "2026-10-12T09:00:00Z",
+    "count": 7,
+    "index": {
+     "lightning bolt": [
+      "wanted",
+      "sold_out"
+     ],
+     "jotun grunt": [
+      "sold_out",
+      "wanted"
+     ],
+     "fire // ice": [
+      "wanted"
+     ],
+     "fire": [
+      "wanted"
+     ],
+     "ice": [
+      "wanted"
+     ],
+     "delver of secrets": [
+      "vip",
+      "wanted"
+     ],
+     "lim-dul's vault": [],
+     "insectile aberration": [
+      "restock"
+     ]
+    }
+   }
+  },
+  {
+   "text": "{\"cards\": []}",
+   "result": {
+    "generated_at": null,
+    "count": 0,
+    "index": {}
+   }
+  },
+  {
+   "text": "{\"generated_at\": 5, \"cards\": [{\"name\": \"Opt\"}]}",
+   "result": {
+    "generated_at": null,
+    "count": 1,
+    "index": {
+     "opt": []
+    }
+   }
+  },
+  {
+   "text": "{\"generated_at\": null, \"cards\": [{\"name\": \"Opt\", \"tags\": []}, {\"name\": \"opt\", \"tags\": [\"wanted\"]}]}",
+   "result": {
+    "generated_at": null,
+    "count": 2,
+    "index": {
+     "opt": [
+      "wanted"
+     ]
+    }
+   }
+  },
+  {
+   "text": "{not json",
+   "error": "not JSON"
+  },
+  {
+   "text": "",
+   "error": "not JSON"
+  },
+  {
+   "text": "[]",
+   "error": "no cards list"
+  },
+  {
+   "text": "{\"cards\": {}}",
+   "error": "no cards list"
+  },
+  {
+   "text": "{\"card\": []}",
+   "error": "no cards list"
+  },
+  {
+   "text": "null",
+   "error": "no cards list"
+  },
+  {
+   "text": "\"cards\"",
+   "error": "no cards list"
+  },
+  {
+   "text": "  \n ",
+   "error": "not JSON"
+  }
+ ],
+ "tags": [
+  {
+   "name": "Lightning Bolt",
+   "tags": [
+    "wanted",
+    "sold_out"
+   ]
+  },
+  {
+   "name": "LIGHTNING  BOLT",
+   "tags": [
+    "wanted",
+    "sold_out"
+   ]
+  },
+  {
+   "name": "Jotun Grunt",
+   "tags": [
+    "wanted",
+    "sold_out"
+   ]
+  },
+  {
+   "name": "Fire // Ice",
+   "tags": [
+    "wanted"
+   ]
+  },
+  {
+   "name": "Fire",
+   "tags": [
+    "wanted"
+   ]
+  },
+  {
+   "name": "Ice",
+   "tags": [
+    "wanted"
+   ]
+  },
+  {
+   "name": "Delver of Secrets // Insectile Aberration",
+   "tags": [
+    "wanted",
+    "vip",
+    "restock"
+   ]
+  },
+  {
+   "name": "Insectile Aberration",
+   "tags": [
+    "restock"
+   ]
+  },
+  {
+   "name": "Lim-Dûl’s Vault",
+   "tags": []
+  },
+  {
+   "name": "Opt",
+   "tags": []
+  },
+  {
+   "name": "",
+   "tags": []
+  },
+  {
+   "name": null,
+   "tags": []
+  },
+  {
+   "name": "Lightning Bolt",
+   "tags": [
+    "wanted",
+    "sold_out"
+   ]
+  },
+  {
+   "name": "  Jötun   Grunt ",
+   "tags": [
+    "wanted",
+    "sold_out"
+   ]
+  },
+  {
+   "name": "Lim-Dûl’s Vault",
+   "tags": []
+  },
+  {
+   "name": "“Ach! Hans, Run!”",
+   "tags": []
+  },
+  {
+   "name": "Fire//Ice",
+   "tags": [
+    "wanted"
+   ]
+  },
+  {
+   "name": "Fire  //   Ice",
+   "tags": [
+    "wanted"
+   ]
+  },
+  {
+   "name": "Ætherize",
+   "tags": []
+  },
+  {
+   "name": "Smith – Steel — Hammer",
+   "tags": []
+  },
+  {
+   "name": "A B C",
+   "tags": []
+  },
+  {
+   "name": "Séance",
+   "tags": []
+  },
+  {
+   "name": "Delver of Secrets // Insectile Aberration",
+   "tags": [
+    "wanted",
+    "vip",
+    "restock"
+   ]
+  },
+  {
+   "name": "Bonecrusher Giant // Stomp",
+   "tags": []
+  },
+  {
+   "name": "Kongming, ‘Sleeping Dragon’",
+   "tags": []
+  },
+  {
+   "name": "Rhox Faithmender\t",
+   "tags": []
+  },
+  {
+   "name": "ÉÈÊË àáâãäå çñ",
+   "tags": []
+  },
+  {
+   "name": "Circle of Protection: Red",
+   "tags": []
+  },
+  {
+   "name": "Will-o’-the-Wisp",
+   "tags": []
+  },
+  {
+   "name": "",
+   "tags": []
+  },
+  {
+   "name": "   ",
+   "tags": []
+  },
+  {
+   "name": "//",
+   "tags": []
+  },
+  {
+   "name": "A // ",
+   "tags": []
+  },
+  {
+   "name": " // B",
+   "tags": []
+  },
+  {
+   "name": "Dandân",
+   "tags": []
+  },
+  {
+   "name": "Mishra’s Factory",
+   "tags": []
+  },
+  {
+   "name": "Bösium Strip",
+   "tags": []
+  },
+  {
+   "name": "Ifh-Bíff Efreet",
+   "tags": []
+  },
+  {
+   "name": "Ｆｕｌｌｗｉｄｔｈ",
+   "tags": []
+  },
+  {
+   "name": "İstanbul",
+   "tags": []
+  },
+  {
+   "name": "Straße",
+   "tags": []
+  },
+  {
+   "name": "Name  /  Not a face",
+   "tags": []
+  },
+  {
+   "name": "Who // What // When // Where // Why",
+   "tags": []
+  }
+ ],
+ "scan_name": [
+  {
+   "scan": {
+    "selection": {
+     "name": "A"
+    },
+    "candidates": [
+     {
+      "name": "B"
+     }
+    ],
+    "card_read": {
+     "name": "C"
+    }
+   },
+   "name": "A"
+  },
+  {
+   "scan": {
+    "selection": null,
+    "candidates": [
+     {
+      "name": "B"
+     }
+    ],
+    "card_read": {
+     "name": "C"
+    }
+   },
+   "name": "B"
+  },
+  {
+   "scan": {
+    "candidates": [],
+    "card_read": {
+     "name": "C"
+    }
+   },
+   "name": "C"
+  },
+  {
+   "scan": {
+    "candidates": [],
+    "card_read": {}
+   },
+   "name": null
+  },
+  {
+   "scan": {
+    "selection": {
+     "name": "  "
+    },
+    "candidates": [
+     {
+      "name": ""
+     }
+    ],
+    "card_read": {
+     "name": "C"
+    }
+   },
+   "name": "C"
+  },
+  {
+   "scan": {
+    "selection": {
+     "name": " 　"
+    },
+    "candidates": [
+     {
+      "name": "\tB "
+     }
+    ]
+   },
+   "name": "\tB "
+  },
+  {
+   "scan": {
+    "selection": {
+     "name": 5
+    },
+    "candidates": [
+     {
+      "id": "x"
+     }
+    ],
+    "card_read": {
+     "name": null
+    }
+   },
+   "name": null
+  },
+  {
+   "scan": {},
+   "name": null
+  }
+ ],
+ "source": {
+  "clock": "C%04d",
+  "steps": [
+   {
+    "op": "new",
+    "url": "",
+    "returned": null,
+    "fetched": [],
+    "status": {
+     "enabled": false,
+     "count": 0,
+     "generated_at": null,
+     "updated_at": null,
+     "error": null,
+     "error_at": null
+    },
+    "current_count": null
+   },
+   {
+    "op": "refresh",
+    "returned": false,
+    "fetched": [],
+    "status": {
+     "enabled": false,
+     "count": 0,
+     "generated_at": null,
+     "updated_at": null,
+     "error": null,
+     "error_at": null
+    },
+    "current_count": null
+   },
+   {
+    "op": "set_url",
+    "url": " https://lists.example/cards.json?key=s3cret ",
+    "returned": null,
+    "fetched": [],
+    "status": {
+     "enabled": true,
+     "count": 0,
+     "generated_at": null,
+     "updated_at": null,
+     "error": null,
+     "error_at": null
+    },
+    "current_count": 0
+   },
+   {
+    "op": "refresh",
+    "answer": [
+     200,
+     "{\"generated_at\": \"2026-10-12T09:00:00Z\", \"extra\": {\"x\": 1}, \"cards\": [{\"name\": \"Lightning Bolt\", \"tags\": [\"wanted\"]}, {\"name\": \"Jötun Grunt\", \"tags\": [\"sold_out\", \"wanted\"]}, {\"name\": \"Fire // Ice\", \"tags\": [\"wanted\"]}, {\"name\": \"Delver of Secrets\", \"tags\": [\"vip\", \"wanted\", \" vip \", \"  \"], \"qty\": 4}, {\"name\": \"Lightning Bolt\", \"tags\": [\"sold_out\", 7, null]}, {\"name\": \"Lim-Dul's Vault\", \"tags\": \"wanted\"}, {\"name\": \"Insectile Aberration\", \"tags\": [\" restock \"]}, {\"name\": \"\", \"tags\": [\"wanted\"]}, {\"name\": 5, \"tags\": [\"wanted\"]}, {\"tags\": [\"wanted\"]}, \"junk\", null, 3]}"
+    ],
+    "returned": true,
+    "fetched": [
+     "https://lists.example/cards.json?key=s3cret"
+    ],
+    "status": {
+     "enabled": true,
+     "count": 7,
+     "generated_at": "2026-10-12T09:00:00Z",
+     "updated_at": "C0001",
+     "error": null,
+     "error_at": null
+    },
+    "current_count": 7
+   },
+   {
+    "op": "refresh",
+    "answer": "down",
+    "returned": false,
+    "fetched": [
+     "https://lists.example/cards.json?key=s3cret"
+    ],
+    "status": {
+     "enabled": true,
+     "count": 7,
+     "generated_at": "2026-10-12T09:00:00Z",
+     "updated_at": "C0001",
+     "error": "unreachable",
+     "error_at": "C0002"
+    },
+    "current_count": 7
+   },
+   {
+    "op": "refresh",
+    "answer": [
+     500,
+     "oops"
+    ],
+    "returned": false,
+    "fetched": [
+     "https://lists.example/cards.json?key=s3cret"
+    ],
+    "status": {
+     "enabled": true,
+     "count": 7,
+     "generated_at": "2026-10-12T09:00:00Z",
+     "updated_at": "C0001",
+     "error": "HTTP 500",
+     "error_at": "C0003"
+    },
+    "current_count": 7
+   },
+   {
+    "op": "refresh",
+    "answer": [
+     200,
+     "{bad"
+    ],
+    "returned": false,
+    "fetched": [
+     "https://lists.example/cards.json?key=s3cret"
+    ],
+    "status": {
+     "enabled": true,
+     "count": 7,
+     "generated_at": "2026-10-12T09:00:00Z",
+     "updated_at": "C0001",
+     "error": "not JSON",
+     "error_at": "C0004"
+    },
+    "current_count": 7
+   },
+   {
+    "op": "refresh",
+    "answer": [
+     200,
+     "[]"
+    ],
+    "returned": false,
+    "fetched": [
+     "https://lists.example/cards.json?key=s3cret"
+    ],
+    "status": {
+     "enabled": true,
+     "count": 7,
+     "generated_at": "2026-10-12T09:00:00Z",
+     "updated_at": "C0001",
+     "error": "no cards list",
+     "error_at": "C0005"
+    },
+    "current_count": 7
+   },
+   {
+    "op": "restart",
+    "url": "https://lists.example/cards.json?key=s3cret",
+    "returned": null,
+    "fetched": [],
+    "status": {
+     "enabled": true,
+     "count": 7,
+     "generated_at": "2026-10-12T09:00:00Z",
+     "updated_at": "C0001",
+     "error": null,
+     "error_at": null
+    },
+    "current_count": 7
+   },
+   {
+    "op": "restart",
+    "url": "https://lists.example/other.json",
+    "returned": null,
+    "fetched": [],
+    "status": {
+     "enabled": true,
+     "count": 0,
+     "generated_at": null,
+     "updated_at": null,
+     "error": null,
+     "error_at": null
+    },
+    "current_count": 0
+   },
+   {
+    "op": "refresh",
+    "answer": [
+     404,
+     ""
+    ],
+    "returned": false,
+    "fetched": [
+     "https://lists.example/other.json"
+    ],
+    "status": {
+     "enabled": true,
+     "count": 0,
+     "generated_at": null,
+     "updated_at": null,
+     "error": "HTTP 404",
+     "error_at": "C0006"
+    },
+    "current_count": 0
+   },
+   {
+    "op": "set_url",
+    "url": "https://lists.example/cards.json?key=s3cret",
+    "returned": null,
+    "fetched": [],
+    "status": {
+     "enabled": true,
+     "count": 7,
+     "generated_at": "2026-10-12T09:00:00Z",
+     "updated_at": "C0001",
+     "error": null,
+     "error_at": null
+    },
+    "current_count": 7
+   },
+   {
+    "op": "refresh",
+    "answer": [
+     200,
+     "{\"generated_at\": \"G2\", \"cards\": [{\"name\": \"Opt\", \"tags\": [\"wanted\"]}]}"
+    ],
+    "returned": true,
+    "fetched": [
+     "https://lists.example/cards.json?key=s3cret"
+    ],
+    "status": {
+     "enabled": true,
+     "count": 1,
+     "generated_at": "G2",
+     "updated_at": "C0007",
+     "error": null,
+     "error_at": null
+    },
+    "current_count": 1
+   },
+   {
+    "op": "set_url",
+    "url": "",
+    "returned": null,
+    "fetched": [],
+    "status": {
+     "enabled": false,
+     "count": 0,
+     "generated_at": null,
+     "updated_at": null,
+     "error": null,
+     "error_at": null
+    },
+    "current_count": null
+   },
+   {
+    "op": "restart",
+    "url": "https://lists.example/cards.json?key=s3cret",
+    "returned": null,
+    "fetched": [],
+    "status": {
+     "enabled": true,
+     "count": 1,
+     "generated_at": "G2",
+     "updated_at": "C0007",
+     "error": null,
+     "error_at": null
+    },
+    "current_count": 1
+   }
+  ]
+ },
+ "api": {
+  "clock": "T%04d",
+  "seeds": [
+   {
+    "identified": true,
+    "card_read": {
+     "name": "Lightning Bolt"
+    },
+    "confidence": {},
+    "candidates": [
+     {
+      "id": "b1",
+      "name": "Lightning Bolt",
+      "set": "m10",
+      "collector_number": "146",
+      "multi_distance": 70
+     },
+     {
+      "id": "b2",
+      "name": "Lightning Bolt",
+      "set": "2x2",
+      "collector_number": "117",
+      "multi_distance": 80
+     }
+    ]
+   },
+   {
+    "identified": true,
+    "card_read": {
+     "name": "Delver of Secrets"
+    },
+    "confidence": {},
+    "candidates": [
+     {
+      "id": "d1",
+      "name": "Delver of Secrets // Insectile Aberration",
+      "set": "isd",
+      "collector_number": "51",
+      "multi_distance": 60
+     },
+     {
+      "id": "o1",
+      "name": "Opt",
+      "set": "dom",
+      "collector_number": "60",
+      "multi_distance": 150
+     }
+    ]
+   },
+   {
+    "identified": false,
+    "card_read": {
+     "name": "Jötun Grunt"
+    },
+    "confidence": {},
+    "candidates": [],
+    "error": "not identified"
+   },
+   {
+    "identified": false,
+    "card_read": {},
+    "confidence": {},
+    "candidates": []
+   }
+  ],
+  "steps": [
+   {
+    "method": "GET",
+    "path": "/api/scans",
+    "body": null,
+    "status": 200,
+    "response": [
+     {
+      "id": 4,
+      "created_at": "T0004",
+      "updated_at": "T0004",
+      "status": "candidates",
+      "identified": false,
+      "error": null,
+      "card_read": {},
+      "confidence": {},
+      "candidates": [],
+      "selection": null,
+      "f2f": null,
+      "included": true,
+      "flagged": false
+     },
+     {
+      "id": 3,
+      "created_at": "T0003",
+      "updated_at": "T0003",
+      "status": "candidates",
+      "identified": false,
+      "error": "not identified",
+      "card_read": {
+       "name": "Jötun Grunt"
+      },
+      "confidence": {},
+      "candidates": [],
+      "selection": null,
+      "f2f": null,
+      "included": true,
+      "flagged": false
+     },
+     {
+      "id": 2,
+      "created_at": "T0002",
+      "updated_at": "T0002",
+      "status": "candidates",
+      "identified": true,
+      "error": null,
+      "card_read": {
+       "name": "Delver of Secrets"
+      },
+      "confidence": {},
+      "candidates": [
+       {
+        "id": "d1",
+        "name": "Delver of Secrets // Insectile Aberration",
+        "set": "isd",
+        "collector_number": "51",
+        "multi_distance": 60,
+        "other_art": false
+       },
+       {
+        "id": "o1",
+        "name": "Opt",
+        "set": "dom",
+        "collector_number": "60",
+        "multi_distance": 150,
+        "other_art": true
+       }
+      ],
+      "selection": null,
+      "f2f": null,
+      "included": true,
+      "flagged": false
+     },
+     {
+      "id": 1,
+      "created_at": "T0001",
+      "updated_at": "T0001",
+      "status": "candidates",
+      "identified": true,
+      "error": null,
+      "card_read": {
+       "name": "Lightning Bolt"
+      },
+      "confidence": {},
+      "candidates": [
+       {
+        "id": "b1",
+        "name": "Lightning Bolt",
+        "set": "m10",
+        "collector_number": "146",
+        "multi_distance": 70,
+        "other_art": false
+       },
+       {
+        "id": "b2",
+        "name": "Lightning Bolt",
+        "set": "2x2",
+        "collector_number": "117",
+        "multi_distance": 80,
+        "other_art": false
+       }
+      ],
+      "selection": null,
+      "f2f": null,
+      "included": true,
+      "flagged": false
+     }
+    ]
+   },
+   {
+    "method": "LIST",
+    "body": {
+     "url": "https://lists.example/cards.json",
+     "answer": [
+      200,
+      "{\"generated_at\": \"2026-10-12T09:00:00Z\", \"extra\": {\"x\": 1}, \"cards\": [{\"name\": \"Lightning Bolt\", \"tags\": [\"wanted\"]}, {\"name\": \"Jötun Grunt\", \"tags\": [\"sold_out\", \"wanted\"]}, {\"name\": \"Fire // Ice\", \"tags\": [\"wanted\"]}, {\"name\": \"Delver of Secrets\", \"tags\": [\"vip\", \"wanted\", \" vip \", \"  \"], \"qty\": 4}, {\"name\": \"Lightning Bolt\", \"tags\": [\"sold_out\", 7, null]}, {\"name\": \"Lim-Dul's Vault\", \"tags\": \"wanted\"}, {\"name\": \"Insectile Aberration\", \"tags\": [\" restock \"]}, {\"name\": \"\", \"tags\": [\"wanted\"]}, {\"name\": 5, \"tags\": [\"wanted\"]}, {\"tags\": [\"wanted\"]}, \"junk\", null, 3]}"
+     ]
+    },
+    "status": {
+     "enabled": true,
+     "count": 7,
+     "generated_at": "2026-10-12T09:00:00Z",
+     "updated_at": "C0001",
+     "error": null,
+     "error_at": null
+    }
+   },
+   {
+    "method": "GET",
+    "path": "/api/scans",
+    "body": null,
+    "status": 200,
+    "response": [
+     {
+      "id": 4,
+      "created_at": "T0004",
+      "updated_at": "T0004",
+      "status": "candidates",
+      "identified": false,
+      "error": null,
+      "card_read": {},
+      "confidence": {},
+      "candidates": [],
+      "selection": null,
+      "f2f": null,
+      "included": true,
+      "flagged": false,
+      "list_tags": []
+     },
+     {
+      "id": 3,
+      "created_at": "T0003",
+      "updated_at": "T0003",
+      "status": "candidates",
+      "identified": false,
+      "error": "not identified",
+      "card_read": {
+       "name": "Jötun Grunt"
+      },
+      "confidence": {},
+      "candidates": [],
+      "selection": null,
+      "f2f": null,
+      "included": true,
+      "flagged": false,
+      "list_tags": [
+       "wanted",
+       "sold_out"
+      ]
+     },
+     {
+      "id": 2,
+      "created_at": "T0002",
+      "updated_at": "T0002",
+      "status": "candidates",
+      "identified": true,
+      "error": null,
+      "card_read": {
+       "name": "Delver of Secrets"
+      },
+      "confidence": {},
+      "candidates": [
+       {
+        "id": "d1",
+        "name": "Delver of Secrets // Insectile Aberration",
+        "set": "isd",
+        "collector_number": "51",
+        "multi_distance": 60,
+        "other_art": false
+       },
+       {
+        "id": "o1",
+        "name": "Opt",
+        "set": "dom",
+        "collector_number": "60",
+        "multi_distance": 150,
+        "other_art": true
+       }
+      ],
+      "selection": null,
+      "f2f": null,
+      "included": true,
+      "flagged": false,
+      "list_tags": [
+       "wanted",
+       "vip",
+       "restock"
+      ]
+     },
+     {
+      "id": 1,
+      "created_at": "T0001",
+      "updated_at": "T0001",
+      "status": "candidates",
+      "identified": true,
+      "error": null,
+      "card_read": {
+       "name": "Lightning Bolt"
+      },
+      "confidence": {},
+      "candidates": [
+       {
+        "id": "b1",
+        "name": "Lightning Bolt",
+        "set": "m10",
+        "collector_number": "146",
+        "multi_distance": 70,
+        "other_art": false
+       },
+       {
+        "id": "b2",
+        "name": "Lightning Bolt",
+        "set": "2x2",
+        "collector_number": "117",
+        "multi_distance": 80,
+        "other_art": false
+       }
+      ],
+      "selection": null,
+      "f2f": null,
+      "included": true,
+      "flagged": false,
+      "list_tags": [
+       "wanted",
+       "sold_out"
+      ]
+     }
+    ]
+   },
+   {
+    "method": "GET",
+    "path": "/api/scans/2",
+    "body": null,
+    "status": 200,
+    "response": {
+     "id": 2,
+     "created_at": "T0002",
+     "updated_at": "T0002",
+     "status": "candidates",
+     "identified": true,
+     "error": null,
+     "card_read": {
+      "name": "Delver of Secrets"
+     },
+     "confidence": {},
+     "candidates": [
+      {
+       "id": "d1",
+       "name": "Delver of Secrets // Insectile Aberration",
+       "set": "isd",
+       "collector_number": "51",
+       "multi_distance": 60,
+       "other_art": false
+      },
+      {
+       "id": "o1",
+       "name": "Opt",
+       "set": "dom",
+       "collector_number": "60",
+       "multi_distance": 150,
+       "other_art": true
+      }
+     ],
+     "selection": null,
+     "f2f": null,
+     "included": true,
+     "flagged": false,
+     "list_tags": [
+      "wanted",
+      "vip",
+      "restock"
+     ]
+    }
+   },
+   {
+    "method": "POST",
+    "path": "/api/scans/2/select",
+    "body": {
+     "printing": {
+      "id": "o1",
+      "name": "Opt",
+      "set": "dom",
+      "collector_number": "60",
+      "multi_distance": 150
+     }
+    },
+    "status": 200,
+    "response": {
+     "id": 2,
+     "created_at": "T0002",
+     "updated_at": "T0005",
+     "status": "selected",
+     "identified": true,
+     "error": null,
+     "card_read": {
+      "name": "Delver of Secrets"
+     },
+     "confidence": {},
+     "candidates": [
+      {
+       "id": "d1",
+       "name": "Delver of Secrets // Insectile Aberration",
+       "set": "isd",
+       "collector_number": "51",
+       "multi_distance": 60
+      },
+      {
+       "id": "o1",
+       "name": "Opt",
+       "set": "dom",
+       "collector_number": "60",
+       "multi_distance": 150
+      }
+     ],
+     "selection": {
+      "scryfall_id": "o1",
+      "name": "Opt",
+      "set": "dom",
+      "set_name": "",
+      "collector_number": "60",
+      "condition": "NM",
+      "finish": "Non-Foil",
+      "quantity": 1,
+      "foil": false,
+      "image_normal": "",
+      "popularity": null
+     },
+     "f2f": null,
+     "included": true,
+     "flagged": false
+    }
+   },
+   {
+    "method": "GET",
+    "path": "/api/scans/2",
+    "body": null,
+    "status": 200,
+    "response": {
+     "id": 2,
+     "created_at": "T0002",
+     "updated_at": "T0005",
+     "status": "selected",
+     "identified": true,
+     "error": null,
+     "card_read": {
+      "name": "Delver of Secrets"
+     },
+     "confidence": {},
+     "candidates": [
+      {
+       "id": "d1",
+       "name": "Delver of Secrets // Insectile Aberration",
+       "set": "isd",
+       "collector_number": "51",
+       "multi_distance": 60,
+       "other_art": false
+      },
+      {
+       "id": "o1",
+       "name": "Opt",
+       "set": "dom",
+       "collector_number": "60",
+       "multi_distance": 150,
+       "other_art": true
+      }
+     ],
+     "selection": {
+      "scryfall_id": "o1",
+      "name": "Opt",
+      "set": "dom",
+      "set_name": "",
+      "collector_number": "60",
+      "condition": "NM",
+      "finish": "Non-Foil",
+      "quantity": 1,
+      "foil": false,
+      "image_normal": "",
+      "popularity": null
+     },
+     "f2f": null,
+     "included": true,
+     "flagged": false,
+     "list_tags": []
+    }
+   },
+   {
+    "method": "LIST",
+    "body": {
+     "url": "https://lists.example/cards.json",
+     "answer": [
+      200,
+      "{\"cards\": [{\"name\": \"Opt\", \"tags\": [\"sold_out\", \"wanted\"]}]}"
+     ]
+    },
+    "status": {
+     "enabled": true,
+     "count": 1,
+     "generated_at": null,
+     "updated_at": "C0002",
+     "error": null,
+     "error_at": null
+    }
+   },
+   {
+    "method": "GET",
+    "path": "/api/scans",
+    "body": null,
+    "status": 200,
+    "response": [
+     {
+      "id": 4,
+      "created_at": "T0004",
+      "updated_at": "T0004",
+      "status": "candidates",
+      "identified": false,
+      "error": null,
+      "card_read": {},
+      "confidence": {},
+      "candidates": [],
+      "selection": null,
+      "f2f": null,
+      "included": true,
+      "flagged": false,
+      "list_tags": []
+     },
+     {
+      "id": 3,
+      "created_at": "T0003",
+      "updated_at": "T0003",
+      "status": "candidates",
+      "identified": false,
+      "error": "not identified",
+      "card_read": {
+       "name": "Jötun Grunt"
+      },
+      "confidence": {},
+      "candidates": [],
+      "selection": null,
+      "f2f": null,
+      "included": true,
+      "flagged": false,
+      "list_tags": []
+     },
+     {
+      "id": 2,
+      "created_at": "T0002",
+      "updated_at": "T0005",
+      "status": "selected",
+      "identified": true,
+      "error": null,
+      "card_read": {
+       "name": "Delver of Secrets"
+      },
+      "confidence": {},
+      "candidates": [
+       {
+        "id": "d1",
+        "name": "Delver of Secrets // Insectile Aberration",
+        "set": "isd",
+        "collector_number": "51",
+        "multi_distance": 60,
+        "other_art": false
+       },
+       {
+        "id": "o1",
+        "name": "Opt",
+        "set": "dom",
+        "collector_number": "60",
+        "multi_distance": 150,
+        "other_art": true
+       }
+      ],
+      "selection": {
+       "scryfall_id": "o1",
+       "name": "Opt",
+       "set": "dom",
+       "set_name": "",
+       "collector_number": "60",
+       "condition": "NM",
+       "finish": "Non-Foil",
+       "quantity": 1,
+       "foil": false,
+       "image_normal": "",
+       "popularity": null
+      },
+      "f2f": null,
+      "included": true,
+      "flagged": false,
+      "list_tags": [
+       "wanted",
+       "sold_out"
+      ]
+     },
+     {
+      "id": 1,
+      "created_at": "T0001",
+      "updated_at": "T0001",
+      "status": "candidates",
+      "identified": true,
+      "error": null,
+      "card_read": {
+       "name": "Lightning Bolt"
+      },
+      "confidence": {},
+      "candidates": [
+       {
+        "id": "b1",
+        "name": "Lightning Bolt",
+        "set": "m10",
+        "collector_number": "146",
+        "multi_distance": 70,
+        "other_art": false
+       },
+       {
+        "id": "b2",
+        "name": "Lightning Bolt",
+        "set": "2x2",
+        "collector_number": "117",
+        "multi_distance": 80,
+        "other_art": false
+       }
+      ],
+      "selection": null,
+      "f2f": null,
+      "included": true,
+      "flagged": false,
+      "list_tags": []
+     }
+    ]
+   },
+   {
+    "method": "LIST",
+    "body": {
+     "url": "https://lists.example/cards.json",
+     "answer": "down"
+    },
+    "status": {
+     "enabled": true,
+     "count": 1,
+     "generated_at": null,
+     "updated_at": "C0002",
+     "error": "unreachable",
+     "error_at": "C0003"
+    }
+   },
+   {
+    "method": "GET",
+    "path": "/api/scans/1",
+    "body": null,
+    "status": 200,
+    "response": {
+     "id": 1,
+     "created_at": "T0001",
+     "updated_at": "T0001",
+     "status": "candidates",
+     "identified": true,
+     "error": null,
+     "card_read": {
+      "name": "Lightning Bolt"
+     },
+     "confidence": {},
+     "candidates": [
+      {
+       "id": "b1",
+       "name": "Lightning Bolt",
+       "set": "m10",
+       "collector_number": "146",
+       "multi_distance": 70,
+       "other_art": false
+      },
+      {
+       "id": "b2",
+       "name": "Lightning Bolt",
+       "set": "2x2",
+       "collector_number": "117",
+       "multi_distance": 80,
+       "other_art": false
+      }
+     ],
+     "selection": null,
+     "f2f": null,
+     "included": true,
+     "flagged": false,
+     "list_tags": []
+    }
+   },
+   {
+    "method": "LIST",
+    "body": {
+     "url": "",
+     "answer": null
+    },
+    "status": {
+     "enabled": false,
+     "count": 0,
+     "generated_at": null,
+     "updated_at": null,
+     "error": null,
+     "error_at": null
+    }
+   },
+   {
+    "method": "GET",
+    "path": "/api/scans",
+    "body": null,
+    "status": 200,
+    "response": [
+     {
+      "id": 4,
+      "created_at": "T0004",
+      "updated_at": "T0004",
+      "status": "candidates",
+      "identified": false,
+      "error": null,
+      "card_read": {},
+      "confidence": {},
+      "candidates": [],
+      "selection": null,
+      "f2f": null,
+      "included": true,
+      "flagged": false
+     },
+     {
+      "id": 3,
+      "created_at": "T0003",
+      "updated_at": "T0003",
+      "status": "candidates",
+      "identified": false,
+      "error": "not identified",
+      "card_read": {
+       "name": "Jötun Grunt"
+      },
+      "confidence": {},
+      "candidates": [],
+      "selection": null,
+      "f2f": null,
+      "included": true,
+      "flagged": false
+     },
+     {
+      "id": 2,
+      "created_at": "T0002",
+      "updated_at": "T0005",
+      "status": "selected",
+      "identified": true,
+      "error": null,
+      "card_read": {
+       "name": "Delver of Secrets"
+      },
+      "confidence": {},
+      "candidates": [
+       {
+        "id": "d1",
+        "name": "Delver of Secrets // Insectile Aberration",
+        "set": "isd",
+        "collector_number": "51",
+        "multi_distance": 60,
+        "other_art": false
+       },
+       {
+        "id": "o1",
+        "name": "Opt",
+        "set": "dom",
+        "collector_number": "60",
+        "multi_distance": 150,
+        "other_art": true
+       }
+      ],
+      "selection": {
+       "scryfall_id": "o1",
+       "name": "Opt",
+       "set": "dom",
+       "set_name": "",
+       "collector_number": "60",
+       "condition": "NM",
+       "finish": "Non-Foil",
+       "quantity": 1,
+       "foil": false,
+       "image_normal": "",
+       "popularity": null
+      },
+      "f2f": null,
+      "included": true,
+      "flagged": false
+     },
+     {
+      "id": 1,
+      "created_at": "T0001",
+      "updated_at": "T0001",
+      "status": "candidates",
+      "identified": true,
+      "error": null,
+      "card_read": {
+       "name": "Lightning Bolt"
+      },
+      "confidence": {},
+      "candidates": [
+       {
+        "id": "b1",
+        "name": "Lightning Bolt",
+        "set": "m10",
+        "collector_number": "146",
+        "multi_distance": 70,
+        "other_art": false
+       },
+       {
+        "id": "b2",
+        "name": "Lightning Bolt",
+        "set": "2x2",
+        "collector_number": "117",
+        "multi_distance": 80,
+        "other_art": false
+       }
+      ],
+      "selection": null,
+      "f2f": null,
+      "included": true,
+      "flagged": false
+     }
+    ]
+   }
+  ]
+ }
+}

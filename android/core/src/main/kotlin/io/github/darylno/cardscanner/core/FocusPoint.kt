@@ -8,7 +8,7 @@ package io.github.darylno.cardscanner.core
  * - The first-card pass (and every pass the soft-capture watchdog or a failed
  *   pass re-arms) runs while a card sits still in the Area: the CENTRE OF THE
  *   CARD, i.e. the Trigger's mask box mapped out of the [sampleW]×[sampleH]
- *   detection sample (which covers [area] of the upright frame). Before 1.1.11
+ *   detection sample (which covers [area] of the upright frame). Before 1.1.14
  *   that pass metered the Area centre too, so a card lying off-centre in a
  *   wide Area was focused on through the tray beside it.
  *

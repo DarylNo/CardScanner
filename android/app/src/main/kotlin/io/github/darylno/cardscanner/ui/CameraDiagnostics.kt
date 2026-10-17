@@ -10,7 +10,7 @@ import java.util.concurrent.TimeUnit
  * The camera block of Settings → Diagnostics and the debug report (Settings has
  * no camera of its own; the scan screen's CameraController holds it).
  *
- * Before 1.1.11 this was ONE string copied at bind — before any focus lock had
+ * Before 1.1.14 this was ONE string copied at bind — before any focus lock had
  * run — so "focus:", "last frame:", "analyzer:" and "last capture:" were stale
  * and the open-thread asks that read them could not be answered. Now:
  * - while the scan screen has a camera, [current] reads it LIVE (on the main

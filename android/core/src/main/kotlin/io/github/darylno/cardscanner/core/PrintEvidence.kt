@@ -39,7 +39,7 @@ import kotlin.math.roundToInt
  * change, a camera rebind), learned slightly out of focus, a room light under AE
  * lock, a nudged mat — and then the tray's own texture reads as print, over the
  * whole Area (the box IS the Area, so its shape and size always pass). The review
- * of 1.1.11 measured those as phantom scans of an empty tray. So two more tests,
+ * of 1.1.14 measured those as phantom scans of an empty tray. So two more tests,
  * both independent of how fresh the reference is:
  *  - [trayTexture] — the learned tray was SMOOTH in the core: at most
  *    [MAX_TRAY_TEXTURE] of it above [TRAY_GRAD] (half the mask's "textured"). On

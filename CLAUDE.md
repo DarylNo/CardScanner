@@ -43,7 +43,7 @@ android/app/         Android: camera/ (CameraX, FrameRing, ScanAnalyzer,
 server/              reference FastAPI app, store.py, export.py, static pages
 mtg_card_scanner/    reference pipeline: card_detect, art_index, art_pack,
                      scryfall, visual_match, ocr_id, artwork, popularity,
-                     facetoface
+                     facetoface, card_list
 scripts/             export_*_fixtures.py (generate the Kotlin fixtures from the
                      reference; `--check` in CI), make_android_keystore.py
 tests/               pytest (~470, all fakes — no camera/network)
@@ -191,6 +191,38 @@ Lightning Bolt lands at 0.02 tix and Black Lotus at 61.08), and the open
 tournament dataset everyone cites, `Badaro/MTGODecklistCache`, **shut down in
 June 2025** (live successors: `fbettega/MTG_decklistcache`, and
 `davidfischer/modometa-mtgo-data` whose names are already Scryfall-normalized).
+
+**External card list (`card_list.py`, owner 2026-10-12) — generic, READ-ONLY.**
+Not the reverted MX-inventory integration: no store branding, nothing written
+back, one plain GET of a URL the owner pastes (Settings → External card list,
+`AppSettings.cardListUrl`; the reference server reads `CARD_LIST_URL`). The URL
+lives ONLY in settings (the repo is public), any key in its query string; it is
+never logged, never in `status()`, and Settings shows its host only. Empty =
+off: nothing fetched, NO `list_tags` key on any scan (the pages read "no key" as
+"feature off" and hide the chips and "Tagged only"). Contract and setup:
+README → External card list. Rules that must hold:
+- **Match by NAME, any printing:** `normalize_name` (NFD minus Mn marks, curly
+  quotes → straight, en/em dash → "-", lowercase, " // " between faces,
+  whitespace collapsed — the whitespace set is SPELLED OUT, not `\s`, so the
+  Kotlin port matches) on both sides; full name OR any face, both sides
+  (`name_keys`). The scan's name: its pick, else its top candidate, else the read.
+- **Evaluated at READ time** (`flag_list_tags` beside `flag_other_art` on
+  `/api/scans` + `/api/scans/{id}`), never stored — a refreshed list re-tags
+  every existing scan. Chips (Wanted / Sold out / any other tag as raw text) sit
+  right after the popularity chip; yes/no only, never mixed into a tier.
+- **Never block scanning, never lose the list:** fetched at app start and on
+  "Refresh now" on its own low-priority thread; the last GOOD list is cached on
+  disk (keyed by URL — another URL's cache is not this list); offline / HTTP
+  error / bad JSON keep the cache and record the error ("unreachable", "HTTP n",
+  "not JSON", "no cards list"), shown in Settings and Diagnostics. https only
+  (the network security config allows cleartext to loopback only).
+- **"Tagged only" is a VIEW chip, not a filter vote** — it narrows the list like
+  All / Pending (a "check" row still shows), so `passesFilters` and "Exclude
+  filtered" never drop an untagged card from the export. Persisted in
+  `listFilters.tagged`.
+Golden: `scripts/export_card_list_fixtures.py` (normalize/keys/parse/tags, a
+`CardListSource` session with a pinned clock, and the REAL app.py's reads) →
+`CardListParityTest`; `check_card_list_ui.py` drives both pages.
 
 **F2F client (`facetoface.py`) — each scanner prices from ITS OWN IP.** No
 proxy, no shared backend: the client reads the storefront's public Shopify
@@ -382,6 +414,29 @@ lens on testers' phones), minSdk 29, arm64-v8a.
   (`tests/test_static_pages.py`, CI) — change it in both, then re-run the
   scorer and put the numbers in the commit. Synthetic photos only: not yet
   measured on real rig photos.
+  **In a compare the scan is FITTED onto the compared printing's picture
+  (owner, 2026-10-10, 1.1.11 — phone v52, desktop d45: "better cropped so I can
+  do the blend to see exact diff"; on the rig a Flux Channeler showed tray down
+  one side and the bottom).** The edge crop is only as good as the quad the photo
+  was warped from: a quad a few mm too BIG puts the card off its layout rect and
+  rule 7 keeps the layout rect (tray). `alignToPrint` (in the shared block) fits
+  x0/y0/x1/y1 by normalised cross-correlation of luma GRADIENTS (white balance,
+  lighting gradients and glare move colour, not frame lines), coarse to fine
+  (36×50 → 72×100 → 144×200), a pattern search that moves one side, the whole
+  box or its size, from the edge crop ±4 % / ±8 %; `cardAlign` runs it once per
+  photo × printing after the printing loads (a second CORS read — Scryfall's CDN
+  allows any origin; a tainted canvas just means no fit) and `fitScan` refits
+  when it lands (`data-fill="aligned"`). Taken only when clear (`alignTaken`:
+  score ≥ 0.6, ≥ the edge crop's own, 63:88 within 10 %) — else the edge crop.
+  Measured by `scripts/score_card_align.py` (REAL Scryfall faces rendered
+  rig-like: 3 trays, blur, lighting gradient + glare, finder quads ±0.5 mm or up
+  to 4 mm too big): same printing mean 0.11 mm (edges 0.39), tray > 0.25 mm on
+  1.9 % of sides (8.0 %), worst tray 0.70 mm where a fit was taken (6.6), fit on
+  99.7 %; another printing of the same art (WAR vs CMM frame) 0.14 mm;
+  ANOTHER card's picture fits 25 % of the time, never cutting > 0.54 mm (frames
+  share their geometry). ~110 ms per fit in desktop Chromium (phone est. 4×,
+  off the first paint). `check_compare_ui.py` scan 10 drives it on both pages.
+  Not the thumbnail or the desktop's ⇆ lightbox (no printing beside them).
   **The desktop's "Pick the printing" is the same compare block (d44):** the
   same modes, ‹ › (and ← →), Scan size and "Pick / Keep SET #n"; its head
   is the compared printing (set · SET #n · ✓ picked ×q · k of N · its price)
@@ -455,12 +510,12 @@ lens on testers' phones), minSdk 29, arm64-v8a.
   Area button draws, it never clears. Mount focus: locks on the Area centre,
   then on the first card's own centre (below); tap the preview to lock elsewhere.
 - **Focus — "is it focusing?" (owner on 1.1.10: "No zoom? Focus working?";
-  1.1.11).** What the code does: every bind / camera re-open / new Area / mode
+  1.1.14).** What the code does: every bind / camera re-open / new Area / mode
   switch locks AF (CameraX AUTO + one trigger, the lens then stays put) at the
   AREA CENTRE on the first frame — there is no card yet; Tray then holds the
   FIRST card's capture (≤ `FOCUS_WAIT_NS` 1.5 s) for a pass metered ON THE
   CARD: the Trigger box's centre mapped out of the sample (`core/FocusPoint`,
-  `FocusRequest` from the analyzer; before 1.1.11 that pass metered the Area
+  `FocusRequest` from the analyzer; before 1.1.14 that pass metered the Area
   centre too, and the card-box branch was dead code). A failed pass retries on
   the next card, 3 in all, then gives up until a tap / new Area / re-open / the
   soft-capture watchdog (a flattened Tray capture < 0.5 × the median of the
@@ -468,7 +523,7 @@ lens on testers' phones), minSdk 29, arm64-v8a.
   start). Taps lock where tapped. CameraX completes a pass that never
   converges NOT focused after 5 s (`FocusMeteringControl.AUTO_FOCUS_TIMEOUT_DURATION`,
   1.5.3 bytecode) — longer than the 1.5 s hold. **Nothing of this reached the
-  log before 1.1.11; now, tag `focus`:** each pass numbered, start
+  log before 1.1.14; now, tag `focus`:** each pass numbered, start
   ("#n why → Area/card centre (u, v) = sensor x,y of W×H · now AF state ·
   lens N dpt (≈ cm when the lens is calibrated)") and result ("#n why:
   focused / NOT focused / timed out / cancelled / superseded in N ms · AF … ·
@@ -486,7 +541,7 @@ lens on testers' phones), minSdk 29, arm64-v8a.
   controller whenever Diagnostics opens or a report is built (off the main
   thread it waits ≤ 1 s, else the snapshot), snapshotted at bind, after every
   capture and when the screen lets go — shown with its age when the scan
-  screen is gone. Before 1.1.11 it was a bind-time copy, so `focus`, `last
+  screen is gone. Before 1.1.14 it was a bind-time copy, so `focus`, `last
   frame`, `analyzer` and `last capture` were stale. New line `focus:` = passes
   this session (focused / NOT focused / timed out / cancelled), the last
   result and its age, watchdog re-arms, the AF state and lens now, and whether
@@ -494,7 +549,7 @@ lens on testers' phones), minSdk 29, arm64-v8a.
   characteristics lines are read once per bind. Tested in code, not on the
   phone; dioptres → cm only when LENS_INFO_FOCUS_DISTANCE_CALIBRATION is not
   UNCALIBRATED.
-- **Zoom to fit the Area (owner on 1.1.10: "No zoom?" → "Go"; 1.1.11).**
+- **Zoom to fit the Area (owner on 1.1.10: "No zoom?" → "Go"; 1.1.14).**
   Settings → Camera → "Zoom to fit the Area", **OFF by default in this build**
   (the owner turns it on to try it), both Tray and Tap to scan, also from the
   desktop 📱 Scanner panel (`zoom_fit`). The camera zooms so the drawn Area fills
@@ -535,7 +590,7 @@ lens on testers' phones), minSdk 29, arm64-v8a.
   result counter in the controller; the read-back is cleared at ON_STOP and
   CLOSING/CLOSED — the last pre-stop frame says what the camera WAS), else the
   request, and a LATE answer that differs re-maps behind the gate (review of
-  1.1.11: a slow reopen after a Settings round trip mapped the stale 1× and
+  1.1.14: a slow reopen after a Settings round trip mapped the stale 1× and
   dropped the camera's 1.9× answer — the Area stayed mapped at the wrong zoom;
   `aLateAnswerAfterTheTimeoutReMaps…`). **The tray is re-learned
   only when (z, view Area) changed** (`ScanAnalyzer.zoomMapped` = setRoi's
@@ -571,7 +626,7 @@ lens on testers' phones), minSdk 29, arm64-v8a.
   a BASE-space picture while zoomed (`core/ZoomSnapshot`: the zoomed frame
   scaled by 1/z, centred on grey — marks land at their base fractions ±1 px at
   1, 1.6 and 2×, `ZoomSnapshotTest`), so drawing the Area there stays 1:1. The
-  📱 Scanner panel (d46) has the checkbox and a zoom line (hidden for an older
+  📱 Scanner panel (d48) has the checkbox and a zoom line (hidden for an older
   phone app) and re-takes the picture after a zoom / Area / lens PATCH. A PATCH
   is answered only after the scan screen's UI thread applied it
   (`DeviceBridge.write` waits ≤ 500 ms on the screen's future — before, the
@@ -695,7 +750,7 @@ lens on testers' phones), minSdk 29, arm64-v8a.
   shutter / Tap to scan is never gated. The UI says "Something in the Area —
   no card shape yet…" instead of "Card detected" while the mask is occupied
   without an outline; the Diagnostics line counts "triggers refused".
-  **THE PRINTED-DETAIL FALLBACK (1.1.11; owner on 1.1.10: "Old bordered cards
+  **THE PRINTED-DETAIL FALLBACK (1.1.14; owner on 1.1.10: "Old bordered cards
   didn't see the change of cards. White bordered cards didn't get picked up as
   cards").** A HEDGE, not a diagnosed fix: synthetic white-bordered cards are
   found by the outline at 176 px, so the rig's cause is unknown. If the finder
@@ -722,7 +777,7 @@ lens on testers' phones), minSdk 29, arm64-v8a.
   the card); it also took 24 of 30 smooth hand blobs for cards (pre-existing,
   not the fallback's doing). Real art is smoother than the synthetic blocks —
   hence the low 6 %; not measured on the rig. **Stale references (review of
-  1.1.11):** "new texture vs the learned tray" is print only while the learned
+  1.1.14):** "new texture vs the learned tray" is print only while the learned
   tray is TRUE — on a textured tray (playmat, wood) a tray learned with a card
   on it (rebind / new Area / zoom change / double-tap), learned slightly out of
   focus, lit brighter under AE lock or nudged reads as print over a box that is
@@ -770,7 +825,7 @@ lens on testers' phones), minSdk 29, arm64-v8a.
   provisional until the rig's numbers are in. While the scanner awaits the next
   card, `ScanAnalyzer` measures it every tick inside the watch window and logs
   EVENTS only under tag `shadow` (≤ ~1 line/s, 3000-line ring): the maximum per
-  wait when the wait ends (with its tick count — since 1.1.11 it rides the
+  wait when the wait ends (with its tick count — since 1.1.14 it rides the
   `detect` "wait over" line), every crossing of 8 with its
   duration and logGrad, and "WOULD re-arm (texture)" when ≥ 8 holds 2 ticks —
   plus one `outline` line per capture (live outline vs capture quad, card
@@ -898,7 +953,7 @@ Open threads:
   only if Android exposes >1 back camera on the N200; is a 24 dp swipe
   comfortable?); the compare block's Scan size slider; and the Camera setting
   on a tester's phone.
-- Owner to send a DEBUG REPORT from 1.1.11 (Settings → Diagnostics → Share
+- Owner to send a DEBUG REPORT from 1.1.14 (Settings → Diagnostics → Share
   debug report) of a Tray session with white-bordered and old-bordered cards,
   including card SWAPS without lifting: the `detect` lines say whether the
   outline found each card ("TRIGGER box … outline found") or the printed-detail
@@ -909,7 +964,7 @@ Open threads:
   decides the real fix (the fallback is a hedge, tested in code, not on the
   phone); also say how tightly the Area is drawn round the card (an Area the
   card fills is where the outline measurably gives up).
-- Owner to confirm on the rig (1.1.11, tested in code, not on the phone): "is
+- Owner to confirm on the rig (1.1.14, tested in code, not on the phone): "is
   it focusing?" — read the `focus` lines of a Tray session (does the first-card
   pass answer FOCUSED inside the 1.5 s hold, or time out? how far does the lens
   move — the dpt before vs after?), the `done #k` lines' three sharpness values
@@ -917,7 +972,7 @@ Open threads:
   Diagnostics' camera block now says "live" with a `focus:` line. That data
   decides the Phase-3 focus work (a periodic Tray re-lock, a better watchdog)
   and the zoom probe.
-- Owner to try "Zoom to fit the Area" on the rig (1.1.11, OFF by default,
+- Owner to try "Zoom to fit the Area" on the rig (1.1.14, OFF by default,
   Settings → Camera; tested in code, not on the phone). With it on, in a Tray
   session: does the Area chip read "Area ✓ · N×" and the preview fill the box?
   The `zoom` lines — "→ N× requested", "camera reports CONTROL_ZOOM_RATIO …"

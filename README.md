@@ -95,6 +95,60 @@ Face to Face every few seconds, and sleeps when nothing is owed. Picked cards
 price their printing; unpicked ones price every printing that shares the
 scanned artwork.
 
+## External card list
+
+You can point the scanner at a list of card **names** you care about, and every
+scan of one of them gets a chip in the scan list and on the card. For example,
+**Wanted** for cards you're looking for and **Sold out** for ones you've run out
+of. The list is read-only: the scanner only downloads it and never sends
+anything back. It matches by name, so any printing of a listed card counts.
+
+**Setup**
+
+1. Publish the list as JSON at an `https://` address the phone can reach. Any
+   access key goes in the address itself (its query string), e.g.
+   `https://example.com/cards.json?key=…`. Plain `http://` addresses are refused.
+2. On the phone: **Settings → External card list → List URL**, paste the
+   address exactly as given, **Save**.
+3. The list is fetched when the app starts and when you tap **Refresh now**.
+   Settings (and Diagnostics) show "N cards, updated <time>", or the last error.
+   The last good list is kept on the phone, so being offline, a server error
+   or a broken file never removes your chips, and scanning never waits for it.
+4. To turn it off, open List URL and tap **Turn off** (an empty address = off):
+   no downloads, no chips.
+
+The address is stored only on the phone (never in this repository), and only
+its host name is shown in Settings, so screenshots don't leak a key.
+
+**Format**
+
+```json
+{
+  "generated_at": "2026-10-12T09:00:00Z",
+  "cards": [
+    { "name": "Lightning Bolt", "tags": ["wanted"] },
+    { "name": "Jötun Grunt", "tags": ["wanted", "sold_out"] },
+    { "name": "Delver of Secrets // Insectile Aberration", "tags": ["restock"] }
+  ]
+}
+```
+
+- `cards` is required (a list). Each entry needs a `name`; `tags` is a list of
+  strings. Entries without a usable name are skipped, and unknown fields are
+  ignored, at the top level and in entries alike.
+- Known tags: `wanted` → **Wanted**, `sold_out` → **Sold out**. Any other tag
+  shows as a plain chip with its own text (`restock` above).
+- Names match ignoring accents (*Jotun* = *Jötun*), letter case, curly vs straight
+  quotes, en/em dashes vs `-`, extra spaces and the spacing around `//`. A
+  double-faced, split or adventure card matches on its full name **or any face**
+  (`Delver of Secrets` alone matches the card above).
+- Chips are a yes/no fact beside the popularity chip; they never change a
+  card's popularity tier. They are worked out each time the list is shown, so a
+  refreshed list re-tags cards you scanned earlier.
+- **Filters → Tagged only** (shown once a list is set) narrows the scan list to
+  tagged cards (plus any that need checking). It only changes what you see:
+  *Exclude filtered* and the export ignore it.
+
 ## Using a computer (optional)
 
 On the same Wi-Fi, or the phone's hotspot:

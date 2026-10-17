@@ -45,7 +45,7 @@ class CaptureResult(
      * Every captured frame's sharpness (Laplacian variance of the Area, oldest
      * first) with the one used in brackets: "sharpness 41.2 / [55.0] / 38.9".
      * A burst whose frames all read soft, or a wide spread between them (motion,
-     * a lens still moving), shows here — "is it focusing?" (1.1.11; it used to
+     * a lens still moving), shows here — "is it focusing?" (1.1.14; it used to
      * say only "sharp #1 of 3").
      */
     fun sharpnessText(): String =

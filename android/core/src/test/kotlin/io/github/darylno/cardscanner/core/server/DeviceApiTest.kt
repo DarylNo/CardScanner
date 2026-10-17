@@ -36,7 +36,7 @@ class DeviceApiTest {
     }
 
     /**
-     * "Zoom to fit the Area" (1.1.11): zoom_fit is a plain switch, validated; the live
+     * "Zoom to fit the Area" (1.1.14): zoom_fit is a plain switch, validated; the live
      * zoom is reported; the Area stays BASE (1×) fractions whatever the zoom.
      */
     @Test fun zoomToFitTheArea() {

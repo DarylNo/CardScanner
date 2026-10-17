@@ -89,7 +89,7 @@ class CaptureOutcome(
  * "new card" and re-scan it every ~20 s). An empty tray is a poor AF target,
  * so the FIRST card is focused on properly: [ScanAnalyzer] holds that card's
  * capture (≤ FOCUS_WAIT_NS) while AF runs ON THE CARD — the Trigger box's
- * centre ([FocusPoint]; the Area centre before 1.1.11) — then shoots from
+ * centre ([FocusPoint]; the Area centre before 1.1.14) — then shoots from
  * post-focus frames. Later cards shoot instantly. A sharpness watchdog (a
  * capture far softer than the session median) re-arms that one-card focus
  * pass. A tap still overrides. Handheld = continuous AF with tap-to-focus.
@@ -103,7 +103,7 @@ class CaptureOutcome(
  * card pass giving up. Each capture carries its chosen frame's AF state and
  * lens position ([FrameMetaRing], by sensor timestamp).
  *
- * "Zoom to fit the Area" (1.1.11, Settings → Camera, OFF by default in this
+ * "Zoom to fit the Area" (1.1.14, Settings → Camera, OFF by default in this
  * build): [ZoomCoordinator] decides, this class is its CameraX glue. The Area it
  * is given ([setRoi]) is BASE (1×) fractions; the analyzer, the focus points and
  * the overlay get the VIEW Area at the ratio READ BACK from the capture results
@@ -269,7 +269,7 @@ class CameraController(
     /**
      * Capture results seen (camera thread). The zoom's read-back only counts a result
      * that arrived after the request ([zoomAskedAt]): one left over from before a stop
-     * says what the camera WAS (review of 1.1.11: a slow reopen timed out onto it).
+     * says what the camera WAS (review of 1.1.14: a slow reopen timed out onto it).
      */
     private val metaSeq = java.util.concurrent.atomic.AtomicLong()
     /** [metaSeq] when the latest zoom request was made (main thread). */
@@ -873,7 +873,7 @@ class CameraController(
      * read whenever Diagnostics opens or a report is made (and after every
      * capture, as the snapshot kept for when this screen is gone), so focus,
      * the last frame, the analyzer and the last capture are current. Before
-     * 1.1.11 it was copied once at bind, before any focus lock had run. The
+     * 1.1.14 it was copied once at bind, before any focus lock had run. The
      * device / characteristics part is read once per bind. Main thread.
      */
     fun diagnostics(): String = (staticDiagnostics ?: readStaticDiagnostics().also { staticDiagnostics = it }) + liveDiagnostics()

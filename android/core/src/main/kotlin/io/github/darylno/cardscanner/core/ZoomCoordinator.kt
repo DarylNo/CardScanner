@@ -9,7 +9,7 @@ import kotlin.math.abs
  * lifecycle is JVM-tested (ZoomCoordinatorTest) with a fake [Port] and clock.
  * Main thread only.
  *
- * The rules, each one a verified finding of the 1.1.11 briefing:
+ * The rules, each one a verified finding of the 1.1.14 briefing:
  * - The switch OFF (the default in this build) and an unzoomed camera: no zoom
  *   call, no gate, no settle, ever — the Area goes to the analyzer exactly as
  *   before ([Port.map] at 1.0, settle = false).
@@ -31,7 +31,7 @@ import kotlin.math.abs
  *   result NEWER than the request says ([Port.readBack] — never one left over
  *   from before a stop), else the request. The camera's answer may still come
  *   (a slow reopen): if it differs from what the timeout mapped, the gate
- *   closes and the Area is re-mapped at it (review of 1.1.11 — before, the late
+ *   closes and the Area is re-mapped at it (review of 1.1.14 — before, the late
  *   answer was dropped and the Area stayed mapped at the wrong zoom until the
  *   next stop).
  * - Drawing an Area zooms OUT to 1× first (the drag is armed by

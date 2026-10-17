@@ -21,7 +21,7 @@ import io.github.darylno.cardscanner.core.ZoomCoordinator
  * `{"x0","y0","x1","y1"}` (the app's [RoiFrac]; each side ≥ its minimum), or
  * null for the full frame.
  *
- * "Zoom to fit the Area" (1.1.11): `zoom_fit` (true / false) is the switch;
+ * "Zoom to fit the Area" (1.1.14): `zoom_fit` (true / false) is the switch;
  * `zoom` = `{ratio, target, limit, fit, lossless, max, settling, drawing}` while
  * the scan screen has its camera, else null (`drawing`: an Area is being drawn on
  * the phone, the camera zoomed out to 1× for it). `roi` stays BASE (1×) fractions at any zoom,

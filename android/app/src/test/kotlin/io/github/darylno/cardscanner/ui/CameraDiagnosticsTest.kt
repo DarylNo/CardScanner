@@ -11,7 +11,7 @@ import java.util.concurrent.TimeUnit
 
 /**
  * The Diagnostics camera block is LIVE while the scan screen has its camera
- * (1.1.11 — it was a bind-time copy, so focus / last frame / analyzer / last
+ * (1.1.14 — it was a bind-time copy, so focus / last frame / analyzer / last
  * capture were stale), else the last snapshot with its age; a report built off
  * the main thread never hangs on a busy main thread.
  */

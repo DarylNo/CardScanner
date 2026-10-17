@@ -7,7 +7,7 @@ import org.opencv.core.Size
 import org.opencv.imgproc.Imgproc
 
 /**
- * `/api/device/snapshot.jpg` while zoomed (1.1.11): the browser draws the scan
+ * `/api/device/snapshot.jpg` while zoomed (1.1.14): the browser draws the scan
  * Area on the snapshot as fractions of the picture, and the stored Area is in
  * BASE (1×) fractions — so a zoomed frame is placed, scaled by 1/z, centred on
  * a grey picture of the full frame's size ([ZoomFit.baseRect]). The desktop's

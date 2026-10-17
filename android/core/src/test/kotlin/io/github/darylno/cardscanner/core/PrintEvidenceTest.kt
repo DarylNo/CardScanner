@@ -15,7 +15,7 @@ import org.junit.Test
  * holds its thresholds: with the outline forced null, every card on a smooth
  * tray must still be accepted and every thing that is not a card refused —
  * including an empty TEXTURED tray read against a STALE reference (the review
- * of 1.1.11: learned with a card on it and the card lifted, learned out of
+ * of 1.1.14: learned with a card on it and the card lifted, learned out of
  * focus, a light under AE lock, a nudged mat), where the old three tests let
  * the tray's own texture through as "print".
  *
@@ -134,7 +134,7 @@ class PrintEvidenceTest {
 
     /**
      * An empty tray read against a STALE reference ([learn] is what the scanner
-     * learned, [now] the empty tray as it is) — the review of 1.1.11, at sensor
+     * learned, [now] the empty tray as it is) — the review of 1.1.14, at sensor
      * noise σ 0.5 and 1. Nothing here is a card.
      */
     private fun staleNonCards(): List<Scene> {
@@ -203,7 +203,7 @@ class PrintEvidenceTest {
     private fun pct(v: Double) = "%.0f%%".format(v * 100)
     private fun pct1(v: Double?) = v?.let { "%.1f%%".format(it * 100) } ?: "—"
 
-    /** What the fallback said before the review of 1.1.11 (print + shape + size): the hazard the stale scenes show. */
+    /** What the fallback said before the review of 1.1.14 (print + shape + size): the hazard the stale scenes show. */
     private fun oldRule(e: PrintEvidence.Evidence) = e.printed && e.cardShaped && e.bigEnough
 
     private fun table(results: List<Result>) {
@@ -299,7 +299,7 @@ class PrintEvidenceTest {
     }
 
     /**
-     * THE REVIEW OF 1.1.11: an empty textured tray against a stale reference —
+     * THE REVIEW OF 1.1.14: an empty textured tray against a stale reference —
      * the card it was learned with lifted, a light under AE lock, a sharper focus,
      * a nudge — reads as "print" over a box that is the whole Area (always
      * card-shaped and big enough). None may be accepted; the table shows which

@@ -395,7 +395,7 @@ class ScreensSmokeTest {
     }
 
     /**
-     * "Zoom to fit the Area" (1.1.11): the Settings → Camera switch is there, OFF by
+     * "Zoom to fit the Area" (1.1.14): the Settings → Camera switch is there, OFF by
      * default, sized and on screen at the N200's size (scrolled to), and saves the setting.
      */
     @Test
@@ -473,7 +473,7 @@ class ScreensSmokeTest {
     }
 
     /**
-     * Review of 1.1.11: the phone server answers a PATCH /api/device on ITS thread
+     * Review of 1.1.14: the phone server answers a PATCH /api/device on ITS thread
      * right after storing the settings, and the scan screen applies them on the UI
      * thread — so the answer's `zoom` was the one from BEFORE the change ("Zoom to
      * fit is off" right after ticking it, the old 1.90× after unticking it) until the
@@ -537,6 +537,54 @@ class ScreensSmokeTest {
         assertEquals(0, app.phoneServer.store.count())
     }
 
+    /**
+     * Settings → External card list: off by default; an http:// address is refused; an
+     * https:// one is saved exactly as typed, shown by its host only (the rest may carry a
+     * key), and its state line appears (tests never fetch, so: the last error); Turn off
+     * clears it.
+     */
+    @Test
+    fun settings_externalCardList_savesAnHttpsUrlAndShowsOnlyItsHost() {
+        app.settings.cardListUrl = ""
+        val a = launch(SettingsActivity::class.java)
+        fun openDialog(): androidx.appcompat.app.AlertDialog {
+            var v: View? = findText(a.window.decorView, a.getString(R.string.settings_card_list_url))
+            while (v != null && !v.isClickable) v = v.parent as? View
+            assertNotNull("a clickable List URL row", v)
+            v!!.performClick()
+            ShadowLooper.idleMainLooper()
+            return org.robolectric.shadows.ShadowDialog.getLatestDialog() as androidx.appcompat.app.AlertDialog
+        }
+        fun input(d: androidx.appcompat.app.AlertDialog): android.widget.EditText {
+            fun find(v: View): android.widget.EditText? = v as? android.widget.EditText
+                ?: (v as? ViewGroup)?.let { g -> (0 until g.childCount).firstNotNullOfOrNull { find(g.getChildAt(it)) } }
+            return find(d.window!!.decorView)!!
+        }
+        assertNotNull("off by default", findText(a.window.decorView, a.getString(R.string.settings_card_list_off)))
+        var d = openDialog()
+        input(d).setText("http://lists.example/cards.json")
+        d.getButton(android.content.DialogInterface.BUTTON_POSITIVE).performClick()
+        ShadowLooper.idleMainLooper()
+        assertEquals("http:// is refused", "", app.settings.cardListUrl)
+        d = openDialog()
+        input(d).setText("  https://lists.example/cards.json?key=s3cret ")
+        d.getButton(android.content.DialogInterface.BUTTON_POSITIVE).performClick()
+        ShadowLooper.idleMainLooper()
+        assertEquals("https://lists.example/cards.json?key=s3cret", app.settings.cardListUrl)
+        val deadline = System.currentTimeMillis() + 5_000
+        while (app.cardList.status()["error"] == null && System.currentTimeMillis() < deadline) { ShadowLooper.idleMainLooper(); Thread.sleep(20) }
+        ShadowLooper.idleMainLooper()
+        assertNotNull("the row shows the host only", findText(a.window.decorView, "lists.example"))
+        assertTrue("never the key", findText(a.window.decorView, "https://lists.example/cards.json?key=s3cret") == null)
+        assertTrue("the state line: no list yet, and why",
+            app.cardList.summary().startsWith("No list yet · last error: unreachable"))
+        assertNotNull(findText(a.window.decorView, a.getString(R.string.settings_card_list_refresh)))
+        d = openDialog()
+        d.getButton(android.content.DialogInterface.BUTTON_NEUTRAL).performClick()
+        ShadowLooper.idleMainLooper()
+        assertEquals("", app.settings.cardListUrl)
+    }
+
     @Test
     fun settingsActivity_showsThePhonesServer() {
         val a = launch(SettingsActivity::class.java)
@@ -546,7 +594,7 @@ class ScreensSmokeTest {
     }
 
     /**
-     * "Is it focusing?" (1.1.11): Settings → Diagnostics reads the scan screen's camera LIVE
+     * "Is it focusing?" (1.1.14): Settings → Diagnostics reads the scan screen's camera LIVE
      * (it was a bind-time copy — focus / last frame / analyzer / last capture were stale),
      * with the session's focus line; once the scan screen is gone, its last snapshot and age.
      */

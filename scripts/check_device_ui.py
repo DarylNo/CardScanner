@@ -1,6 +1,6 @@
 """Drive the REAL desktop.html in headless Chromium against a stub phone
 server and check the 📱 Scanner panel's "Zoom to fit the Area" controls
-(1.1.11, CLAUDE.md → "Zoom to fit the Area"):
+(1.1.14, CLAUDE.md → "Zoom to fit the Area"):
 
 - an older phone app (no `zoom_fit` in /api/device) shows no zoom controls;
 - the checkbox reflects `zoom_fit` and PATCHes {"zoom_fit": true/false};
@@ -8,13 +8,13 @@ server and check the 📱 Scanner panel's "Zoom to fit the Area" controls
   Area fit / lossless / lens max) and "settling…" while it settles;
 - a PATCH answer whose zoom predates the change (an older phone app, or a
   busy one — the stub answers that way on purpose) is never shown: the line
-  says "applying…" and the panel reads /api/device again (review of 1.1.11:
+  says "applying…" and the panel reads /api/device again (review of 1.1.14:
   "Zoom to fit is off" right after ticking the box);
 - an Area being drawn on the phone (zoom.drawing) is said so;
 - after a zoom / Area PATCH the panel takes a new snapshot once it settles;
 - an Area drawn on the (base-space) snapshot while zoomed is PATCHed as the
   picture's own fractions — base fractions, 1:1, never divided by the zoom;
-- the banner reads d46 and the page throws nothing.
+- the banner reads d48 and the page throws nothing.
 
     pip install playwright        # the browser: Chromium, see EXE below
     python scripts/check_device_ui.py
@@ -29,7 +29,7 @@ from PIL import Image, ImageDraw
 from playwright.sync_api import sync_playwright
 
 STATIC = Path(__file__).resolve().parents[1] / "server" / "static"
-VERSION = "d46"
+VERSION = "d48"
 
 ZOOMED = {"ratio": 1.9, "target": 1.9, "limit": "the Area fit", "fit": 2.0, "lossless": 2.6, "max": 10.0, "settling": False}
 UNZOOMED = {"ratio": 1.0, "target": 1.0, "limit": "Zoom to fit is off", "fit": 2.0, "lossless": 2.6, "max": 10.0, "settling": False}
@@ -104,7 +104,7 @@ class H(BaseHTTPRequestHandler):
                 d["roi"] = v
             else:
                 d[k] = v
-        # The ANSWER carries the zoom from before the change — what a busy phone (or 1.1.11
+        # The ANSWER carries the zoom from before the change — what a busy phone (or 1.1.14
         # before its review) sends: the settings are new, the camera's zoom is not yet.
         answer = dict(d)
         if "zoom" in d: answer["zoom"] = stale

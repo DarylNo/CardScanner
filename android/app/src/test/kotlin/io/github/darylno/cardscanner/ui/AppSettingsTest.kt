@@ -34,7 +34,7 @@ class AppSettingsTest {
         assertEquals(true, AppSettings(ctx).auto)       // …and a later start leaves it on
     }
 
-    /** "Zoom to fit the Area" (1.1.11) ships OFF; it persists; a stored Area is untouched by it (base fractions, no migration). */
+    /** "Zoom to fit the Area" (1.1.14) ships OFF; it persists; a stored Area is untouched by it (base fractions, no migration). */
     @Test fun zoomToFitIsOffByDefaultAndTheAreaStaysAsStored() {
         prefs().edit().clear().putString("roi", "0.2,0.25,0.8,0.75").commit()
         val s = AppSettings(ctx)
