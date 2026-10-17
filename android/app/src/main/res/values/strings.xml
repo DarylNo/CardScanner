@@ -61,6 +61,12 @@
     <string name="settings_torch_desc">Keep the flashlight on while scanning</string>
     <string name="settings_debug">Debug overlay</string>
     <string name="settings_debug_desc">Mask coverage, steadiness, timings</string>
+    <string name="settings_screen">Screen</string>
+    <string name="settings_dim">Dim when idle</string>
+    <string name="settings_dim_desc">The app keeps the phone awake on every screen. With no touch and no scan for this long, the screen dims; a touch or the next scan brings it back.</string>
+    <string name="settings_dim_after">After %1$s</string>
+    <string name="settings_dim_never">Never</string>
+    <string name="settings_dim_never_item">Never — keep the phone\'s own brightness</string>
     <string name="settings_card_list">External card list</string>
     <string name="settings_card_list_url">List URL</string>
     <string name="settings_card_list_url_desc">A JSON list of card names with tags (wanted, sold out…). Matching scans get a chip in the review pages. Read-only, HTTPS only.</string>

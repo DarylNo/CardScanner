@@ -689,6 +689,27 @@ lens on testers' phones), minSdk 29, arm64-v8a.
   codes, cookies or tokens (`joinsAreLoggedWithoutTheCode`). The page's copy
   falls back to a textarea: the LAN page is plain HTTP, where browsers give no
   `navigator.clipboard`.
+- **Keep awake, dim when idle (owner, 2026-10-17: "stop the phone from going
+  fully asleep. Allow some dimming?"; 1.1.15).** `ui/ScreenAwake` (a lifecycle
+  observer on EVERY app screen — scan, review, Settings, Share, network test)
+  keeps the display on (FLAG_KEEP_SCREEN_ON; before 1.1.15 only the scan screen
+  did, so the phone slept on the review/Settings/Share screens, which stops the
+  camera and, 30 min later, the phone server) and, after Settings → Screen →
+  "Dim when idle" (`AppSettings.dimAfterS`: 30 s / 1 / 2 / 5 min / Never,
+  default 1 min) with no activity, drops the WINDOW's brightness to
+  `core/ScreenDim.level` — 10 %, but never above half the phone's own
+  `SCREEN_BRIGHTNESS` when it reads 0..255 (some phones use a wider range: then
+  the fixed 10 %), never 0. Activity = the activity's `onUserInteraction` (any
+  touch), and on the scan screen `onCaptureStarted` (trigger or shutter — a
+  dimmed screen lights for the ✓); a card merely sitting there does NOT count,
+  or the screen would never dim with a card on the tray. Leaving a screen
+  restores the brightness; a changed setting applies when a screen next opens.
+  Display only — the camera, analyzer and server never hear of it. Log tag
+  `screen`: "dimmed to N % — 1 min with no touch or scan (where)" / "bright
+  again — touch|scan|shutter (where)", one each per idle cycle; Diagnostics:
+  "screen kept on · dims after 1 min idle". Not in `/api/device` (phone only).
+  Tested in code (ScreenDimTest, ScreenAwakeTest — all 7 fail with it off —,
+  the Settings row at the N200's size), not on the phone.
 - **The scan signal** is ONLY the blue ✓ on the card (a centre ✓ badge with no
   shape), held for Settings/📱 Scanner "Check mark time" (250–10000 ms, default
   2500, `check_ms`), plus two short buzzes (Vibration switch).

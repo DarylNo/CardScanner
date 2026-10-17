@@ -21,6 +21,7 @@ import io.github.darylno.cardscanner.R
 import io.github.darylno.cardscanner.camera.CameraCatalog
 import io.github.darylno.cardscanner.core.CameraChoice
 import io.github.darylno.cardscanner.core.DebugLog
+import io.github.darylno.cardscanner.core.ScreenDim
 import io.github.darylno.cardscanner.core.server.DeviceApi
 import java.util.concurrent.Executors
 
@@ -34,6 +35,7 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var col: LinearLayout
     private lateinit var chrome: ScanChrome
     private val io = Executors.newSingleThreadExecutor()
+    internal lateinit var awake: ScreenAwake
 
     private fun dp(v: Int) = chrome.dp(v)
     private fun wrap() = ViewGroup.LayoutParams.WRAP_CONTENT
@@ -42,6 +44,7 @@ class SettingsActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         app = App.of(this)
+        awake = ScreenAwake(this, app.settings, "Settings").also { lifecycle.addObserver(it) }
         chrome = ScanChrome(this)
         col = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -60,6 +63,11 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private var serverSection: ServerSection? = null
+
+    override fun onUserInteraction() {
+        super.onUserInteraction()
+        awake.poke("touch")
+    }
 
     override fun onDestroy() {
         serverSection?.destroy()
@@ -92,6 +100,29 @@ class SettingsActivity : AppCompatActivity() {
                 if (id != s.cameraId) {
                     DebugLog.global.i("device", "camera setting → " + (id?.let { "camera $it" } ?: "Automatic"))
                     s.cameraId = id
+                }
+                d.dismiss(); render()
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    /** "After 1 min" / "Never". */
+    private fun dimLabel(s: Int): String =
+        if (s <= 0) getString(R.string.settings_dim_never) else getString(R.string.settings_dim_after, ScreenDim.label(s))
+
+    /** Settings → Screen → "Dim when idle": one of [ScreenDim.CHOICES_S]; applies when a screen next opens. */
+    private fun chooseDim() {
+        val s = app.settings
+        val choices = ScreenDim.CHOICES_S
+        val labels = choices.map { if (it <= 0) getString(R.string.settings_dim_never_item) else dimLabel(it) }
+        AlertDialog.Builder(this)
+            .setTitle(R.string.settings_dim)
+            .setSingleChoiceItems(labels.toTypedArray(), choices.indexOf(s.dimAfterS).coerceAtLeast(0)) { d, which ->
+                val v = choices[which]
+                if (v != s.dimAfterS) {
+                    DebugLog.global.i("device", "dim when idle → ${ScreenDim.label(v)}")
+                    s.dimAfterS = v
                 }
                 d.dismiss(); render()
             }
@@ -192,6 +223,13 @@ class SettingsActivity : AppCompatActivity() {
         cam.addView(chrome.switchRow(getString(R.string.settings_debug), getString(R.string.settings_debug_desc), s.debugOverlay) { s.debugOverlay = it })
         col.addView(cam, lp())
         col.addView(note(getString(R.string.settings_camera_note)))
+
+        // ── Screen (owner, 2026-10-17: "stop the phone from going fully asleep. Allow some dimming?") ──
+        col.addView(chrome.sectionHeader(getString(R.string.settings_screen)))
+        val screenCard = chrome.card().apply { setPadding(dp(16), dp(4), dp(16), dp(4)) }
+        screenCard.addView(chrome.valueRow(getString(R.string.settings_dim), getString(R.string.settings_dim_desc),
+            dimLabel(s.dimAfterS)) { chooseDim() })
+        col.addView(screenCard, lp())
 
         // ── External card list (owner, 2026-10-12): read-only tags by card name ──
         col.addView(chrome.sectionHeader(getString(R.string.settings_card_list)))

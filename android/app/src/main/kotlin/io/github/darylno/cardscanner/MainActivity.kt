@@ -44,6 +44,7 @@ import io.github.darylno.cardscanner.ui.ScanRate
 import io.github.darylno.cardscanner.ui.SettingsActivity
 import io.github.darylno.cardscanner.ui.ShareActivity
 import io.github.darylno.cardscanner.ui.DebugShare
+import io.github.darylno.cardscanner.ui.ScreenAwake
 import io.github.darylno.cardscanner.ui.StatusText
 import io.github.darylno.cardscanner.ui.UploadPort
 import io.github.darylno.cardscanner.update.UpdateLock
@@ -66,6 +67,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var app: App
     private val dlog = DebugLog.global
     private lateinit var settings: AppSettings
+    /** Keeps the phone awake here and dims it when idle (Settings → Screen); a scan counts as activity. */
+    internal lateinit var awake: ScreenAwake
     private var camera: CameraPort? = null
     private val io = Executors.newSingleThreadExecutor()
 
@@ -189,6 +192,7 @@ class MainActivity : AppCompatActivity() {
         app = App.of(this)
         settings = app.settings
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        awake = ScreenAwake(this, settings, "scan screen").also { lifecycle.addObserver(it) }
         buildUi()
         applyMode()
         app.uploads.addListener(uploadListener)
@@ -233,6 +237,11 @@ class MainActivity : AppCompatActivity() {
             }
             return true
         }
+    }
+
+    override fun onUserInteraction() {
+        super.onUserInteraction()
+        awake.poke("touch")
     }
 
     override fun onResume() {
@@ -950,6 +959,7 @@ class MainActivity : AppCompatActivity() {
             // painted the box grey in between (blue → grey → blue). Cancelled if
             // THIS capture fails (tagged by burst: two can be in flight).
             runOnUiThread { vibrateTick(); overlay.beginHold(settings.checkMs.toLong(), id) }
+            awake.poke(if (manual) "shutter" else "scan")   // a dimmed screen lights for the ✓
         }
 
         override fun onCaptured(capture: Captured, manual: Boolean) {

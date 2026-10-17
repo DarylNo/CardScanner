@@ -3,6 +3,7 @@ package io.github.darylno.cardscanner.ui
 import android.os.Build
 import io.github.darylno.cardscanner.App
 import io.github.darylno.cardscanner.BuildConfig
+import io.github.darylno.cardscanner.core.ScreenDim
 
 /** Settings → Diagnostics, and the head of the debug report: what the phone is and what state it's in. */
 object DiagnosticsText {
@@ -19,6 +20,7 @@ object DiagnosticsText {
             .append(" · check ").append(app.settings.checkMs).append(" ms")
             .append(" · zoom to fit ").append(if (app.settings.zoomFit) "on" else "off").append('\n')
         append("card list ").append(app.cardList.summary()).append('\n')
+        append("screen kept on · ").append(app.settings.dimAfterS.let { if (it <= 0) "never dims" else "dims after ${ScreenDim.label(it)} idle" }).append('\n')
         app.updates.latest?.let { append("latest release ").append(it.version).append(if (app.updates.locked) " — UPDATE REQUIRED" else "").append('\n') }
         append("queue pending ").append(app.uploads.pending).append("\n\n")
         // Live while the scan screen has its camera; else the last snapshot, with its age.

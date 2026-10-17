@@ -28,6 +28,7 @@ import io.github.darylno.cardscanner.R
  */
 class ShareActivity : AppCompatActivity() {
     private lateinit var app: App
+    internal lateinit var awake: ScreenAwake
     private lateinit var body: LinearLayout
     private lateinit var chrome: ScanChrome
     private val notifPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { render() }
@@ -40,6 +41,7 @@ class ShareActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         app = App.of(this)
+        awake = ScreenAwake(this, app.settings, "Share").also { lifecycle.addObserver(it) }
         chrome = ScanChrome(this)
         body = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -60,6 +62,11 @@ class ShareActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         render()
+    }
+
+    override fun onUserInteraction() {
+        super.onUserInteraction()
+        awake.poke("touch")
     }
 
     /** Amber card: guests get FULL access. Shown in every state — never hide it. */

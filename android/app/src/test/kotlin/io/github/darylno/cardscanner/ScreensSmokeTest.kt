@@ -431,6 +431,43 @@ class ScreensSmokeTest {
     }
 
     /**
+     * Settings → Screen → "Dim when idle" (1.1.15): the row is sized and on screen at the
+     * N200's size (scrolled to), reads "After 1 min" by default, and the chooser offers
+     * 30 s / 1 / 2 / 5 min / Never and saves the pick.
+     */
+    @Test
+    @Config(qualifiers = "w411dp-h914dp-xxhdpi")
+    fun settings_dimWhenIdle_isOnScreenAndSaves() {
+        app.settings.dimAfterS = io.github.darylno.cardscanner.core.ScreenDim.DEFAULT_S
+        val a = launch(SettingsActivity::class.java)
+        val root = a.window.decorView
+        val title = findText(root, a.getString(R.string.settings_dim))
+        assertNotNull("the Dim when idle row", title)
+        var row: View = title!!
+        while (!row.isClickable) row = row.parent as View
+        assertNotNull("reads After 1 min", findText(row, a.getString(R.string.settings_dim_after, "1 min")))
+        val scroll = generateSequence(row.parent) { it.parent }.filterIsInstance<android.widget.ScrollView>().first()
+        val loc = IntArray(2); row.getLocationInWindow(loc)
+        val sloc = IntArray(2); scroll.getLocationInWindow(sloc)
+        scroll.scrollTo(0, loc[1] - sloc[1] - 100)
+        ShadowLooper.idleMainLooper()
+        val l = IntArray(2); row.getLocationInWindow(l)
+        assertTrue("the row has a size (${row.width}×${row.height})", row.width > 0 && row.height > 0)
+        assertTrue("the row is inside the screen (y ${l[1]}..${l[1] + row.height} of ${root.height})",
+            l[1] >= 0 && l[1] + row.height <= root.height && l[0] >= 0 && l[0] + row.width <= root.width)
+        row.performClick()
+        ShadowLooper.idleMainLooper()
+        val d = org.robolectric.shadows.ShadowDialog.getLatestDialog() as androidx.appcompat.app.AlertDialog
+        val list = d.listView
+        val items = (0 until list.adapter.count).map { list.adapter.getItem(it).toString() }
+        assertEquals(listOf("After 30 s", "After 1 min", "After 2 min", "After 5 min", a.getString(R.string.settings_dim_never_item)), items)
+        list.performItemClick(list.getChildAt(4) ?: list, 4, list.adapter.getItemId(4))
+        ShadowLooper.idleMainLooper()
+        assertEquals(0, app.settings.dimAfterS)
+        assertNotNull("the row reads Never", findText(a.window.decorView, a.getString(R.string.settings_dim_never)))
+    }
+
+    /**
      * The Area chip says when the camera is zoomed ("Area ✓ · 1.55×", the longest label)
      * and still fits on screen at the N200's size; drawing a new Area reads Cancel, and
      * Cancel comes back to the zoomed label.
