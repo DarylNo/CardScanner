@@ -244,6 +244,11 @@ class MainActivity : AppCompatActivity() {
         awake.poke("touch")
     }
 
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        awake.focus(hasFocus)
+    }
+
     override fun onResume() {
         super.onResume()
         refreshBanner()
@@ -283,7 +288,7 @@ class MainActivity : AppCompatActivity() {
         rateView.post(rateTick)
         app.phoneServer.device.screen = remoteScreen
         app.phoneServer.start()          // the phone IS the server: keep it up while scanning
-        GatewayService.screenVisible(true)
+        // (visible to the server's idle stop through ScreenAwake, like every app screen)
         app.identify.onScreen()          // a missing card database is fetched again; weekly check
         app.updates.addListener(lockListener)
         app.updates.checkAsync()         // a newer release stops scanning (UpdateLock)
@@ -295,7 +300,6 @@ class MainActivity : AppCompatActivity() {
         measureCard.removeCallbacks(measureTick)
         app.updates.removeListener(lockListener)
         if (app.phoneServer.device.screen === remoteScreen) app.phoneServer.device.screen = null
-        GatewayService.screenVisible(false)
         super.onStop()
     }
 
@@ -937,7 +941,7 @@ class MainActivity : AppCompatActivity() {
         vibratePattern(40, 70, 40)
     }
 
-    private val cameraListener = object : CameraPort.Listener {
+    internal val cameraListener = object : CameraPort.Listener {   // internal: ScreenAwakeTest drives a capture
         override fun onFrameSize(uprightW: Int, uprightH: Int) {
             runOnUiThread {
                 overlay.setFrameSize(uprightW, uprightH)

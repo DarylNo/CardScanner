@@ -461,10 +461,21 @@ class ScreensSmokeTest {
         val list = d.listView
         val items = (0 until list.adapter.count).map { list.adapter.getItem(it).toString() }
         assertEquals(listOf("After 30 s", "After 1 min", "After 2 min", "After 5 min", a.getString(R.string.settings_dim_never_item)), items)
-        list.performItemClick(list.getChildAt(4) ?: list, 4, list.adapter.getItemId(4))
+        list.performItemClick(list.getChildAt(0) ?: list, 0, list.adapter.getItemId(0))
+        ShadowLooper.idleMainLooper()
+        assertEquals(30, app.settings.dimAfterS)
+        shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(31))
+        assertTrue("30 s applies to the Settings screen itself, at once", a.awake.dimmed)
+        var row2: View = findText(a.window.decorView, a.getString(R.string.settings_dim))!!
+        while (!row2.isClickable) row2 = row2.parent as View
+        row2.performClick()
+        ShadowLooper.idleMainLooper()
+        val d2 = org.robolectric.shadows.ShadowDialog.getLatestDialog() as androidx.appcompat.app.AlertDialog
+        d2.listView.performItemClick(d2.listView.getChildAt(4) ?: d2.listView, 4, d2.listView.adapter.getItemId(4))
         ShadowLooper.idleMainLooper()
         assertEquals(0, app.settings.dimAfterS)
         assertNotNull("the row reads Never", findText(a.window.decorView, a.getString(R.string.settings_dim_never)))
+        assertFalse("Never: bright again at once", a.awake.dimmed)
     }
 
     /**

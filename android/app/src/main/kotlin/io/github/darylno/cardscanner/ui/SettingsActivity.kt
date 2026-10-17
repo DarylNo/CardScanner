@@ -69,6 +69,11 @@ class SettingsActivity : AppCompatActivity() {
         awake.poke("touch")
     }
 
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        awake.focus(hasFocus)
+    }
+
     override fun onDestroy() {
         serverSection?.destroy()
         io.shutdown()
@@ -123,6 +128,7 @@ class SettingsActivity : AppCompatActivity() {
                 if (v != s.dimAfterS) {
                     DebugLog.global.i("device", "dim when idle → ${ScreenDim.label(v)}")
                     s.dimAfterS = v
+                    awake.reload()          // this screen too, not only the next one opened
                 }
                 d.dismiss(); render()
             }

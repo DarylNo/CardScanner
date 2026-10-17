@@ -98,14 +98,14 @@ class PanelActivity : AppCompatActivity() {
         ui.post(load)
     }
 
-    override fun onStart() {
-        super.onStart()
-        GatewayService.screenVisible(true)
-    }
-
     override fun onUserInteraction() {
         super.onUserInteraction()
         awake.poke("touch")
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        awake.focus(hasFocus)
     }
 
     /**
@@ -131,10 +131,6 @@ class PanelActivity : AppCompatActivity() {
         super.onPause()
     }
 
-    override fun onStop() {
-        GatewayService.screenVisible(false)
-        super.onStop()
-    }
 
     private fun showError(msg: String) {
         runOnUiThread {

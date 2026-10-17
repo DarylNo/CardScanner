@@ -48,14 +48,31 @@ class ScreenDim(val afterMs: Long) {
         /** A stored choice that is not offered (an older or hand-edited value) reads as the default. */
         fun normalize(s: Int): Int = if (s in CHOICES_S) s else DEFAULT_S
 
+        /** The widest brightness range phones are known to use for SCREEN_BRIGHTNESS (some OnePlus / Xiaomi). */
+        const val WIDEST_MAX = 4095
+
+        /**
+         * The phone's own brightness as 0..1: its SCREEN_BRIGHTNESS [setting] over the range it
+         * declares ([declaredMax], the framework's config_screenBrightnessSettingMaximum — 255 on
+         * most phones, 1023–4095 on some). A reading above the declared range is read against
+         * [WIDEST_MAX]: dimmer than meant on such a phone, never brighter. Null when unknown.
+         */
+        fun ownBrightness(setting: Int?, declaredMax: Int?): Float? {
+            val v = setting?.takeIf { it >= 0 } ?: return null
+            val max = (declaredMax?.takeIf { it > 0 } ?: 255).let { if (v > it) WIDEST_MAX else it }
+            return (v.toFloat() / max).coerceIn(0f, 1f)
+        }
+
         /**
          * The brightness to dim to: [LEVEL], but at most half of the phone's own brightness
-         * ([system], 0..1, when the phone reports one) so dimming never brightens a screen
-         * the owner already turned down.
+         * ([own], 0..1, from [ownBrightness]) so dimming never brightens a screen the owner
+         * already turned down. Null = don't dim: half the phone's own would be under
+         * [MIN_LEVEL], i.e. the screen is already about as dark as it goes.
          */
-        fun level(system: Float?): Float {
-            val cap = system?.takeIf { it in 0f..1f }?.let { it / 2f } ?: LEVEL
-            return minOf(LEVEL, cap).coerceAtLeast(MIN_LEVEL)
+        fun level(own: Float?): Float? {
+            val cap = own?.takeIf { it in 0f..1f }?.let { it / 2f } ?: return LEVEL
+            if (cap < MIN_LEVEL) return null
+            return minOf(LEVEL, cap)
         }
 
         /** "30 s", "1 min", "5 min"; "never" for 0. */

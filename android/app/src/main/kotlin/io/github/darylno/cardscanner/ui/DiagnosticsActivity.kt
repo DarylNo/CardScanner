@@ -118,6 +118,11 @@ class DiagnosticsActivity : AppCompatActivity() {
         awake.poke("touch")
     }
 
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        awake.focus(hasFocus)
+    }
+
     override fun onDestroy() {
         stop?.set()
         worker.shutdown()      // no interrupt: the StopSignal already ends every wait

@@ -20,7 +20,10 @@ object DiagnosticsText {
             .append(" · check ").append(app.settings.checkMs).append(" ms")
             .append(" · zoom to fit ").append(if (app.settings.zoomFit) "on" else "off").append('\n')
         append("card list ").append(app.cardList.summary()).append('\n')
-        append("screen kept on · ").append(app.settings.dimAfterS.let { if (it <= 0) "never dims" else "dims after ${ScreenDim.label(it)} idle" }).append('\n')
+        append("screen kept on · ").append(app.settings.dimAfterS.let { if (it <= 0) "never dims" else "dims after ${ScreenDim.label(it)} idle" })
+            .append(" · phone brightness ")
+            .append(runCatching { android.provider.Settings.System.getInt(app.contentResolver, android.provider.Settings.System.SCREEN_BRIGHTNESS).toString() }.getOrDefault("?"))
+            .append('/').append(ScreenAwake.declaredMax()?.toString() ?: "?").append('\n')
         app.updates.latest?.let { append("latest release ").append(it.version).append(if (app.updates.locked) " — UPDATE REQUIRED" else "").append('\n') }
         append("queue pending ").append(app.uploads.pending).append("\n\n")
         // Live while the scan screen has its camera; else the last snapshot, with its age.

@@ -49,12 +49,27 @@ class ScreenDimTest {
     }
 
     @Test
-    fun level_isTenPercent_neverBrighterThanHalfThePhonesOwn() {
-        assertEquals(ScreenDim.LEVEL, ScreenDim.level(null), 0f)
-        assertEquals("a bright phone dims to the fixed level", 0.1f, ScreenDim.level(1f), 0f)
-        assertEquals(0.1f, ScreenDim.level(0.2f), 1e-6f)
-        assertEquals("a phone already at 12 % dims to 6 %", 0.06f, ScreenDim.level(0.12f), 1e-6f)
-        assertEquals("never all the way to 0", ScreenDim.MIN_LEVEL, ScreenDim.level(0f), 0f)
-        assertEquals("a reading outside 0..1 (a wider brightness range) is not trusted", 0.1f, ScreenDim.level(3.2f), 0f)
+    fun level_isTenPercent_neverBrighterThanHalfThePhonesOwn_andNoneWhenAlreadyDark() {
+        assertEquals("unknown: the fixed level", ScreenDim.LEVEL, ScreenDim.level(null))
+        assertEquals("a bright phone dims to the fixed level", 0.1f, ScreenDim.level(1f))
+        assertEquals(0.1f, ScreenDim.level(0.2f)!!, 1e-6f)
+        assertEquals("a phone already at 12 % dims to 6 %", 0.06f, ScreenDim.level(0.12f)!!, 1e-6f)
+        assertNull("already about as dark as it goes: no dimming", ScreenDim.level(0.015f))
+        assertNull(ScreenDim.level(0f))
+        assertEquals("a reading outside 0..1 is not trusted", 0.1f, ScreenDim.level(3.2f))
+    }
+
+    @Test
+    fun ownBrightness_readsTheSettingAgainstThePhonesDeclaredRange() {
+        assertEquals(1f, ScreenDim.ownBrightness(255, 255)!!, 0f)
+        assertEquals("no declared range: the standard 255", 0.5f, ScreenDim.ownBrightness(128, null)!!, 0.01f)
+        assertEquals("a 0..2047 phone at night (40 ≈ 2 %)", 40 / 2047f, ScreenDim.ownBrightness(40, 2047)!!, 1e-6f)
+        assertEquals("a reading above the declared range is read against the widest (never brighter)",
+            800 / 4095f, ScreenDim.ownBrightness(800, 255)!!, 1e-6f)
+        assertNull(ScreenDim.ownBrightness(null, 255))
+        assertNull(ScreenDim.ownBrightness(-1, 255))
+        // The night case the review found: 40 on a 0..2047 phone must not "dim" to 7.8 %.
+        assertNull("2 % already: left alone", ScreenDim.level(ScreenDim.ownBrightness(40, 2047)))
+        assertEquals(ScreenDim.ownBrightness(300, 2047)!! / 2, ScreenDim.level(ScreenDim.ownBrightness(300, 2047))!!, 1e-6f)
     }
 }

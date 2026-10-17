@@ -69,6 +69,11 @@ class ShareActivity : AppCompatActivity() {
         awake.poke("touch")
     }
 
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        awake.focus(hasFocus)
+    }
+
     /** Amber card: guests get FULL access. Shown in every state — never hide it. */
     private fun warningCard() = chrome.card(ScanChrome.Palette.WARN_BG, ScanChrome.Palette.WARN_STROKE).apply {
         orientation = LinearLayout.HORIZONTAL
