@@ -455,7 +455,7 @@ with sync_playwright() as pw:
     pg = ctx.new_page(); errs3 = []
     pg.on("pageerror", lambda e: errs3.append(str(e)))
     pg.goto(BASE + "/phone?panel=1"); pg.wait_for_timeout(1200)
-    want = "v53"; check(pg.evaluate("UI_VERSION") == want, f"phone banner {want}")
+    want = "v54"; check(pg.evaluate("UI_VERSION") == want, f"phone banner {want}")
     for sid, s in STATE["scans"].items():
         if s["photo"] in REAL: continue       # measured geometrically below
         pg.evaluate(f"openDetail({sid})"); pg.wait_for_timeout(500)

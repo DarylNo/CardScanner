@@ -148,6 +148,10 @@ its host name is shown in Settings, so screenshots don't leak a key.
 - **Filters → Tagged only** (shown once a list is set) narrows the scan list to
   tagged cards (plus any that need checking). It only changes what you see:
   *Exclude filtered* and the export ignore it.
+- **Wanted cards always show.** The price and popularity filters never hide a
+  card tagged `wanted`, in *match any* or *match all*, so *Exclude filtered*
+  never drops one from the export either. The All / Needs pick / Selected /
+  Problems chips, *Tagged only* and the name search still apply.
 
 ## Using a computer (optional)
 
