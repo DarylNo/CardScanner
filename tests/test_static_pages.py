@@ -41,3 +41,18 @@ def test_both_pages_crop_through_the_block():
         rest = page.replace(_block(name), "")
         assert "cardCrop(img)" in rest and "cardCropTransform(" in rest, name
         assert "PHOTO_FILL" not in page, name          # the fixed zoom it replaced
+
+
+def test_a_wanted_card_is_never_filtered_away_on_either_page():
+    """CLAUDE.md → "List filters": a card the external list tags "wanted" always
+    shows — passesFilters lets it through before either bar votes, so neither
+    bar (in ANY or ALL) nor "Exclude filtered" can drop it. Driven for real in
+    Chromium by scripts/check_card_list_ui.py; this keeps CI honest about it."""
+    for name in ("phone.html", "desktop.html"):
+        page = (STATIC / name).read_text(encoding="utf-8")
+        assert re.search(r"const isWanted = scan => listTags\(scan\)\.includes\((['\"])wanted\1\);", page), name
+        body = re.search(r"function passesFilters\((\w+)\)\s*\{(.*?)\n\}", page, re.S)
+        assert body, name
+        arg, lines = body.group(1), body.group(2)
+        first_vote = lines.index("activeFilters()")
+        assert re.search(rf"isWanted\({arg}\)\)? return true;", lines[:first_vote]), name

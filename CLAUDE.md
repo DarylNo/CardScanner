@@ -218,6 +218,15 @@ README → External card list. Rules that must hold:
   All / Pending (a "check" row still shows), so `passesFilters` and "Exclude
   filtered" never drop an untagged card from the export. Persisted in
   `listFilters.tagged`.
+- **A Wanted card ALWAYS shows (owner, 2026-10-17: "I need to have wanted cards
+  always show"; phone v54, desktop d47).** `isWanted` (the `wanted` tag, exact,
+  as the chip reads it) is exempt in `passesFilters` exactly like a "check"
+  row: neither bar hides it, in ANY or ALL, so "Exclude filtered" never drops
+  it from the export. The view chips (All / Needs pick / …), "Tagged only" and
+  the name search still narrow it like any row — they are where you LOOK, the
+  bars are what gets thrown away. Other tags (`sold_out`, raw text) get no
+  exemption. `check_card_list_ui.py` drives it on both pages;
+  `test_static_pages.py` guards it in CI.
 Golden: `scripts/export_card_list_fixtures.py` (normalize/keys/parse/tags, a
 `CardListSource` session with a pinned clock, and the REAL app.py's reads) →
 `CardListParityTest`; `check_card_list_ui.py` drives both pages.
@@ -284,7 +293,8 @@ searched, or a scan carrying no popularity because it predates the feature).
 That third state is load-bearing — collapsing it to "pass" is the bug that made
 ALL barely differ from ANY (an unpriced card "satisfied" a Min $ it had never
 been measured against). Rules that must hold:
-- **A "check" row is never filtered away**, by any bar, in either mode.
+- **A "check" row is never filtered away**, by any bar, in either mode — nor
+  is a card the external list tags Wanted (below).
 - **ANY (the default) never hides on ignorance.** Show on any pass; with no pass
   but something still NULL, show anyway. Hide only when every active bar
   actively fails. This is what keeps an unpriced Black Lotus on screen.

@@ -582,6 +582,9 @@ function tagChips(scan){
   return listTags(scan).map(t => `<span class="pill ltag ${LIST_TAG_LABELS[t] ? esc(t) : "other"}" title="external card list">${esc(LIST_TAG_LABELS[t] || t)}</span>`).join("");
 }
 const tagSig = scan => listTags(scan).join(";");
+// A card the list WANTS always shows: never filtered away by the price or
+// popularity bar, in either mode — so "Exclude filtered" never drops it either.
+const isWanted = scan => listTags(scan).includes("wanted");
 const listOn = () => scans.some(s => Array.isArray(s.list_tags));
 // "Tagged only": narrows the VIEW like the All / Needs pick chips — not a filter
 // vote, so "Exclude filtered" never drops an untagged card from the export.
@@ -661,6 +664,7 @@ function activeFilters(){
    says so; ANY remains the default for anyone who does not want it. */
 function passesFilters(scan){
   if (isProblem(scan)) return true;            // a "check" row is never filtered away
+  if (isWanted(scan)) return true;             // nor is a card the external list wants
   const on = activeFilters();
   if (!on.price && !on.pop) return true;
   const votes = [];
@@ -2162,7 +2166,7 @@ function sigOf(scan){
 
 // Version banner — page version · server git hash. Same rationale as the
 // phone: without it, "is this the old page?" is undebuggable.
-const UI_VERSION = "d46";
+const UI_VERSION = "d47";
 
 // Who is asking: the phone server says "guest" for the 6-digit code (admin =
 // the paired computer); the computer's own server always says admin. Guests

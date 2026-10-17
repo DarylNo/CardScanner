@@ -7,7 +7,11 @@ server and check the external card list's chips and "Tagged only" view
     popularity chip, in the list rows and the open card;
   * a refreshed list (new list_tags on the next poll) re-tags the rows;
   * "Tagged only" keeps tagged rows + "check" rows, survives a reload, and is
-    NOT a filter vote: "Exclude filtered" still sees the untagged cards as passing.
+    NOT a filter vote: "Exclude filtered" still sees the untagged cards as passing;
+  * a Wanted card always shows: neither the price band nor the popularity floor
+    hides it, in "any" or "all", and "Exclude filtered" never PATCHes it — while
+    the view chips and the name search still narrow it like any row, and a card
+    tagged only "sold_out" (or untagged) is filtered as before.
 
     pip install playwright        # Chromium: /opt/pw-browsers in a cloud session, or set CHROME
     python scripts/check_card_list_ui.py
@@ -23,14 +27,15 @@ STATIC = Path(__file__).resolve().parents[1] / "server" / "static"
 POP = {"tier": "staple", "label": "Staple", "rank": 158, "percentile": 0.5}
 
 
-def scan(i, name, tags=None, sel=False, problem=False):
+def scan(i, name, tags=None, sel=False, problem=False, price=2.5, tier=None):
+    pop = POP if tier is None else dict(POP, tier=tier, label=tier.title())
     c = dict(id=f"c{i}", name=name, set="m10", set_name="M10", collector_number=str(i), rarity="common",
-             finishes=["nonfoil"], multi_distance=70, image_small="/x.png", image_normal="/x.png", popularity=POP)
+             finishes=["nonfoil"], multi_distance=70, image_small="/x.png", image_normal="/x.png", popularity=pop)
     s = dict(id=i, status="selected" if sel else "pending", identified=not problem, card_read={"name": name},
              confidence="high", candidates=[] if problem else [c], included=True, flagged=False,
              selection=dict(c, scryfall_id=c["id"], condition="NM", finish="Non-Foil", quantity=1,
                             f2f=None) if sel else None,
-             error="not identified" if problem else None, f2f={"conditions": {"NM": 2.5}} if sel else None,
+             error="not identified" if problem else None, f2f={"conditions": {"NM": price}} if sel else None,
              created_at="2026-10-12T00:00:00")
     if tags is not None:
         s["list_tags"] = tags
@@ -43,7 +48,19 @@ def tagged_scans():
             scan(1, "Forest", [], sel=True)]
 
 
-STATE = {"scans": [scan(5, "Lightning Bolt", sel=True), scan(4, "Opt")]}   # off: no list_tags
+def wanted_scans(tagged=True):
+    """Cheap / unpriced / fringe cards, some Wanted. *tagged* False = the list is off."""
+    t = (lambda tags: tags) if tagged else (lambda tags: None)
+    return [scan(16, "Mystery", t([]), problem=True),
+            scan(15, "Dear Plain", t([]), sel=True, price=9.0),
+            scan(14, "Sold Plain", t(["sold_out"]), sel=True, price=0.25, tier="fringe"),
+            scan(13, "Unpriced Plain", t([])),
+            scan(12, "Unpriced Want", t(["wanted"])),
+            scan(11, "Cheap Plain", t([]), sel=True, price=0.25, tier="fringe"),
+            scan(10, "Cheap Want", t(["vip", "wanted"]), sel=True, price=0.25, tier="fringe")]
+
+
+STATE = {"scans": [scan(5, "Lightning Bolt", sel=True), scan(4, "Opt")], "patches": []}   # off: no list_tags
 
 
 class H(BaseHTTPRequestHandler):
@@ -73,7 +90,10 @@ class H(BaseHTTPRequestHandler):
         return self.send(404, {"error": "stub"})
 
     def do_POST(self): self.send(200, {})
-    def do_PATCH(self): self.send(200, {})
+    def do_PATCH(self):
+        n = int(self.headers.get("Content-Length") or 0)
+        STATE["patches"].append((self.path, json.loads(self.rfile.read(n) or b"{}")))
+        self.send(200, {})
 
 
 srv = ThreadingHTTPServer(("127.0.0.1", 0), H)
@@ -85,6 +105,46 @@ fails = []
 def check(cond, msg):
     print(("  ok   " if cond else "  FAIL ") + msg)
     if not cond: fails.append(msg)
+
+
+def wanted_always_show(pg, page):
+    """The Wanted exemption, driven through the page's own controls. *page* names
+    the controls: desktop (#pmin, #fmode, #popmin, .fchip, #filter) or phone."""
+    d = page == "desktop"
+    row, attr = ("#list .row", "id") if d else (".srow", "sid")
+    ids = lambda: pg.evaluate(f"[...document.querySelectorAll({row!r})].map(r => +r.dataset.{attr})")
+    def settle(): pg.wait_for_timeout(250)
+    q = {"min": "#pmin", "fmode": "#fmode", "popmin": "#popmin"}.get if d else (lambda x: "#p-" + x)
+    if not d and "open" not in (pg.locator("#fltPanel").get_attribute("class") or ""):
+        pg.locator("#fltBtn").click()
+    STATE["scans"] = wanted_scans()
+    pg.wait_for_function(f"document.querySelectorAll({row!r}).length === 7", timeout=8000); settle()
+    pg.locator(q("min")).fill("5"); settle()
+    check(ids() == [16, 15, 13, 12, 10], f"Min $5, any: the cheap Wanted card shows, the cheap plain / sold-out ones don't ({ids()})")
+    pg.locator(q("fmode")).click(); settle()
+    check(ids() == [16, 15, 12, 10], f"Min $5, all: the unpriced Wanted card still shows, the unpriced plain one doesn't ({ids()})")
+    STATE["patches"].clear()
+    pg.locator("#exclBtn" if d else "#p-excl").click(); pg.wait_for_timeout(600)
+    hit = sorted(int(path.rsplit("/", 1)[1]) for path, body in STATE["patches"] if body == {"included": False})
+    check(hit == [11, 14], f"Exclude filtered drops the filtered cards, never the Wanted one ({hit})")
+    pg.locator(q("fmode")).click(); pg.locator(q("min")).fill(""); settle()
+    pg.locator(q("popmin")).select_option("staple"); settle()
+    check(ids() == [16, 15, 13, 12, 10], f"Staples only: the fringe Wanted card shows, the fringe plain ones don't ({ids()})")
+    pg.locator(q("fmode")).click(); settle()
+    check(ids() == [16, 15, 13, 12, 10], f"Staples only, all: the Wanted card still shows ({ids()})")
+    sel = ".fchip" if d else ".vchip"
+    pg.locator(f"{sel}[data-view='pending']").click(); settle()
+    check(ids() == [16, 13, 12], f"the Needs pick view still narrows Wanted rows like any other ({ids()})")
+    pg.locator(f"{sel}[data-view='all']").click(); settle()
+    if d:
+        pg.locator("#filter").fill("Plain"); settle()
+        check(10 not in ids() and 12 not in ids(), f"the name search still narrows Wanted rows ({ids()})")
+        pg.locator("#filter").fill(""); settle()
+    STATE["scans"] = wanted_scans(tagged=False)                  # the list switched off
+    pg.wait_for_function(f"!document.querySelector({row!r} + '[data-{attr}=\"10\"]')", timeout=8000); settle()
+    check(ids() == [16, 15, 13, 12], f"list off: no Wanted tag, so the fringe card is filtered as before ({ids()})")
+    pg.locator(q("fmode")).click(); pg.locator(q("popmin")).select_option(""); settle()
+    check(ids() == [16, 15, 14, 13, 12, 11, 10], f"filters cleared: every row back ({ids()})")
 
 
 def chips(pg, row_sel):
@@ -102,7 +162,7 @@ with sync_playwright() as pw:
     pg = ctx.new_page(); errs = []
     pg.on("pageerror", lambda e: errs.append(str(e)))
     pg.goto(BASE + "/"); pg.wait_for_selector(".row[data-id='5']")
-    check(pg.evaluate("UI_VERSION") == "d46", "banner d46")
+    check(pg.evaluate("UI_VERSION") == "d47", "banner d47")
     check(pg.locator(".ltag").count() == 0, "feature off: no list chips")
     check(not pg.locator("#tagged").is_visible(), "feature off: no Tagged only")
     STATE["scans"] = tagged_scans()
@@ -131,6 +191,8 @@ with sync_playwright() as pw:
     pg.locator("#tagged").click(); pg.wait_for_timeout(200)
     pg.locator(".row[data-id='4']").click(); pg.wait_for_timeout(500)
     check("Sold out" in pg.locator("#right").inner_text(), "the open card shows its chip")
+    print("  -- Wanted always shows")
+    wanted_always_show(pg, "desktop")
     check(not errs, f"no page errors ({errs[:3]})")
     ctx.close()
 
@@ -141,7 +203,7 @@ with sync_playwright() as pw:
     pg = ctx.new_page(); errs = []
     pg.on("pageerror", lambda e: errs.append(str(e)))
     pg.goto(BASE + "/phone?panel=1"); pg.wait_for_selector(".srow[data-sid='5']")
-    check(pg.evaluate("UI_VERSION") == "v53", "banner v53")
+    check(pg.evaluate("UI_VERSION") == "v54", "banner v54")
     check(pg.locator(".ltag").count() == 0, "feature off: no list chips")
     pg.locator("#fltBtn").click()
     check(not pg.locator("#p-tagged").is_visible(), "feature off: no Tagged only")
@@ -168,6 +230,10 @@ with sync_playwright() as pw:
     pg.wait_for_function("document.querySelectorAll('.srow').length === 2", timeout=8000)
     st = pg.evaluate("[document.querySelectorAll('.srow .ltag').length, getComputedStyle(document.querySelector('#p-tagged')).display, document.querySelector('#fltPanel').className]")
     check(st[0] == 0 and st[1] == "none", f"turned off: chips and Tagged only gone, every row back ({st})")
+    print("  -- Wanted always shows")
+    if "on" in (pg.locator("#p-tagged").get_attribute("class") or ""):
+        pg.evaluate("taggedOnly = false")
+    wanted_always_show(pg, "phone")
     check(not errs, f"no page errors ({errs[:3]})")
     ctx.close()
     b.close()
