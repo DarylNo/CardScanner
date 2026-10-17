@@ -294,7 +294,7 @@ That third state is load-bearing — collapsing it to "pass" is the bug that mad
 ALL barely differ from ANY (an unpriced card "satisfied" a Min $ it had never
 been measured against). Rules that must hold:
 - **A "check" row is never filtered away**, by any bar, in either mode — nor
-  is a card the external list tags Wanted (below).
+  is a card the external list tags Wanted (above, External card list).
 - **ANY (the default) never hides on ignorance.** Show on any pass; with no pass
   but something still NULL, show anyway. Hide only when every active bar
   actively fails. This is what keeps an unpriced Black Lotus on screen.
