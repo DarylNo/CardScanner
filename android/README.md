@@ -311,7 +311,10 @@ computer and guests, and a frozen queue stops identifying.
 - Open **Recents**, tap the **⋮** menu on Card Scanner's card (or long-press
   it) → **Lock**, so "clear all" leaves it alone.
 - While scanning on the mount, keep the phone on a charger; the app keeps the
-  screen on.
+  screen on — on every one of its screens, not just the camera — and dims it
+  after a minute with no touch and no scan (Settings → Screen → **Dim when
+  idle**: 30 s, 1, 2 or 5 min, or Never). A touch or the next scan brings the
+  brightness back; the camera keeps scanning while it is dim.
 
 ## Device test checklist
 

@@ -11,7 +11,6 @@ import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.view.ViewGroup
-import android.view.WindowManager
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -58,6 +57,7 @@ import java.util.concurrent.Executors
  */
 class DiagnosticsActivity : AppCompatActivity() {
     private lateinit var chrome: ScanChrome
+    internal lateinit var awake: ScreenAwake
     private lateinit var col: LinearLayout
     private lateinit var status: TextView
     private lateinit var resultsBox: LinearLayout
@@ -91,6 +91,9 @@ class DiagnosticsActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Kept awake like every app screen (a run used to set FLAG_KEEP_SCREEN_ON itself and
+        // clear it at the end, which would now drop ScreenAwake's own); dims when idle.
+        awake = ScreenAwake(this, App.of(this).settings, "network test").also { lifecycle.addObserver(it) }
         chrome = ScanChrome(this)
         statusText = getString(R.string.nettest_idle)
         col = LinearLayout(this).apply {
@@ -108,6 +111,16 @@ class DiagnosticsActivity : AppCompatActivity() {
         setContentView(root)
         build()
         refresh()
+    }
+
+    override fun onUserInteraction() {
+        super.onUserInteraction()
+        awake.poke("touch")
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        awake.focus(hasFocus)
     }
 
     override fun onDestroy() {
@@ -159,7 +172,6 @@ class DiagnosticsActivity : AppCompatActivity() {
         running = true
         val signal = StopSignal()
         stop = signal
-        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         ui.post(ticker)
         worker.execute {
             try {
@@ -171,10 +183,7 @@ class DiagnosticsActivity : AppCompatActivity() {
             } finally {
                 statusText = getString(if (signal.isSet) R.string.nettest_stopped else R.string.nettest_done)
                 running = false
-                ui.post {
-                    window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-                    refresh()
-                }
+                ui.post { refresh() }
             }
         }
     }

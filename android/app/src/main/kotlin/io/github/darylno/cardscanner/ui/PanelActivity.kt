@@ -37,11 +37,14 @@ class PanelActivity : AppCompatActivity() {
     private lateinit var web: WebView
     private lateinit var errorView: TextView
     private val ui = Handler(Looper.getMainLooper())
+    /** The review keeps the phone awake too (before 1.1.15 it slept here); dims when idle. */
+    internal lateinit var awake: ScreenAwake
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val phone = App.of(this).phoneServer
+        awake = ScreenAwake(this, App.of(this).settings, "review").also { lifecycle.addObserver(it) }
         val root = FrameLayout(this)
         web = WebView(this)
         errorView = TextView(this).apply {
@@ -95,9 +98,14 @@ class PanelActivity : AppCompatActivity() {
         ui.post(load)
     }
 
-    override fun onStart() {
-        super.onStart()
-        GatewayService.screenVisible(true)
+    override fun onUserInteraction() {
+        super.onUserInteraction()
+        awake.poke("touch")
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        awake.focus(hasFocus)
     }
 
     /**
@@ -123,10 +131,6 @@ class PanelActivity : AppCompatActivity() {
         super.onPause()
     }
 
-    override fun onStop() {
-        GatewayService.screenVisible(false)
-        super.onStop()
-    }
 
     private fun showError(msg: String) {
         runOnUiThread {

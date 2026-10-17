@@ -44,4 +44,15 @@ class AppSettingsTest {
         assertEquals(io.github.darylno.cardscanner.core.RoiFrac(0.2, 0.25, 0.8, 0.75), AppSettings(ctx).roi)
         assertEquals("0.2,0.25,0.8,0.75", prefs().getString("roi", null))
     }
+
+    /** "Dim when idle" (1.1.15): a minute by default; Never (0) persists; a value not offered reads as the default. */
+    @Test fun dimWhenIdleDefaultsToAMinute() {
+        prefs().edit().clear().commit()
+        val s = AppSettings(ctx)
+        assertEquals(60, s.dimAfterS)
+        s.dimAfterS = 0
+        assertEquals(0, AppSettings(ctx).dimAfterS)
+        prefs().edit().putInt("dim_after_s", 45).commit()
+        assertEquals(60, AppSettings(ctx).dimAfterS)
+    }
 }

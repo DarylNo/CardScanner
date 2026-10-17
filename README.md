@@ -51,6 +51,12 @@ is there: glare, a shadow or a hand that holds still is "Something in the
 Area — no card shape yet…", never a scan, and after a couple of seconds the
 app adopts the still view as the empty tray. The shutter always scans.
 
+**The phone never sleeps while the app is open** — on the camera, the scan list,
+Settings or Share. After a minute with no touch and no scan the screen dims
+(scanning carries on); a touch or the next scan brings it back. Settings →
+Screen → **Dim when idle** sets the time (30 s, 1, 2 or 5 min) or turns dimming
+off.
+
 The top of the screen shows the version and the server state
 (`serving at <ip>:8090`), cards/min and a battery estimate. Every button is at
 the bottom, within thumb reach: Tray|Tap · **⚙ Settings**, then **Share** over

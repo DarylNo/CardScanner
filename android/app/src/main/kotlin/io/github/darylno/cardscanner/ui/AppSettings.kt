@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import androidx.core.content.edit
 import io.github.darylno.cardscanner.core.RoiFrac
+import io.github.darylno.cardscanner.core.ScreenDim
 import io.github.darylno.cardscanner.core.server.DeviceApi
 
 /**
@@ -95,6 +96,15 @@ class AppSettings(context: Context) {
         get() = prefs.getInt(K_CHECK_MS, DeviceApi.CHECK_MS_DEFAULT).coerceIn(DeviceApi.CHECK_MS_MIN, DeviceApi.CHECK_MS_MAX)
         set(v) = prefs.edit().putInt(K_CHECK_MS, v.coerceIn(DeviceApi.CHECK_MS_MIN, DeviceApi.CHECK_MS_MAX)).apply()
 
+    /**
+     * Settings → Screen → "Dim when idle" (1.1.15, core ScreenDim): seconds with no touch
+     * and no scan before an app screen dims; 0 = never. Every app screen keeps the phone
+     * awake either way (ScreenAwake).
+     */
+    var dimAfterS: Int
+        get() = ScreenDim.normalize(prefs.getInt(K_DIM_AFTER, ScreenDim.DEFAULT_S))
+        set(v) = prefs.edit().putInt(K_DIM_AFTER, ScreenDim.normalize(v)).apply()
+
     /** The scan screen asked for the notification permission once (the server's Stop lives there). */
     var notifAsked: Boolean
         get() = prefs.getBoolean(K_NOTIF_ASKED, false)
@@ -148,6 +158,7 @@ class AppSettings(context: Context) {
         const val K_VIBRATION = "vibration"
         const val K_NOTIF_ASKED = "notif_asked"
         const val K_CHECK_MS = "check_ms"
+        const val K_DIM_AFTER = "dim_after_s"
         const val K_DEBUG = "debug_overlay"
         const val K_MEASURE_STEP = "measure_step"
         const val K_MEASURE_CAPTURES = "measure_captures"

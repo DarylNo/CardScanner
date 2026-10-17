@@ -44,6 +44,7 @@ import io.github.darylno.cardscanner.ui.ScanRate
 import io.github.darylno.cardscanner.ui.SettingsActivity
 import io.github.darylno.cardscanner.ui.ShareActivity
 import io.github.darylno.cardscanner.ui.DebugShare
+import io.github.darylno.cardscanner.ui.ScreenAwake
 import io.github.darylno.cardscanner.ui.StatusText
 import io.github.darylno.cardscanner.ui.UploadPort
 import io.github.darylno.cardscanner.update.UpdateLock
@@ -66,6 +67,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var app: App
     private val dlog = DebugLog.global
     private lateinit var settings: AppSettings
+    /** Keeps the phone awake here and dims it when idle (Settings → Screen); a scan counts as activity. */
+    internal lateinit var awake: ScreenAwake
     private var camera: CameraPort? = null
     private val io = Executors.newSingleThreadExecutor()
 
@@ -189,6 +192,7 @@ class MainActivity : AppCompatActivity() {
         app = App.of(this)
         settings = app.settings
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        awake = ScreenAwake(this, settings, "scan screen").also { lifecycle.addObserver(it) }
         buildUi()
         applyMode()
         app.uploads.addListener(uploadListener)
@@ -235,6 +239,16 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    override fun onUserInteraction() {
+        super.onUserInteraction()
+        awake.poke("touch")
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        awake.focus(hasFocus)
+    }
+
     override fun onResume() {
         super.onResume()
         refreshBanner()
@@ -274,7 +288,7 @@ class MainActivity : AppCompatActivity() {
         rateView.post(rateTick)
         app.phoneServer.device.screen = remoteScreen
         app.phoneServer.start()          // the phone IS the server: keep it up while scanning
-        GatewayService.screenVisible(true)
+        // (visible to the server's idle stop through ScreenAwake, like every app screen)
         app.identify.onScreen()          // a missing card database is fetched again; weekly check
         app.updates.addListener(lockListener)
         app.updates.checkAsync()         // a newer release stops scanning (UpdateLock)
@@ -286,7 +300,6 @@ class MainActivity : AppCompatActivity() {
         measureCard.removeCallbacks(measureTick)
         app.updates.removeListener(lockListener)
         if (app.phoneServer.device.screen === remoteScreen) app.phoneServer.device.screen = null
-        GatewayService.screenVisible(false)
         super.onStop()
     }
 
@@ -928,7 +941,7 @@ class MainActivity : AppCompatActivity() {
         vibratePattern(40, 70, 40)
     }
 
-    private val cameraListener = object : CameraPort.Listener {
+    internal val cameraListener = object : CameraPort.Listener {   // internal: ScreenAwakeTest drives a capture
         override fun onFrameSize(uprightW: Int, uprightH: Int) {
             runOnUiThread {
                 overlay.setFrameSize(uprightW, uprightH)
@@ -950,6 +963,7 @@ class MainActivity : AppCompatActivity() {
             // painted the box grey in between (blue → grey → blue). Cancelled if
             // THIS capture fails (tagged by burst: two can be in flight).
             runOnUiThread { vibrateTick(); overlay.beginHold(settings.checkMs.toLong(), id) }
+            awake.poke(if (manual) "shutter" else "scan")   // a dimmed screen lights for the ✓
         }
 
         override fun onCaptured(capture: Captured, manual: Boolean) {

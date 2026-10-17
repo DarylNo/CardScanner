@@ -689,6 +689,43 @@ lens on testers' phones), minSdk 29, arm64-v8a.
   codes, cookies or tokens (`joinsAreLoggedWithoutTheCode`). The page's copy
   falls back to a textarea: the LAN page is plain HTTP, where browsers give no
   `navigator.clipboard`.
+- **Keep awake, dim when idle (owner, 2026-10-17: "stop the phone from going
+  fully asleep. Allow some dimming?"; 1.1.15).** `ui/ScreenAwake` (a lifecycle
+  observer on EVERY app screen — scan, review, Settings, Share, network test)
+  keeps the display on (FLAG_KEEP_SCREEN_ON; before 1.1.15 only the scan screen
+  did, so the phone slept on the review/Settings/Share screens, which stops the
+  camera and, 30 min later, the phone server) and, after Settings → Screen →
+  "Dim when idle" (`AppSettings.dimAfterS`: 30 s / 1 / 2 / 5 min / Never,
+  default 1 min) with no activity, drops the WINDOW's brightness to
+  `core/ScreenDim.level`: 10 %, but at most half the phone's own brightness —
+  `SCREEN_BRIGHTNESS` over the range the phone DECLARES
+  (`config_screenBrightnessSettingMaximum` read by name from the framework's
+  resources: 255 in AOSP, 1023–4095 on some OnePlus/Xiaomi; a reading above the
+  declared range is read against 4095 — dimmer than meant, never brighter) — and
+  NOT AT ALL when that half is under 1 % (already about as dark as it goes; the
+  review found a 0..2047 phone at night would otherwise be BRIGHTENED 4×).
+  `screen_brightness_float` is not used: it is gone from Settings.System on
+  Android 15. Activity = the activity's `onUserInteraction` (any touch), and on
+  the scan screen `onCaptureStarted` (trigger or shutter — a dimmed screen lights
+  for the ✓); a card merely sitting there does NOT count, or the screen would
+  never dim with a card on the tray. **Only while the screen has window focus**
+  (review of 1.1.15): a dialog (the pairing QR + one-time code, a text field, the
+  page's confirm()), the notification shade or the other split-screen half takes
+  it and their touches never reach `onUserInteraction` — so focus loss brightens
+  and stops the clock, focus gain restarts it (each activity forwards
+  `onWindowFocusChanged`). Leaving a screen restores the brightness; a choice
+  made on the Settings screen applies there at once (`reload`). Every
+  kept-awake screen also counts for the server's idle stop
+  (`GatewayService.screenVisible`, moved here from MainActivity / PanelActivity —
+  before, the server stopped after 30 min under a Share screen still showing its
+  code). Display only otherwise. Log tag `screen`: "dimmed to N % — 1 min with
+  no touch or scan (phone brightness S/MAX, where)", "bright again —
+  touch|scan|shutter|a dialog or another window is on top (where)", "not
+  dimming — the screen is already that dark (…)" once per visit; Diagnostics:
+  "screen kept on · dims after 1 min idle · phone brightness S/MAX" (the rig's
+  range shows there). Not in `/api/device` (phone only). Tested in code
+  (ScreenDimTest; ScreenAwakeTest — each of its rules fails its test when
+  removed; the Settings row at the N200's size), not on the phone.
 - **The scan signal** is ONLY the blue ✓ on the card (a centre ✓ badge with no
   shape), held for Settings/📱 Scanner "Check mark time" (250–10000 ms, default
   2500, `check_ms`), plus two short buzzes (Vibration switch).
