@@ -67,6 +67,14 @@ class AutoScanner {
 
     val hasEmptyRef get() = emptyRef != null
 
+    /**
+     * App-only, READ-ONLY (the card-shape gate's print-evidence fallback,
+     * [PrintEvidence] — phone.html has no gate, so the differential test never
+     * calls it): a copy of the learned empty tray's gradient map, or null before
+     * learning. A copy, so nothing outside can change what [tick] compares against.
+     */
+    fun emptyGradient(): IntArray? = emptyGrad?.copyOf()
+
     /** sampleSmallGray's geometry guard: a new scan-area aspect invalidates every reference. */
     private fun accept(sample: Gray): Gray {
         if (sample.h != mh) {

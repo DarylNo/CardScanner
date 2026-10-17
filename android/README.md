@@ -171,10 +171,13 @@ sampling and capture to the tray; double-tap the preview to re-learn the empty
 tray. Focus: when the camera starts it locks on the centre of the scan Area
 (the screen centre with no Area) so the lens stops hunting; then the FIRST
 card is focused on properly — its capture waits (≤1.5 s, once) until the
-lens has focused at the Area centre with the card under it — and every card
+lens has focused on the card's own centre — and every card
 after shoots instantly with focus held. It focuses again only when the Area
 changes, the camera reopens, you tap the preview (locks where you tapped), or
 a capture comes out far softer than the session's usual (bumped mount).
+Every focus pass, its result (focused / not / timed out) and the lens
+position go in the debug log under `focus`, and each capture line carries its
+three frames' sharpness and the chosen frame's AF state.
 Tray
 scans are hands-free. While a card sits there the app outlines it (blue with
 a ✓ when it is captured). A Tray scan only fires when that outline is there:
@@ -273,9 +276,14 @@ paths — a hand-pushed tag, and `auto-tag.yml` (it calls `release.yml` with
 
 ## Debugging
 
-- **Live log:** every trigger, capture, identification (name, printings, OCR,
-  stage timings), queue outcome, F2F request, server event and error goes to
-  an in-memory log mirrored to logcat: `adb logcat -s CardScanner`.
+- **Live log:** every trigger, focus pass (`focus`), capture (sharpness of
+  its three frames, AF state and lens position), identification (name,
+  printings, OCR, stage timings), queue job and outcome, F2F request, server
+  event and error goes to an in-memory log mirrored to logcat:
+  `adb logcat -s CardScanner`.
+- **Settings → Diagnostics** reads the camera LIVE from the scan screen
+  (focus results this session, the lens now, the analyzer, the last capture);
+  once the scan screen is closed it shows the last snapshot and its age.
 - **On the paired computer:** 🐞 → **App log** tails it live (filter, pause);
   **Copy report** / **Download** = diagnostics + the whole log.
 - **On the phone:** Settings → Diagnostics → **Share debug report**.
@@ -316,7 +324,12 @@ Run on the Nord N200 after installing a new build:
 - [ ] Draw an Area; detection and capture stay inside it. Double-tap re-learns.
 - [ ] Sleeved card, dark card, foil under glare and a white-bordered card all
       trigger (the card-shape gate refuses none of them; the `detect` log
-      shows no "TRIGGER refused" for a real card).
+      shows no "TRIGGER refused" for a real card — a card the outline missed
+      reads "TRIGGER accepted without an outline — printed detail N%").
+- [ ] Swap one white-bordered card for another (and an old-bordered one): each
+      is scanned; the `detect` log says "next card: swapped — change N%" or
+      "removed". A swap it missed shows why in that wait's "wait over" line
+      (the change while a card sat still never passed 6 %, never still, …).
 - [ ] Empty tray / glare / hand in frame → nothing filed as a card; the status
       reads "no card shape yet", then the view is adopted as the empty tray.
 - [ ] The outline sits on the card, turns blue with the ✓ on capture, and stays
@@ -342,7 +355,8 @@ Run on the Nord N200 after installing a new build:
 - [ ] Screen off for 10 minutes: the computer and guests still get through.
 - [ ] Settings → Diagnostics shows the camera setting, every offered lens,
       the bound camera, hardware level, analysis size and capture timings;
-      Copy works.
+      the camera block says "live" and its `focus:` line counts this
+      session's passes; Copy works.
 - [ ] Update to the next release-signed APK installs over the old one with
       the scans and the paired computer intact.
 

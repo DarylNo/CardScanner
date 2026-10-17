@@ -19,6 +19,8 @@ object StatusText {
     const val NO_CARD = "No card detected."
     const val QUEUED_OPEN = "Queued — the scan opens once it's identified"
     const val AREA_DRAG = "Drag a box around the tray…"
+    /** Drawing an Area while zoomed: the camera goes back to the whole frame first. */
+    const val AREA_ZOOMING_OUT = "Zooming out to the whole frame…"
     const val AREA_DRAG_TRAY = "Tray: draw a box around where the card will sit (Cancel keeps the current area)."
     const val AREA_DEFAULT = "Scan area drawn for you — put the card in the box, or tap Area to draw your own."
     const val AREA_UNCHANGED = "Scan area unchanged."
