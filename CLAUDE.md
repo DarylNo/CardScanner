@@ -218,6 +218,15 @@ README → External card list. Rules that must hold:
   All / Pending (a "check" row still shows), so `passesFilters` and "Exclude
   filtered" never drop an untagged card from the export. Persisted in
   `listFilters.tagged`.
+- **A Wanted card ALWAYS shows (owner, 2026-10-17: "I need to have wanted cards
+  always show"; phone v54, desktop d47).** `isWanted` (the `wanted` tag, exact,
+  as the chip reads it) is exempt in `passesFilters` exactly like a "check"
+  row: neither bar hides it, in ANY or ALL, so "Exclude filtered" never drops
+  it from the export. The view chips (All / Needs pick / …), "Tagged only" and
+  the name search still narrow it like any row — they are where you LOOK, the
+  bars are what gets thrown away. Other tags (`sold_out`, raw text) get no
+  exemption. `check_card_list_ui.py` drives it on both pages;
+  `test_static_pages.py` guards it in CI.
 Golden: `scripts/export_card_list_fixtures.py` (normalize/keys/parse/tags, a
 `CardListSource` session with a pinned clock, and the REAL app.py's reads) →
 `CardListParityTest`; `check_card_list_ui.py` drives both pages.
@@ -284,7 +293,8 @@ searched, or a scan carrying no popularity because it predates the feature).
 That third state is load-bearing — collapsing it to "pass" is the bug that made
 ALL barely differ from ANY (an unpriced card "satisfied" a Min $ it had never
 been measured against). Rules that must hold:
-- **A "check" row is never filtered away**, by any bar, in either mode.
+- **A "check" row is never filtered away**, by any bar, in either mode — nor
+  is a card the external list tags Wanted (above, External card list).
 - **ANY (the default) never hides on ignorance.** Show on any pass; with no pass
   but something still NULL, show anyway. Hide only when every active bar
   actively fails. This is what keeps an unpriced Black Lotus on screen.
@@ -335,7 +345,14 @@ lens on testers' phones), minSdk 29, arm64-v8a.
   flipped `> median`. `HashParityTest` checks every stage against
   `resources/arthash/expected.json` (`scripts/export_hash_fixtures.py`). Never
   loosen it to "close enough": the 110/140+20/210 thresholds only transfer on
-  equal bits.
+  equal bits. **Pillow is pinned < 13** (2026-10-17): Pillow 13.0.0 moved the
+  8-bit LANCZOS output for sources TALLER than wide (41 of the 168 resize-sweep
+  digests), so CI's hash `--check` went red the day it shipped. Every art crop
+  is wider than tall — 160 real crops (the arthash cards × 8 scales) hashed
+  bit-identically — but the port follows Pillow 12 and the weekly art pack is
+  built with whatever `pip install .` resolves, so the pin keeps the pack, CI
+  and the phone on one LANCZOS. Lift it only by porting 13's change and
+  regenerating the fixtures.
 - **Golden-tested server:** `scripts/export_api_fixtures.py` drives the REAL
   app.py through scripted sessions (`api/expected.json`, `sweep.json` — every
   body AND the exact F2F lookup sequence, `export.json` — every status,

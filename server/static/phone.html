@@ -461,6 +461,9 @@ function tagChips(scan){
   return listTags(scan).map(t => `<span class="spill ltag ${LIST_TAG_LABELS[t] ? escHtml(t) : 'other'}">${escHtml(LIST_TAG_LABELS[t] || t)}</span>`).join('');
 }
 const tagSig = scan => listTags(scan).join(';');
+// A card the list WANTS always shows: never filtered away by the price or
+// popularity bar, in either mode — so "Exclude filtered" never drops it either.
+const isWanted = scan => listTags(scan).includes('wanted');
 // Which formats a card may be PLAYED in — a different question from how much
 // it is played, so these never get a popularity colour. `not_legal` is dropped:
 // most cards are not legal in most formats and listing that buries the rest.
@@ -481,7 +484,7 @@ function formatChipsHtml(scan, pop = popOf(scan)){
 }
 
 /* ── version banner — proves which page+server combo is running ────────────── */
-const UI_VERSION = 'v53';
+const UI_VERSION = 'v54';
 
 // Who is asking: the phone server says "guest" for the 6-digit code (admin =
 // the paired computer); the computer's own server always says admin. Guests
@@ -1085,7 +1088,7 @@ function activeFilters() {
    ALL: every active bar must be affirmatively satisfied, so an unknown does
    not count and unpriced rows are hidden. See desktop.html for the rationale. */
 function passesFilters(s) {
-  if (isProblem(s)) return true;
+  if (isProblem(s) || isWanted(s)) return true;   // "check" and Wanted rows always show
   const on = activeFilters();
   if (!on.price && !on.pop) return true;
   const votes = [];
