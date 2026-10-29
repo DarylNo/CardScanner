@@ -475,13 +475,18 @@ function toast(msg){
 }
 
 /* ── pricing helpers ───────────────────────────────────────────────────── */
-function f2fBest(scan){
-  const c = scan.f2f?.conditions || {};
-  const cond = scan.selection?.condition || "NM";
+// The F2F price for condition `cond` out of a print's per-condition listing
+// (NM → PL, LP → PL then NM, …; nothing in that order → the cheapest listed).
+function condPrice(c, cond){
+  c = c || {};
   const order = { NM:["NM","PL"], LP:["PL","NM"], MP:["MP","PL","NM"], HP:["HP","PL","NM"], DMG:["DMG","HP","PL","NM"] }[cond] || ["NM"];
   for (const k of order) if (c[k]!=null) return c[k];
   const vals = Object.values(c); return vals.length ? Math.min(...vals) : null;
 }
+function f2fBest(scan){ return condPrice(scan.f2f?.conditions, scan.selection?.condition || "NM"); }
+// The condition an UNPICKED scan will be filed at when a printing is picked
+// (the server's select: the condition read off the card, else NM).
+const pickCond = s => String(s.card_read?.condition_estimate || "NM").toUpperCase();
 // Low–high across every listed condition — shown for pending scans too, since
 // Per-print F2F data on an unpicked scan (filled by the auto-sweeper).
 // searched is true once EVERY candidate print has a completed search — only
@@ -492,9 +497,13 @@ function printInfo(s){
   const cands = (s.candidates || []).filter(c => !c.other_art);
   const searched = cands.length > 0 && cands.every(c => c.f2f_conditions != null);
   const vals = [];
+  // Each print at the price a PICK of it would show (owner, 2026-10-29: the cheapest
+  // listed condition — a $0.95 Played copy of a $1.20 NM card — hid an unpicked
+  // card under a Min $0.99 that the same card passed the moment it was picked).
+  const cond = pickCond(s);
   for (const c of cands){
-    const v = Object.values(c.f2f_conditions || {});
-    if (v.length) vals.push(Math.min(...v));
+    const v = condPrice(c.f2f_conditions, cond);
+    if (v != null) vals.push(v);
   }
   return { searched, vals };
 }
@@ -2171,7 +2180,7 @@ function sigOf(scan){
 
 // Version banner — page version · server git hash. Same rationale as the
 // phone: without it, "is this the old page?" is undebuggable.
-const UI_VERSION = "d48";
+const UI_VERSION = "d49";
 
 // Who is asking: the phone server says "guest" for the 6-digit code (admin =
 // the paired computer); the computer's own server always says admin. Guests

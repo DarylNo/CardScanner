@@ -307,6 +307,12 @@ been measured against). Rules that must hold:
   order (basic lands and Commander-banned cards report it), so a popularity
   floor ALONE hides Black Lotus along with the bulk — the price floor ORed
   beside it is the rescue, and `#fhint` warns in that configuration too.
+- **An unpicked card is judged on the price its PICK would show** (1.1.16,
+  owner: a card hidden by Min $0.99 showed the moment its printing was picked):
+  each print counts at `condPrice(f2f_conditions, pickCond(s))` — the condition
+  read off the card, else NM, in `f2fBest`'s order — never the cheapest listed
+  condition (a $0.95 Played copy of a $1.20 NM card). Row range and filter
+  alike; `scripts/check_price_filter_ui.py` drives both pages.
 - **"Exclude filtered" still requires a known price** even when only the
   popularity bar is on — never drop a card from the export on a price that was
   never looked up.
