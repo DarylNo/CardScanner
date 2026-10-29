@@ -155,11 +155,48 @@ def build() -> dict[str, bytes]:
     return files
 
 
+# expected.json is compared as NUMBERS, to 1e-9 relative: the scene PNGs are
+# byte-identical everywhere (the SIMD pin above), but the reference's float maths
+# still meets the platform's libm (log / exp), whose last bits differ between this
+# container and a GitHub runner — 2026-10-29: the PNGs matched on CI, expected.json
+# did not. The port is held to 1e-6, so 1e-9 still catches any real drift; the
+# structure, every key and every non-float value must match exactly.
+REL_TOL, ABS_TOL = 1e-9, 1e-12
+
+
+def _diff(a, b, at="$"):
+    if isinstance(a, dict) and isinstance(b, dict):
+        if a.keys() != b.keys():
+            return f"{at}: keys differ"
+        return next((d for k in a if (d := _diff(a[k], b[k], f"{at}.{k}"))), None)
+    if isinstance(a, list) and isinstance(b, list):
+        if len(a) != len(b):
+            return f"{at}: length {len(a)} vs {len(b)}"
+        return next((d for i, (x, y) in enumerate(zip(a, b)) if (d := _diff(x, y, f"{at}[{i}]"))), None)
+    if isinstance(a, float) or isinstance(b, float):
+        if isinstance(a, (int, float)) and isinstance(b, (int, float)) and not isinstance(a, bool) \
+                and not isinstance(b, bool) and abs(a - b) <= max(REL_TOL * max(abs(a), abs(b)), ABS_TOL):
+            return None
+        return f"{at}: {a!r} vs {b!r}"
+    return None if a == b else f"{at}: {a!r} vs {b!r}"
+
+
+def _same(name: str, committed: bytes, built: bytes) -> bool:
+    if committed == built:
+        return True
+    if name != "expected.json":
+        return False
+    d = _diff(json.loads(committed), json.loads(built))
+    if d:
+        print(f"  expected.json differs at {d}")
+    return d is None
+
+
 def main() -> int:
     files = build()
     if "--check" in sys.argv:
         stale = [n for n, b in files.items()
-                 if not (OUT / n).exists() or (OUT / n).read_bytes() != b]
+                 if not (OUT / n).exists() or not _same(n, (OUT / n).read_bytes(), b)]
         extra = [p.name for p in OUT.glob("*") if p.name not in files] if OUT.exists() else []
         if stale or extra:
             print("change fixtures are stale — run: python scripts/export_change_fixtures.py")
