@@ -162,7 +162,7 @@ with sync_playwright() as pw:
     pg = ctx.new_page(); errs = []
     pg.on("pageerror", lambda e: errs.append(str(e)))
     pg.goto(BASE + "/"); pg.wait_for_selector(".row[data-id='5']")
-    check(pg.evaluate("UI_VERSION") == "d48", "banner d48")
+    check(pg.evaluate("UI_VERSION") == "d50", "banner d50")
     check(pg.locator(".ltag").count() == 0, "feature off: no list chips")
     check(not pg.locator("#tagged").is_visible(), "feature off: no Tagged only")
     STATE["scans"] = tagged_scans()
@@ -203,7 +203,7 @@ with sync_playwright() as pw:
     pg = ctx.new_page(); errs = []
     pg.on("pageerror", lambda e: errs.append(str(e)))
     pg.goto(BASE + "/phone?panel=1"); pg.wait_for_selector(".srow[data-sid='5']")
-    check(pg.evaluate("UI_VERSION") == "v54", "banner v54")
+    check(pg.evaluate("UI_VERSION") == "v56", "banner v54")
     check(pg.locator(".ltag").count() == 0, "feature off: no list chips")
     pg.locator("#fltBtn").click()
     check(not pg.locator("#p-tagged").is_visible(), "feature off: no Tagged only")

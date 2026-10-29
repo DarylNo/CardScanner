@@ -183,8 +183,10 @@
   .cmpbox img.cmpscan:not([data-fill]), .shotbox img:not([data-fill]), .lbscan img:not([data-fill]) { visibility: hidden; }
   .cmpbody.overlay .cmpbox img.under { z-index: 1; }
   .cmpbody.overlay .cmpbox img.over { z-index: 2; }
-  .cmpcap { position: absolute; left: 8px; bottom: 8px; z-index: 3; font-size: 11px; font-weight: 700;
-            padding: 2px 8px; border-radius: 999px; background: #000a; color: #fff; pointer-events: none; }
+  /* The caption sits UNDER the picture, never on it (owner, 2026-10-29: the pill in the
+     bottom-left corner covered the card — exactly where the collector line is). */
+  .cmpcap { display: block; margin-top: 4px; text-align: center; font-size: 11px; font-weight: 700;
+            color: var(--muted); pointer-events: none; }
   .cmpctl { display: flex; align-items: center; gap: 10px; margin: 10px auto 0; max-width: calc(92vh + 14px); }
   .cmpctl .btn { flex: 0 0 auto; }
   .cmpctl .btn.pick { flex: 1 1 auto; }
@@ -475,13 +477,18 @@ function toast(msg){
 }
 
 /* ── pricing helpers ───────────────────────────────────────────────────── */
-function f2fBest(scan){
-  const c = scan.f2f?.conditions || {};
-  const cond = scan.selection?.condition || "NM";
+// The F2F price for condition `cond` out of a print's per-condition listing
+// (NM → PL, LP → PL then NM, …; nothing in that order → the cheapest listed).
+function condPrice(c, cond){
+  c = c || {};
   const order = { NM:["NM","PL"], LP:["PL","NM"], MP:["MP","PL","NM"], HP:["HP","PL","NM"], DMG:["DMG","HP","PL","NM"] }[cond] || ["NM"];
   for (const k of order) if (c[k]!=null) return c[k];
   const vals = Object.values(c); return vals.length ? Math.min(...vals) : null;
 }
+function f2fBest(scan){ return condPrice(scan.f2f?.conditions, scan.selection?.condition || "NM"); }
+// The condition an UNPICKED scan will be filed at when a printing is picked
+// (the server's select: the condition read off the card, else NM).
+const pickCond = s => String(s.card_read?.condition_estimate || "NM").toUpperCase();
 // Low–high across every listed condition — shown for pending scans too, since
 // Per-print F2F data on an unpicked scan (filled by the auto-sweeper).
 // searched is true once EVERY candidate print has a completed search — only
@@ -492,11 +499,16 @@ function printInfo(s){
   const cands = (s.candidates || []).filter(c => !c.other_art);
   const searched = cands.length > 0 && cands.every(c => c.f2f_conditions != null);
   const vals = [];
+  // Each print at the price a PICK of it would show (owner, 2026-10-29: the cheapest
+  // listed condition — a $0.95 Played copy of a $1.20 NM card — hid an unpicked
+  // card under a Min $0.99 that the same card passed the moment it was picked).
+  const cond = pickCond(s);
   for (const c of cands){
-    const v = Object.values(c.f2f_conditions || {});
-    if (v.length) vals.push(Math.min(...v));
+    const v = condPrice(c.f2f_conditions, cond);
+    if (v != null) vals.push(v);
   }
-  return { searched, vals };
+  const priced = searched && vals.length === cands.length;   // a price for EVERY print of the art
+  return { searched, priced, vals };
 }
 
 // the server prices the top-ranked printing in the background at scan time.
@@ -530,9 +542,13 @@ function priceVote(scan){
     const p = priceOf(scan);
     return p == null ? null : inBand(p);
   }
-  const { searched, vals } = printInfo(scan);
-  if (!searched || !vals.length) return null;
-  return vals.some(inBand);
+  const { searched, priced, vals } = printInfo(scan);
+  // Hidden only on FULL knowledge (owner, 2026-10-29): every print of the scanned
+  // artwork searched AND priced — a print F2F has no listing for is a price not
+  // known, so it can keep the card on screen but never hide it.
+  if (!searched) return null;
+  if (vals.some(inBand)) return true;
+  return priced ? false : null;
 }
 // Kept for anything that still wants the old two-valued reading, where an
 // unknown price counts as "do not hide".
@@ -1762,9 +1778,9 @@ function drawCompare(){
   const scanImg = `<i id="cmpScanSlot"></i>`;   // the kept photo goes here (placeScanImg)
   const printImg = `<img class="cmpprint" src="${esc(c.image_normal||c.image_small)}" alt="${esc(tag)}" onerror="this.style.visibility='hidden'">`;
   const body = overlay
-    ? `<div class="cmpbody overlay"><div class="cmpbox">${scanImg}${printImg}<span class="cmpcap" id="cmpOverCap"></span></div></div>`
-    : `<div class="cmpbody side"><div class="cmpbox">${scanImg}<span class="cmpcap">scan</span></div>
-         <div class="cmpbox">${printImg}<span class="cmpcap">${esc(tag)}</span></div></div>`;
+    ? `<div class="cmpbody overlay"><div><div class="cmpbox">${scanImg}${printImg}</div><span class="cmpcap" id="cmpOverCap"></span></div></div>`
+    : `<div class="cmpbody side"><div><div class="cmpbox">${scanImg}</div><span class="cmpcap">scan</span></div>
+         <div><div class="cmpbox">${printImg}</div><span class="cmpcap">${esc(tag)}</span></div></div>`;
   wrap.innerHTML = `<div class="cmpblk" id="cmp">
     <div class="cmphead"><div>
         <b>${esc(c.set_name||"")}</b> · <b>${esc(tag)}</b>${picked ? ` · <span class="picked">✓ picked</span> · ×${esc(sel.quantity)}` : ""} · ${i+1} of ${n}<span id="cmpPrice">${cmpPriceHtml(scan, c)}</span>
@@ -2171,7 +2187,7 @@ function sigOf(scan){
 
 // Version banner — page version · server git hash. Same rationale as the
 // phone: without it, "is this the old page?" is undebuggable.
-const UI_VERSION = "d48";
+const UI_VERSION = "d50";
 
 // Who is asking: the phone server says "guest" for the 6-digit code (admin =
 // the paired computer); the computer's own server always says admin. Guests

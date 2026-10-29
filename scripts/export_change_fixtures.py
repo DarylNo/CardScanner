@@ -21,11 +21,27 @@ drift from the reference.
 from __future__ import annotations
 
 import json
+import os
+import platform
 import sys
 from pathlib import Path
 
-import cv2
-import numpy as np
+# Pin numpy and OpenCV to their BASELINE instruction set before either loads.
+# Both pick SIMD kernels per CPU at run time (OpenCV SSE4.1…AVX-512 over an SSE3
+# baseline, numpy x86-64-v3/v4 over v2), and the scenes' blurs / resizes and the
+# float sums come out a few ulps apart between them: the committed PNGs and
+# expected.json then match one GitHub runner's CPU and not another's
+# (2026-10-29: --check failed on CI for an unrelated PR; it passed here, and
+# failed here too with OPENCV_CPU_DISABLE=AVX2). Baseline-only output is the same
+# bytes on every x86-64 machine (checked: py3.12 / numpy 2.5.4 and py3.13 /
+# numpy 2.5.3, on an AVX-512 host with and without its wide paths). The values
+# the port is held to (≤ 1e-6) are unchanged by it; only the last bits move.
+if platform.machine().lower() in ("x86_64", "amd64"):
+    os.environ["OPENCV_CPU_DISABLE"] = "SSE4.1,SSE4.2,AVX,FP16,AVX2,AVX512-SKX"
+    os.environ["NPY_DISABLE_CPU_FEATURES"] = "X86_V3 X86_V4 AVX512_ICL AVX512_SPR"
+
+import cv2  # noqa: E402
+import numpy as np  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
@@ -139,11 +155,48 @@ def build() -> dict[str, bytes]:
     return files
 
 
+# expected.json is compared as NUMBERS, to 1e-9 relative: the scene PNGs are
+# byte-identical everywhere (the SIMD pin above), but the reference's float maths
+# still meets the platform's libm (log / exp), whose last bits differ between this
+# container and a GitHub runner — 2026-10-29: the PNGs matched on CI, expected.json
+# did not. The port is held to 1e-6, so 1e-9 still catches any real drift; the
+# structure, every key and every non-float value must match exactly.
+REL_TOL, ABS_TOL = 1e-9, 1e-12
+
+
+def _diff(a, b, at="$"):
+    if isinstance(a, dict) and isinstance(b, dict):
+        if a.keys() != b.keys():
+            return f"{at}: keys differ"
+        return next((d for k in a if (d := _diff(a[k], b[k], f"{at}.{k}"))), None)
+    if isinstance(a, list) and isinstance(b, list):
+        if len(a) != len(b):
+            return f"{at}: length {len(a)} vs {len(b)}"
+        return next((d for i, (x, y) in enumerate(zip(a, b)) if (d := _diff(x, y, f"{at}[{i}]"))), None)
+    if isinstance(a, float) or isinstance(b, float):
+        if isinstance(a, (int, float)) and isinstance(b, (int, float)) and not isinstance(a, bool) \
+                and not isinstance(b, bool) and abs(a - b) <= max(REL_TOL * max(abs(a), abs(b)), ABS_TOL):
+            return None
+        return f"{at}: {a!r} vs {b!r}"
+    return None if a == b else f"{at}: {a!r} vs {b!r}"
+
+
+def _same(name: str, committed: bytes, built: bytes) -> bool:
+    if committed == built:
+        return True
+    if name != "expected.json":
+        return False
+    d = _diff(json.loads(committed), json.loads(built))
+    if d:
+        print(f"  expected.json differs at {d}")
+    return d is None
+
+
 def main() -> int:
     files = build()
     if "--check" in sys.argv:
         stale = [n for n, b in files.items()
-                 if not (OUT / n).exists() or (OUT / n).read_bytes() != b]
+                 if not (OUT / n).exists() or not _same(n, (OUT / n).read_bytes(), b)]
         extra = [p.name for p in OUT.glob("*") if p.name not in files] if OUT.exists() else []
         if stale or extra:
             print("change fixtures are stale — run: python scripts/export_change_fixtures.py")
