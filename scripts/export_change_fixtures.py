@@ -21,11 +21,27 @@ drift from the reference.
 from __future__ import annotations
 
 import json
+import os
+import platform
 import sys
 from pathlib import Path
 
-import cv2
-import numpy as np
+# Pin numpy and OpenCV to their BASELINE instruction set before either loads.
+# Both pick SIMD kernels per CPU at run time (OpenCV SSE4.1…AVX-512 over an SSE3
+# baseline, numpy x86-64-v3/v4 over v2), and the scenes' blurs / resizes and the
+# float sums come out a few ulps apart between them: the committed PNGs and
+# expected.json then match one GitHub runner's CPU and not another's
+# (2026-10-29: --check failed on CI for an unrelated PR; it passed here, and
+# failed here too with OPENCV_CPU_DISABLE=AVX2). Baseline-only output is the same
+# bytes on every x86-64 machine (checked: py3.12 / numpy 2.5.4 and py3.13 /
+# numpy 2.5.3, on an AVX-512 host with and without its wide paths). The values
+# the port is held to (≤ 1e-6) are unchanged by it; only the last bits move.
+if platform.machine().lower() in ("x86_64", "amd64"):
+    os.environ["OPENCV_CPU_DISABLE"] = "SSE4.1,SSE4.2,AVX,FP16,AVX2,AVX512-SKX"
+    os.environ["NPY_DISABLE_CPU_FEATURES"] = "X86_V3 X86_V4 AVX512_ICL AVX512_SPR"
+
+import cv2  # noqa: E402
+import numpy as np  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
