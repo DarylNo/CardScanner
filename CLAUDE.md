@@ -313,6 +313,11 @@ been measured against). Rules that must hold:
   read off the card, else NM, in `f2fBest`'s order — never the cheapest listed
   condition (a $0.95 Played copy of a $1.20 NM card). Row range and filter
   alike; `scripts/check_price_filter_ui.py` drives both pages.
+- **A price bar may hide an unpicked card only when EVERY print of the scanned
+  artwork has a price** (owner, 2026-10-29: "to hide it should have all the
+  prices available for the print of that art"): searched is not enough — a print
+  F2F has no listing for is an unknown price, so it can keep the card (NULL)
+  but never hide it (`printInfo().priced`). Any print in band still passes.
 - **"Exclude filtered" still requires a known price** even when only the
   popularity bar is on — never drop a card from the export on a price that was
   never looked up.
@@ -497,6 +502,10 @@ lens on testers' phones), minSdk 29, arm64-v8a.
   resets; persisted per viewer (`cmpScale`). Manual on purpose — the photo's
   card is at a known 95 % only when the quad was right (a sleeve edge makes
   it read larger).
+  **The compare captions ("scan over print", "scan", "SET #n") sit UNDER the
+  pictures, never on them** (owner, 2026-10-29: the bottom-left pill covered the
+  card — exactly where the collector line is); `check_price_filter_ui.py` checks
+  every caption is clear of every box, in all three modes, on both pages.
   Scan-screen Share is the standard share glyph (`drawable/ic_share`,
   `ScanChrome.iconChip`, named "Share" for TalkBack).
 - **The Camera setting (owner, 2026-10-02: "thinking about when people are

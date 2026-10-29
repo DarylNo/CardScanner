@@ -40,6 +40,9 @@ def scan(i, name, cands, read_cond=None, selected=None):
 
 NM_PL = {"NM": 1.20, "PL": 0.95}
 SCANS = [
+    # one print of the art priced $0.50, the other searched but NOT LISTED at F2F: its price
+    # is unknown, so the card must stay (owner: hide only with every print of the art priced)
+    scan(7, "One Unlisted", [cand("n1", "One Unlisted", {"NM": 0.50}), cand("n2", "One Unlisted", {})]),
     scan(6, "Two Prints", [cand("t1", "Two Prints", {"NM": 0.50}), cand("t2", "Two Prints", NM_PL)]),
     scan(5, "Cheap", [cand("c1", "Cheap", {"NM": 0.50, "PL": 0.40})]),
     scan(4, "Read as LP", [cand("l1", "Read as LP", NM_PL)], read_cond="lp"),
@@ -50,7 +53,7 @@ SCANS = [
 # What a pick would show, so what the filter must use: 1 → NM $1.20 (in), 2 → $1.20 (in),
 # 3 → only HP listed, $1.10 (in), 4 → read LP: PL $0.95 (out), 5 → $0.50 (out),
 # 6 → $0.50 / $1.20 — one print in band (in).
-WANT_SHOWN = [6, 3, 2, 1]
+WANT_SHOWN = [7, 6, 3, 2, 1]
 WANT_RANGE = {1: "$1.20", 4: "$0.95", 6: "$0.50–$1.20"}
 
 
@@ -113,6 +116,24 @@ with sync_playwright() as pw:
         pg.locator(minsel).fill("0.99"); pg.wait_for_timeout(300)
         ids = pg.evaluate(f"[...document.querySelectorAll({row!r})].map(r => +r.dataset.{idattr})")
         check(ids == WANT_SHOWN, f"Min $0.99 shows {ids} (want {WANT_SHOWN}): an unpicked NM $1.20 card is not hidden")
+        # the compare caption ("scan over print", "scan", "SET #n") sits under the picture, never on it
+        for mode in ("blend", "wipe", "side"):
+            pg.evaluate(f"localStorage.setItem('cmpMode', '{mode}')")
+            pg.reload(); pg.wait_for_selector(f"{row}[data-{idattr}='1']")
+            if page == "desktop.html":
+                pg.locator("#list .row[data-id='1']").click()
+            else:
+                pg.evaluate("openDetail(1)")
+            pg.wait_for_selector("#cmp .cmpcap", timeout=8000); pg.wait_for_timeout(300)
+            over = pg.evaluate("""() => [...document.querySelectorAll('#cmp .cmpcap')].map(c => {
+                const r = c.getBoundingClientRect();
+                return [c.textContent, [...document.querySelectorAll('#cmp .cmpbox')].some(b => {
+                  const q = b.getBoundingClientRect();
+                  return r.left < q.right && r.right > q.left && r.top < q.bottom && r.bottom > q.top; })]; })""")
+            check(over and all(not o for _, o in over) and all(t for t, _ in over),
+                  f"{mode}: every caption is shown and clear of the pictures {over}")
+            if page == "phone.html":
+                pg.evaluate("closeDetail()")
         check(not errs, f"no page errors ({errs[:3]})")
         pg.evaluate("localStorage.clear()")
         ctx.close()

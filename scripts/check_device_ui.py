@@ -14,7 +14,7 @@ server and check the 📱 Scanner panel's "Zoom to fit the Area" controls
 - after a zoom / Area PATCH the panel takes a new snapshot once it settles;
 - an Area drawn on the (base-space) snapshot while zoomed is PATCHed as the
   picture's own fractions — base fractions, 1:1, never divided by the zoom;
-- the banner reads d49 and the page throws nothing.
+- the banner reads d50 and the page throws nothing.
 
     pip install playwright        # the browser: Chromium, see EXE below
     python scripts/check_device_ui.py
@@ -29,7 +29,7 @@ from PIL import Image, ImageDraw
 from playwright.sync_api import sync_playwright
 
 STATIC = Path(__file__).resolve().parents[1] / "server" / "static"
-VERSION = "d49"
+VERSION = "d50"
 
 ZOOMED = {"ratio": 1.9, "target": 1.9, "limit": "the Area fit", "fit": 2.0, "lossless": 2.6, "max": 10.0, "settling": False}
 UNZOOMED = {"ratio": 1.0, "target": 1.0, "limit": "Zoom to fit is off", "fit": 2.0, "lossless": 2.6, "max": 10.0, "settling": False}
