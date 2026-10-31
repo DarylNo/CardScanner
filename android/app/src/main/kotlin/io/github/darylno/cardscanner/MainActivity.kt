@@ -325,7 +325,11 @@ class MainActivity : AppCompatActivity() {
                 appliedRoi = settings.roi
                 camera?.setRoi(settings.roi)
             }
-            applyMode()
+            // The mode reaches the camera only when it CHANGED (1.1.17): handing it Tray again
+            // re-arms a card that already scanned (AutoScanner.setAuto(true) → WATCHING), so
+            // any PATCH — a torch, a check time, the 📱 Scanner panel's zoom box — filed the
+            // card still sitting there a second time, two steady ticks later.
+            applyMode(pushAuto = settings.auto != appliedAuto)
             camera?.setTorch(settings.torch)
             camera?.setAeLock(settings.aeLock)
             camera?.setHighRes(settings.highRes)
@@ -339,6 +343,8 @@ class MainActivity : AppCompatActivity() {
         override fun zoomState() = camera?.zoomState()
     }
     private var appliedRoi: io.github.darylno.cardscanner.core.RoiFrac? = null
+    /** The mode the camera was last handed (setAuto), null = none yet — [applyRemote] re-hands it only when it changed. */
+    private var appliedAuto: Boolean? = null
 
     /** Battery % and charging state from the sticky ACTION_BATTERY_CHANGED broadcast (no receiver kept). */
     private fun readBattery(now: Long) {
@@ -636,13 +642,22 @@ class MainActivity : AppCompatActivity() {
     }
 
     // ── modes / controls ────────────────────────────────────────────────────
-    private fun applyMode() {
+    /**
+     * Show the mode (the Tray|Tap chip, the Area, the overlay, the status line) and, with
+     * [pushAuto], hand it to the camera. Handing Tray over again is not harmless: it puts
+     * the scanner back to WATCHING, so a card that already scanned is shot again — the
+     * browser's PATCH passes false unless the mode changed ([appliedAuto]).
+     */
+    private fun applyMode(pushAuto: Boolean = true) {
         styleAuto()
         val drew = ensureArea()
         showArea()
         overlay.setBox(null, 176, 132, OverlayView.BoxState.SETTLING)
         updateAreaBtn()
-        camera?.setAuto(settings.auto)
+        if (pushAuto) {
+            camera?.setAuto(settings.auto)
+            appliedAuto = settings.auto
+        }
         setStatus(
             when {
                 drew -> StatusText.AREA_DEFAULT
@@ -687,6 +702,7 @@ class MainActivity : AppCompatActivity() {
         settings.auto = auto
         styleAuto()
         camera?.setAuto(settings.auto)
+        appliedAuto = settings.auto
         if (settings.auto) {
             // Tray scans wherever the card is put down: ask for a box around that spot
             // (owner). Cancel keeps the current Area.
@@ -861,6 +877,7 @@ class MainActivity : AppCompatActivity() {
         cam.setRoi(settings.roi)
         appliedRoi = settings.roi
         cam.setAuto(settings.auto)
+        appliedAuto = settings.auto
         cam.bind(this, preview, cameraListener)
         syncPause()
     }

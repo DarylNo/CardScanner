@@ -536,18 +536,6 @@ class ScreensSmokeTest {
         app.settings.zoomFit = false
         grantCamera(true)
         launch(MainActivity::class.java)
-        val api = io.github.darylno.cardscanner.core.server.DeviceApi(app.phoneServer.device)
-        fun patchFromTheServerThread(body: String): Map<*, *> {
-            var answer: io.github.darylno.cardscanner.core.server.ApiResponse? = null
-            val t = Thread {
-                answer = api.handle(io.github.darylno.cardscanner.core.server.ApiRequest("PATCH", "/api/device", body = body.toByteArray()))
-            }
-            t.start()
-            while (t.isAlive) { ShadowLooper.idleMainLooper(); t.join(5) }
-            val r = answer!!
-            assertEquals(200, r.status)
-            return io.github.darylno.cardscanner.core.MiniJson.parse(String(r.body)) as Map<*, *>
-        }
         fun zoomOf(m: Map<*, *>) = m["zoom"] as Map<*, *>
         val on = patchFromTheServerThread("""{"zoom_fit":true}""")
         assertEquals(true, on["zoom_fit"])
@@ -557,6 +545,82 @@ class ScreensSmokeTest {
         assertEquals(false, off["zoom_fit"])
         assertEquals("$off", 1.0, (zoomOf(off)["target"] as Number).toDouble(), 0.0)
         assertEquals("Zoom to fit is off", zoomOf(off)["limit"])
+    }
+
+    /**
+     * PATCH /api/device the way the phone server does: on a background thread (as
+     * NanoHTTPD's), while this thread — the UI thread — runs what the bridge waits for.
+     */
+    private fun patchFromTheServerThread(body: String): Map<*, *> {
+        val api = io.github.darylno.cardscanner.core.server.DeviceApi(app.phoneServer.device)
+        var answer: io.github.darylno.cardscanner.core.server.ApiResponse? = null
+        val t = Thread {
+            answer = api.handle(io.github.darylno.cardscanner.core.server.ApiRequest("PATCH", "/api/device", body = body.toByteArray()))
+        }
+        t.start()
+        while (t.isAlive) { ShadowLooper.idleMainLooper(); t.join(5) }
+        val r = answer!!
+        assertEquals(200, r.status)
+        return io.github.darylno.cardscanner.core.MiniJson.parse(String(r.body)) as Map<*, *>
+    }
+
+    /** A camera that records what the scan screen asks of it (Robolectric has none to bind). */
+    private class RecordingCamera : io.github.darylno.cardscanner.ui.CameraPort {
+        val calls = mutableListOf<String>()
+        /** Every setAuto since the last [calls] clear, in order. */
+        val autos get() = calls.filter { it.startsWith("setAuto(") }
+        override fun bind(owner: LifecycleOwner, preview: androidx.camera.view.PreviewView,
+                          listener: io.github.darylno.cardscanner.ui.CameraPort.Listener) { calls += "bind" }
+        override fun rebind() { calls += "rebind" }
+        override fun unbind() { calls += "unbind" }
+        override fun setAuto(on: Boolean) { calls += "setAuto($on)" }
+        override fun setRoi(roi: io.github.darylno.cardscanner.core.RoiFrac?) { calls += "setRoi(${roi?.encode()})" }
+        override fun setZoomFit(on: Boolean) { calls += "setZoomFit($on)" }
+        override fun relearn() { calls += "relearn" }
+        override fun pause(paused: Boolean) { calls += "pause($paused)" }
+        override fun manualScan() { calls += "manualScan" }
+        override fun tapFocus(x: Float, y: Float) { calls += "tapFocus" }
+        override fun noCard(scene: io.github.darylno.cardscanner.core.Gray?) { calls += "noCard" }
+        override fun setTorch(on: Boolean) { calls += "setTorch($on)" }
+        override fun setAeLock(on: Boolean) { calls += "setAeLock($on)" }
+        override fun setHighRes(high: Boolean) { calls += "setHighRes($high)" }
+        override fun setCamera(id: String?) { calls += "setCamera($id)" }
+        override fun diagnostics(): String = "recording camera"
+    }
+
+    /**
+     * Found while checking the zoom probe (1.1.17): EVERY desktop PATCH re-armed Tray on
+     * a card that had already scanned. The scan screen re-applied the mode on any change
+     * — a torch, a check time, the 📱 Scanner panel's zoom box — and setAuto(true) puts
+     * the scanner back to WATCHING (AutoScanner.setAuto), so the card still sitting there
+     * in AWAIT_NEXT triggered again two steady ticks later and was filed twice. Only a
+     * PATCH that changes the mode may reach the camera's setAuto, once.
+     */
+    @Test
+    fun deviceApi_aPatchThatKeepsTheModeNeverReArmsTray() {
+        app.settings.roi = io.github.darylno.cardscanner.core.RoiFrac(0.25, 0.25, 0.75, 0.75)
+        app.settings.auto = true
+        app.settings.zoomFit = false
+        val cam = RecordingCamera()
+        app.cameraFactory = { _, _ -> cam }
+        grantCamera(true)
+        launch(MainActivity::class.java)
+        assertEquals("the scan screen starts its camera in Tray: ${cam.calls}", listOf("setAuto(true)"), cam.autos)
+        for (body in listOf("""{"torch":true}""", """{"check_ms":500}""", """{"zoom_fit":true}""", """{"torch":false}""")) {
+            cam.calls.clear()
+            patchFromTheServerThread(body)
+            assertTrue("the PATCH $body reached the camera: ${cam.calls}", cam.calls.isNotEmpty())
+            assertEquals("a PATCH that keeps the mode ($body) never re-arms Tray: ${cam.calls}", emptyList<String>(), cam.autos)
+        }
+        cam.calls.clear()
+        assertEquals("tap", patchFromTheServerThread("""{"mode":"tap"}""")["mode"])
+        assertEquals("a mode change reaches the camera exactly once: ${cam.calls}", listOf("setAuto(false)"), cam.autos)
+        cam.calls.clear()
+        patchFromTheServerThread("""{"torch":true}""")
+        assertEquals("…and a PATCH after it that keeps Tap to scan stays quiet: ${cam.calls}", emptyList<String>(), cam.autos)
+        cam.calls.clear()
+        assertEquals("tray", patchFromTheServerThread("""{"mode":"tray"}""")["mode"])
+        assertEquals("back to Tray from the computer: exactly once: ${cam.calls}", listOf("setAuto(true)"), cam.autos)
     }
 
     /** Settings → Delete all scans: the count is shown, the dialog says it, and OK deletes every scan and photo. */

@@ -70,7 +70,10 @@ class App : Application() {
         identify.onAppStart { if (it is io.github.darylno.cardscanner.ident.ArtPackStore.Check.Installed) uploads.retryNow() }
     }
 
-    fun newCamera(): CameraPort = Adapters.camera(this, settings)
+    /** Builds the scan screen's camera. Tests put a recording [CameraPort] here (Robolectric has no camera to bind). */
+    internal var cameraFactory: (Context, AppSettings) -> CameraPort = Adapters::camera
+
+    fun newCamera(): CameraPort = cameraFactory(this, settings)
 
     // ── the live log ────────────────────────────────────────────────────────
     private val crashFile get() = java.io.File(filesDir, "last-crash.txt")
