@@ -26,15 +26,20 @@ import java.util.Locale
  *    is false): one AF pass there, its lens move reported.
  * 9. RESTORE — back to [ZoomProbe.Facts.restoreZ], AE/AWB unlocked, [RESTORE_AE_MS],
  *    frames: the same card in the same place ([ZoomProbe.sameCard]) → [Port.end]
- *    with verified = true (the glue rebases the scanned scene, then ends the probe);
- *    anything else → verified = false, and a swapped card will scan.
+ *    with verified = true (the coordinator's endProbe asks the rebase, then ends the
+ *    probe); anything else — no frames, another card, or a restore zoom the camera
+ *    never answered — → verified = false, and a swapped card will scan.
  * A CANCEL (the owner) from any step after BEGIN goes through the RESTORE —
- * verified once the AF pass ran. The [BUDGET_MS] budget does the same. A
- * coordinator ABORT ([aborted]: the screen stopped, a new Area, …) stops at once:
- * no RESTORE, no [Port.end] (the coordinator already ended it), no rebase — what
- * follows is today's round trip. Answers that come after their step moved on (a
- * stale zoom, a late worker) are ignored; [Port.finished] comes exactly once.
- * Nothing here can file a scan.
+ * verified once an AF pass has been STARTED (the lens may move from the trigger on,
+ * review of 08a77d1), and if a pass is still running it is waited for (≤ its
+ * [FOCUS_GUARD_MS]) so the restore's frames and any rebase come after the lens
+ * settled. The [BUDGET_MS] budget does the same. A coordinator ABORT ([aborted]:
+ * the screen stopped, a new Area, …) stops at once: no RESTORE, no [Port.end] (the
+ * coordinator already ended it), no rebase — what follows is today's round trip.
+ * An abort that races the restore's end (its answer posted behind the worker's)
+ * finds [Port.end] answering false: no rebase was asked, the run is STOPPED.
+ * Answers that come after their step moved on (a stale zoom, a late worker) are
+ * ignored; [Port.finished] comes exactly once. Nothing here can file a scan.
  */
 class ZoomProbeRun(
     private val port: Port,
@@ -56,12 +61,20 @@ class ZoomProbeRun(
     /** The worker's answer: each frame's facts in a [w]×[h] frame, the card [thumbnail] (START / RESTORE), [ms] of work. */
     class Measured(val frames: List<ZoomProbe.FrameFacts>, val w: Int, val h: Int, val thumbnail: FloatArray? = null, val ms: Long = 0)
 
-    /** For the scan screen: the status pill's [status], the measurement card's [count], the rung's zoom [z] (null = none). */
+    /**
+     * For the scan screen: the status pill's [status] (the rung being asked), the measurement
+     * card's [count] (+ the newest measured rung's card, which lags the camera), and [z] = the
+     * zoom the camera last ANSWERED (the glue draws the Area there; null before the first answer).
+     */
     class Progress(val status: String, val count: String, val z: Double?)
 
     enum class Kind(val word: String) { REFUSED("refused"), STOPPED("stopped"), CANCELLED("cancelled"), DONE("done") }
 
-    /** How the run ended — exactly once: [words] for the owner, [result] when it measured, [thumbnail] its 1× card. */
+    /**
+     * How the run ended — exactly once: [words] for the owner (THIS run's; across a session the scan
+     * screen shows ZoomProbe.combine over its runs, which leads with them after a run that did not
+     * count), [result] when it measured, [thumbnail] its 1× card.
+     */
     class Outcome(val kind: Kind, val words: String, val result: ZoomProbe.Result?, val thumbnail: FloatArray?)
 
     interface Port {
@@ -79,8 +92,13 @@ class ZoomProbeRun(
         fun frames(done: (Grab?) -> Unit)
         /** The worker measures [grab] as [role], looking for the card in [rect] (`[x, y, w, h]`; null = the Area, else the frame). */
         fun measure(role: Role, grab: Grab, rect: IntArray?, done: (Measured?) -> Unit)
-        /** The probe is over: [verified] = the restore found the same card in the same place (rebase it), then endProbe. */
-        fun end(verified: Boolean, why: String)
+        /**
+         * The probe is over: ZoomCoordinator.endProbe(why, rebase = [verified]) — [verified] =
+         * the restore found the same card in the same place, so the scanned scene is rebased
+         * (asked by the coordinator, before its map). FALSE = the coordinator had already
+         * stopped the probe (a lifecycle input raced this end): nothing was rebased or ended.
+         */
+        fun end(verified: Boolean, why: String): Boolean
         fun later(ms: Long, block: () -> Unit)
         fun now(): Long
         fun log(line: String)
@@ -99,7 +117,12 @@ class ZoomProbeRun(
     private var finished = false
     private var began = false
     private var aeLocked = false
+    /** An AF pass has been STARTED (its trigger went out: the lens may have moved since). */
     private var afRan = false
+    /** An AF pass is out and has not answered: a stop waits for it ([stopAndRestore]). */
+    private var afPending = false
+    /** A cancel / the budget that came during an AF pass: the restore it asked for, run when the pass answers. */
+    private var deferred: (() -> Unit)? = null
     private lateinit var facts: ZoomProbe.Facts
     private var plan: ZoomProbe.Plan? = null
     private var rungs: Array<ZoomProbe.Rung?> = emptyArray()
@@ -125,6 +148,13 @@ class ZoomProbeRun(
     private var zoomAskedAt = 0L
 
     private class Answer(val camera: Double, val readBack: Double?, val error: String?, val ms: Long)
+
+    // The scan screen's words (re-sent when the camera answers or a rung is measured).
+    private var shownZ: Double? = null
+    private var status = "Zoom probe — hands off the tray"
+    private var count = ""
+    /** The newest measured rung, for the count line: "card 979 px at 1.60×". */
+    private var measuredNote: String? = null
 
     val running: Boolean get() = began && !finished
 
@@ -167,19 +197,47 @@ class ZoomProbeRun(
 
     /** The owner cancelled (Cancel probe, or any control the touch policy turns into a cancel). */
     fun cancel(why: String) {
-        if (!began || finished || state == State.RESTORING || state == State.DONE) return
+        if (!began || finished || state == State.RESTORING || state == State.DONE || deferred != null) return
         port.log("probe run $run CANCELLED at ${where()} — $why")
-        restore(afRan, Kind.CANCELLED, "Zoom probe cancelled ($why) — nothing filed")
+        stopAndRestore(Kind.CANCELLED, "Zoom probe cancelled ($why) — nothing filed")
     }
 
     /** The coordinator stopped the probe (a lifecycle input): stop at once — no restore, no end, no rebase. */
     fun aborted(why: String) {
         if (!began || finished) return
-        epoch++; token++; awaitZ = null; zoomNext = null
+        stop(why)
+    }
+
+    private fun stop(why: String) {
+        val place = where()                                   // before the state is DONE (it said "at done")
+        epoch++; token++; awaitZ = null; zoomNext = null; deferred = null
         state = State.DONE
         if (aeLocked) { port.aeLock(false); aeLocked = false }
-        port.log("probe run $run STOPPED at ${where()} — $why (nothing filed; the scanned scene kept as before)")
+        port.log("probe run $run STOPPED at $place — $why (nothing filed; the scanned scene kept as before)")
         finish(Kind.STOPPED, "Zoom probe stopped — $why. Nothing was filed; Run again when ready", ZoomProbe.stopped(run, plan, why, facts))
+    }
+
+    /**
+     * A cancel or the budget: the RESTORE — verified once an AF pass started; while one is
+     * still out, after it answers (its guard bounds the wait), so nothing is measured or
+     * rebased while the lens moves.
+     */
+    private fun stopAndRestore(kind: Kind, words: String) {
+        if (deferred != null) return
+        if (afPending) {
+            port.log("probe run $run: the AF pass in flight is waited for (≤ ${FOCUS_GUARD_MS / 1000} s) — the lens is moving; then the restore")
+            deferred = { restore(true, kind, words) }
+            return
+        }
+        restore(afRan, kind, words)
+    }
+
+    /** An AF pass answered: a stop that came meanwhile runs now (true = the caller stops there). */
+    private fun runDeferred(): Boolean {
+        val d = deferred ?: return false
+        deferred = null
+        d()
+        return true
     }
 
     // ── the steps ──
@@ -194,7 +252,11 @@ class ZoomProbeRun(
 
     private fun zoom(z: Double, then: (Answer) -> Unit) {
         val t = ++token
-        awaitZ = z; zoomNext = then; zoomAskedAt = port.now()
+        awaitZ = z; zoomAskedAt = port.now()
+        zoomNext = { a ->
+            if (a.error == null) { shownZ = a.camera; emit() }   // the Area follows the camera's answer, not the ask
+            then(a)
+        }
         port.later(ZOOM_GUARD_MS) {
             if (t == token && awaitZ == z) onZoom(-1, z, z, null, ZoomCoordinator.PROBE_NO_ANSWER)
         }
@@ -259,11 +321,12 @@ class ZoomProbeRun(
         progress(1.0, "focusing on the card")
         val t = ++token
         var done = false
-        val handle: (ZoomProbe.Focus) -> Unit = { f ->
+        val handle: (ZoomProbe.Focus) -> Unit = handle@{ f ->
             if (t == token && !done && state == State.FOCUSING) {
                 done = true
-                afRan = true
+                afPending = false
                 focus1 = f
+                if (runDeferred()) return@handle
                 if (!f.ok) {
                     port.log("probe run $run: the 1× focus pass did not focus (${f.state}) — restoring")
                     restore(true, Kind.REFUSED, "Couldn't focus on the card — more light, then Run again")
@@ -271,6 +334,7 @@ class ZoomProbeRun(
             }
         }
         port.later(FOCUS_GUARD_MS) { handle(ZoomProbe.Focus(false, null, null, FOCUS_GUARD_MS, "no answer in ${FOCUS_GUARD_MS} ms")) }
+        afRan = true; afPending = true                       // the trigger goes out now: from here on the lens may move
         port.focusOnCard(p.cx, p.cy, "zoom probe run $run", handle)
     }
 
@@ -326,7 +390,8 @@ class ZoomProbeRun(
             startThumb?.let { th -> sameCardAs = earlier.firstOrNull { ZoomDetail.ncc(it.thumbnail, th) >= ZoomProbe.SAME_NCC }?.run }
         }
         port.log(ZoomProbe.rungLine(i + 1, p.order.size, r, startH(), locked))
-        progress(z, r.longPx?.let { "card %.0f px".format(Locale.ROOT, it) }, i)
+        // The worker lags the camera: the figure rides the count line, the pill stays on the rung being asked.
+        r.longPx?.let { measuredNote = "card %.0f px at %.2f×".format(Locale.ROOT, it, z); if (state == State.LADDER) emit() }
         resumeAt?.let { resumeAt = null; ladder(it); return }
         if (ladderAsked && outstanding == 0) afterLadder()
     }
@@ -342,10 +407,12 @@ class ZoomProbeRun(
             if (a.error != null) { restore(true, Kind.DONE, null); return@zoom }
             val t = ++token
             var done = false
-            val handle: (ZoomProbe.Focus) -> Unit = { f ->
+            val handle: (ZoomProbe.Focus) -> Unit = handle@{ f ->
                 if (t == token && !done && state == State.REFOCUS) {
                     done = true
+                    afPending = false
                     refocusFocus = f
+                    if (runDeferred()) return@handle
                     frames { g ->
                         if (g == null) {
                             port.log(ZoomProbe.refocusLine(zr, f, null, null))
@@ -365,6 +432,7 @@ class ZoomProbeRun(
                 }
             }
             port.later(FOCUS_GUARD_MS) { handle(ZoomProbe.Focus(false, null, null, FOCUS_GUARD_MS, "no answer in ${FOCUS_GUARD_MS} ms")) }
+            afPending = true
             port.focusOnCard(ZoomFit.toViewAxis(p.cx, a.camera), ZoomFit.toViewAxis(p.cy, a.camera),
                 "zoom probe refocus check at %.2f×".format(Locale.ROOT, zr), handle)
         }
@@ -384,15 +452,17 @@ class ZoomProbeRun(
         progress(z, "restoring")
         zoom(z) { a ->
             if (aeLocked) { port.aeLock(false); aeLocked = false }
-            if (!verify) {
-                port.end(false, "zoom probe over")
-                port.log(ZoomProbe.restoreLine(z, null, false))
+            // A restore zoom the camera never answered is not verified (review of 08a77d1): frames at an
+            // unconfirmed zoom prove nothing, and the coordinator's end asks the target again.
+            if (!verify || a.error != null) {
+                if (!ended(false)) return@zoom
+                port.log(ZoomProbe.restoreLine(z, null, verify, a.error))
                 conclude(kind, words)
                 return@zoom
             }
             wait(RESTORE_AE_MS) {
                 frames { g ->
-                    if (g == null) { endRestore(z, null); conclude(kind, words); return@frames }
+                    if (g == null) { if (endRestore(z, null)) conclude(kind, words); return@frames }
                     val p = plan
                     val e = epoch
                     val t = ++token
@@ -406,8 +476,7 @@ class ZoomProbeRun(
                             val refThumb = if (ref === locateRung) locateThumb else startThumb
                             val ncc = if (m?.thumbnail != null && refThumb != null) ZoomDetail.ncc(refThumb, m.thumbnail) else null
                             val same = if (r == null) null else ZoomProbe.sameCard(ref, r, ZoomProbe.fitH(cleanRungs()), ncc)
-                            endRestore(z, same)
-                            conclude(kind, words)
+                            if (endRestore(z, same)) conclude(kind, words)
                         }
                     }
                     port.later(MEASURE_GUARD_MS) { handle(null) }
@@ -422,9 +491,21 @@ class ZoomProbeRun(
         return rungs.filterNotNull().filter { ZoomProbe.validity(it, l).isEmpty() }
     }
 
-    private fun endRestore(z: Double, same: ZoomProbe.SameCard?) {
-        port.end(same?.same == true, "zoom probe over")
+    /** The verified restore's end; false = the probe had already been stopped (the run is STOPPED). */
+    private fun endRestore(z: Double, same: ZoomProbe.SameCard?): Boolean {
+        if (!ended(same?.same == true)) return false
         port.log(ZoomProbe.restoreLine(z, same, true))
+        return true
+    }
+
+    /**
+     * [Port.end]. False = a lifecycle input stopped the probe first and its [aborted] is still on
+     * its way (posted behind this answer): nothing was rebased — report the run STOPPED now.
+     */
+    private fun ended(verified: Boolean): Boolean {
+        if (port.end(verified, "zoom probe over")) return true
+        stop("the probe was stopped before its restore could end (the screen or the camera changed)")
+        return false
     }
 
     private fun conclude(kind: Kind, words: String?) {
@@ -438,18 +519,24 @@ class ZoomProbeRun(
     }
 
     private fun onBudget() {
+        if (deferred != null) return                          // a cancel already waits for the AF pass
         port.log("probe run $run: the ${BUDGET_MS / 1000} s budget ran out at ${where()} — restoring")
-        restore(afRan, Kind.CANCELLED, "The zoom probe ran past ${BUDGET_MS / 1000} s — stopped; nothing filed. Run again")
+        stopAndRestore(Kind.CANCELLED, "The zoom probe ran past ${BUDGET_MS / 1000} s — stopped; nothing filed. Run again")
     }
 
-    /** The scan screen's words: [k] = the rung they are about (default: the one being asked). */
-    private fun progress(z: Double?, what: String?, k: Int = at) {
+    /** The scan screen's words for the step now: [z] = the zoom being asked (words only — [Progress.z] is the camera's). */
+    private fun progress(z: Double?, what: String?) {
         val p = plan
         val n = p?.order?.size
-        val step = if (p != null && (state == State.LADDER)) "${k + 1}/$n" else null
-        val status = "Zoom probe" + (step?.let { " $it" } ?: "") + (z?.let { " · %.2f×".format(Locale.ROOT, it) } ?: "") + " — hands off the tray"
-        val count = listOfNotNull(step?.let { "rung $it" }, z?.let { "%.2f×".format(Locale.ROOT, it) }, what).joinToString(" · ")
-        port.progress(Progress(status, count, z))
+        val step = if (p != null && (state == State.LADDER)) "${at + 1}/$n" else null
+        status = "Zoom probe" + (step?.let { " $it" } ?: "") + (z?.let { " · %.2f×".format(Locale.ROOT, it) } ?: "") + " — hands off the tray"
+        count = listOfNotNull(step?.let { "rung $it" }, z?.let { "%.2f×".format(Locale.ROOT, it) }, what).joinToString(" · ")
+        emit()
+    }
+
+    private fun emit() {
+        val c = if (state == State.LADDER) listOfNotNull(count.ifEmpty { null }, measuredNote).joinToString(" · ") else count
+        port.progress(Progress(status, c, shownZ))
     }
 
     private fun finish(kind: Kind, words: String, result: ZoomProbe.Result?) {

@@ -51,7 +51,12 @@ import kotlin.math.abs
  *   and keeps it closed for every rung ([probeTo] asks the camera; the answer is
  *   [Port.probeAt], never a [Port.map]); [endProbe] maps the IDENTICAL (ratio,
  *   view) the analyzer had, behind the gate — no re-learn, `changes` unchanged —
- *   or asks for the target first if the camera is elsewhere. Any lifecycle input
+ *   or asks for the target first if the camera is elsewhere. A rung the camera
+ *   never answered is UNKNOWN, never assumed: the next ask (a rung, the restore,
+ *   the end) goes to the camera; and a request the timeout gave up on just before
+ *   the probe keeps its late re-map (noted mid-probe, mapped at the end — review of
+ *   08a77d1). The end's rebase ([Port.probeRebase]) is asked only while the probe
+ *   still runs, before its map: never after an abort. Any lifecycle input
  *   (stop, opening, bind, a new Area, the switch, drawing) stops the probe FIRST
  *   ([Port.probeEnded]) and then does exactly what it does today, so an aborted
  *   probe is today's Scans / Settings round trip. Nothing here files a scan.
@@ -93,6 +98,12 @@ class ZoomCoordinator(private val port: Port, private val log: (String) -> Unit 
         fun probeAt(gen: Int, asked: Double, camera: Double, readBack: Double?, error: String?) {}
         /** A lifecycle input stopped the probe ([why]) before it ended; what follows is today's path. */
         fun probeEnded(why: String) {}
+        /**
+         * [endProbe] with rebase = true, while the probe still ran: the analyzer re-takes its
+         * scanned scene (ScanAnalyzer.rebaseAfterProbe) — asked BEFORE the end's map or
+         * request, and never after an abort (a card swapped while the screen was away must scan).
+         */
+        fun probeRebase(why: String) {}
     }
 
     /** What Diagnostics, the zoom log and `/api/device` report. */
@@ -132,7 +143,8 @@ class ZoomCoordinator(private val port: Port, private val log: (String) -> Unit 
         }
     }
 
-    private class Pending(val gen: Int, val ratio: Double, val why: String) { var tries = 0 }
+    /** [probe] = asked by the zoom probe (a rung, the restore), not by the scanner. */
+    private class Pending(val gen: Int, val ratio: Double, val why: String, val probe: Boolean = false) { var tries = 0 }
 
     @Volatile var enabled = false
         private set
@@ -144,7 +156,10 @@ class ZoomCoordinator(private val port: Port, private val log: (String) -> Unit 
     @Volatile private var lensMax: Double? = null
     /** A camera is bound and not stopped. */
     @Volatile private var active = false
-    /** The ratio last asked of the camera and answered (1.0 after a bind / stop: CameraX resets). */
+    /**
+     * The ratio last asked of the camera and answered (1.0 after a bind / stop: CameraX resets).
+     * NaN = unknown: a probe rung timed out ([onTimeout]) — the next ask of any ratio goes to the camera.
+     */
     private var requested = 1.0
     /** The ratio the camera reported for it (what frames are at). */
     @Volatile private var camera = 1.0
@@ -171,6 +186,8 @@ class ZoomCoordinator(private val port: Port, private val log: (String) -> Unit 
     private var probeWant = 1.0
     /** [problem] when the probe began: a rung's clamp or refusal is the probe's finding, not the scanner's. */
     private var problemBeforeProbe: String? = null
+    /** The probe asked the camera something (so where the camera is at the end is the probe's doing). */
+    private var probeAsked = false
     /** Where the probe is, in the runner's words (Diagnostics / `/api/device`); cleared when it ends. */
     @Volatile var probeNote: String? = null
 
@@ -307,8 +324,11 @@ class ZoomCoordinator(private val port: Port, private val log: (String) -> Unit 
         }
         problemBeforeProbe = problem
         probing = true
+        probeAsked = false
         probeWant = camera
-        lastTimedOut = null                                   // a late answer from before the probe must never map mid-probe
+        // A request the timeout gave up on just before is KEPT (review of 08a77d1): its late answer
+        // never maps mid-probe ([lateAnswer] only notes where the camera is), and once the probe
+        // asks the camera anything that request supersedes it ([request]).
         log("zoom probe START (%s) — the analyzer stays paused; camera at %.2f×, frames mapped at %.2f× (kept)".format(why, camera, mapped))
         closeGate("zoom probe ($why)")
         return true
@@ -323,19 +343,33 @@ class ZoomCoordinator(private val port: Port, private val log: (String) -> Unit 
 
     /**
      * The probe is over: map what the analyzer had — the IDENTICAL (ratio, view)
-     * when the camera is back at the target (no re-learn), else the target is
-     * asked for first — behind the gate, which opens after the settle frames.
+     * when the camera answered the target (no re-learn); what the camera reports
+     * when it answered the target with another ratio (as [onApplied] maps, a
+     * re-learn); else — a rung or the restore left the camera elsewhere or
+     * unanswered — the target is ASKED for first, never assumed. Behind the gate,
+     * which opens after the settle frames. [rebase] = the runner's restore found the
+     * same card in the same place: [Port.probeRebase] first. Returns false (and does
+     * nothing, no rebase) when no probe runs — a lifecycle input already stopped it.
      */
-    fun endProbe(why: String) {
-        if (!probing) return
+    fun endProbe(why: String, rebase: Boolean = false): Boolean {
+        if (!probing) return false
         probing = false
         probeNote = null
         problem = problemBeforeProbe
         val t = target().z
-        val same = pending == null && requested == t && camera == mapped && ZoomFit.toView(base, camera) == mappedView
-        log("zoom probe END ($why) — " + if (same) "back to %.2f× on the same mapping (no re-learn)".format(camera)
-            else "the target %.2f× is asked for (the camera is at %.2f×)".format(t, camera))
+        val answered = pending == null && requested == t      // NaN (a rung with no answer) is never t
+        val view = ZoomFit.toView(base, camera)
+        log("zoom probe END ($why) — " + when {
+            !answered -> "the target %.2f× is asked for (the camera is at %.2f×)".format(t, camera)
+            camera == mapped && view == mappedView -> "back to %.2f× on the same mapping (no re-learn)".format(camera)
+            camera == t -> "the camera is at the target %.2f×, the analyzer was mapped at %.2f× — mapping with %.2f× (the analyzer re-learns)".format(t, mapped, camera)
+            else -> "the camera reports %.2f× for the target %.2f× — mapping with %.2f× (the analyzer re-learns)".format(camera, t, camera)
+        })
+        if (answered && camera != t && probeAsked)
+            problem = "after the zoom probe the camera reports %.2f× for %.2f× — mapping with %.2f×".format(camera, t, camera)
+        if (rebase) port.probeRebase(why)
         reconcile("zoom probe over")
+        return true
     }
 
     /** A lifecycle input stops a running probe first; the caller then does what it does today. */
@@ -405,13 +439,25 @@ class ZoomCoordinator(private val port: Port, private val log: (String) -> Unit 
         log("%.2f× answered after the %d ms timeout (%s) · read back %s · %s".format(p.ratio, SETTLE_TIMEOUT_MS, p.why,
             readBack?.let { "%.3f×".format(it) } ?: "nothing — the request is assumed",
             if (now == camera) "the timeout assumed %.2f× — right".format(camera)
+            else if (probing) "the timeout assumed %.2f× — the camera is at %.2f× (the zoom probe holds the gate: mapped when it ends)".format(camera, now)
             else "the timeout assumed %.2f× — re-mapping at %.2f×".format(camera, now)))
+        if (probing) {
+            // Never a map mid-probe: only where the camera is — [endProbe] maps (or asks) from it.
+            if (p.probe) requested = p.ratio                  // the rung WAS answered: known again
+            if (now == camera) return
+            camera = now
+            if (!p.probe) problemBeforeProbe = lateNote(p.ratio, now)
+            return
+        }
         if (now == camera) return
         camera = now
-        problem = "no answer for %.2f× within %d ms; it came later at %.2f× and the Area was re-mapped".format(p.ratio, SETTLE_TIMEOUT_MS, now)
+        problem = lateNote(p.ratio, now)
         closeGate("the camera answered %.2f× after the timeout".format(now))
         settle(p.why)
     }
+
+    private fun lateNote(asked: Double, now: Double) =
+        "no answer for %.2f× within %d ms; it came later at %.2f× and the Area was re-mapped".format(asked, SETTLE_TIMEOUT_MS, now)
 
     /** A request the timeout already mapped failed after all: map what the camera is left at. */
     private fun lateFailure(g: Int, notActive: Boolean, message: String) {
@@ -421,7 +467,16 @@ class ZoomCoordinator(private val port: Port, private val log: (String) -> Unit 
         // An inactive camera comes back at 1.0 (the next start asks again); a refusal kept what it had.
         val now = if (notActive) 1.0 else port.readBack()?.let { agreed(p.ratio, it) } ?: camera
         if (notActive) requested = 1.0
-        problem = "%.2f× could not be applied (%s), answered after the %d ms timeout".format(p.ratio, message, SETTLE_TIMEOUT_MS)
+        val what = "%.2f× could not be applied (%s), answered after the %d ms timeout".format(p.ratio, message, SETTLE_TIMEOUT_MS)
+        if (probing) {
+            // As [lateAnswer]: never a map mid-probe — where the camera is, for [endProbe].
+            if (p.probe && !notActive) requested = p.ratio    // refused: not asked again in a loop
+            log("$what — the camera is at %.2f× (the zoom probe holds the gate)".format(now))
+            camera = now
+            if (!p.probe) problemBeforeProbe = what
+            return
+        }
+        problem = what
         log("$problem — scanning at %.2f×".format(now))
         if (now == camera) return
         camera = now
@@ -500,9 +555,10 @@ class ZoomCoordinator(private val port: Port, private val log: (String) -> Unit 
 
     private fun request(t: Double, why: String) {
         val g = ++gen
-        val p = Pending(g, t, why)
+        val p = Pending(g, t, why, probe = probing)
         pending = p
-        lastTimedOut = null
+        if (probing) probeAsked = true
+        lastTimedOut = null                                   // superseded: the camera answers the newest request
         closeGate("zoom → %.2f× ($why)".format(t))
         if (!probing) log("→ %.2f× requested ($why)%s".format(t, if (t != 1.0 && !drawing) " · ${target().describe()}" else ""))
         port.request(g, t)
@@ -514,15 +570,17 @@ class ZoomCoordinator(private val port: Port, private val log: (String) -> Unit 
         if (p.gen != g) return
         val rb = port.readBack()
         pending = null
-        requested = p.ratio
         camera = agreed(p.ratio, rb)
+        lastTimedOut = p                                      // its late answer may still say where the camera is
         if (probing) {
-            // No late re-map: the runner skips the rung; the next rung (or the end) asks the camera again.
-            lastTimedOut = null
+            // The rung is NOT reached (review of 08a77d1: recording it made the next ask of that ratio —
+            // the restore — "already there", and the end mapped the stale read-back): unknown, so the
+            // next rung or the end asks the camera again. Never a map; the runner skips the rung.
+            requested = Double.NaN
             port.probeAt(g, p.ratio, camera, rb, PROBE_NO_ANSWER)
             return
         }
-        lastTimedOut = p
+        requested = p.ratio
         problem = "no answer for %.2f× within %d ms (read back %s)".format(p.ratio, SETTLE_TIMEOUT_MS, rb?.let { "%.2f×".format(it) } ?: "nothing")
         log("$problem — mapping with %.2f×".format(camera))
         settle(p.why)

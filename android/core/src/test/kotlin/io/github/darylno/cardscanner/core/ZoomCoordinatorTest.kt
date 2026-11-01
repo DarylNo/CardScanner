@@ -44,6 +44,7 @@ class ZoomCoordinatorTest {
             probeAts += ProbeAt(gen, asked, camera, readBack, error); events += "probeAt %.2f".format(asked)
         }
         override fun probeEnded(why: String) { probeEnds += why; events += "probeEnded" }
+        override fun probeRebase(why: String) { events += "rebase" }
         override fun later(ms: Long, block: () -> Unit) { timers += ms to block }
         override fun readBack(): Double? = readBack
         /** Run the timers of exactly [ms] that are due (a fake clock that only knows the delays). */
@@ -571,6 +572,157 @@ class ZoomCoordinatorTest {
         assertFalse("a probe already running", z.beginProbe("run 2"))
         assertEquals(closes + 1, port.closes.size)
         assertTrue(port.probeEnds.isEmpty())
+    }
+
+    /**
+     * Review of 08a77d1: the restore's verified end must never rebase after a lifecycle
+     * abort got there first (a worker answer queued behind ON_STOP) — a card swapped while
+     * the screen was away would be rebased into the scene and never scanned. endProbe owns
+     * that rule: the rebase is asked only while the probe still runs, and before the end's map.
+     */
+    @Test fun aRebaseIsAskedOnlyWhileTheProbeRunsAndBeforeTheEndsMap() {
+        mappedAt19()
+        assertTrue(z.beginProbe("run 1"))
+        z.probeTo(1.0); answer()
+        z.probeTo(1.9); answer()
+        val n = port.events.size
+        assertTrue(z.endProbe("zoom probe over", rebase = true))
+        assertEquals("the rebase first, then the identical map", listOf("rebase", "map 1.90"), port.events.drop(n))
+        assertFalse("ended already: no second end", z.endProbe("again", rebase = true))
+        // Aborted by the screen stopping: the runner's late end changes nothing and rebases nothing.
+        assertTrue(z.beginProbe("run 2"))
+        z.cameraStopped("the scan screen stopped")
+        val m = port.events.size
+        assertFalse(z.endProbe("zoom probe over", rebase = true))
+        assertEquals(m, port.events.size)
+        // Unverified: no rebase.
+        z.cameraStarted("the scan screen started"); answer()
+        assertTrue(z.beginProbe("run 3"))
+        val k = port.events.size
+        assertTrue(z.endProbe("zoom probe over"))
+        assertFalse(port.events.drop(k).contains("rebase"))
+    }
+
+    /**
+     * Review of 08a77d1: beginProbe threw away the 1.1.14 late-answer re-map. A request
+     * times out (the Area mapped at the assumed 1.90×), a probe begins and is refused at
+     * CHECK (begin → end with the camera never asked): the camera's late 1.60× answer
+     * must still re-map, as it does with no probe (aLateAnswerAfterTheTimeoutReMapsWhatTheCameraDid).
+     */
+    @Test fun aTimeoutBeforeARefusedProbeStillReMapsTheLateAnswer() {
+        z.setEnabled(true); z.setArea(area); z.cameraBound(2.6, 8.0)
+        val g = port.lastGen
+        port.fire(ZoomCoordinator.SETTLE_TIMEOUT_MS)               // no read-back: 1.90× assumed
+        assertEquals(1.9, z.mapped, 0.0)
+        assertTrue(z.beginProbe("run 1"))
+        z.endProbe("zoom probe refused")                           // the CHECK said no: the camera never moved
+        assertEquals("the identical mapping back", 1.9, port.maps.last().ratio, 0.0)
+        val closes = port.closes.size
+        z.onApplied(g, 1.6)                                        // …then the camera's real answer
+        assertEquals("the late answer re-maps, probe or no probe", 1.6, z.mapped, 0.0)
+        assertEquals(ZoomFit.toView(area, 1.6), port.maps.last().view)
+        assertTrue("behind the gate", port.closes.size == closes + 1 && port.maps.last().settle)
+    }
+
+    /**
+     * The rule beginProbe's `lastTimedOut = null` was meant to enforce, pinned: a late answer
+     * from BEFORE the probe never maps while it runs (no map, no gate call) — it only tells the
+     * coordinator where the camera is, and the end maps THAT (what lateAnswer would have done).
+     * Once the probe has asked the camera anything, that request supersedes it: ignored.
+     */
+    @Test fun aLateAnswerFromBeforeTheProbeNeverMapsMidProbe() {
+        z.setEnabled(true); z.setArea(area); z.cameraBound(2.6, 8.0)
+        val g = port.lastGen
+        port.fire(ZoomCoordinator.SETTLE_TIMEOUT_MS)
+        assertTrue(z.beginProbe("run 1"))
+        val n = port.events.size
+        z.onApplied(g, 1.6)
+        assertEquals("no map, no close, no probeAt while the probe holds the gate", n, port.events.size)
+        assertTrue(z.state().probing)
+        z.endProbe("zoom probe over")
+        assertEquals("the end maps where the camera really is", 1.6, port.maps.last().ratio, 0.0)
+        assertEquals(ZoomFit.toView(area, 1.6), port.maps.last().view)
+        assertTrue(port.maps.last().settle)
+        assertEquals("nothing asked: the camera answered", 1, port.requests.size)
+        assertTrue("$log", log.any { it.startsWith("zoom probe END (zoom probe over) — the camera reports 1.60× for the target 1.90×") })
+        assertTrue(z.state().problem!!, z.state().problem!!.contains("it came later at 1.60×"))
+        // Superseded: a probe that asked a rung first ignores the old answer.
+        val p = FakePort(); val c = ZoomCoordinator(p)
+        c.setEnabled(true); c.setArea(area); c.cameraBound(2.6, 8.0)
+        val g2 = p.lastGen
+        p.fire(ZoomCoordinator.SETTLE_TIMEOUT_MS)
+        assertTrue(c.beginProbe("run 1"))
+        c.probeTo(1.0); c.onApplied(p.lastGen, 1.0)
+        val m = p.events.size
+        c.onApplied(g2, 1.6)
+        assertEquals(m, p.events.size)
+        c.probeTo(1.9); c.onApplied(p.lastGen, 1.9)
+        c.endProbe("zoom probe over")
+        assertEquals(1.9, p.maps.last().ratio, 0.0)
+    }
+
+    /**
+     * Review of 08a77d1: a rung the camera never answered was recorded as reached — the
+     * next probeTo of that ratio was "already there" (no request) and the end mapped the
+     * STALE read-back (a re-learn, the Area at a zoom the camera is not at, and the switch
+     * OFF reading "applied 1.60×"). A timed-out rung is unknown: it is asked again.
+     */
+    @Test fun aTimedOutRungIsAskedAgainNeverAssumed() {
+        z.setArea(area); z.cameraBound(2.6, 8.0)                   // the switch OFF: the restore goes to 1×
+        assertTrue(z.beginProbe("run 1"))
+        z.probeTo(1.6); answer()
+        z.probeTo(1.0)
+        port.readBack = 1.6                                        // a result newer than the request, still at 1.60×
+        port.fire(ZoomCoordinator.SETTLE_TIMEOUT_MS)
+        assertEquals(ZoomCoordinator.PROBE_NO_ANSWER, port.probeAts.last().error)
+        val asks = port.requests.size
+        z.probeTo(1.0)                                             // the runner's restore
+        assertEquals("asked again, not assumed", asks + 1, port.requests.size)
+        assertEquals(1.0, port.requests.last().second, 0.0)
+        answer()
+        z.endProbe("zoom probe over")
+        val m = port.maps.last()
+        assertEquals(1.0, m.ratio, 0.0); assertTrue(m.view === area); assertTrue(m.settle)
+        assertEquals("no applied change", 0, z.changes)
+        assertTrue(z.state().describe(), z.state().describe().contains("applied 1.00×"))
+    }
+
+    /** The same with the switch ON: the RESTORE rung times out; the end asks for the target, and its answer maps identically. */
+    @Test fun aTimedOutRestoreIsAskedForAtTheEndAndMapsIdentically() {
+        mappedAt19()
+        val before = port.maps.last()
+        assertTrue(z.beginProbe("run 1"))
+        z.probeTo(2.2); answer()
+        z.probeTo(1.9)                                             // the restore…
+        val g = port.lastGen
+        port.readBack = 2.2                                        // …frames still at the rung
+        port.fire(ZoomCoordinator.SETTLE_TIMEOUT_MS)
+        val n = port.maps.size; val asks = port.requests.size
+        z.endProbe("zoom probe over")
+        assertEquals("nothing mapped on an assumption", n, port.maps.size)
+        assertEquals("the target is asked for", asks + 1, port.requests.size)
+        assertEquals(1.9, port.requests.last().second, 0.0)
+        assertTrue("$log", log.any { it == "zoom probe END (zoom probe over) — the target 1.90× is asked for (the camera is at 2.20×)" })
+        z.onApplied(g, 1.9)                                        // the timed-out request's own answer: superseded
+        assertEquals(n, port.maps.size)
+        answer()
+        assertEquals(1.9, port.maps.last().ratio, 0.0); assertEquals(before.view, port.maps.last().view); assertTrue(port.maps.last().settle)
+        assertEquals("the analyzer keeps its tray", 1, z.changes)
+        assertEquals(null, z.state().problem)
+    }
+
+    /** The end's log says what it does: a camera that answered the restore with another ratio is MAPPED there, not "asked for". */
+    @Test fun theEndSaysWhichWayItGoes() {
+        mappedAt19()
+        assertTrue(z.beginProbe("run 1"))
+        z.probeTo(1.0); answer()
+        z.probeTo(1.9); z.onApplied(port.lastGen, 2.0)            // answered — at 2.00×
+        val asks = port.requests.size
+        z.endProbe("zoom probe over")
+        assertEquals("nothing asked: the camera answered", asks, port.requests.size)
+        assertEquals(2.0, port.maps.last().ratio, 0.0)
+        assertTrue("$log", log.any { it == "zoom probe END (zoom probe over) — the camera reports 2.00× for the target 1.90× — mapping with 2.00× (the analyzer re-learns)" })
+        assertTrue(z.state().problem!!, z.state().problem!!.startsWith("after the zoom probe the camera reports 2.00× for 1.90×"))
     }
 
     /**

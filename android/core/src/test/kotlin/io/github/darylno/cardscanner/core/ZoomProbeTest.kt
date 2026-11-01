@@ -287,7 +287,7 @@ class ZoomProbeTest {
         val m = r.toMap()
         assertTrue(m.containsKey("knee") && m["knee"] == null)
         assertTrue(m.containsKey("recommended") && m["recommended"] == null)
-        assertTrue(r.words(), r.words().endsWith("the probe does not measure MAX_ZOOM"))
+        assertTrue(r.words(), r.words().contains("(the probe does not measure MAX_ZOOM)"))
         assertTrue(r.logLine(), r.logLine().contains("knee: not measured (no validated detail metric)"))
         val c = ZoomProbe.combine(listOf(r, ZoomProbe.verdict(2, plan, run(plan), focused, focused, facts)))
         assertTrue(c.enough)
@@ -346,6 +346,70 @@ class ZoomProbeTest {
         assertTrue(slow.reason, slow.valid); assertFalse(slow.settleOk)
         assertEquals(1, slow.settleMax)
         assertTrue(slow.words(), slow.words().contains("still at the old zoom on"))
+    }
+
+    /**
+     * Review of 08a77d1: a lens or light slip on ONE 1× repeat made the whole run
+     * inconclusive, while the same slip on any other rung only cost that rung — a rule
+     * not in the pre-registered list. A 1× repeat counts like any rung under the 80 % rule.
+     */
+    @Test
+    fun aSlipOnOneOneTimesRepeatCountsLikeAnyRung() {
+        val plan = planFor()
+        val midOne = plan.order.withIndex().filter { it.value == 1.0 }.map { it.index }[1]
+        val one = ZoomProbe.verdict(1, plan, run(plan) { i, z -> rung(i, z, lensDpt = if (i == midOne) lens + 0.03 else lens) }, focused, focused, facts)
+        assertTrue(one.reason, one.valid)
+        assertEquals(plan.order.size - 1, one.validRungs)
+        val other = plan.order.indexOf(1.5)
+        val same = ZoomProbe.verdict(1, plan, run(plan) { i, z -> rung(i, z, lensDpt = if (i == other) lens + 0.03 else lens) }, focused, focused, facts)
+        assertTrue(same.reason, same.valid)
+        assertEquals(one.validRungs, same.validRungs)
+    }
+
+    /**
+     * Review of 08a77d1: the NOT-centred words always cited the centre drift at the top,
+     * even when centring failed on the card's SIZE ("the card moved 0.0 % at 2.20×").
+     * They name the rule that failed and the zoom where it was worst.
+     */
+    @Test
+    fun notCentredSaysWhichRuleFailedAndWhere() {
+        val plan = planFor()
+        // The card 4 % bigger at 2.0× than the straight line says (a lens switch on a logical camera); the centre never moves.
+        val r = ZoomProbe.verdict(1, plan, run(plan) { i, z -> rung(i, z, h1 = if (z == 2.0) 612.0 * 1.04 else 612.0) }, focused, focused, facts)
+        assertTrue(r.reason, r.valid); assertEquals(false, r.centred)
+        assertEquals(0.0, r.drift!!, 1e-6)
+        assertTrue(r.words(), r.words().startsWith("The zoom is NOT the centred crop this app assumes (the card's size is 3.2 % off a straight line at 2.00×)"))
+        assertFalse(r.words(), r.words().contains("moved"))
+        val c = ZoomProbe.combine(listOf(r))
+        assertTrue(c.words, c.words.startsWith("the zoom is NOT the centred crop this app assumes (run 1: the card's size is 3.2 % off a straight line at 2.00×)"))
+        // The drift's own zoom, not the top's: a crop that slips only at 1.5×.
+        val slip = ZoomProbe.verdict(1, plan, run(plan) { i, z -> rung(i, z, crop = { if (it == 1.5) 0.02 else 0.0 }) }, focused, focused, facts)
+        assertEquals(false, slip.centred)
+        assertTrue(slip.words(), slip.words().startsWith("The zoom is NOT the centred crop this app assumes (the card moved 2.0 % at 1.50×)"))
+    }
+
+    /**
+     * Review of 08a77d1: a valid run's words gave no next step, and after a run 2 that failed
+     * or was stopped the combined words still said "run 1 valid — lift this card, put a
+     * DIFFERENT card down…", dropping why run 2 failed. The last run's own words lead.
+     */
+    @Test
+    fun theWordsSayWhatToDoNext() {
+        val plan = planFor()
+        val ok = ZoomProbe.verdict(1, plan, run(plan), focused, focused, facts)
+        assertTrue(ok.words(), ok.words().startsWith("Run 1: valid — the zoom is the centred crop"))
+        assertTrue(ok.words(), ok.words().endsWith(". Lift this card, put a DIFFERENT card down, let it scan, then Run again"))
+        assertFalse("the H-fit numbers stay in the log line: ${ok.words()}", ok.words().contains("H ="))
+        val failed = ZoomProbe.verdict(2, plan, run(plan), ZoomProbe.Focus(false, 4.0, 4.0, 5000, "NOT focused"), null, facts)
+        val c = ZoomProbe.combine(listOf(ok, failed))
+        assertTrue(c.words, c.words.startsWith("Not conclusive — the 1× focus pass did not report FOCUSED"))
+        assertTrue(c.words, c.words.endsWith(" · run 1 is valid: one more valid run on a DIFFERENT card decides"))
+        assertFalse(c.words, c.words.contains("lift this card"))
+        val stopped = ZoomProbe.combine(listOf(ok, ZoomProbe.stopped(2, plan, "the scan screen stopped", facts)))
+        assertTrue(stopped.words, stopped.words.startsWith("Run 2 stopped (the scan screen stopped) — nothing filed; Run again when ready · run 1 is valid"))
+        assertTrue(ZoomProbe.combine(listOf(failed)).words, ZoomProbe.combine(listOf(failed)).words.endsWith(" · no valid run yet"))
+        val three = ZoomProbe.combine(listOf(ok, ZoomProbe.verdict(2, plan, run(plan), focused, focused, facts), failed))
+        assertTrue(three.words, three.words.endsWith(" · 2 cards already agree — Next"))
     }
 
     @Test

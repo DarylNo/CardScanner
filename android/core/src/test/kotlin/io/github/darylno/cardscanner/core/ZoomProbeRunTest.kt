@@ -70,6 +70,14 @@ class ZoomProbeRunTest {
         var zoomOutstanding = 0; var maxZoomOutstanding = 0
         var measureOutstanding = 0; var maxMeasureOutstanding = 0
         var aeOn = false
+        /** How long each AF pass takes: the 1× pass, then the refocus check. */
+        var focusMs = 600L; var refocusMs = 600L
+        /** [calls]' size when each AF pass answered (the lens has settled from there on). */
+        val focusAnsweredAt = mutableListOf<Int>()
+        /** A silent zoom that still MOVES the camera (it got there; the answer never came). */
+        var silentMoves = false
+        /** The fake camera's zoom when each progress came. */
+        val progressCam = mutableListOf<Double>()
 
         override fun begin(why: String): String? { calls += "begin"; return beginRefusal }
         override fun check(answer: (String?) -> Unit) { calls += "check"; later(10) { answer(checkRefusal) } }
@@ -77,7 +85,11 @@ class ZoomProbeRunTest {
         override fun zoomTo(z: Double) {
             calls += "zoom %.2f".format(z)
             zoomOutstanding++; maxZoomOutstanding = max(maxZoomOutstanding, zoomOutstanding)
-            if (z in silent) { later(ZoomCoordinator.SETTLE_TIMEOUT_MS) { zoomOutstanding--; run.onZoom(1, z, z, null, ZoomCoordinator.PROBE_NO_ANSWER) }; return }
+            if (z in silent) {
+                if (silentMoves) cameraZ = z
+                later(ZoomCoordinator.SETTLE_TIMEOUT_MS) { zoomOutstanding--; run.onZoom(1, z, z, null, ZoomCoordinator.PROBE_NO_ANSWER) }
+                return
+            }
             val refused = refuseAbove?.let { z > it } == true
             // The glue posts the coordinator's answer: never inside zoomTo, even when the camera is already there.
             later(if (z == cameraZ) 0 else 150) {
@@ -88,7 +100,8 @@ class ZoomProbeRunTest {
         }
         override fun focusOnCard(u: Double, v: Double, why: String, done: (ZoomProbe.Focus) -> Unit) {
             calls += "focus"; focusAt += u to v
-            later(600) { done(ZoomProbe.Focus(focusOk, 4.05, 4.21, 600, if (focusOk) "FOCUSED" else "NOT focused")) }
+            val ms = if (focusAt.size == 1) focusMs else refocusMs
+            later(ms) { focusAnsweredAt += calls.size; done(ZoomProbe.Focus(focusOk, 4.05, 4.21, ms, if (focusOk) "FOCUSED" else "NOT focused")) }
         }
         override fun frames(done: (ZoomProbeRun.Grab?) -> Unit) {
             calls += "frames"
@@ -109,11 +122,11 @@ class ZoomProbeRunTest {
             if (role in stuck) return
             if (role in manual) pendingWorker += deliver else later(workerMs, deliver)
         }
-        override fun end(verified: Boolean, why: String) { calls += "end $verified" }
+        override fun end(verified: Boolean, why: String): Boolean { calls += "end $verified"; return true }
         override fun later(ms: Long, block: () -> Unit) { timers += Triple(now + ms, seq++, block) }
         override fun now(): Long = now
         override fun log(line: String) { logs += line }
-        override fun progress(p: ZoomProbeRun.Progress) { progresses += p }
+        override fun progress(p: ZoomProbeRun.Progress) { progresses += p; progressCam += cameraZ }
         override fun finished(o: ZoomProbeRun.Outcome) { outcomes += o; calls += "finished ${o.kind}" }
         override fun facts() = ZoomProbe.Facts("0", W, H, false, 4160, 3120, 2.6, 10.0, restoreZ)
 
@@ -307,7 +320,7 @@ class ZoomProbeRunTest {
             assertEquals("$abortAt: $after", if (abortAt == "ladder") listOf("ae off", "finished STOPPED") else listOf("finished STOPPED"), after)
             assertFalse(f.calls.any { it.startsWith("end") })
             assertEquals(1, f.outcomes.size)
-            assertTrue(f.logs.last(), f.logs.last().startsWith("probe run 1 STOPPED at ") &&
+            assertTrue(f.logs.last(), f.logs.last().startsWith("probe run 1 STOPPED at ${if (abortAt == "ladder") "rung " else "restoring"}") &&
                 f.logs.last().endsWith("— the scan screen stopped (nothing filed; the scanned scene kept as before)"))
             assertEquals("Zoom probe stopped — the scan screen stopped. Nothing was filed; Run again when ready", f.outcomes.single().words)
         }
@@ -350,6 +363,187 @@ class ZoomProbeRunTest {
             f.calls.filter { it.startsWith("end") } == listOf("end false"))
         assertTrue(f.now in ZoomProbeRun.BUDGET_MS..ZoomProbeRun.BUDGET_MS + 15_000)
         assertEquals("The zoom probe ran past 90 s — stopped; nothing filed. Run again", f.outcomes.single().words)
+    }
+
+    /**
+     * Review of 08a77d1: a cancel (or the budget) while an AF pass is still running ended
+     * the probe before the pass finished — in FOCUSING not even verified (the "lens may have
+     * moved" mark came with the pass's ANSWER), in REFOCUS rebased before the lens settled.
+     * The pass is waited for (≤ its guard), then the VERIFIED restore: its frames, and any
+     * rebase, come after the lens has settled.
+     */
+    @Test
+    fun aStopDuringAnAfPassWaitsForItThenVerifies() {
+        val expected = listOf("zoom 1.90", "ae off", "frames", "measure RESTORE", "end true")
+        // A cancel during the 1× pass (FOCUSING), the answer 2 s away.
+        val a = fake { focusMs = 2_000 }
+        a.run.start()
+        a.until { a.calls.contains("focus") }
+        a.run.cancel("Cancel probe")
+        a.until { a.outcomes.isNotEmpty() }
+        assertEquals(expected + "finished CANCELLED", a.calls.drop(a.index("focus") + 1))
+        assertTrue("the restore starts after the pass answered", a.focusAnsweredAt.single() <= a.index("zoom 1.90"))
+        assertEquals(Kind.CANCELLED, a.outcomes.single().kind)
+        assertFalse(a.logs.any { it.contains("no focus pass ran") })
+        // A cancel during the refocus check's pass (3 s).
+        val b = fake { refocusMs = 3_000 }
+        b.run.start()
+        b.until { b.calls.count { it == "focus" } == 2 }
+        val at = b.calls.lastIndexOf("focus")
+        b.run.cancel("Cancel probe")
+        b.until { b.outcomes.isNotEmpty() }
+        assertEquals(expected + "finished CANCELLED", b.calls.drop(at + 1))
+        assertTrue("the restore's frames come after the lens settled", b.focusAnsweredAt[1] <= b.index("measure RESTORE"))
+        assertFalse("the refocus frames are not taken after a cancel", b.calls.contains("measure REFOCUS"))
+        // The budget running out during the 1× pass: the same.
+        val c = fake { manual = setOf(Role.LOCATE) }
+        c.run.start()
+        c.until(30_000) { c.pendingWorker.isNotEmpty() }
+        c.advance(ZoomProbeRun.BUDGET_MS - 300 - c.now)
+        c.pendingWorker.removeFirst()()                              // LOCATE answers: the AF pass goes out 300 ms before the budget
+        c.until { c.outcomes.isNotEmpty() }
+        assertTrue(c.logs.any { it.startsWith("probe run 1: the 90 s budget ran out at focusing") })
+        assertEquals(expected + "finished CANCELLED", c.calls.drop(c.index("focus") + 1))
+        assertTrue(c.focusAnsweredAt.single() <= c.index("zoom 1.90"))
+    }
+
+    /**
+     * The REAL coordinator wired to the REAL runner through one main-thread FIFO, as the
+     * CameraController glue will be: the coordinator's probeAt / probeEnded and the worker's
+     * answers are all posted.
+     */
+    private inner class Wired : ZoomCoordinator.Port, ZoomProbeRun.Port {
+        var now = 0L
+        private var seq = 0
+        private val timers = PriorityQueue<Triple<Long, Int, () -> Unit>>(compareBy<Triple<Long, Int, () -> Unit>>({ it.first }, { it.second }))
+        val coord = ZoomCoordinator(this)
+        lateinit var run: ZoomProbeRun
+        var cameraZ = 1.0
+        val calls = mutableListOf<String>()
+        val outcomes = mutableListOf<ZoomProbeRun.Outcome>()
+        var restoreDeliver: (() -> Unit)? = null
+        // The camera side.
+        override fun request(gen: Int, ratio: Double) { later(150) { cameraZ = ratio; coord.onApplied(gen, ratio) } }
+        override fun closeGate(why: String) { calls += "close" }
+        override fun map(ratio: Double, view: RoiFrac?, settle: Boolean, why: String) { calls += "map %.2f".format(ratio) }
+        override fun drawingReady(ratio: Double) {}
+        override fun readBack(): Double? = null
+        override fun probeAt(gen: Int, asked: Double, camera: Double, readBack: Double?, error: String?) {
+            later(0) { run.onZoom(gen, asked, camera, readBack, error) }
+        }
+        override fun probeEnded(why: String) { later(0) { run.aborted(why) } }
+        override fun probeRebase(why: String) { calls += "REBASE" }
+        // The runner side.
+        override fun begin(why: String): String? = if (coord.beginProbe(why)) null else "refused"
+        override fun check(answer: (String?) -> Unit) { later(10) { answer(null) } }
+        override fun aeLock(on: Boolean) {}
+        override fun zoomTo(z: Double) = coord.probeTo(z)
+        override fun focusOnCard(u: Double, v: Double, why: String, done: (ZoomProbe.Focus) -> Unit) {
+            later(600) { done(ZoomProbe.Focus(true, 4.05, 4.21, 600, "FOCUSED")) }
+        }
+        override fun frames(done: (ZoomProbeRun.Grab?) -> Unit) { later(200) { done(ZoomProbeRun.Grab(6, 2, 1)) } }
+        override fun measure(role: Role, grab: ZoomProbeRun.Grab, rect: IntArray?, done: (ZoomProbeRun.Measured?) -> Unit) {
+            val z = cameraZ
+            val frames = List(6) {
+                ZoomProbe.FrameFacts(quad(W / 2.0, H / 2.0, H1 * z + 3.0), z, true, 4.21, 16_700_000L, 400, "FOCUSED_LOCKED", 120.0, true)
+            }
+            val th = if (role == Role.LOCATE || role == Role.START || role == Role.RESTORE) thumb(1L) else null
+            val deliver = { done(ZoomProbeRun.Measured(frames, W, H, th, 250)) }
+            if (role == Role.RESTORE) { calls += "measure RESTORE"; restoreDeliver = deliver } else later(300, deliver)
+        }
+        // The glue's contract: the coordinator asks the rebase (probeRebase) only while the probe still runs.
+        override fun end(verified: Boolean, why: String): Boolean = coord.endProbe(why, rebase = verified)
+        override fun later(ms: Long, block: () -> Unit) { timers += Triple(now + ms, seq++, block) }
+        override fun now(): Long = now
+        override fun log(line: String) {}
+        override fun progress(p: ZoomProbeRun.Progress) {}
+        override fun finished(o: ZoomProbeRun.Outcome) { outcomes += o; calls += "finished ${o.kind}" }
+        override fun facts() = ZoomProbe.Facts("0", W, H, false, 4160, 3120, 2.6, 10.0, coord.target().z)
+        fun advance(ms: Long) {
+            val until = now + ms
+            while (true) {
+                val t = timers.peek() ?: break
+                if (t.first > until) break
+                timers.poll(); now = t.first; t.third()
+            }
+            now = until
+        }
+        fun until(limit: Long = 200_000, cond: () -> Boolean) { val end = now + limit; while (!cond() && now < end) advance(10) }
+    }
+
+    private fun wired(): Wired {
+        val w = Wired()
+        w.coord.setEnabled(true); w.coord.setArea(RoiFrac(0.25, 0.25, 0.75, 0.75)); w.coord.cameraBound(2.6, 8.0)
+        w.advance(1_000)
+        assertEquals(1.9, w.coord.mapped, 0.0)
+        w.run = ZoomProbeRun(w, 1, 3)
+        w.run.start()
+        w.until { w.restoreDeliver != null }
+        return w
+    }
+
+    /**
+     * Review of 08a77d1 (the plan's risk #9): the worker's RESTORE answer already queued when
+     * ON_STOP is handled ran FIRST — end(true), a rebase posted after the coordinator had
+     * aborted the probe, and the run reported DONE. A card swapped while the owner was away
+     * would be rebased into the scene and never scanned. Now the end finds the probe gone:
+     * no rebase, the run STOPPED.
+     */
+    @Test
+    fun aLifecycleAbortRacingTheRestoresEndNeverRebases() {
+        // The control: no abort — one rebase, the identical mapping, DONE.
+        val ok = wired()
+        val n = ok.calls.size
+        ok.later(0) { ok.restoreDeliver!!() }
+        ok.until { ok.outcomes.isNotEmpty() }
+        assertEquals(listOf("REBASE", "map 1.90", "finished DONE"), ok.calls.drop(n))
+        assertFalse(ok.coord.probing)
+        // The race: the worker's answer is queued, then ON_STOP is handled.
+        val w = wired()
+        val m = w.calls.size
+        w.later(0) { w.restoreDeliver!!() }
+        w.coord.cameraStopped("the scan screen stopped")
+        w.until { w.outcomes.isNotEmpty() }
+        w.advance(10_000)
+        assertFalse("no rebase after the abort: ${w.calls.drop(m)}", w.calls.contains("REBASE"))
+        assertEquals(Kind.STOPPED, w.outcomes.single().kind)
+        assertFalse(w.coord.probing)
+        assertTrue("the coordinator's abort, then the stop's own close: nothing mapped", w.calls.drop(m).none { it.startsWith("map") })
+    }
+
+    /**
+     * Review of 08a77d1: the restore's zoom with no answer was verified anyway — frames
+     * measured at a zoom the camera never confirmed, and a rebase the coordinator's end
+     * (which asks the target again) can void. An unanswered restore is not verified.
+     */
+    @Test
+    fun anUnansweredRestoreIsNotVerified() {
+        val f = fake { silent = setOf(1.9); silentMoves = true }
+        f.run.start(); f.until { f.outcomes.isNotEmpty() }
+        val restore = f.calls.lastIndexOf("zoom 1.90")
+        assertFalse("no restore frames: ${f.calls.drop(restore)}", f.calls.drop(restore).contains("measure RESTORE"))
+        assertEquals(listOf("end false"), f.calls.filter { it.startsWith("end") })
+        assertTrue(f.logs.any { it.startsWith("restore at 1.90×: the camera did not answer the zoom (no answer in 2000 ms) — not verified") })
+        assertEquals(Kind.DONE, f.outcomes.single().kind)
+    }
+
+    /**
+     * Review of 08a77d1: each measured rung's progress came after the NEXT rung's, carrying the
+     * previous rung's number and zoom — the pill stepped back and forth and Progress.z (the
+     * glue draws the Area there) was stale most of each rung. z is the camera's own zoom; the
+     * rung number only moves forward; a measured figure rides the count line.
+     */
+    @Test
+    fun theProgressFollowsTheCamera() {
+        val f = fake()
+        f.run.start(); f.until { f.outcomes.isNotEmpty() }
+        f.progresses.forEachIndexed { i, p ->
+            if (p.z != null) assertEquals("progress $i '${p.status}'", f.progressCam[i], p.z!!, 0.0)
+        }
+        val steps = f.progresses.mapNotNull { Regex("Zoom probe (\\d+)/").find(it.status)?.groupValues?.get(1)?.toInt() }
+        assertTrue(steps.toString(), steps.size >= 15)
+        assertEquals("the rung number never steps back: $steps", steps.sorted(), steps)
+        assertTrue(f.progresses.joinToString("\n") { it.count }, f.progresses.any { Regex("rung \\d+/15 · [0-9.]+× · card \\d+ px at [0-9.]+×").matches(it.count) })
     }
 
     @Test

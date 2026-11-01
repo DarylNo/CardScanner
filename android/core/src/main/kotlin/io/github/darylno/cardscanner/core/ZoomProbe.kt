@@ -327,8 +327,11 @@ object ZoomProbe {
     /** What a run locked at 1× (after its AF pass, under AE/AWB lock) and where the card started. */
     class Locked(val lensDpt: Double?, val exposureNs: Long?, val iso: Int?, val luma: Double?, val cx: Double, val cy: Double)
 
-    /** H = [a]·z + [c] (c = the finder's constant px bias), its largest relative deviation and rms over the rungs fitted. */
-    class HFit(val a: Double, val c: Double, val maxDev: Double, val rms: Double) {
+    /**
+     * H = [a]·z + [c] (c = the finder's constant px bias), its largest relative deviation and rms
+     * over the rungs fitted; [worstZ] = the camera ratio of that largest deviation (null = not known).
+     */
+    class HFit(val a: Double, val c: Double, val maxDev: Double, val rms: Double, val worstZ: Double? = null) {
         fun at(z: Double) = a * z + c
     }
 
@@ -341,7 +344,8 @@ object ZoomProbe {
         val a = pts.sumOf { (it.first - mx) * (it.second - my) } / sxx
         val c = my - a * mx
         val devs = pts.map { (it.second - (a * it.first + c)) / it.second }
-        return HFit(a, c, devs.maxOf { abs(it) }, sqrt(devs.sumOf { it * it } / devs.size))
+        val worst = devs.indices.maxByOrNull { abs(devs[it]) }!!
+        return HFit(a, c, abs(devs[worst]), sqrt(devs.sumOf { it * it } / devs.size), pts[worst].first)
     }
 
     /**
@@ -403,27 +407,40 @@ object ZoomProbe {
      * the old zoom after the drops (at most [settleMax] on one); [reportsZoomRatio]
      * whether CONTROL_ZOOM_RATIO came on the frames (null = no metas); [zPipe] = 880 ÷
      * H(1×); [lensDrift] the largest lens move off the lock; [refocus] the check at the
-     * top; [sameCardAs] = the earlier run this card repeats (the runner's thumbnail NCC).
-     * The knee and MAX_ZOOM are not measured ([DETAIL_VALIDATED] is false).
+     * top; [sameCardAs] = the earlier run this card repeats (the runner's thumbnail NCC);
+     * [driftZ] = the camera ratio where the centre drifted most. The knee and MAX_ZOOM are
+     * not measured ([DETAIL_VALIDATED] is false).
      */
     class Result(
         val run: Int, val valid: Boolean, val reason: String?, val centred: Boolean?, val fit: HFit?, val drift: Double?,
         val rungs: Int, val validRungs: Int, val settleRungs: Int, val settleMax: Int, val reportsZoomRatio: Boolean?,
         val zPipe: Double?, val lensDrift: Double?, val refocus: Focus?, val stream: String, val top: Double,
-        val sameCardAs: Int?, val h1: Double?, val stoppedAt: String? = null,
+        val sameCardAs: Int?, val h1: Double?, val stoppedAt: String? = null, val driftZ: Double? = null,
     ) {
         /** The settle rule: frames at the old zoom after the drops on more than [SETTLE_SHARE] of rungs. */
         val settleOk: Boolean get() = rungs == 0 || settleRungs.toDouble() / rungs <= SETTLE_SHARE + 1e-9
 
-        /** The owner's line on the scan screen. */
+        /**
+         * Why the run is NOT the centred crop, from the rule(s) that failed and where each was worst
+         * (review of 08a77d1: the words always cited the drift at the top, even when the SIZE failed).
+         */
+        fun notCentredWhy(): String = listOfNotNull(
+            fit?.takeIf { it.maxDev > H_FIT_TOL + 1e-9 }?.let {
+                "the card's size is %.1f %% off a straight line at %.2f×".format(Locale.ROOT, it.maxDev * 100, it.worstZ ?: top)
+            },
+            drift?.takeIf { it > CENTRE_TOL + 1e-9 }?.let { "the card moved %.1f %% at %.2f×".format(Locale.ROOT, it * 100, driftZ ?: top) },
+        ).ifEmpty { listOf("too few rungs measured to fit the card's size against zoom") }.joinToString(" and ")
+
+        /** The settle fact in words. */
+        private fun settleWords() = if (settleOk) "frames settle within the dropped ones" else "frames are still at the old zoom on $settleRungs of $rungs rungs"
+
+        /** The owner's line on the scan screen: what the run found and what to do next (the H-fit numbers are the log line's). */
         fun words(): String = when {
             stoppedAt != null -> "Run $run stopped ($stoppedAt) — nothing filed; Run again when ready"
             !valid -> "Not conclusive — ${reason ?: "?"}"
-            centred == false -> "The zoom is NOT the centred crop this app assumes (the card moved %.1f %% at %.2f×) — keep Zoom to fit off and send the report"
-                .format(Locale.ROOT, (drift ?: 0.0) * 100, top)
-            else -> "Run $run: the zoom is the centred crop (card %s), frames %s — the probe does not measure MAX_ZOOM"
-                .format(Locale.ROOT, fit?.let { "±%.1f %% on H = %.1f·z %+.1f".format(Locale.ROOT, it.maxDev * 100, it.a, it.c) } ?: "?",
-                    if (settleOk) "settle within the dropped frames" else "still at the old zoom on $settleRungs of $rungs rungs")
+            centred == false -> "The zoom is NOT the centred crop this app assumes (${notCentredWhy()}) — keep Zoom to fit off and send the report"
+            else -> "Run $run: valid — the zoom is the centred crop, ${settleWords()} (the probe does not measure MAX_ZOOM). " +
+                "Lift this card, put a DIFFERENT card down, let it scan, then Run again"
         }
 
         /** The `probe` RESULT line. */
@@ -477,9 +494,10 @@ object ZoomProbe {
         val settleMax = main.maxOfOrNull { it.atOtherZoom } ?: 0
         val withMeta = main.sumOf { it.withMeta }
         val reports = if (withMeta == 0) null else main.sumOf { it.reported } > 0
-        fun result(valid: Boolean, reason: String?, centred: Boolean?, fit: HFit?, drift: Double?, validRungs: Int, lensDrift: Double?) =
+        fun result(valid: Boolean, reason: String?, centred: Boolean?, fit: HFit?, drift: Double?, validRungs: Int, lensDrift: Double?,
+                   driftZ: Double? = null) =
             Result(run, valid, reason, centred, fit, drift, main.size, validRungs, settleRungs, settleMax, reports, zPipe,
-                lensDrift, refocus, facts.stream, plan.top, sameCardAs, start?.longPx)
+                lensDrift, refocus, facts.stream, plan.top, sameCardAs, start?.longPx, driftZ = driftZ)
         if (focus == null || !focus.ok)
             return result(false, "the 1× focus pass did not report FOCUSED (${focus?.state ?: "none"}) — more light, then Run again", null, null, null, 0, null)
         if (start == null) return result(false, "no card found at 1×", null, null, null, 0, null)
@@ -499,9 +517,11 @@ object ZoomProbe {
         }
         agree(ones)?.let { return result(false, "the card moved (1× again is %.0f %% off the start): leave the tray untouched and Run again"
             .format(Locale.ROOT, max(1.0, it * 100)), null, null, null, validRungs, lensDrift) }
+        // Only the WORDS of the 80 % rule below: more than 20 % of rungs lost to the light or the lens
+        // leaves under 80 % valid anyway. A slip on a 1× repeat costs that rung, like any other
+        // (review of 08a77d1: it used to sink the run — a rule not in the pre-registered list).
         val lightOrFocus = reasons.count { r -> r.any { it.startsWith("the light") || it.startsWith("the lens") || it.startsWith("the exposure") || it.startsWith("the ISO") } }
-        if (ones.any { r -> validity(r, locked).any { it.startsWith("the light") || it.startsWith("the lens") } } ||
-            lightOrFocus > main.size * (1 - MIN_VALID_SHARE))
+        if (lightOrFocus > main.size * (1 - MIN_VALID_SHARE))
             return result(false, "the light or focus changed during the run — keep shadows and hands off, then Run again", null, null, null, validRungs, lensDrift)
         agree(tops)?.let { return result(false, "the card moved between the two %.2f× rungs — leave the tray untouched and Run again"
             .format(Locale.ROOT, plan.top), null, null, null, validRungs, lensDrift) }
@@ -511,9 +531,11 @@ object ZoomProbe {
         // The geometry: over the rungs that measured cleanly.
         val clean = main.filterIndexed { i, _ -> reasons[i].isEmpty() }
         val fit = fitH(clean)
-        val drift = clean.mapNotNull { r -> r.cx?.let { max(abs(it - locked.cx), abs(r.cy!! - locked.cy)) } }.maxOrNull() ?: 0.0
+        val drifts = clean.mapNotNull { r -> r.cx?.let { r.camera to max(abs(it - locked.cx), abs(r.cy!! - locked.cy)) } }
+        val worst = drifts.maxByOrNull { it.second }
+        val drift = worst?.second ?: 0.0
         val centred = fit != null && fit.maxDev <= H_FIT_TOL + 1e-9 && drift <= CENTRE_TOL + 1e-9
-        return result(true, null, centred, fit, drift, validRungs, lensDrift)
+        return result(true, null, centred, fit, drift, validRungs, lensDrift, worst?.first)
     }
 
     /** A run the scan screen or a lifecycle input stopped (nothing measured counts). */
@@ -554,15 +576,24 @@ object ZoomProbe {
         val reports = valid.mapNotNull { it.reportsZoomRatio }.let { if (it.isEmpty()) null else it.all { r -> r } }
         val zPipe = valid.mapNotNull { it.zPipe }.minOrNull()
         val last = runs.lastOrNull()
+        // Where the session stands, for after a run that did not count.
+        val tally = when (cards.size) {
+            0 -> "no valid run yet"
+            1 -> "run ${cards[0].run} is valid: one more valid run on a DIFFERENT card decides"
+            else -> "${cards.size} cards already agree — Next"
+        }
         val words = when {
             last == null -> "never run"
-            valid.any { it.centred == false } -> "the zoom is NOT the centred crop this app assumes — keep Zoom to fit off and send the report"
+            valid.any { it.centred == false } -> valid.first { it.centred == false }.let {
+                "the zoom is NOT the centred crop this app assumes (run ${it.run}: ${it.notCentredWhy()}) — keep Zoom to fit off and send the report"
+            }
+            // The run just made failed or was stopped (review of 08a77d1): ITS reason and what to do lead, then the tally.
+            !last.valid || last.stoppedAt != null -> last.words() + " · " + tally
             last.sameCardAs != null && last.sameCardAs in validRuns -> "that is the same card as run ${last.sameCardAs} — use a different one"
             cards.size >= 2 -> "%d cards agree: the zoom is the centred crop%s%s — Next".format(Locale.ROOT, cards.size,
                 if (settle == true) ", frames settle within the dropped ones" else ", but frames are still at the old zoom after the drops (SETTLE_DROP_FRAMES must rise first)",
                 zPipe?.let { " · z_pipe %.2f×".format(Locale.ROOT, it) } ?: "")
-            cards.size == 1 -> "run ${cards[0].run} valid — lift this card, put a DIFFERENT card down, let it scan, then Run again"
-            else -> "no valid run yet — " + last.words()
+            else -> "run ${cards[0].run} valid — lift this card, put a DIFFERENT card down, let it scan, then Run again"
         }
         return Combined(cards.size, centred, settle, reports, zPipe, words)
     }
@@ -662,9 +693,15 @@ object ZoomProbe {
         if (h0 != null && h1 != null) append(" · card %.0f → %.0f px (%+.1f %%, focus breathing)".format(Locale.ROOT, h0, h1, (h1 / h0 - 1) * 100))
     }
 
-    /** "restore at 1.90×: the same card in the same place (…) — the scanned scene is re-taken; nothing filed" */
-    fun restoreLine(z: Double, s: SameCard?, verify: Boolean): String = when {
+    /**
+     * "restore at 1.90×: the same card in the same place (…) — the scanned scene is re-taken; nothing filed".
+     * [verify] false = no AF pass was ever started (nothing moved); [zoomError] = the camera never answered
+     * the restore's zoom, so nothing could be verified.
+     */
+    fun restoreLine(z: Double, s: SameCard?, verify: Boolean, zoomError: String? = null): String = when {
         !verify -> "restore at %.2f×: no focus pass ran — the scanned scene is kept as it was; nothing filed".format(Locale.ROOT, z)
+        zoomError != null -> ("restore at %.2f×: the camera did not answer the zoom (%s) — not verified: the scanned scene is kept, " +
+            "so the card on the tray may scan again; nothing filed").format(Locale.ROOT, z, zoomError)
         s == null -> "restore at %.2f×: no frames to check — the scanned scene is kept; a swapped card will scan".format(Locale.ROOT, z)
         s.same -> "restore at %.2f×: the same card in the same place (%s) — the scanned scene is re-taken; nothing filed".format(Locale.ROOT, z, s.describe())
         else -> "restore at %.2f×: NOT the same card in the same place (%s) — the scanned scene is kept; a new card will scan".format(Locale.ROOT, z, s.describe())
