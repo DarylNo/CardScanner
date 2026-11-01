@@ -52,6 +52,14 @@ import io.github.darylno.cardscanner.core.ZoomFit
  * view is 400 before a picture is taken. No picture → 503: the scan screen closed (today's
  * words), else "no picture within 2 s" — naming the zoom only while `zoom.settling` says so.
  * Admin only like the rest ([ScanServer.adminOnly] reads the path, never the query).
+ *
+ * The zoom probe (1.1.17), REPORTED, never driven, from here (it runs from the
+ * measurement session's step on the phone): `zoom.probing` = it holds the camera
+ * now (`zoom.ratio` is then the camera's rung, never `settling` — the analyzer is
+ * paused on purpose) and `zoom.probe` = where it is, in the phone's words ("rung
+ * 7/15 · 1.60× · …"), null otherwise; top-level `zoom_probe` = the last probe's
+ * verdict as the phone keeps it (`{at, camera, stream, words, …}`, null = never
+ * run) — with the scan screen closed too. PATCH has no key for either.
  */
 class DeviceApi(private val device: DeviceControl) {
 
@@ -75,6 +83,8 @@ class DeviceApi(private val device: DeviceControl) {
         fun cameras(): List<Pair<String, String>> = emptyList()
         /** The live zoom (the scan screen's camera), or null when it isn't open. */
         fun zoom(): ZoomCoordinator.State? = null
+        /** The last zoom probe's verdict as the phone keeps it (its settings — no camera needed), or null = never run. */
+        fun zoomProbe(): Map<String, Any?>? = null
     }
 
     /** [auto] = the mode: true = "tray" (hands-free), false = "tap" (tap to scan). */
@@ -153,6 +163,8 @@ class DeviceApi(private val device: DeviceControl) {
             "snapshot_views" to listOf(VIEW_BASE, VIEW_CAMERA),
             "zoom_fit" to s.zoomFit,
             "zoom" to device.zoom()?.let(::zoomJson),
+            // The zoom probe's last verdict (1.1.17): read-only, also with the scan screen closed.
+            "zoom_probe" to device.zoomProbe(),
         )
     }
 
@@ -181,6 +193,9 @@ class DeviceApi(private val device: DeviceControl) {
                     "words" to o.describe(),
                 )
             },
+            // The zoom probe holds the camera (1.1.17): `ratio` is its rung; `probe` says where it is.
+            "probing" to z.probing,
+            "probe" to z.probeNote?.takeIf { z.probing },
         )
     }
 

@@ -28,6 +28,12 @@ object StatusText {
     const val AREA_CLEARED = "Scan area cleared — full frame. Empty the tray to re-learn…"
     const val AREA_SET = "Scan area set. Empty the tray to re-learn…"
     const val RELEARN = "Re-learning the empty tray — keep it clear…"
+    /** The zoom probe's touch policy (1.1.17): a control tapped while it runs only cancels it. */
+    const val PROBE_CANCELLING = "Cancelling the zoom probe — hands off the tray; tap again once it is over"
+    const val PROBE_DONE = "Zoom probe over — nothing filed. What it found is on the card above"
+    const val PROBE_REFUSED = "Zoom probe not run — the card above says why"
+    const val PROBE_STOPPED = "Zoom probe stopped — nothing filed. The card above says why"
+    const val PROBE_NOT_READY = "The camera is not ready — try again in a second"
 
     /**
      * After an Area is saved on the phone: [offCentre] = the off-centre hint's short

@@ -81,9 +81,10 @@ data class AbRecord(
  * A tie stays OFF: every Area or lens change costs a re-learn for nothing. If A1
  * already OCR-confirms nearly every card, B cannot win — the verdict says so.
  *
- * The probe half of the default-on verdict (piece 1, the zoom probe) is not built
- * in this version: [verdictLine] takes its checks when there are some, and says
- * "not measured" until then — so this build's verdict is never YES.
+ * The probe half of the default-on verdict (the zoom probe's runs this session,
+ * MeasureSession.probeChecks) comes in as checks; with no probe run it is "not
+ * measured". Its knee is never measured in this build (ZoomProbe.DETAIL_VALIDATED is
+ * false), so the verdict is never YES.
  */
 class AbSummary(records: List<AbRecord>, val target: Int = MeasureSession.AB_CARDS) {
     class Check(val ok: Boolean, val words: String) {
@@ -292,8 +293,8 @@ class AbSummary(records: List<AbRecord>, val target: Int = MeasureSession.AB_CAR
         else "void — A ran at ${x(aWorst)} (A must be at ${x(1.0)})"
 
     /**
-     * The `test` log's verdict line. [probe] = the probe half's checks (piece 1) — null
-     * until the zoom probe is built, so Zoom to fit ON by default reads NO.
+     * The `test` log's verdict line. [probe] = the probe half's checks (MeasureSession.probeChecks
+     * over the session's runs), null = no zoom probe ran: Zoom to fit ON by default reads NO.
      */
     fun verdictLine(probe: List<Check>? = null): String = buildString {
         append("zoom VERDICT: ")
@@ -302,7 +303,7 @@ class AbSummary(records: List<AbRecord>, val target: Int = MeasureSession.AB_CAR
             State.VOID -> append(voidWords()).append(" · Zoom to fit ON by default: NO")
             State.FAIL -> append("Zoom to fit ON by default: NO — the A/B half fails")
             State.PASS -> when {
-                probe == null -> append("Zoom to fit ON by default: NO — the A/B half passes; the probe half is not measured (the zoom probe is not built in this version)")
+                probe == null -> append("Zoom to fit ON by default: NO — the A/B half passes; the probe half is not measured (no zoom probe ran this session)")
                 probe.all { it.ok } -> append("Zoom to fit ON by default: YES — both halves pass")
                 else -> append("Zoom to fit ON by default: NO — the A/B half passes, the probe half fails")
             }
@@ -316,18 +317,23 @@ class AbSummary(records: List<AbRecord>, val target: Int = MeasureSession.AB_CAR
         append(" · note: MAX_ZOOM is still %.2f× in this build".format(Locale.ROOT, ZoomFit.MAX_ZOOM))
     }
 
-    /** The summary, the per-card line and the verdict — logged before "session END". */
-    fun logLines(): List<String> = listOf(summaryLine(), perCardLine(), verdictLine())
+    /** The summary, the per-card line and the verdict ([probe]: its probe half) — logged before "session END". */
+    fun logLines(probe: List<Check>? = null): List<String> = listOf(summaryLine(), perCardLine(), verdictLine(probe))
 
-    /** The done card's two lines (the full ones are in the debug report). */
-    fun cardText(): String = buildString {
+    /** The done card's two lines (the full ones are in the debug report); [probe] as in [verdictLine]. */
+    fun cardText(probe: List<Check>? = null): String = buildString {
         append("A/B, same ${cards.size} cards (B ${x(zB)}): OCR ✓ ${counts(::ocr)} · B better $better / worse $worse · still identifying $pending\n")
-        append("Zoom to fit ON by default: NO — ")
+        val yes = state == State.PASS && probe != null && probe.all { it.ok }
+        append(if (yes) "Zoom to fit ON by default: YES — " else "Zoom to fit ON by default: NO — ")
         append(when (state) {
             State.INCOMPLETE -> incompleteWords()
             State.VOID -> voidWords()
             State.FAIL -> checks.filter { !it.ok }.joinToString(" · ")
-            State.PASS -> "the A/B half passes; the probe half is not measured yet"
+            State.PASS -> when {
+                probe == null -> "the A/B half passes; no zoom probe ran"
+                yes -> "both halves pass"
+                else -> "the A/B half passes; the probe half fails (" + probe.filter { !it.ok }.joinToString(" · ") + ")"
+            }
         })
         if (noJob) append(" · zoom has no job at this mount height")
         if (outOfReach) append(" · rule 2 out of reach this run ${outOfReachWhy()}")

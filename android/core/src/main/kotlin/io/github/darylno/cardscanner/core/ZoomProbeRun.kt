@@ -73,9 +73,13 @@ class ZoomProbeRun(
     /**
      * How the run ended — exactly once: [words] for the owner (THIS run's; across a session the scan
      * screen shows ZoomProbe.combine over its runs, which leads with them after a run that did not
-     * count), [result] when it measured, [thumbnail] its 1× card.
+     * count), [result] when it measured, [thumbnail] its 1× card. [numbered] = the `probe` log
+     * carries this run's number (START, a focus failure after it, CANCELLED, STOPPED, the RESULT):
+     * the session's next run is the next number. False = refused before any of that ("probe
+     * refused — …", no number): the owner's next Run probe is this run again.
      */
-    class Outcome(val kind: Kind, val words: String, val result: ZoomProbe.Result?, val thumbnail: FloatArray?)
+    class Outcome(val kind: Kind, val words: String, val result: ZoomProbe.Result?, val thumbnail: FloatArray?,
+                  val numbered: Boolean = false)
 
     interface Port {
         /** ZoomCoordinator.beginProbe: null = begun (the gate is closed), else why not, in the owner's words (nothing changed). */
@@ -542,7 +546,9 @@ class ZoomProbeRun(
     private fun finish(kind: Kind, words: String, result: ZoomProbe.Result?) {
         if (finished) return
         finished = true
-        port.finished(Outcome(kind, words, result, if (result?.valid == true) startThumb else null))
+        // A refusal logs no run number ("probe refused — …") unless the plan was made: START went out first.
+        port.finished(Outcome(kind, words, result, if (result?.valid == true) startThumb else null,
+            numbered = kind != Kind.REFUSED || plan != null))
     }
 
     companion object {

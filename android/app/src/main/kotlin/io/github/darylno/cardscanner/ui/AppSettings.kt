@@ -147,6 +147,20 @@ class AppSettings(context: Context) {
     var measureAb: String?
         get() = prefs.getString(K_MEASURE_AB, null)
         set(v) { if (v == null) prefs.edit().remove(K_MEASURE_AB).apply() else prefs.edit().putString(K_MEASURE_AB, v).apply() }
+    /**
+     * The zoom probe's runs this session (1.1.17, MeasureSession: a JSON array of
+     * `{run, kind, words, at, result}`), null = none; cleared with the session.
+     */
+    var zoomProbeRuns: String?
+        get() = prefs.getString(K_ZOOM_PROBE_RUNS, null)
+        set(v) { if (v == null) prefs.edit().remove(K_ZOOM_PROBE_RUNS).apply() else prefs.edit().putString(K_ZOOM_PROBE_RUNS, v).apply() }
+    /**
+     * The last zoom probe's verdict (JSON: `{at, camera, stream, words, probe_half, …, last}`),
+     * null = never run. Kept after the session: Diagnostics and `/api/device` read it.
+     */
+    var zoomProbeLast: String?
+        get() = prefs.getString(K_ZOOM_PROBE_LAST, null)
+        set(v) { if (v == null) prefs.edit().remove(K_ZOOM_PROBE_LAST).apply() else prefs.edit().putString(K_ZOOM_PROBE_LAST, v).apply() }
 
     var debugOverlay: Boolean
         get() = prefs.getBoolean(K_DEBUG, false)
@@ -186,6 +200,8 @@ class AppSettings(context: Context) {
         const val K_MEASURE_PLAN = "measure_plan"
         const val K_MEASURE_STEP_ID = "measure_step_id"
         const val K_MEASURE_AB = "measure_ab"
+        const val K_ZOOM_PROBE_RUNS = "zoom_probe_runs"
+        const val K_ZOOM_PROBE_LAST = "zoom_probe_last"
         const val K_TIMINGS = "recent_timings"
     }
 }

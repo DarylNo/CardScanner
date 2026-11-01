@@ -147,6 +147,11 @@ class ScreensSmokeTest {
     fun mainActivity_everyControlIsOnScreen() {
         grantCamera(true)
         val a = launch(MainActivity::class.java)
+        assertEveryControlIsOnScreen(a)
+    }
+
+    /** [mainActivity_everyControlIsOnScreen]'s checks, on any scan screen [a] laid out at the N200's size. */
+    private fun assertEveryControlIsOnScreen(a: MainActivity) {
         val root = a.window.decorView
         val screenH = root.height
         assertTrue("laid out ($screenH px)", screenH > 0)
@@ -332,6 +337,316 @@ class ScreensSmokeTest {
         next()
         assertEquals("zoom-done", m.step.id)
         checkCard(m.step.instruction, "Zoom to fit ON by default: NO", "✗ post-fit", "rule 2 out of reach this run (5 unstable at 1×, 0 still identifying)")
+    }
+
+    /**
+     * A camera that runs the zoom probe the way CameraController answers it (1.1.17): a
+     * [ZoomStateCamera] (the real coordinator behind the Area and the zoom state) whose
+     * probe the TEST drives — what was started (run number, the earlier valid runs it
+     * compares with), what cancelled it, and the listener to send progress and the end to.
+     */
+    private class ProbeCamera(val inner: ZoomStateCamera = ZoomStateCamera()) : io.github.darylno.cardscanner.ui.CameraPort by inner {
+        val started = mutableListOf<Pair<Int, List<Int>>>()
+        val cancels = mutableListOf<String>()
+        var probe: io.github.darylno.cardscanner.ui.ProbeListener? = null
+        var running = false
+        val calls get() = inner.rec.calls
+        override fun startZoomProbe(run: Int, earlier: List<io.github.darylno.cardscanner.core.ZoomProbeRun.Earlier>,
+                                    l: io.github.darylno.cardscanner.ui.ProbeListener): Boolean {
+            started += run to earlier.map { it.run }; probe = l; running = true; return true
+        }
+        override fun cancelZoomProbe(why: String) { cancels += why }
+        override fun zoomProbeRunning() = running
+        override fun manualScan() { inner.rec.calls += "manualScan" }
+        override fun tapFocus(x: Float, y: Float) { inner.rec.calls += "tapFocus" }
+        override fun relearn() { inner.rec.calls += "relearn" }
+        override fun setTorch(on: Boolean) { inner.rec.calls += "setTorch($on)" }
+        override fun setCamera(id: String?) { inner.rec.calls += "setCamera($id)" }
+        /** The run ends as the controller reports it: on the UI thread, once. */
+        fun finish(o: io.github.darylno.cardscanner.core.ZoomProbeRun.Outcome) { running = false; probe!!.onFinished(o); ShadowLooper.idleMainLooper() }
+    }
+
+    /** A probe run's result (ZoomProbe.verdict's fields): valid and centred on camera 0, or with [words] for an inconclusive one. */
+    private fun probeResult(run: Int, valid: Boolean = true, centred: Boolean? = true, reason: String? = null,
+                            fit: io.github.darylno.cardscanner.core.ZoomProbe.HFit? = io.github.darylno.cardscanner.core.ZoomProbe.HFit(612.0, 3.0, 0.002, 0.0, 2.0),
+                            drift: Double? = 0.001, driftZ: Double? = 2.2, validRungs: Int = 15) =
+        io.github.darylno.cardscanner.core.ZoomProbe.Result(run, valid, reason, centred, fit, drift, 15, validRungs, 0, 0, true, 1.43, 0.0, null,
+            "1600×1200", 2.2, null, 612.0, driftZ = driftZ, camera = "0")
+
+    private fun probeOutcome(kind: io.github.darylno.cardscanner.core.ZoomProbeRun.Kind, words: String,
+                             r: io.github.darylno.cardscanner.core.ZoomProbe.Result? = null, numbered: Boolean = r != null) =
+        io.github.darylno.cardscanner.core.ZoomProbeRun.Outcome(kind, words, r, if (r?.valid == true) FloatArray(64 * 88) { 0.5f } else null, numbered)
+
+    /** The text of the measurement card's count line (the line under the instruction). */
+    private fun countLine(root: View): String = generateSequence(listOf(root)) { vs -> vs.flatMap { v -> (v as? ViewGroup)?.let { g -> (0 until g.childCount).map(g::getChildAt) } ?: emptyList() }.ifEmpty { null } }
+        .flatten().filterIsInstance<TextView>().firstOrNull { it.isShown && it.text.toString().startsWith(app.getString(R.string.measure_captures, 0).substringBefore("0")) }
+        ?.text?.toString() ?: ""
+
+    /**
+     * The zoom probe's step on the scan screen (1.1.17): Run probe starts run 1 (no earlier
+     * card); while it runs the button is Cancel probe, the status pill and the count line say
+     * where it is, the Area is drawn where it sits at the camera's ANSWERED zoom (the chip
+     * "Area ✓ · 1.6×") and the outline / watch window are hidden; Cancel probe cancels it.
+     * Each end shows what the session's runs say (a run with no result: its own words); Run
+     * again numbers the next run (a refusal before it began leaves the number) and hands it
+     * the valid runs' cards to compare with; the last verdict reaches /api/device.
+     */
+    @Test
+    @Config(qualifiers = "w411dp-h914dp-xxhdpi")
+    fun mainActivity_zoomProbeStep_runsCancelsAndRunsAgain() {
+        app.settings.roi = io.github.darylno.cardscanner.core.RoiFrac(0.25, 0.25, 0.75, 0.75)
+        app.settings.auto = true
+        app.settings.zoomFit = false
+        val cam = ProbeCamera()
+        app.cameraFactory = { _, _ -> cam }
+        grantCamera(true)
+        app.measure.start(io.github.darylno.cardscanner.ui.MeasureSession.Plan.ZOOM)
+        app.measure.next()
+        assertEquals("zoom-probe", app.measure.step.id)
+        val a = launch(MainActivity::class.java)
+        val root = a.window.decorView
+        val bottom = root.findViewWithTag<View>(TAG_BOTTOM_BAR)
+        val overlay = findOverlay(root)!!
+        fun overlayRoi() = io.github.darylno.cardscanner.ui.OverlayView::class.java.getDeclaredField("roi").apply { isAccessible = true }.get(overlay)
+        assertFalse("no Yes / No on the probe step", findText(root, a.getString(R.string.measure_yes))?.isShown == true)
+        val run = findText(root, "Run probe")
+        assertNotNull("the step's own button", run)
+        assertTrue(run!!.isShown)
+        run.performClick(); ShadowLooper.idleMainLooper()
+        assertEquals(listOf(1 to emptyList<Int>()), cam.started)
+        assertNotNull("running: the button cancels", findText(root, "Cancel probe"))
+        cam.probe!!.onProgress("Zoom probe 7/15 · 1.60× — hands off the tray", "rung 7/15 · 1.60× · card 979 px at 1.50×", 1.6)
+        ShadowLooper.idleMainLooper()
+        assertEquals("Zoom probe 7/15 · 1.60× — hands off the tray", a.statusForTest)
+        assertTrue(countLine(root), countLine(root).endsWith("\nrung 7/15 · 1.60× · card 979 px at 1.50×"))
+        assertNotNull("the chip says the rung's zoom", findText(bottom, a.getString(R.string.area_zoomed, "1.6")))
+        assertEquals("the Area where it sits at the camera's 1.60×",
+            io.github.darylno.cardscanner.core.ZoomFit.toView(app.settings.roi, 1.6), overlayRoi())
+        assertEquals("no outline or watch window on the rungs", null, overlay.plan().shape)
+        findText(root, "Cancel probe")!!.performClick(); ShadowLooper.idleMainLooper()
+        assertEquals(listOf("Cancel probe"), cam.cancels)
+        assertEquals("still running until it ends", 1, cam.started.size)
+        cam.finish(probeOutcome(io.github.darylno.cardscanner.core.ZoomProbeRun.Kind.CANCELLED, "Zoom probe cancelled (Cancel probe) — nothing filed", numbered = true))
+        assertTrue(countLine(root), countLine(root).endsWith("\nZoom probe cancelled (Cancel probe) — nothing filed"))
+        assertTrue(a.statusForTest, a.statusForTest.startsWith("Zoom probe cancelled"))
+        // Run again: run 2 (the cancelled run used 1), valid.
+        findText(root, "Run again")!!.performClick(); ShadowLooper.idleMainLooper()
+        assertEquals(2 to emptyList<Int>(), cam.started.last())
+        cam.finish(probeOutcome(io.github.darylno.cardscanner.core.ZoomProbeRun.Kind.DONE, "Run 2: valid — …", probeResult(2)))
+        val valid = "run 2 valid — lift this card, put a DIFFERENT card down, let it scan, then Run again"
+        assertTrue(countLine(root), countLine(root).endsWith("\n$valid"))
+        val api = io.github.darylno.cardscanner.core.server.DeviceApi(app.phoneServer.device)
+        val dev = io.github.darylno.cardscanner.core.MiniJson.parse(String(
+            api.handle(io.github.darylno.cardscanner.core.server.ApiRequest("GET", "/api/device"))!!.body)) as Map<*, *>
+        assertEquals(valid, (dev["zoom_probe"] as Map<*, *>)["words"])
+        // Run 3 compares its card with run 2's; refused before it began — its words, and the number is kept.
+        findText(root, "Run again")!!.performClick(); ShadowLooper.idleMainLooper()
+        assertEquals(3 to listOf(2), cam.started.last())
+        val wait = "Let the card scan first (wait for the ✓), then Run probe"
+        cam.finish(probeOutcome(io.github.darylno.cardscanner.core.ZoomProbeRun.Kind.REFUSED, wait))
+        assertTrue(countLine(root), countLine(root).endsWith("\n$wait"))
+        findText(root, "Run again")!!.performClick(); ShadowLooper.idleMainLooper()
+        assertEquals(3 to listOf(2), cam.started.last())
+        cam.finish(probeOutcome(io.github.darylno.cardscanner.core.ZoomProbeRun.Kind.REFUSED, wait))
+        // Not running: Next moves on, and the button is gone on B.
+        findText(root, a.getString(R.string.measure_next))!!.performClick(); ShadowLooper.idleMainLooper()
+        assertEquals("zoom-b", app.measure.step.id)
+        assertEquals(null, findText(root, "Run again")?.takeIf { it.isShown })
+    }
+
+    /**
+     * The touch policy while the zoom probe runs (1.1.17): every control on the scan screen
+     * ONLY cancels it — through its verified restore, never a stop that skips it — and does
+     * nothing else; the owner taps again once it is over. The shutter scans nothing, a preview
+     * tap focuses nowhere, a double-tap re-learns nothing, the Area / Tray|Tap / the camera pill
+     * change nothing, Scans / ⚙ / Share / the Back key leave nothing, Back / Next / Stop on the
+     * card keep the step. Once it is over every control works again.
+     */
+    @Test
+    @Config(qualifiers = "w411dp-h914dp-xxhdpi")
+    fun mainActivity_theShutterIsRefusedDuringTheProbe() {
+        addN200Cameras()
+        app.settings.cameraId = null
+        app.settings.roi = io.github.darylno.cardscanner.core.RoiFrac(0.25, 0.25, 0.75, 0.75)
+        app.settings.auto = true
+        val cam = ProbeCamera()
+        app.cameraFactory = { _, _ -> cam }
+        grantCamera(true)
+        app.measure.start(io.github.darylno.cardscanner.ui.MeasureSession.Plan.ZOOM)
+        app.measure.next()
+        val a = launch(MainActivity::class.java)
+        val root = a.window.decorView
+        val bottom = root.findViewWithTag<View>(TAG_BOTTOM_BAR)
+        val top = root.findViewWithTag<View>(TAG_TOP_BAR)
+        val overlay = findOverlay(root)!!
+        while (nextStarted() != null) { }
+        cam.running = true                                         // the probe runs (through the adapter: zoomProbeRunning)
+        cam.calls.clear()
+        val controls = listOf<Pair<String, () -> Unit>>(
+            "the shutter" to { findDesc(bottom, a.getString(R.string.scan_card))!!.performClick() },
+            "a tap on the preview" to { overlay.onTap!!.invoke(100f, 100f) },
+            "a double-tap" to { overlay.onDoubleTap!!.invoke() },
+            "the Area button" to { findText(bottom, a.getString(R.string.area_set))!!.performClick() },
+            "Tray | Tap" to { findText(bottom, a.getString(R.string.mode_tap))!!.performClick() },
+            "the camera pill" to { findText(top, "‹  Auto · 13 MP  ›")!!.performClick() },
+            "Scans" to { findText(bottom, a.getString(R.string.scans))!!.performClick() },
+            "Settings" to { findDesc(bottom, a.getString(R.string.settings))!!.performClick() },
+            "Share" to { findDesc(bottom, a.getString(R.string.share))!!.performClick() },
+            "Back" to { findText(root, a.getString(R.string.measure_back))!!.performClick() },
+            "Next" to { findText(root, a.getString(R.string.measure_next))!!.performClick() },
+            "Stop" to { findText(root, a.getString(R.string.measure_stop))!!.performClick() },
+            "the Back key" to { a.onBackPressedDispatcher.onBackPressed() },
+        )
+        for ((n, c) in controls.withIndex()) {
+            val (name, act) = c
+            act(); ShadowLooper.idleMainLooper()
+            assertEquals("$name only cancels the probe: ${cam.cancels}", n + 1, cam.cancels.size)
+            assertEquals("…once, as \"$name\"", name, cam.cancels.last())
+            assertTrue("$name: ${a.statusForTest}", a.statusForTest.startsWith("Cancelling the zoom probe"))
+        }
+        assertEquals("nothing else reached the camera: ${cam.calls}", emptyList<String>(), cam.calls)
+        assertEquals("nothing opened", null, nextStarted())
+        assertFalse("the scan screen stays", a.isFinishing)
+        assertEquals("the step stays", "zoom-probe", app.measure.step.id)
+        assertTrue(app.measure.active)
+        assertTrue(app.settings.auto); assertEquals(null, app.settings.cameraId)
+        assertEquals(io.github.darylno.cardscanner.core.RoiFrac(0.25, 0.25, 0.75, 0.75), app.settings.roi)
+        // Over: the shutter scans again.
+        cam.running = false
+        findDesc(bottom, a.getString(R.string.scan_card))!!.performClick(); ShadowLooper.idleMainLooper()
+        assertEquals(listOf("manualScan"), cam.calls)
+        assertEquals(controls.size, cam.cancels.size)
+    }
+
+    /**
+     * A change from the computer while the zoom probe runs (1.1.17): it is stored at once (the
+     * PATCH answers), the probe is cancelled — its verified restore — and the change reaches
+     * the camera only once the probe has ended (a torch, a lens, the Zoom to fit switch mid-run
+     * would end it with no restore, or spoil its frames).
+     */
+    @Test
+    fun deviceApi_aChangeFromTheComputerDuringTheProbeWaitsForItsEnd() {
+        app.settings.roi = io.github.darylno.cardscanner.core.RoiFrac(0.25, 0.25, 0.75, 0.75)
+        app.settings.auto = true
+        app.settings.torch = false
+        val cam = ProbeCamera()
+        app.cameraFactory = { _, _ -> cam }
+        grantCamera(true)
+        app.measure.start(io.github.darylno.cardscanner.ui.MeasureSession.Plan.ZOOM)
+        app.measure.next()
+        val a = launch(MainActivity::class.java)
+        findText(a.window.decorView, "Run probe")!!.performClick(); ShadowLooper.idleMainLooper()
+        assertEquals(1, cam.started.size)
+        cam.calls.clear()
+        assertEquals(true, patchFromTheServerThread("""{"torch":true}""")["torch"])
+        assertTrue("stored at once", app.settings.torch)
+        assertEquals(listOf("a change from the computer"), cam.cancels)
+        assertEquals("nothing reached the camera while it runs: ${cam.calls}", emptyList<String>(), cam.calls)
+        patchFromTheServerThread("""{"check_ms":500}""")
+        assertEquals("a second PATCH: still waiting", emptyList<String>(), cam.calls)
+        cam.finish(probeOutcome(io.github.darylno.cardscanner.core.ZoomProbeRun.Kind.CANCELLED, "Zoom probe cancelled (a change from the computer) — nothing filed", numbered = true))
+        assertTrue("applied once it ended: ${cam.calls}", cam.calls.contains("setTorch(true)"))
+        assertEquals("…the mode not handed over again (no re-arm): ${cam.calls}", emptyList<String>(), cam.calls.filter { it.startsWith("setAuto(") })
+        cam.calls.clear()
+        patchFromTheServerThread("""{"torch":false}""")
+        assertTrue("no probe: at once", cam.calls.contains("setTorch(false)"))
+    }
+
+    /**
+     * The probe step's card at the N200's size with its longest words (NATIVE text): the
+     * off-centre refusal with its numbers, a NOT-centred verdict naming both rules, an
+     * inconclusive run with the session's tally, and the running count line — Run probe /
+     * Cancel probe / Run again, Back, Stop and Next each have a size and sit on screen, the card
+     * stays ≤ 45 % of the screen and the bottom row is still there.
+     */
+    @Test
+    @Config(qualifiers = "w411dp-h914dp-xxhdpi")
+    @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
+    fun mainActivity_zoomProbeStep_controlsAreOnScreen() {
+        app.settings.roi = io.github.darylno.cardscanner.core.RoiFrac(0.25, 0.25, 0.75, 0.75)
+        app.settings.auto = true
+        val cam = ProbeCamera()
+        app.cameraFactory = { _, _ -> cam }
+        grantCamera(true)
+        app.measure.start()                                          // the FULL session: "Step 10 of 15"
+        while (app.measure.step.id != "zoom-probe") app.measure.next()
+        val a = launch(MainActivity::class.java)
+        val root = a.window.decorView
+        val m = app.measure
+        fun layout() {
+            root.measure(View.MeasureSpec.makeMeasureSpec(root.width, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(root.height, View.MeasureSpec.EXACTLY))
+            root.layout(0, 0, root.width, root.height)
+        }
+        fun onScreen(name: String, v: View) {
+            val l = IntArray(2); v.getLocationInWindow(l)
+            assertTrue("$name has a size (${v.width}×${v.height})", v.width > 0 && v.height > 0)
+            assertTrue("$name is inside the screen (x ${l[0]}..${l[0] + v.width} of ${root.width}, y ${l[1]}..${l[1] + v.height} of ${root.height})",
+                l[0] >= 0 && l[0] + v.width <= root.width && l[1] >= 0 && l[1] + v.height <= root.height)
+        }
+        fun check(button: String, words: String) {
+            ShadowLooper.idleMainLooper(); layout()
+            assertTrue("the count line: ${countLine(root)}", countLine(root).endsWith("\n$words"))
+            val title = findText(root, a.getString(R.string.measure_step, m.index + 1, m.steps.size, m.step.title))!!
+            var card: View = title
+            while ((card.parent as View).tag != TAG_TOP_BAR) card = card.parent as View
+            assertTrue("the card is ≤ 45 % of the screen (${card.height} of ${root.height} px) with: $words", card.height <= root.height * 0.45)
+            onScreen("the card", card)
+            onScreen(button, findText(root, button)!!)
+            onScreen("Back", findText(root, a.getString(R.string.measure_back))!!)
+            onScreen("Stop", findText(root, a.getString(R.string.measure_stop))!!)
+            onScreen("Next", findText(root, a.getString(R.string.measure_next))!!)
+            val bottom = root.findViewWithTag<View>(TAG_BOTTOM_BAR)
+            onScreen("Scans", findText(bottom, a.getString(R.string.scans))!!)
+            onScreen("the shutter", findDesc(bottom, a.getString(R.string.scan_card))!!)
+        }
+        ShadowLooper.idleMainLooper(); layout()
+        onScreen("Run probe", findText(root, "Run probe")!!)
+        // The longest refusal: the off-centre card, its numbers (the plan's own words).
+        val offCentre = io.github.darylno.cardscanner.core.ZoomProbe.plan(floatArrayOf(546f, 594f, 984f, 594f, 984f, 1206f, 546f, 1206f),
+            1200, 1600, 10.0, 1) as io.github.darylno.cardscanner.core.ZoomProbe.Refusal
+        assertEquals(io.github.darylno.cardscanner.core.ZoomProbe.Why.OFF_CENTRE, offCentre.why)
+        findText(root, "Run probe")!!.performClick(); ShadowLooper.idleMainLooper()
+        cam.probe!!.onProgress("Zoom probe 12/15 · 2.20× — hands off the tray", "rung 12/15 · 2.20× · card 1349 px at 2.00×", 2.2)
+        check("Cancel probe", "rung 12/15 · 2.20× · card 1349 px at 2.00×")
+        assertTrue(offCentre.words, offCentre.words.startsWith("The card is 14 % right and 6 % below the view's centre"))
+        cam.finish(probeOutcome(io.github.darylno.cardscanner.core.ZoomProbeRun.Kind.REFUSED, offCentre.words))
+        check("Run again", offCentre.words)
+        // A valid run, then one NOT centred on both rules: the combined words name run 2's.
+        findText(root, "Run again")!!.performClick(); ShadowLooper.idleMainLooper()
+        assertEquals("the refusal left the number", 1, cam.started.last().first)
+        cam.finish(probeOutcome(io.github.darylno.cardscanner.core.ZoomProbeRun.Kind.DONE, "Run 1", probeResult(1)))
+        findText(root, "Run again")!!.performClick(); ShadowLooper.idleMainLooper()
+        val bent = probeResult(2, centred = false, fit = io.github.darylno.cardscanner.core.ZoomProbe.HFit(612.0, 3.0, 0.032, 0.0, 2.0), drift = 0.021, driftZ = 1.5)
+        cam.finish(probeOutcome(io.github.darylno.cardscanner.core.ZoomProbeRun.Kind.DONE, bent.words(), bent))
+        val notCentred = io.github.darylno.cardscanner.core.ZoomProbe.combine(listOf(probeResult(1), bent)).words
+        assertTrue(notCentred, notCentred.contains("the card's size is 3.2 % off a straight line at 2.00× and the card moved 2.1 % at 1.50×"))
+        check("Run again", notCentred)
+        // An inconclusive run after a valid one (a fresh tally): its reason, then the tally.
+        app.settings.zoomProbeRuns = null
+        findText(root, "Run again")!!.performClick(); ShadowLooper.idleMainLooper()
+        assertEquals(1, cam.started.last().first)
+        cam.finish(probeOutcome(io.github.darylno.cardscanner.core.ZoomProbeRun.Kind.DONE, "Run 1", probeResult(1)))
+        findText(root, "Run again")!!.performClick(); ShadowLooper.idleMainLooper()
+        val stuck = probeResult(2, valid = false, centred = null, fit = null, drift = null, driftZ = null, validRungs = 9,
+            reason = "only 9 of 15 rungs measured cleanly (the lens moved off the lock ×4, no answer from the camera ×2)")
+        cam.finish(probeOutcome(io.github.darylno.cardscanner.core.ZoomProbeRun.Kind.DONE, stuck.words(), stuck))
+        val inconclusive = io.github.darylno.cardscanner.core.ZoomProbe.combine(listOf(probeResult(1), stuck)).words
+        assertTrue(inconclusive, inconclusive.endsWith(" · run 1 is valid: one more valid run on a DIFFERENT card decides"))
+        check("Run again", inconclusive)
+    }
+
+    /** Every scan-screen control is on screen at the N200's size with a session on the zoom probe's step (its card in the top scrim). */
+    @Test
+    @Config(qualifiers = "w411dp-h914dp-xxhdpi")
+    fun mainActivity_everyControlIsOnScreen_onTheProbeStep() {
+        app.measure.start(io.github.darylno.cardscanner.ui.MeasureSession.Plan.ZOOM)
+        app.measure.next()
+        assertEquals("zoom-probe", app.measure.step.id)
+        grantCamera(true)
+        val a = launch(MainActivity::class.java)
+        assertNotNull(findText(a.window.decorView, "Run probe"))
+        assertEveryControlIsOnScreen(a)
     }
 
     /**
@@ -1200,6 +1515,37 @@ class ScreensSmokeTest {
         assertTrue(after, after.contains("camera (snapshot from "))
         assertTrue(after, after.contains("the scan screen is closed"))
         assertTrue(after, after.contains("focus: passes this session: "))
+    }
+
+    /**
+     * The zoom probe's last verdict (1.1.17) is read from the phone's settings, so Settings →
+     * Diagnostics (and the debug report's head) and the paired computer's GET /api/device
+     * (`zoom_probe`) have it with no scan screen open: when, which camera, which stream, and
+     * what the runs said — or "never run".
+     */
+    @Test
+    fun diagnosticsAndTheComputerReadTheLastZoomProbeWithTheScreenClosed() {
+        app.settings.zoomProbeLast = null
+        val never = io.github.darylno.cardscanner.ui.DiagnosticsText.build(app)
+        assertTrue(never, never.lines().contains("zoom probe: never run"))
+        val api = io.github.darylno.cardscanner.core.server.DeviceApi(app.phoneServer.device)
+        fun device() = io.github.darylno.cardscanner.core.MiniJson.parse(String(
+            api.handle(io.github.darylno.cardscanner.core.server.ApiRequest("GET", "/api/device"))!!.body)) as Map<*, *>
+        val d0 = device()
+        assertTrue("$d0", d0.containsKey("zoom_probe") && d0["zoom_probe"] == null)
+        val at = java.util.Calendar.getInstance().apply { set(2026, java.util.Calendar.OCTOBER, 31, 14, 3, 0) }.timeInMillis
+        val words = "2 cards agree: the zoom is the centred crop, frames settle within the dropped ones · z_pipe 1.43× — Next"
+        app.settings.zoomProbeLast = io.github.darylno.cardscanner.core.MiniJson.stringify(linkedMapOf(
+            "at" to at, "camera" to "0", "stream" to "1600×1200", "run" to 3, "runs" to 2, "valid_cards" to 2, "words" to words,
+            "probe_half" to "✓ 2 valid run(s) on different cards (needs 2) ✓ centred ✓ settle ✗ knee: not measured"))
+        val diag = io.github.darylno.cardscanner.ui.DiagnosticsText.build(app)
+        assertTrue(diag, diag.lines().contains("zoom probe: 31 Oct 14:03 · camera 0 · 1600×1200 — $words"))
+        val p = device()["zoom_probe"] as Map<*, *>
+        assertEquals(at, p["at"]); assertEquals("0", p["camera"]); assertEquals("1600×1200", p["stream"]); assertEquals(words, p["words"])
+        assertEquals("no scan screen: no live zoom", null, device()["zoom"])
+        app.settings.zoomProbeLast = "not json"
+        assertTrue("a broken record reads as never run", io.github.darylno.cardscanner.ui.DiagnosticsText.build(app).lines().contains("zoom probe: never run"))
+        assertEquals(null, device()["zoom_probe"])
     }
 
     @Test

@@ -280,6 +280,7 @@
   #devMsg { font-size: 12px; color: var(--muted); min-height: 1.2em; }
   #devZoom { font-size: 12px; color: var(--muted); line-height: 1.45; margin-top: -4px; }
   #devZoom b { color: var(--text, inherit); font-weight: 600; }
+  #devProbe { font-size: 12px; color: var(--muted); line-height: 1.45; margin-top: -4px; }
   #devMsg.err { color: var(--bad); }
   @media (max-width: 720px) {
     #devBody { grid-template-columns: 1fr; }
@@ -330,6 +331,7 @@
         <label class="sel" id="devCamRow" style="display:none"><span>Lens<small>Which of the phone's cameras scans · changing it re-learns the empty tray</small></span><select id="devCam"></select></label>
         <label id="devZoomRow" style="display:none"><input type="checkbox" data-k="zoom_fit"><span>Zoom to fit the Area<small>Zooms the camera in so the scan area fills its view (up to 2×) · a zoom change re-learns the empty tray</small></span></label>
         <div id="devZoom" style="display:none"></div>
+        <div id="devProbe" style="display:none"></div>
         <label><input type="checkbox" data-k="torch"><span>Torch</span></label>
         <label><input type="checkbox" data-k="high_res"><span>High resolution<small>2048×1536 instead of 1600×1200</small></span></label>
         <label><input type="checkbox" data-k="ae_lock"><span>Exposure lock<small>Hold exposure + white balance</small></span></label>
@@ -2774,6 +2776,10 @@ function devRender(){
   const zt = hasZoom ? devZoomText(dev) : "";
   $("#devZoom").style.display = zt ? "" : "none";
   $("#devZoom").innerHTML = zt;
+  // The zoom probe's last verdict (1.1.17; also with the scan screen closed). Hidden for an older phone app.
+  const pt = devProbeText(dev);
+  $("#devProbe").style.display = pt ? "" : "none";
+  $("#devProbe").innerHTML = pt;
   // The camera view (1.1.17). Hidden for an older phone app (no snapshot_views): it would answer
   // ?view=camera with the base picture, drawn as if it were the zoomed one.
   const views = devCamViewOk();
@@ -2790,6 +2796,9 @@ function devRender(){
 function devZoomText(d){
   const z = d.zoom, x = v => v == null ? "?" : (+v).toFixed(2) + "×";
   if (!z) return d.zoom_fit ? "Zoom: on — open the scan screen on the phone to see it." : "";
+  // The zoom probe (1.1.17) holds the camera: its rung, in the phone's words — never "settling"
+  // (the phone pauses the scanner on purpose) and never what the Area would zoom (it is not at it).
+  if (z.probing) return `Zoom probe running on the phone — <b>${esc(z.probe || "starting")}</b>. Hands off the tray.`;
   // The off-centre hint (1.1.17; an older phone app sends neither `would` nor `off_centre`):
   // CameraX zooms about the frame centre, so the same Area centred may zoom more.
   const oc = z.off_centre ? `<br>Off-centre: ${esc(z.off_centre.words || "")}` : "";
@@ -2807,6 +2816,17 @@ function devZoomText(d){
   if (z.drawing) return `Zoom <b>${x(z.ratio)}</b> — an Area is being drawn on the phone (zoomed out to the whole frame)`;
   return `Zoom <b>${x(z.ratio)}</b>${z.settling ? " (settling…)" : ""} · target ${x(z.target)} — ${esc(z.limit || "")}` +
     `<br>Area fit ${x(z.fit)} · lossless ${x(z.lossless)} · lens max ${x(z.max)}` + oc;
+}
+/* The last zoom probe (1.1.17): "Last zoom probe (31 Oct 14:03, 1600×1200): <the phone's words>" — read-only
+   (the probe runs from the measurement session on the phone), not while one runs (the zoom line says so). */
+const DEV_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+function devProbeText(d){
+  const p = d.zoom_probe;
+  if (!p || typeof p !== "object" || !p.words || d.zoom?.probing) return "";
+  const t = typeof p.at === "number" ? new Date(p.at) : null, two = n => String(n).padStart(2, "0");
+  const when = t && !isNaN(t) ? `${t.getDate()} ${DEV_MONTHS[t.getMonth()]} ${two(t.getHours())}:${two(t.getMinutes())}` : "";
+  const facts = [when, p.stream].filter(Boolean).join(", ");
+  return `Last zoom probe${facts ? ` (${esc(facts)})` : ""}: ${esc(p.words)}`;
 }
 /* The note above the picture: the base picture's zoomed note as before, or what the camera view is. */
 function devNote(){

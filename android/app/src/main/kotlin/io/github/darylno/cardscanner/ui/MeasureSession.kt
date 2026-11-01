@@ -1,8 +1,11 @@
 package io.github.darylno.cardscanner.ui
 
 import io.github.darylno.cardscanner.core.DebugLog
+import io.github.darylno.cardscanner.core.MiniJson
 import io.github.darylno.cardscanner.core.ZoomCoordinator
 import io.github.darylno.cardscanner.core.ZoomFit
+import io.github.darylno.cardscanner.core.ZoomProbe
+import io.github.darylno.cardscanner.core.ZoomProbeRun
 import io.github.darylno.cardscanner.core.server.DeviceApi
 import org.json.JSONArray
 import java.util.Locale
@@ -26,7 +29,15 @@ import kotlin.math.abs
  * size, strip detail and ISO and its identification tallied ([AbRecord]) and
  * judged by rules written down before the data ([AbSummary]); the summary and the
  * verdict are logged before "session END". "Run the zoom steps" ([Plan.ZOOM]) runs
- * just those. The zoom probe's step (piece 1) is a placeholder in this version.
+ * just those.
+ *
+ * THE ZOOM PROBE'S STEP (1.1.17, between A1 and B): the scan screen's Run probe runs
+ * core ZoomProbeRun on the card A1 left; each run that used its number is kept for the
+ * session ([recordProbe], AppSettings.zoomProbeRuns), the card shows what the runs say
+ * TOGETHER (ZoomProbe.combine), and the session's verdict at the end is the A/B half
+ * and the probe half together — never YES in this build: the probe measures no knee
+ * (ZoomProbe.DETAIL_VALIDATED is false). The last verdict outlives the session
+ * (AppSettings.zoomProbeLast, for Diagnostics and `/api/device`).
  *
  * Pure state: the scan screen hosts the card, this decides what it says.
  */
@@ -40,8 +51,8 @@ class MeasureSession(
      * long to hold it (0 = no timer); [question] asks for a Yes/No before Next; the
      * nullable settings are applied when the step starts (null = inherited from the
      * step before). [arm] = the zoom A/B arm ("A1" | "B" | "A2") whose captures are
-     * tallied; [action] = what the step's own button does (the zoom probe: piece 1,
-     * not built yet — the step is a placeholder).
+     * tallied; [action] = what the step's own button does ([Action.PROBE]: the scan
+     * screen's Run probe / Cancel probe / Run again).
      */
     class Step(
         val id: String,
@@ -99,6 +110,8 @@ class MeasureSession(
         if (active) finish(abandoned = true)
         settings.measurePlan = if (plan == Plan.FULL) null else plan.key
         settings.measureAb = null
+        settings.zoomProbeRuns = null
+        probeThumbs.clear()
         settings.measureOriginal = "${settings.aeLock},${settings.vibration},${settings.checkMs},${settings.zoomFit}"
         log.i("test", "session START${if (plan == Plan.ZOOM) ", the zoom steps" else ""} (your settings: AE lock ${settings.aeLock}, " +
             "vibration ${settings.vibration}, check ${settings.checkMs} ms, zoom to fit ${settings.zoomFit})")
@@ -160,6 +173,82 @@ class MeasureSession(
 
     fun abSummary(): AbSummary = abSummary(records)
 
+    // ── the zoom probe's runs this session (1.1.17) ──
+
+    /**
+     * One attempt at the probe that used its run number ([ZoomProbeRun.Outcome.numbered], or one
+     * with a result): how it ended ([kind] = ZoomProbeRun.Kind's word), its own [words], when, and
+     * its [result] (null: cancelled, or refused after its start, before one was measured).
+     */
+    class ProbeRun(val run: Int, val kind: String, val words: String, val at: Long, val result: ZoomProbe.Result?) {
+        fun toJson(): Map<String, Any?> = linkedMapOf("run" to run, "kind" to kind, "words" to words, "at" to at, "result" to result?.toMap())
+
+        companion object {
+            fun fromJson(m: Map<*, *>): ProbeRun? = runCatching {
+                ProbeRun((m["run"] as Number).toInt(), m["kind"] as String, m["words"] as String, (m["at"] as Number).toLong(),
+                    (m["result"] as? Map<*, *>)?.let { ZoomProbe.Result.fromMap(it) })
+            }.getOrNull()
+        }
+    }
+
+    /**
+     * The earlier VALID runs' 1× card thumbnails, for the next run's same-card check — in
+     * memory only (64×88 floats each): after the app restarts the check has nothing to
+     * compare with and says nothing (the plan's "if the earlier thumbnail is still in memory").
+     */
+    private val probeThumbs = ArrayList<ZoomProbeRun.Earlier>()
+
+    /** This session's probe runs, oldest first (AppSettings.zoomProbeRuns). */
+    val probeRuns: List<ProbeRun> get() {
+        val raw = settings.zoomProbeRuns ?: return emptyList()
+        return runCatching { (MiniJson.parse(raw) as List<*>).mapNotNull { (it as? Map<*, *>)?.let(ProbeRun::fromJson) } }.getOrDefault(emptyList())
+    }
+
+    /** The number the owner's next Run probe gets: one past the last this session used. */
+    fun nextProbeRun(): Int = (probeRuns.maxOfOrNull { it.run } ?: 0) + 1
+
+    /** The thumbnails the next run compares its card with ([ZoomProbeRun]'s `earlier`). */
+    fun probeEarlier(): List<ZoomProbeRun.Earlier> = probeThumbs.toList()
+
+    /** What this session's measured runs say together (ZoomProbe.combine), or null when none measured. */
+    fun probeCombined(): ZoomProbe.Combined? =
+        probeRuns.mapNotNull { it.result }.takeIf { it.isNotEmpty() }?.let { ZoomProbe.combine(it) }
+
+    /** The probe step's line between runs: what the session's runs say together, or null. */
+    fun probeLine(): String? = probeCombined()?.words
+
+    /**
+     * Run [run] ended ([o], from the scan screen's ProbeListener): keep it for the session when it
+     * used its number, keep its thumbnail when valid, keep the session's verdict as the last one
+     * when it measured, mark the step in the log — and answer the words for the card: what the
+     * session's runs now say together, or — no result — the run's own (a refusal says what to do).
+     */
+    fun recordProbe(run: Int, o: ZoomProbeRun.Outcome): String {
+        val at = clock()
+        o.thumbnail?.let { t -> if (o.result?.valid == true) { probeThumbs.removeAll { it.run == run }; probeThumbs += ZoomProbeRun.Earlier(run, t) } }
+        if (active && (o.numbered || o.result != null))
+            saveProbeRuns(probeRuns.filter { it.run != run } + ProbeRun(run, o.kind.word, o.words, at, o.result))
+        val result = o.result
+        val results = if (active) probeRuns.mapNotNull { it.result } else listOfNotNull(result)
+        val combined = if (result != null) ZoomProbe.combine(results) else null
+        val words = combined?.words ?: o.words
+        if (result != null && combined != null) settings.zoomProbeLast = MiniJson.stringify(lastProbe(at, result, combined, results.size))
+        if (active) log.i("test", "step ${index + 1}/${steps.size} ${step.id}: run $run → ${o.kind.word} — $words")
+        return words
+    }
+
+    private fun saveProbeRuns(r: List<ProbeRun>) {
+        settings.zoomProbeRuns = if (r.isEmpty()) null else MiniJson.stringify(r.takeLast(MAX_PROBE_RUNS).map { it.toJson() })
+    }
+
+    /** The last verdict as Diagnostics and `/api/device` read it (DeviceApi's `zoom_probe`). */
+    private fun lastProbe(at: Long, r: ZoomProbe.Result, c: ZoomProbe.Combined, runs: Int): Map<String, Any?> = linkedMapOf(
+        "at" to at, "camera" to r.camera, "stream" to r.stream, "run" to r.run, "runs" to runs,
+        "valid_cards" to c.validCards, "centred" to c.centred, "settle_ok" to c.settleOk,
+        "reports_zoom_ratio" to c.reportsZoomRatio, "z_pipe" to c.zPipe,
+        "words" to c.words, "probe_half" to c.checks(), "last" to r.toMap(),
+    )
+
     /**
      * What the count line adds on this step (text only): on an arm step the arm's live
      * tally and its notes ([notes]); on the last step the A/B summary and verdict.
@@ -176,7 +265,11 @@ class MeasureSession(
                     (if (shutter > 0) " · $shutter shutter (not counted)" else "") +
                     notes(s, auto, zoom).joinToString("") { "\n$it" }
             }
-            isLast -> records.takeIf { it.isNotEmpty() }?.let { "\n" + abSummary(it).cardText() } ?: ""
+            isLast -> {
+                val probe = probeCombined()
+                (records.takeIf { it.isNotEmpty() }?.let { "\n" + abSummary(it).cardText(probe?.let(::probeChecks)) } ?: "") +
+                    (probe?.let { "\nProbe: " + it.words } ?: "")
+            }
             else -> ""
         }
     }
@@ -211,12 +304,17 @@ class MeasureSession(
         val done = if (abandoned) index else n
         val at = index + 1
         restore()
-        records.takeIf { it.isNotEmpty() }?.let { r -> abSummary(r).logLines().forEach { log.i("test", it) } }
+        // The combined verdict (1.1.17): the probe's half first, then the A/B with both halves.
+        val probe = probeCombined()
+        probe?.let { log.i("test", it.logLine()) }
+        records.takeIf { it.isNotEmpty() }?.let { r -> abSummary(r).logLines(probe?.let(::probeChecks)).forEach { log.i("test", it) } }
         log.i("test", "session END (${if (abandoned) "stopped at step $at" else "all $n steps done"}, $done/$n; your settings restored)")
         settings.measureStep = -1
         settings.measureStepId = null
         settings.measurePlan = null
         settings.measureAb = null
+        settings.zoomProbeRuns = null
+        probeThumbs.clear()
         settings.measureCaptures = 0
         settings.measureAnswer = null
         settings.measureOriginal = null
@@ -293,6 +391,12 @@ class MeasureSession(
         const val AB_CARDS = 10
         /** The A/B records kept (3 arms × 10 cards, re-runs and strays): the oldest go first. */
         const val MAX_RECORDS = 120
+        /** The probe runs kept per session (2 agreeing runs decide; a third if they disagree): the oldest go first. */
+        const val MAX_PROBE_RUNS = 12
+
+        /** The probe half of the session's verdict, as the A/B's checks read ("✓ probe: centred"). */
+        fun probeChecks(c: ZoomProbe.Combined): List<AbSummary.Check> =
+            c.checkList().map { (ok, words) -> AbSummary.Check(ok, "probe: $words") }
 
         /** 1.1.16's step ids, in its order: a session it saved kept only an index into these. */
         val LEGACY_IDS = listOf("setup", "short-check", "swaps", "lift", "hands", "lean", "lights", "foil", "ae-lock", "done")
@@ -369,9 +473,10 @@ class MeasureSession(
             "Use cards with 2+ printings and a printed set code and collector number (2015-style frame or newer), no foils, the same sleeves throughout. " +
             "Leave the 10th on the tray.",
             target = AB_CARDS, aeLock = false, zoomFit = false, arm = "A1")
-        private val ZOOM_PROBE = Step("zoom-probe", "Zoom probe (placeholder)",
-            "The zoom probe (a measured ladder of zoom ratios on the card you left) is not built in this version — this step is a placeholder and does nothing. " +
-            "Leave the 10th card on the tray, untouched, and tap Next.",
+        private val ZOOM_PROBE = Step("zoom-probe", "Zoom probe",
+            "Leave the card on the tray, untouched — it has scanned and nothing more is filed. Tap Run probe and keep hands and shadows off the tray " +
+            "for about 30 s: the camera zooms in and out on the card, then comes back. Then run it once more on a DIFFERENT card: lift this one, " +
+            "put the other down, let it scan (it is filed like any scan), tap Run again. Any button while it runs only cancels it.",
             aeLock = false, zoomFit = false, action = Action.PROBE)
         private val ZOOM_B = Step("zoom-b", "Same cards zoomed",
             "Zoom to fit is now ON (the line below says how far). The card you left must NOT scan again while the zoom changes. " +

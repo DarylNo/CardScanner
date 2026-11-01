@@ -21,6 +21,8 @@ class DeviceApiTest {
     private var cameraPic: DeviceApi.Picture? = DeviceApi.Picture(byteArrayOf(7, 8, 9), 1.9, 1200, 1600)
     /** Runs inside the camera view's wait (the 2 s on the phone): what changes while it waits. */
     private var duringCameraShot: () -> Unit = {}
+    /** The phone's last zoom probe (AppSettings.zoomProbeLast on the phone), or null = never run. */
+    private var probe: Map<String, Any?>? = null
     private val api = DeviceApi(object : DeviceApi.DeviceControl {
         override fun read() = st
         override fun write(s: DeviceApi.DeviceState) { st = s; writes++ }
@@ -29,6 +31,7 @@ class DeviceApiTest {
         override fun cameraLive() = live
         override fun cameras() = cams
         override fun zoom() = zoom
+        override fun zoomProbe() = probe
     })
 
     private fun patch(body: String) = api.handle(ApiRequest("PATCH", "/api/device", body = body.toByteArray()))!!
@@ -41,7 +44,56 @@ class DeviceApiTest {
             "cameras" to listOf(mapOf("id" to "0", "label" to "Camera 0 · back · 13 MP · autofocus"),
                 mapOf("id" to "2", "label" to "Camera 2 · back · 2.0 MP · fixed focus")),
             "camera_live" to true, "snapshot_views" to listOf("base", "camera"),
-            "zoom_fit" to false, "zoom" to null), s)
+            "zoom_fit" to false, "zoom" to null, "zoom_probe" to null), s)
+    }
+
+    /**
+     * The zoom probe (1.1.17) is reported, never driven, from the computer: while it runs,
+     * `zoom.probing` and `zoom.probe` (the runner's words for where it is) — never
+     * "settling", the gate is closed on purpose — and `zoom_probe` = the last probe's
+     * verdict at the top level, read from the phone's settings, so it is there with the
+     * scan screen closed too. PATCH has no key for either: "unknown setting", nothing written.
+     */
+    @Test fun theProbeIsReportedReadOnly() {
+        var asked = -1
+        val coord = ZoomCoordinator(object : ZoomCoordinator.Port {
+            override fun request(gen: Int, ratio: Double) { asked = gen }
+            override fun closeGate(why: String) {}
+            override fun map(ratio: Double, view: RoiFrac?, settle: Boolean, why: String) {}
+            override fun drawingReady(ratio: Double) {}
+            override fun later(ms: Long, block: () -> Unit) {}
+            override fun readBack(): Double? = null
+        })
+        fun get() = json(api.handle(ApiRequest("GET", "/api/device"))!!)
+        coord.setArea(RoiFrac(0.25, 0.25, 0.75, 0.75)); coord.cameraBound(2.6, 10.0)
+        zoom = coord.state()
+        val idle = get()["zoom"] as Map<*, *>
+        assertEquals(false, idle["probing"])
+        assertTrue("$idle", idle.containsKey("probe") && idle["probe"] == null)
+        // A run on its 7th rung: the camera answered 1.60×.
+        assertTrue(coord.beginProbe("run 1"))
+        coord.probeTo(1.6); coord.onApplied(asked, 1.6)
+        coord.probeNote = "rung 7/15 · 1.60× · card 979 px at 1.50×"
+        zoom = coord.state()
+        val running = get()["zoom"] as Map<*, *>
+        assertEquals(true, running["probing"])
+        assertEquals("rung 7/15 · 1.60× · card 979 px at 1.50×", running["probe"])
+        assertEquals(false, running["settling"])
+        assertEquals(1.6, (running["ratio"] as Number).toDouble(), 0.0)
+        // The last probe, with the scan screen closed.
+        live = false; zoom = null
+        probe = linkedMapOf("at" to 1_793_000_000_000L, "camera" to "0", "stream" to "1600×1200", "words" to "run 1 valid — lift this card…")
+        val closed = get()
+        assertEquals(null, closed["zoom"])
+        assertEquals(mapOf("at" to 1_793_000_000_000L, "camera" to "0", "stream" to "1600×1200", "words" to "run 1 valid — lift this card…"),
+            closed["zoom_probe"])
+        // Read-only: no key starts, stops or rewrites it.
+        for (b in listOf("""{"probe":true}""", """{"zoom_probe":null}""", """{"probing":false}""")) {
+            val r = patch(b)
+            assertEquals(b, 400, r.status)
+            assertTrue(b, (json(r)["error"] as String).startsWith("unknown setting"))
+        }
+        assertEquals(0, writes)
     }
 
     /**

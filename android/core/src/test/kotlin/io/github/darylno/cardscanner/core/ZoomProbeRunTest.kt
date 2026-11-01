@@ -275,6 +275,36 @@ class ZoomProbeRunTest {
         assertTrue("every rung after the silent one was still asked", h.zooms.containsAll(plan.ladder))
     }
 
+    /**
+     * The scan screen numbers the session's runs (1.1.17): an attempt that put its run number in
+     * the `probe` log (START, a focus failure after it, CANCELLED, STOPPED, a result) used that
+     * number — the next one is the next number; a refusal before any of that (BEGIN, CHECK, no
+     * card, the plan's own refusal — "probe refused — …", no number) did not, and the owner's
+     * next Run probe is the same run again.
+     */
+    @Test
+    fun onlyAnAttemptThatLoggedItsRunNumberUsedIt() {
+        fun outcome(f: Fake, act: Fake.() -> Unit = {}): ZoomProbeRun.Outcome { f.run.start(); f.act(); f.until { f.outcomes.isNotEmpty() }; return f.outcomes.single() }
+        fun numberedInLog(f: Fake) = f.logs.any { it.startsWith("probe run 1 ") || it.startsWith("probe run 1:") }
+        val cases = listOf(
+            "begin refused" to fake { beginRefusal = "The zoom is still settling — try again in a second" },
+            "check refused" to fake { checkRefusal = "Let the card scan first (wait for the ✓), then Run probe" },
+            "no card" to fake { noCard = true },
+            "off-centre" to fake { bx = 0.75; by = 0.70 },
+            "no focus" to fake { focusOk = false },
+            "done" to fake(),
+        )
+        for ((what, f) in cases) {
+            val o = outcome(f)
+            assertEquals("$what: ${f.logs}", numberedInLog(f), o.numbered)
+        }
+        assertEquals(listOf(false, false, false, false, true, true), cases.map { it.second.outcomes.single().numbered })
+        val c = fake(); c.run.start(); c.advance(5); c.run.cancel("Back"); c.until { c.outcomes.isNotEmpty() }
+        assertTrue("a cancel logged its number: ${c.logs}", numberedInLog(c) && c.outcomes.single().numbered)
+        val s = fake(); s.run.start(); s.advance(5); s.run.aborted("the scan screen stopped")
+        assertTrue("a stop logged its number: ${s.logs}", numberedInLog(s) && s.outcomes.single().numbered)
+    }
+
     @Test
     fun aCancelAlwaysGoesThroughTheVerifiedRestore() {
         for (cancelAfterRung in listOf(1, 5, 16)) {                  // early, mid-ladder, at the refocus (15 rungs + REFOCUS)

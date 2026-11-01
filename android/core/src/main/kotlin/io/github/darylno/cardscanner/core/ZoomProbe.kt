@@ -408,14 +408,20 @@ object ZoomProbe {
      * whether CONTROL_ZOOM_RATIO came on the frames (null = no metas); [zPipe] = 880 ÷
      * H(1×); [lensDrift] the largest lens move off the lock; [refocus] the check at the
      * top; [sameCardAs] = the earlier run this card repeats (the runner's thumbnail NCC);
-     * [driftZ] = the camera ratio where the centre drifted most. The knee and MAX_ZOOM are
-     * not measured ([DETAIL_VALIDATED] is false).
+     * [driftZ] = the camera ratio where the centre drifted most; [camera] = the Camera2 id it
+     * ran on (MAX_ZOOM, like the stream, holds only for the camera it was measured on). The
+     * knee and MAX_ZOOM are not measured ([DETAIL_VALIDATED] is false).
+     *
+     * Kept as JSON ([toJson]; the scan screen keeps a session's runs, 1.1.17) and read back
+     * with [fromMap]: what [words], [combine] and [toMap] read comes back as it was — the
+     * refocus check's details ([refocus]) and the H fit's rms do not (the RESULT line had them).
      */
     class Result(
         val run: Int, val valid: Boolean, val reason: String?, val centred: Boolean?, val fit: HFit?, val drift: Double?,
         val rungs: Int, val validRungs: Int, val settleRungs: Int, val settleMax: Int, val reportsZoomRatio: Boolean?,
         val zPipe: Double?, val lensDrift: Double?, val refocus: Focus?, val stream: String, val top: Double,
         val sameCardAs: Int?, val h1: Double?, val stoppedAt: String? = null, val driftZ: Double? = null,
+        val camera: String? = null,
     ) {
         /** The settle rule: frames at the old zoom after the drops on more than [SETTLE_SHARE] of rungs. */
         val settleOk: Boolean get() = rungs == 0 || settleRungs.toDouble() / rungs <= SETTLE_SHARE + 1e-9
@@ -463,17 +469,40 @@ object ZoomProbe {
             sameCardAs?.let { append(" · the same card as run $it") }
         }
 
+        /**
+         * The run's facts as JSON values. What the words and the rules read is kept as it was
+         * measured ([fromMap] must say the same: a rounded max_dev or drift could cross its 1 %
+         * rule, a rounded z_pipe print another %.2f); the rest is rounded for reading.
+         */
         fun toMap(): Map<String, Any?> = linkedMapOf(
-            "run" to run, "valid" to valid, "reason" to reason, "centred" to centred,
-            "h_fit" to fit?.let { mapOf("a" to it.a.r2(), "c" to it.c.r2(), "max_dev" to (it.maxDev * 1000).roundToInt() / 1000.0) },
-            "drift" to drift?.let { (it * 1000).roundToInt() / 1000.0 },
+            "run" to run, "valid" to valid, "reason" to reason, "centred" to centred, "camera" to camera,
+            "h_fit" to fit?.let { linkedMapOf("a" to it.a.r2(), "c" to it.c.r2(), "max_dev" to it.maxDev, "worst_z" to it.worstZ) },
+            "drift" to drift, "drift_z" to driftZ,
             "rungs" to rungs, "valid_rungs" to validRungs, "settle_rungs" to settleRungs, "settle_max" to settleMax,
-            "settle_ok" to settleOk, "reports_zoom_ratio" to reportsZoomRatio, "z_pipe" to zPipe?.r2(),
-            "lens_drift" to lensDrift?.r2(), "stream" to stream, "top" to top, "same_card_as" to sameCardAs,
+            "settle_ok" to settleOk, "reports_zoom_ratio" to reportsZoomRatio, "z_pipe" to zPipe,
+            "lens_drift" to lensDrift?.r2(), "stream" to stream, "top" to top, "h1" to h1?.r2(), "same_card_as" to sameCardAs,
             "stopped" to stoppedAt, "knee" to null, "recommended" to null, "words" to words(),
         )
 
         fun toJson(): String = MiniJson.stringify(toMap())
+
+        companion object {
+            /** A [toMap] read back (MiniJson numbers: Long or Double), or null when [m] is not one. */
+            fun fromMap(m: Map<*, *>): Result? = runCatching {
+                fun d(k: String, from: Map<*, *> = m) = (from[k] as? Number)?.toDouble()
+                fun i(k: String) = (m[k] as? Number)?.toInt()
+                val f = m["h_fit"] as? Map<*, *>
+                Result(
+                    run = i("run")!!, valid = m["valid"] as Boolean, reason = m["reason"] as? String, centred = m["centred"] as? Boolean,
+                    fit = f?.let { HFit(d("a", it)!!, d("c", it)!!, d("max_dev", it)!!, 0.0, d("worst_z", it)) },
+                    drift = d("drift"), rungs = i("rungs")!!, validRungs = i("valid_rungs")!!, settleRungs = i("settle_rungs")!!,
+                    settleMax = i("settle_max")!!, reportsZoomRatio = m["reports_zoom_ratio"] as? Boolean, zPipe = d("z_pipe"),
+                    lensDrift = d("lens_drift"), refocus = null, stream = m["stream"] as String, top = d("top")!!,
+                    sameCardAs = i("same_card_as"), h1 = d("h1"), stoppedAt = m["stopped"] as? String, driftZ = d("drift_z"),
+                    camera = m["camera"] as? String,
+                )
+            }.getOrNull()
+        }
     }
 
     /**
@@ -497,7 +526,7 @@ object ZoomProbe {
         fun result(valid: Boolean, reason: String?, centred: Boolean?, fit: HFit?, drift: Double?, validRungs: Int, lensDrift: Double?,
                    driftZ: Double? = null) =
             Result(run, valid, reason, centred, fit, drift, main.size, validRungs, settleRungs, settleMax, reports, zPipe,
-                lensDrift, refocus, facts.stream, plan.top, sameCardAs, start?.longPx, driftZ = driftZ)
+                lensDrift, refocus, facts.stream, plan.top, sameCardAs, start?.longPx, driftZ = driftZ, camera = facts.cameraId)
         if (focus == null || !focus.ok)
             return result(false, "the 1× focus pass did not report FOCUSED (${focus?.state ?: "none"}) — more light, then Run again", null, null, null, 0, null)
         if (start == null) return result(false, "no card found at 1×", null, null, null, 0, null)
@@ -540,7 +569,8 @@ object ZoomProbe {
 
     /** A run the scan screen or a lifecycle input stopped (nothing measured counts). */
     fun stopped(run: Int, plan: Plan?, why: String, facts: Facts): Result =
-        Result(run, false, why, null, null, null, 0, 0, 0, 0, null, null, null, null, facts.stream, plan?.top ?: 1.0, null, null, why)
+        Result(run, false, why, null, null, null, 0, 0, 0, 0, null, null, null, null, facts.stream, plan?.top ?: 1.0, null, null, why,
+            camera = facts.cameraId)
 
     // ── across runs ──
 
@@ -549,13 +579,20 @@ object ZoomProbe {
                    val words: String) {
         /** Two valid runs on different cards. */
         val enough: Boolean get() = validCards >= 2
-        /** "✓ 2 valid runs on different cards ✓ centred ✓ settle ✗ knee: not measured …" — the session's verdict reads it. */
-        fun checks(): String = listOf(
-            (if (enough) "✓" else "✗") + " $validCards valid run(s) on different cards (needs 2)",
-            (if (centred == true) "✓" else "✗") + (if (centred == false) " NOT centred" else " centred"),
-            (if (settleOk == true) "✓" else "✗") + " settle",
-            "✗ knee: not measured (no validated detail metric — MAX_ZOOM is not decided by the probe)",
-        ).joinToString(" ")
+        /**
+         * The probe half's rules, each (passed, words): two valid runs on different cards, centred,
+         * the settle rule, the knee — never passed in this build ([DETAIL_VALIDATED] is false), so
+         * Zoom to fit is never ON by default on the probe's say. The session's verdict reads them.
+         */
+        fun checkList(): List<Pair<Boolean, String>> = listOf(
+            enough to "$validCards valid run(s) on different cards (needs 2)",
+            (centred == true) to (if (centred == false) "NOT centred" else "centred"),
+            (settleOk == true) to "settle",
+            false to "knee: not measured (no validated detail metric — MAX_ZOOM is not decided by the probe)",
+        )
+
+        /** "✓ 2 valid runs on different cards ✓ centred ✓ settle ✗ knee: not measured …" */
+        fun checks(): String = checkList().joinToString(" ") { (ok, words) -> (if (ok) "✓ " else "✗ ") + words }
 
         fun logLine(): String = "probe VERDICT: $words · probe half of default-on: ${checks()}"
     }

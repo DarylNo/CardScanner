@@ -108,6 +108,9 @@
     <string name="measure_stop">Stop</string>
     <string name="measure_yes">Yes</string>
     <string name="measure_no">No</string>
+    <string name="measure_probe_run">Run probe</string>
+    <string name="measure_probe_cancel">Cancel probe</string>
+    <string name="measure_probe_again">Run again</string>
     <string name="measure_stopped">Measurement session stopped — your settings are back.</string>
 
     <!-- Share -->

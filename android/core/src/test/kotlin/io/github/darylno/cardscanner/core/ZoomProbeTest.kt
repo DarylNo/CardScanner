@@ -412,6 +412,38 @@ class ZoomProbeTest {
         assertTrue(three.words, three.words.endsWith(" · 2 cards already agree — Next"))
     }
 
+    /**
+     * A session's runs are kept as JSON (AppSettings.zoomProbeRuns, 1.1.17): read back
+     * ([ZoomProbe.Result.fromMap]), every run says what it said — its words, the camera it
+     * ran on, its RESULT facts — and [ZoomProbe.combine] over the read-back runs is the
+     * live one, whatever the runs were: valid on two cards, the same card again, NOT
+     * centred (on the size, and on the drift: the words name where), inconclusive, stopped.
+     */
+    @Test
+    fun aResultReadBackFromItsJsonSaysTheSame() {
+        val plan = planFor()
+        fun back(r: ZoomProbe.Result) = ZoomProbe.Result.fromMap(MiniJson.parse(r.toJson()) as Map<*, *>)!!
+        val ok = ZoomProbe.verdict(1, plan, run(plan), focused, focused, facts)
+        val again = ZoomProbe.verdict(2, plan, run(plan), focused, focused, facts, sameCardAs = 1)
+        val size = ZoomProbe.verdict(3, plan, run(plan) { i, z -> rung(i, z, h1 = if (z == 2.0) 612.0 * 1.04 else 612.0) }, focused, focused, facts)
+        val slip = ZoomProbe.verdict(4, plan, run(plan) { i, z -> rung(i, z, crop = { if (it == 1.5) 0.02 else 0.0 }) }, focused, focused, facts)
+        val nf = ZoomProbe.verdict(5, plan, run(plan), ZoomProbe.Focus(false, 4.0, 4.0, 5000, "NOT focused"), null, facts)
+        val slow = ZoomProbe.verdict(6, plan, run(plan) { i, z ->
+            if (i % 4 == 3) ZoomProbe.Rung(i, z, z, 120, null, rung(i, z).frames + rung(i, 1.0).frames.take(1), 2, 0, W, H, 900) else rung(i, z)
+        }, focused, focused, facts)
+        val stopped = ZoomProbe.stopped(7, plan, "the scan screen stopped", facts)
+        val all = listOf(ok, again, size, slip, nf, slow, stopped)
+        for (r in all) {
+            val b = back(r)
+            assertEquals("run ${r.run}", r.words(), b.words())
+            assertEquals("run ${r.run}", "0", b.camera)
+            assertEquals("run ${r.run}: the facts the scan screen, Diagnostics and /api/device read", r.toMap(), b.toMap())
+        }
+        for (runs in listOf(listOf(ok), listOf(ok, again), listOf(ok, again, slow), listOf(ok, size), listOf(slip, ok), listOf(ok, nf), listOf(ok, stopped), all))
+            assertEquals(runs.map { it.run }.toString(), ZoomProbe.combine(runs).words, ZoomProbe.combine(runs.map(::back)).words)
+        assertEquals("not a result", null, ZoomProbe.Result.fromMap(mapOf("run" to 1L)))
+    }
+
     @Test
     fun combineNeedsTwoValidRunsOnDifferentCards() {
         val plan = planFor()

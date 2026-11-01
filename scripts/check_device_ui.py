@@ -44,6 +44,13 @@ server and check the 📱 Scanner panel's "Zoom to fit the Area" controls
   longer "Full frame" beside "Whole frame") is not offered in Camera view and
   PATCHes nothing there, and a draft drawn on Whole frame survives a look at
   Camera view;
+- the zoom probe (1.1.17), reported by the phone, never driven from here:
+  while `zoom.probing` the zoom line reads "Zoom probe running on the phone
+  — <the phone's words>. Hands off the tray." — at any rung, the switch on or
+  off, and never "settling" (nor "Off — this Area would zoom") — and once it
+  is over, top-level `zoom_probe` shows "Last zoom probe (31 Oct 14:03,
+  1600×1200): <its words>", with the scan screen closed too; `zoom_probe`
+  null or absent (an older phone app) shows no probe line at all;
 - the banner reads d51 and the page throws nothing.
 
     pip install playwright        # the browser: Chromium, see EXE below
@@ -219,7 +226,8 @@ def reopen_panel(pg):
 
 with sync_playwright() as pw:
     b = pw.chromium.launch(executable_path=EXE) if EXE else pw.chromium.launch()
-    ctx = b.new_context(viewport={"width": 1400, "height": 1000})
+    # UTC: the last zoom probe's time ("31 Oct 14:03") is shown in the browser's own zone.
+    ctx = b.new_context(viewport={"width": 1400, "height": 1000}, timezone_id="UTC")
     pg = ctx.new_page()
     errs = []
     pg.on("pageerror", lambda e: errs.append(str(e)))
@@ -233,6 +241,7 @@ with sync_playwright() as pw:
     check(not pg.locator("#devZoomRow").is_visible(), "no zoom checkbox")
     check(not pg.locator("#devZoom").is_visible(), "no zoom line")
     check(not pg.locator("#devViewSeg").is_visible(), "no Whole frame | Camera view toggle")
+    check(not pg.locator("#devProbe").is_visible(), "no zoom probe line")
     pg.click("#devClose")
 
     print("a 1.1.16 phone app (zoom, no snapshot_views), zoomed")
@@ -696,6 +705,74 @@ with sync_playwright() as pw:
     check("Off-centre: " + EDGE_WORDS in pg.locator("#devZoom").inner_text(), "…then the phone's own hint, read again")
     check(pg.locator("#devRoiCentred").is_visible(), "…and its ghost")
     STATE["roi_zoom"] = None
+
+    # The zoom probe (1.1.17): reported by the phone (DeviceApiTest.theProbeIsReportedReadOnly), never driven here.
+    LAST_WORDS = "run 1 valid — lift this card, put a DIFFERENT card down, let it scan, then Run again"
+    LAST = {"at": 1793455380000, "camera": "0", "stream": "1600×1200", "run": 1, "runs": 1, "valid_cards": 1,
+            "words": LAST_WORDS, "probe_half": "✗ 1 valid run(s) on different cards (needs 2) ✓ centred ✓ settle ✗ knee: not measured"}
+    LAST_LINE = f"Last zoom probe (31 Oct 14:03, 1600×1200): {LAST_WORDS}"
+
+    def probe_line():
+        return pg.locator("#devProbe").inner_text() if pg.locator("#devProbe").is_visible() else ""
+
+    print("the zoom probe running on the phone, the switch off")
+    STATE["dev"] = device(zoom_fit=False)
+    STATE["dev"]["zoom"] = dict(UNZOOMED, ratio=1.6, probing=True, probe="rung 7/15 · 1.60× · card 979 px at 1.50×",
+                                would={"z": 1.9, "limit": "the Area fit", "fit": 2.0}, off_centre=None)
+    STATE["dev"]["zoom_probe"] = None
+    open_panel(pg)
+    pg.evaluate("""() => { window.__zl = []; const el = document.querySelector('#devZoom');
+        new MutationObserver(() => window.__zl.push(el.style.display === 'none' ? '' : el.textContent))
+          .observe(el, {childList: true, subtree: true, characterData: true, attributes: true}); }""")
+    line = pg.locator("#devZoom").inner_text() if pg.locator("#devZoom").is_visible() else ""
+    check(line == "Zoom probe running on the phone — rung 7/15 · 1.60× · card 979 px at 1.50×. Hands off the tray.",
+          f"the zoom line says the probe runs, in the phone's words: {line!r}")
+    check(probe_line() == "", f"no last-probe line while one runs: {probe_line()!r}")
+    print("…at a 1.00× rung: still the probe, not what the Area would zoom")
+    STATE["dev"]["zoom"].update(ratio=1.0, probe="rung 9/15 · 1.00× · card 612 px at 1.00×")
+    pg.wait_for_function("document.querySelector('#devZoom').textContent.includes('rung 9/15')", timeout=8000)
+    line = pg.locator("#devZoom").inner_text()
+    check(line.startswith("Zoom probe running on the phone — rung 9/15") and "would zoom" not in line, f"{line!r}")
+    print("…the switch on, the phone saying settling (it never does while probing): never 'settling'")
+    STATE["dev"]["zoom_fit"] = True
+    STATE["dev"]["zoom"] = dict(ZOOMED, ratio=2.2, settling=True, probing=True, probe="rung 12/15 · 2.20× · card 1349 px at 2.00×")
+    pg.wait_for_function("document.querySelector('#devZoom').textContent.includes('rung 12/15')", timeout=8000)
+    shown = pg.evaluate("window.__zl")
+    check(not any("settling" in t for t in shown), f"never 'settling' while the probe runs: {shown}")
+    check(not any("Off — this Area would zoom" in t for t in shown), f"never the switch-off line while it runs: {shown}")
+    print("…it ends: the last probe's verdict")
+    STATE["dev"]["zoom_fit"] = False
+    STATE["dev"]["zoom"] = dict(UNZOOMED, would={"z": 1.9, "limit": "the Area fit", "fit": 2.0}, off_centre=None, probing=False, probe=None)
+    STATE["dev"]["zoom_probe"] = dict(LAST)
+    pg.wait_for_selector("#devProbe", state="visible", timeout=8000)
+    check(probe_line() == LAST_LINE, f"the last probe, when, which stream and its words: {probe_line()!r}")
+    line = pg.locator("#devZoom").inner_text() if pg.locator("#devZoom").is_visible() else ""
+    check("Zoom probe running" not in line and line.startswith("Off — this Area would zoom 1.90×"), f"the zoom line is the Area's again: {line!r}")
+    check(not any("settling" in t for t in pg.evaluate("window.__zl") if "Zoom probe" in t), "the probe line never said settling")
+    pg.click("#devClose")
+
+    print("the last zoom probe with the scan screen closed")
+    STATE["dev"] = device(zoom_fit=False)
+    STATE["dev"]["camera_live"] = False; STATE["dev"]["zoom"] = None
+    STATE["dev"]["zoom_probe"] = dict(LAST)
+    STATE["base_503"] = NO_CAMERA
+    pg.goto(BASE + "/")
+    pg.wait_for_function(f"document.querySelector('#dver').textContent.startsWith('{VERSION}')")
+    pg.wait_for_selector("#devBtn", state="visible")
+    pg.click("#devBtn"); pg.wait_for_selector("#devModal.open")
+    pg.wait_for_selector("#devProbe", state="visible", timeout=4000)
+    check(probe_line() == LAST_LINE, f"there with no scan screen: {probe_line()!r}")
+    check(not pg.locator("#devZoom").is_visible(), "…and no zoom line (no camera)")
+    STATE["base_503"] = None
+    pg.click("#devClose")
+
+    print("zoom_probe null: no probe line")
+    STATE["dev"] = device(zoom_fit=False)
+    STATE["dev"]["zoom_probe"] = None
+    open_panel(pg)
+    pg.wait_for_timeout(300)
+    check(probe_line() == "", f"never run: no line ({probe_line()!r})")
+    pg.click("#devClose")
 
     check(not errs, f"no page errors: {errs}")
     b.close()

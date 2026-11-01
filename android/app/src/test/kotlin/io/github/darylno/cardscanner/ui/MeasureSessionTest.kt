@@ -254,7 +254,8 @@ class MeasureSessionTest {
         assertEquals(listOf("zoom-a1", "zoom-probe", "zoom-b", "zoom-a2", "zoom-done"), m.steps.map { it.id })
         assertEquals(listOf("A1", null, "B", "A2", null), m.steps.map { it.arm })
         assertEquals(MeasureSession.Action.PROBE, m.steps[1].action)
-        assertTrue("the probe step says it is a placeholder", m.steps[1].instruction.contains("not built"))
+        assertTrue("the probe step runs the probe (no longer a placeholder): ${m.steps[1].instruction}",
+            m.steps[1].instruction.contains("Tap Run probe") && !m.steps[1].instruction.contains("not built"))
         assertEquals("zoom-a1", m.step.id)
         assertFalse(settings.aeLock); assertFalse(settings.zoomFit)
         assertEquals("the owner's check time is left alone", 4000, settings.checkMs)
@@ -292,7 +293,7 @@ class MeasureSessionTest {
      * outcomes matched by job id, cards paired by name across A1 / B / A2, a card whose
      * two 1× runs disagree left out as unstable, each written-down rule printed ✓/✗,
      * "still identifying n", and each arm's END line naming its burst range before the
-     * answer. The probe half is not built yet, so the verdict can only be NO.
+     * answer. No zoom probe ran in this session (its half is not measured), so the verdict can only be NO.
      */
     @Test
     fun theAbTallyPairsCardsAndAppliesTheRules() {
@@ -466,6 +467,132 @@ class MeasureSessionTest {
         assertEquals(0, MeasureSession.facts(Outcome.NoMatch(org.json.JSONObject(), 7, false)).rank)
         assertEquals(0, MeasureSession.facts(Outcome.NoCard("No card detected.", false)).rank)
         assertEquals(0, MeasureSession.facts(Outcome.Rejected(422, "bad", false)).rank)
+    }
+
+    /** A probe run's result as the runner hands it over (ZoomProbe.verdict's fields; a centred, settled run on camera 0). */
+    private fun result(run: Int, valid: Boolean = true, centred: Boolean? = true, same: Int? = null, reason: String? = null) =
+        io.github.darylno.cardscanner.core.ZoomProbe.Result(run, valid, reason, if (valid) centred else null,
+            if (valid) io.github.darylno.cardscanner.core.ZoomProbe.HFit(612.0, 3.0, 0.002, 0.0, 2.0) else null, if (valid) 0.001 else null,
+            15, if (valid) 15 else 9, 0, 0, true, 1.43, 0.0, null, "1600×1200", 2.2, same, 612.0, camera = "0")
+
+    private fun outcome(kind: io.github.darylno.cardscanner.core.ZoomProbeRun.Kind, words: String,
+                        r: io.github.darylno.cardscanner.core.ZoomProbe.Result? = null, numbered: Boolean = r != null) =
+        io.github.darylno.cardscanner.core.ZoomProbeRun.Outcome(kind, words, r, if (r?.valid == true) FloatArray(64 * 88) { r.run.toFloat() } else null, numbered)
+
+    /**
+     * The probe step (1.1.17): each run the scan screen hands over is kept for the session
+     * (AppSettings.zoomProbeRuns) under its number — a refusal that logged none ("probe
+     * refused — …") leaves the number for the owner's next Run probe — and what the card says
+     * after it is ZoomProbe.combine over the session's runs (a run with no result says its own
+     * words). The valid runs' 1× thumbnails come back for the next run's same-card check. The
+     * last verdict is kept past the session (zoomProbeLast: Diagnostics, /api/device), with the
+     * time, the camera and the stream; the runs and thumbnails go with the session.
+     */
+    @Test
+    fun theProbeStepKeepsEachRunAndSaysWhatTheyShowTogether() {
+        val m = session()
+        m.start(MeasureSession.Plan.ZOOM)
+        m.next()
+        assertEquals("zoom-probe", m.step.id)
+        assertEquals(MeasureSession.Action.PROBE, m.step.action)
+        assertEquals("Zoom probe", m.step.title)
+        assertEquals(1, m.nextProbeRun())
+        assertEquals(null, m.probeLine())
+        // Refused before it began: its own words, no number used, nothing kept.
+        val wait = "Let the card scan first (wait for the ✓), then Run probe"
+        assertEquals(wait, m.recordProbe(1, outcome(io.github.darylno.cardscanner.core.ZoomProbeRun.Kind.REFUSED, wait)))
+        assertEquals(1, m.nextProbeRun())
+        assertEquals(null, settings.zoomProbeLast)
+        assertTrue(lines().last(), lines().last() == "step 2/5 zoom-probe: run 1 → refused — $wait")
+        // Run 1, valid.
+        now += 40_000
+        val one = m.recordProbe(1, outcome(io.github.darylno.cardscanner.core.ZoomProbeRun.Kind.DONE, "Run 1: valid — …", result(1)))
+        assertEquals("run 1 valid — lift this card, put a DIFFERENT card down, let it scan, then Run again", one)
+        assertEquals(one, m.probeLine())
+        assertEquals(2, m.nextProbeRun())
+        assertEquals(listOf(1), m.probeEarlier().map { it.run })
+        assertTrue(lines().last(), lines().last().startsWith("step 2/5 zoom-probe: run 1 → done — run 1 valid"))
+        val last = io.github.darylno.cardscanner.core.MiniJson.parse(settings.zoomProbeLast!!) as Map<*, *>
+        assertEquals(1_040_000L, last["at"]); assertEquals("0", last["camera"]); assertEquals("1600×1200", last["stream"])
+        assertEquals(one, last["words"])
+        assertEquals(1L, last["valid_cards"])
+        assertTrue("${last["probe_half"]}", (last["probe_half"] as String).endsWith("✗ knee: not measured (no validated detail metric — MAX_ZOOM is not decided by the probe)"))
+        assertEquals(true, (last["last"] as Map<*, *>)["valid"])
+        // Run 2: cancelled (it logged its number) — its own words; the number is used.
+        val cancelled = "Zoom probe cancelled (Back) — nothing filed"
+        assertEquals(cancelled, m.recordProbe(2, outcome(io.github.darylno.cardscanner.core.ZoomProbeRun.Kind.CANCELLED, cancelled, numbered = true)))
+        assertEquals(3, m.nextProbeRun())
+        // Run 3, valid on a different card: the two agree.
+        val three = m.recordProbe(3, outcome(io.github.darylno.cardscanner.core.ZoomProbeRun.Kind.DONE, "Run 3: valid — …", result(3)))
+        assertTrue(three, three.startsWith("2 cards agree: the zoom is the centred crop, frames settle within the dropped ones · z_pipe 1.43× — Next"))
+        assertEquals(listOf(1, 3), m.probeEarlier().map { it.run })
+        assertEquals(listOf(1, 2, 3), m.probeRuns.map { it.run })
+        assertEquals(listOf("done", "cancelled", "done"), m.probeRuns.map { it.kind })
+        // The screen closed and reopened: the runs and the words are still there (the thumbnails are memory only).
+        assertEquals(three, session().probeLine())
+        assertEquals(4, session().nextProbeRun())
+        // The session ends: the probe's verdict is logged before "session END"; the runs go, the last verdict stays.
+        m.next(); m.next(); m.next()
+        assertEquals("zoom-done", m.step.id)
+        m.next()
+        val l = lines()
+        assertTrue(l[l.size - 2], l[l.size - 2].startsWith("probe VERDICT: 2 cards agree") &&
+            l[l.size - 2].contains("probe half of default-on: ✓ 2 valid run(s) on different cards (needs 2) ✓ centred ✓ settle ✗ knee: not measured"))
+        assertTrue(l.last().startsWith("session END"))
+        assertEquals(null, settings.zoomProbeRuns)
+        assertTrue(m.probeEarlier().isEmpty())
+        assertEquals(three, (io.github.darylno.cardscanner.core.MiniJson.parse(settings.zoomProbeLast!!) as Map<*, *>)["words"])
+        m.start()
+        assertEquals(1, m.nextProbeRun())
+        assertEquals(null, m.probeLine())
+        m.finish(abandoned = true)
+        assertEquals("a session with no probe run logs no probe verdict", 0, lines().count { it.startsWith("probe VERDICT") } - 1)
+    }
+
+    /**
+     * The combined verdict at the session's end (1.1.17): the A/B half and the probe half
+     * together. The probe half never passes in this build (no validated detail metric: the
+     * knee is not measured), so even a passing A/B and two agreeing runs read NO — saying which
+     * half failed and why; the done card says so too. No probe run: "not measured".
+     */
+    @Test
+    fun theVerdictCarriesTheProbeHalf() {
+        val m = session()
+        m.start(MeasureSession.Plan.ZOOM)
+        m.arm(1, 1.0, 612, 212.0, listOf(3, 1, 1, 1, 1, 2, 0, 3, 1, 1))
+        m.next()
+        m.recordProbe(1, outcome(io.github.darylno.cardscanner.core.ZoomProbeRun.Kind.DONE, "Run 1", result(1)))
+        m.recordProbe(2, outcome(io.github.darylno.cardscanner.core.ZoomProbeRun.Kind.DONE, "Run 2", result(2)))
+        m.next()
+        m.arm(11, 1.9, 1163, 344.0, listOf(3, 3, 3, 3, 3, 2, 1, 3, 1, 1))
+        m.next()
+        m.arm(21, 1.0, 612, 212.0, listOf(3, 1, 1, 1, 1, 2, 0, 3, 1, 1))
+        m.next()
+        assertEquals("zoom-done", m.step.id)
+        val card = m.countExtra(auto = true, zoom = null)
+        assertTrue(card, card.contains("Zoom to fit ON by default: NO — the A/B half passes; the probe half fails (✗ probe: knee: not measured"))
+        assertTrue(card, card.contains("\nProbe: 2 cards agree: the zoom is the centred crop"))
+        m.next()
+        val l = lines()
+        val end = l.indexOfLast { it.startsWith("session END") }
+        assertTrue(l[end - 4], l[end - 4].startsWith("probe VERDICT: 2 cards agree"))
+        assertTrue(l[end - 3], l[end - 3].startsWith("zoom A/B (same 10 cards"))
+        assertTrue(l[end - 2], l[end - 2].startsWith("zoom A/B per card"))
+        val v = l[end - 1]
+        assertTrue(v, v.startsWith("zoom VERDICT: Zoom to fit ON by default: NO — the A/B half passes, the probe half fails · " +
+            "✓ probe: 2 valid run(s) on different cards (needs 2) · ✓ probe: centred · ✓ probe: settle · " +
+            "✗ probe: knee: not measured (no validated detail metric — MAX_ZOOM is not decided by the probe) · ✓ B worse on none"))
+        // The same A/B with no probe run at all: the probe half is not measured.
+        val n = session()
+        n.start(MeasureSession.Plan.ZOOM)
+        n.arm(1, 1.0, 612, 212.0, listOf(3, 1, 1, 1, 1, 2, 0, 3, 1, 1)); n.next(); n.next()
+        n.arm(11, 1.9, 1163, 344.0, listOf(3, 3, 3, 3, 3, 2, 1, 3, 1, 1)); n.next()
+        n.arm(21, 1.0, 612, 212.0, listOf(3, 1, 1, 1, 1, 2, 0, 3, 1, 1)); n.next()
+        assertTrue(n.countExtra(true, null), n.countExtra(true, null).contains("the A/B half passes; no zoom probe ran"))
+        n.next()
+        val v2 = lines().last { it.startsWith("zoom VERDICT") }
+        assertTrue(v2, v2.startsWith("zoom VERDICT: Zoom to fit ON by default: NO — the A/B half passes; the probe half is not measured (no zoom probe ran this session)"))
+        assertFalse(lines().takeLast(5).any { it.startsWith("probe VERDICT") })
     }
 
     /** Finish logs the A/B summary, the per-card line and the verdict BEFORE "session END", then forgets the tally. */
