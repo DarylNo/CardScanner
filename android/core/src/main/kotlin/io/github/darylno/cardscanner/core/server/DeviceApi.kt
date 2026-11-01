@@ -17,6 +17,9 @@ import io.github.darylno.cardscanner.core.ZoomFit
  *                                     or an id from `cameras` [{id, label}])
  *   GET   /api/device/snapshot.jpg  → the camera's current upright frame, the
  *                                     space the scan Area fractions live in
+ *   GET   /api/device/snapshot.jpg?view=camera
+ *                                   → the zoomed frame as the camera delivers it
+ *                                     (headers `X-Zoom-Ratio`, `X-Frame-Size`)
  *
  * `roi` is the scan Area as fractions of the upright frame
  * `{"x0","y0","x1","y1"}` (the app's [RoiFrac]; each side ≥ its minimum), or
@@ -36,6 +39,18 @@ import io.github.darylno.cardscanner.core.ZoomFit
  * where it would sit, `dx`/`dy` the Area's centre minus the frame's (+ = right /
  * below), `words` worded on the phone like `limit`. Read-only: PATCH has no key
  * for either.
+ *
+ * The camera view (1.1.17): `snapshot_views` = `["base","camera"]` says this phone
+ * answers `?view=camera` (an older one answers every view with the base picture, so
+ * the desktop shows its "Whole frame | Camera view" toggle only when it is listed).
+ * `view=camera` is the upright analysis frame AS THE CAMERA DELIVERS IT — zoomed,
+ * no grey ring, long side ≤ 2048 (the stream's own pixels, to judge focus) — with
+ * the zoom that frame was taken at in `X-Zoom-Ratio` ("1.900") and its size in
+ * `X-Frame-Size` ("1200x1600"): the Area sits at ½ + (b − ½)·z of it, never at the
+ * polled `zoom.ratio` (a frame and a poll can straddle a zoom change). No query,
+ * `?t=` only and `view=base` stay the base picture above, byte for byte; any other
+ * view is 400 before a picture is taken. Admin only like the rest ([ScanServer.adminOnly]
+ * reads the path, never the query).
  */
 class DeviceApi(private val device: DeviceControl) {
 
@@ -46,6 +61,12 @@ class DeviceApi(private val device: DeviceControl) {
         fun write(s: DeviceState)
         /** The current upright camera frame as JPEG, or null when the scan screen isn't open. */
         fun snapshot(): ByteArray?
+        /**
+         * `?view=camera`: the current upright frame as the camera delivers it (zoomed, no
+         * grey ring) with its own zoom, or null — the scan screen isn't open, or no frame
+         * came in time (the zoom settling). The default: a control with no camera view.
+         */
+        fun cameraSnapshot(): Picture? = null
         /** True while the scan screen (the camera) is open. */
         fun cameraLive(): Boolean
         /** The cameras the Camera setting offers on this phone, as (id, label); empty = unknown. */
@@ -66,6 +87,9 @@ class DeviceApi(private val device: DeviceControl) {
         val zoomFit: Boolean = false,
     )
 
+    /** A camera-view picture: the JPEG, the zoom its frame was taken at (1.0 = none), its size in px. */
+    class Picture(val jpeg: ByteArray, val ratio: Double, val w: Int, val h: Int)
+
     companion object {
         const val MODE_TRAY = "tray"
         const val MODE_TAP = "tap"
@@ -73,15 +97,30 @@ class DeviceApi(private val device: DeviceControl) {
         const val CHECK_MS_DEFAULT = 2_500
         const val CHECK_MS_MIN = 250
         const val CHECK_MS_MAX = 10_000
+        /** `snapshot.jpg?view=`: the base-space picture (the default) or the camera's own view. */
+        const val VIEW_BASE = "base"
+        const val VIEW_CAMERA = "camera"
+        private const val NO_CAMERA = "the camera isn't running — open the scan screen on the phone"
+        private const val NO_PICTURE = "no picture within 2 s — the camera's zoom is changing; try again"
     }
 
     fun handle(req: ApiRequest): ApiResponse? = when {
         req.path == "/api/device" && req.method == "GET" -> ApiResponse.json(200, state())
         req.path == "/api/device" && req.method == "PATCH" -> patch(req)
-        req.path == "/api/device/snapshot.jpg" && req.method == "GET" ->
-            device.snapshot()?.let { ApiResponse(200, "image/jpeg", it) }
-                ?: ApiResponse.json(503, mapOf("error" to "the camera isn't running — open the scan screen on the phone"))
+        req.path == "/api/device/snapshot.jpg" && req.method == "GET" -> snapshot(req.query["view"])
         else -> null
+    }
+
+    private fun snapshot(view: String?): ApiResponse = when (view) {
+        null, VIEW_BASE -> device.snapshot()?.let { ApiResponse(200, "image/jpeg", it) }
+            ?: ApiResponse.json(503, mapOf("error" to NO_CAMERA))
+        VIEW_CAMERA -> device.cameraSnapshot()?.let { p ->
+            ApiResponse(200, "image/jpeg", p.jpeg, linkedMapOf(
+                "X-Zoom-Ratio" to "%.3f".format(java.util.Locale.ROOT, p.ratio),
+                "X-Frame-Size" to "${p.w}x${p.h}",
+            ))
+        } ?: ApiResponse.json(503, mapOf("error" to if (device.cameraLive()) NO_PICTURE else NO_CAMERA))
+        else -> bad("view must be \"$VIEW_BASE\" or \"$VIEW_CAMERA\"")
     }
 
     fun state(): Map<String, Any?> {
@@ -94,6 +133,8 @@ class DeviceApi(private val device: DeviceControl) {
             "camera" to (s.cameraId ?: CAMERA_AUTO),
             "cameras" to device.cameras().map { (id, label) -> linkedMapOf("id" to id, "label" to label) },
             "camera_live" to device.cameraLive(),
+            // snapshot.jpg?view=camera (1.1.17) — an older phone app lists nothing and answers the base picture.
+            "snapshot_views" to listOf(VIEW_BASE, VIEW_CAMERA),
             "zoom_fit" to s.zoomFit,
             "zoom" to device.zoom()?.let(::zoomJson),
         )

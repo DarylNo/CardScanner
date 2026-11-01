@@ -139,6 +139,8 @@ interface CameraPort {
     fun diagnostics(): String
     /** The current upright frame as JPEG, or null (see CameraController.snapshotJpeg). Off the UI thread. */
     fun snapshotJpeg(): ByteArray? = null
+    /** The zoomed frame as the camera delivers it, or null (see CameraController.cameraSnapshot). Off the UI thread. */
+    fun cameraSnapshot(): io.github.darylno.cardscanner.core.server.DeviceApi.Picture? = null
 }
 
 /** Final outcome of one upload job (mirrors net.ScanOutcome). */

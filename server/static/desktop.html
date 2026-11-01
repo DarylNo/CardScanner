@@ -265,7 +265,10 @@
   #devArea { padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
   #devStage { position: relative; align-self: center; max-width: 100%; user-select: none; touch-action: none;
               background: #000; border-radius: 8px; overflow: hidden; line-height: 0; cursor: crosshair; }
+  #devStage.camview { cursor: default; }
   #devSnap { max-width: 100%; max-height: 60vh; display: block; }
+  /* Whole frame | Camera view (1.1.17): which picture of the phone's camera the panel shows. */
+  #devViewSeg { display: flex; gap: 6px; }
   #devRoi { position: absolute; border: 2px solid var(--accent); box-shadow: 0 0 0 9999px #0008;
             pointer-events: none; display: none; }
   #devRoi.draft { border-style: dashed; border-color: var(--warn); }
@@ -337,6 +340,10 @@
       </div>
       <div id="devArea">
         <div class="h" style="font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em">Scan area — drag on the picture to draw it</div>
+        <div id="devViewSeg" style="display:none">
+          <button class="btn ghost sm" data-view="base" title="The whole camera frame — the scan area is drawn on this one">Whole frame</button>
+          <button class="btn ghost sm" data-view="camera" title="What the zoomed camera sees, at its own pixels — to judge focus. Drawing is off here.">Camera view</button>
+        </div>
         <div id="devZoomNote" style="display:none;font-size:12px;color:var(--muted)">Zoomed in: the picture is still the whole frame — the grey ring is what the zoomed camera doesn't see.</div>
         <div id="devStage"><img id="devSnap" alt="" draggable="false"><div id="devRoi"></div><div id="devRoiCentred"><span></span></div></div>
         <div id="devNoCam" style="display:none">Open the scan screen on the phone to see the camera<br>and draw the scan area here.</div>
@@ -2721,6 +2728,16 @@ $("#dbgSave").addEventListener("click", () => { window.location = "/api/debug/re
    snapshot is that frame, so a rectangle drawn on it maps 1:1. */
 let dev = null, devDraft = null, devTimer = null, devDrag = null;
 const DEV_MIN_SIDE = 0.08;                    // RoiFrac.MIN_SIDE on the phone
+/* Whole frame | Camera view (1.1.17). devView = the view asked for: "base" = snapshot.jpg as
+   always (base space, the Area drawn on it 1:1 — the panel always opens on it), "camera" =
+   snapshot.jpg?view=camera, the zoomed frame as the camera delivers it, at its own pixels (to
+   judge focus). Drawing is off there. devPic = what the <img> shows now: its view, and for the
+   camera view the zoom THAT FRAME was taken at (X-Zoom-Ratio — never the polled zoom.ratio: a
+   frame and a poll can straddle a zoom change) and its size. A camera picture is fetched (an
+   <img> cannot read headers) into an object URL, the previous one revoked once replaced. */
+let devView = "base", devPic = { view: "base" }, devSnapSeq = 0, devCamUrl = null, devCamTimer = null, devCamBusy = false;
+const DEV_NOCAM = $("#devNoCam").innerHTML, DEV_BASE_NOTE = $("#devZoomNote").textContent;
+const devCamViewOk = () => Array.isArray(dev?.snapshot_views) && dev.snapshot_views.includes("camera");
 async function devLoad(){
   try {
     const r = await fetch("/api/device");
@@ -2755,7 +2772,13 @@ function devRender(){
   const zt = hasZoom ? devZoomText(dev) : "";
   $("#devZoom").style.display = zt ? "" : "none";
   $("#devZoom").innerHTML = zt;
-  $("#devZoomNote").style.display = hasZoom && dev.zoom && dev.zoom.ratio > 1 ? "" : "none";
+  // The camera view (1.1.17). Hidden for an older phone app (no snapshot_views): it would answer
+  // ?view=camera with the base picture, drawn as if it were the zoomed one.
+  const views = devCamViewOk();
+  $("#devViewSeg").style.display = views ? "" : "none";
+  if (!views && devView !== "base") { devView = "base"; devSnapshot(); }
+  $("#devViewSeg").querySelectorAll("[data-view]").forEach(b => b.classList.toggle("ghost", b.dataset.view !== devView));
+  devNote();
   const cm = $("#devCheckMs");
   cm.closest("label").style.display = dev.check_ms == null ? "none" : "";   // an older phone app has no setting
   if (document.activeElement !== cm && dev.check_ms != null) cm.value = dev.check_ms;
@@ -2783,17 +2806,38 @@ function devZoomText(d){
   return `Zoom <b>${x(z.ratio)}</b>${z.settling ? " (settling…)" : ""} · target ${x(z.target)} — ${esc(z.limit || "")}` +
     `<br>Area fit ${x(z.fit)} · lossless ${x(z.lossless)} · lens max ${x(z.max)}` + oc;
 }
+/* The note above the picture: the base picture's zoomed note as before, or what the camera view is. */
+function devNote(){
+  const n = $("#devZoomNote");
+  if (devPic.view === "camera") {
+    const z = devPic.ratio, size = devPic.w && devPic.h ? ` (${devPic.w}×${devPic.h} px)` : "";
+    n.textContent = (z == null ? "Camera view" : `Camera view at ${z.toFixed(2)}×`) + ` — what the scanner sees${size}`;
+    n.style.display = devPic.none ? "none" : "";
+    return;
+  }
+  n.textContent = DEV_BASE_NOTE;
+  n.style.display = dev && "zoom_fit" in dev && dev.zoom && dev.zoom.ratio > 1 ? "" : "none";
+}
+/* A base Area in a frame zoomed z× about its centre (ZoomFit.toView on the phone), clamped to it. */
+function devViewRoi(b, z){
+  if (!b || !(z > 0)) return null;
+  const v = t => Math.min(1, Math.max(0, 0.5 + (t - 0.5) * z));
+  return { x0: v(b.x0), y0: v(b.y0), x1: v(b.x1), y1: v(b.y1) };
+}
 function devDrawRoi(){
-  const box = $("#devRoi"), r = devDraft || dev?.roi;
-  box.classList.toggle("draft", !!devDraft);
-  $("#devRoiSave").style.display = devDraft ? "" : "none";
-  $("#devRoiUndo").style.display = devDraft ? "" : "none";
+  // Camera view (1.1.17): the stored Area where it sits in THAT frame — no draft, no ghost (no drawing there).
+  const cam = devPic.view === "camera";
+  const box = $("#devRoi"), r = cam ? devViewRoi(dev?.roi, devPic.ratio) : (devDraft || dev?.roi);
+  $("#devStage").classList.toggle("camview", cam);
+  box.classList.toggle("draft", !cam && !!devDraft);
+  $("#devRoiSave").style.display = !cam && devDraft ? "" : "none";
+  $("#devRoiUndo").style.display = !cam && devDraft ? "" : "none";
   $("#devRoiClear").disabled = !dev?.roi && !devDraft;
   // The off-centre ghost (1.1.17): the stored Area moved to the frame centre (base fractions, 1:1 like
   // the Area) — hidden while a new Area is drawn (here or on the phone), while a change is being applied,
-  // and with no Area (the full frame: nothing to move).
+  // with no Area (the full frame: nothing to move) and in the camera view (it is not base space).
   const ghost = $("#devRoiCentred"), oc = dev?.zoom?.off_centre;
-  const c = !devDraft && dev?.roi && !dev?.zoom?.applying && !dev?.zoom?.drawing && oc?.centred_roi;
+  const c = !cam && !devDraft && dev?.roi && !dev?.zoom?.applying && !dev?.zoom?.drawing && oc?.centred_roi;
   if (c && $("#devSnap").naturalWidth) {
     ghost.style.display = "block";
     ghost.style.left = (c.x0 * 100) + "%"; ghost.style.top = (c.y0 * 100) + "%";
@@ -2834,17 +2878,62 @@ async function devPatch(body){
   } catch(e){ devMsg("Could not reach the phone.", true); return false; }
 }
 function devSnapshot(){
-  const img = $("#devSnap");
-  img.onload = () => { $("#devStage").style.display = ""; $("#devNoCam").style.display = "none"; devDrawRoi(); };
-  img.onerror = () => { $("#devStage").style.display = "none"; $("#devNoCam").style.display = ""; };
-  img.src = "/api/device/snapshot.jpg?t=" + Date.now();
+  const img = $("#devSnap"), seq = ++devSnapSeq, old = devCamUrl;
+  // An onload fires only for the src set last, so it says what the <img> now shows.
+  const shown = pic => {
+    devPic = pic;
+    $("#devStage").style.display = ""; $("#devNoCam").style.display = "none";
+    devNote(); devDrawRoi();
+    if (old && old !== devCamUrl) URL.revokeObjectURL(old);
+  };
+  if (devView !== "camera") {
+    devCamUrl = null;
+    img.onload = () => shown({ view: "base" });
+    img.onerror = () => { $("#devNoCam").innerHTML = DEV_NOCAM; $("#devStage").style.display = "none"; $("#devNoCam").style.display = ""; };
+    img.src = "/api/device/snapshot.jpg?t=" + Date.now();
+    if (old) URL.revokeObjectURL(old);            // no longer the <img>'s source
+    return;
+  }
+  // The camera view: the phone's own words for a 503 (the scan screen closed, or no frame in 2 s
+  // while the zoom changes) in place of the picture.
+  const failed = msg => {
+    if (seq !== devSnapSeq) return;
+    devPic = { view: "camera", ratio: null, none: true };
+    $("#devNoCam").textContent = "Camera view: " + msg;
+    $("#devStage").style.display = "none"; $("#devNoCam").style.display = "";
+    devNote();
+  };
+  devCamBusy = true;
+  fetch("/api/device/snapshot.jpg?view=camera&t=" + Date.now()).then(async r => {
+    if (!r.ok) {
+      let e = ""; try { e = (await r.json()).error || ""; } catch(_){}
+      throw new Error(e || `the phone answered ${r.status}`);
+    }
+    const ratio = parseFloat(r.headers.get("X-Zoom-Ratio") || "");
+    const size = /^(\d+)x(\d+)$/.exec(r.headers.get("X-Frame-Size") || "");
+    const blob = await r.blob();
+    if (seq !== devSnapSeq) return;                 // a newer picture was asked for meanwhile
+    const url = URL.createObjectURL(blob);
+    devCamUrl = url;
+    img.onload = () => shown({ view: "camera", ratio: ratio > 0 ? ratio : null,
+                               w: size ? +size[1] : img.naturalWidth, h: size ? +size[2] : img.naturalHeight });
+    img.onerror = () => failed("the phone's picture could not be shown");
+    img.src = url;
+  }).catch(e => failed(e && e.message && e.message !== "Failed to fetch" ? e.message : "could not reach the phone"))
+    .finally(() => { devCamBusy = false; });
 }
 async function openDev(){
   const d = await devLoad();
   if (!d) { toast("The scanner phone's settings aren't available"); return; }
   dev = d; devDraft = null; devMsg("");
+  devView = "base";                             // the panel always opens on the whole frame
   devRender(); devSnapshot();
   $("#devModal").classList.add("open");
+  clearInterval(devCamTimer);
+  // While the zoom probe runs on the phone, Camera view follows its rungs: a new picture every 2 s.
+  devCamTimer = setInterval(() => {
+    if (devView === "camera" && dev?.zoom?.probing && !devCamBusy && !document.hidden) devSnapshot();
+  }, 2000);
   clearInterval(devTimer);
   // follow changes made on the phone itself while the panel is open
   devTimer = setInterval(async () => {
@@ -2855,7 +2944,10 @@ async function openDev(){
     if (n.camera_live && !wasLive) devSnapshot();
   }, 3000);
 }
-function closeDev(){ $("#devModal").classList.remove("open"); clearInterval(devTimer); devTimer = null; devDraft = null; }
+function closeDev(){
+  $("#devModal").classList.remove("open"); clearInterval(devTimer); devTimer = null; devDraft = null;
+  clearInterval(devCamTimer); devCamTimer = null;
+}
 $("#devBtn").addEventListener("click", openDev);
 $("#devClose").addEventListener("click", closeDev);
 $("#devModal").addEventListener("click", e => { if (e.target.id === "devModal") closeDev(); });
@@ -2873,6 +2965,11 @@ $("#devCheckMs").addEventListener("change", async e => {
   if (!(await devPatch({ check_ms: v }))) e.target.value = dev?.check_ms ?? "";
 });
 $("#devShot").addEventListener("click", devSnapshot);
+$("#devViewSeg").querySelectorAll("[data-view]").forEach(b => b.addEventListener("click", () => {
+  if (devView === b.dataset.view) return;
+  devView = b.dataset.view; devMsg("");
+  devRender(); devSnapshot();
+}));
 $("#devRoiClear").addEventListener("click", async () => {
   if (devDraft) { devDraft = null; devDrawRoi(); }
   if (dev?.roi) await devPatch({ roi: null });
@@ -2891,6 +2988,14 @@ function devFrac(e){
 }
 $("#devStage").addEventListener("pointerdown", e => {
   if (!$("#devSnap").naturalWidth) return;
+  // The camera view is zoomed (and its own size): a box drawn on it is not the Area's fractions.
+  if (devView === "camera" || devPic.view === "camera") {
+    const z = devPic.view === "camera" ? devPic.ratio : null;
+    devMsg("Switch to Whole frame to draw the Area — " +
+      (z > 1 ? `this picture is zoomed (${z.toFixed(2)}×).` : "Camera view is for looking at what the scanner sees."));
+    e.preventDefault();
+    return;
+  }
   devDrag = devFrac(e); $("#devStage").setPointerCapture(e.pointerId); e.preventDefault();
 });
 $("#devStage").addEventListener("pointermove", e => {

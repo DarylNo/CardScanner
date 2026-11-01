@@ -3,6 +3,7 @@ package io.github.darylno.cardscanner.core.server
 import io.github.darylno.cardscanner.core.MiniJson
 import io.github.darylno.cardscanner.core.RoiFrac
 import io.github.darylno.cardscanner.core.ZoomCoordinator
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -15,10 +16,14 @@ class DeviceApiTest {
     private var live = true
     private var cams = listOf("0" to "Camera 0 · back · 13 MP · autofocus", "2" to "Camera 2 · back · 2.0 MP · fixed focus")
     private var zoom: ZoomCoordinator.State? = null
+    private var baseShots = 0
+    private var cameraShots = 0
+    private var cameraPic: DeviceApi.Picture? = DeviceApi.Picture(byteArrayOf(7, 8, 9), 1.9, 1200, 1600)
     private val api = DeviceApi(object : DeviceApi.DeviceControl {
         override fun read() = st
         override fun write(s: DeviceApi.DeviceState) { st = s; writes++ }
-        override fun snapshot(): ByteArray? = if (live) byteArrayOf(1, 2) else null
+        override fun snapshot(): ByteArray? { baseShots++; return if (live) byteArrayOf(1, 2) else null }
+        override fun cameraSnapshot(): DeviceApi.Picture? { cameraShots++; return if (live) cameraPic else null }
         override fun cameraLive() = live
         override fun cameras() = cams
         override fun zoom() = zoom
@@ -33,7 +38,8 @@ class DeviceApiTest {
             "high_res" to false, "ae_lock" to false, "check_ms" to 2500L, "camera" to "auto",
             "cameras" to listOf(mapOf("id" to "0", "label" to "Camera 0 · back · 13 MP · autofocus"),
                 mapOf("id" to "2", "label" to "Camera 2 · back · 2.0 MP · fixed focus")),
-            "camera_live" to true, "zoom_fit" to false, "zoom" to null), s)
+            "camera_live" to true, "snapshot_views" to listOf("base", "camera"),
+            "zoom_fit" to false, "zoom" to null), s)
     }
 
     /**
@@ -175,10 +181,71 @@ class DeviceApiTest {
         assertEquals(503, api.handle(ApiRequest("GET", "/api/device/snapshot.jpg"))!!.status)
     }
 
+    /**
+     * `?view=camera` (1.1.17): the zoomed frame as the camera delivers it, with ITS zoom in
+     * `X-Zoom-Ratio` (the desktop maps the Area into it). No query, `?t=` only and `view=base`
+     * stay today's base-space picture; any other view is refused before a picture is taken.
+     */
+    @Test fun snapshotViews() {
+        fun get(q: Map<String, String>) = api.handle(ApiRequest("GET", "/api/device/snapshot.jpg", query = q))!!
+        fun error(r: ApiResponse) = json(r)["error"] as String
+        for (q in listOf(emptyMap(), mapOf("t" to "1"), mapOf("view" to "base", "t" to "2"))) {
+            val r = get(q)
+            assertEquals("$q", 200, r.status)
+            assertEquals("$q", "image/jpeg", r.contentType)
+            assertArrayEquals("$q", byteArrayOf(1, 2), r.body)
+            assertEquals("$q", null, r.headers["X-Zoom-Ratio"])
+            assertEquals("$q", null, r.headers["X-Frame-Size"])
+        }
+        assertEquals(3, baseShots); assertEquals(0, cameraShots)
+        val c = get(mapOf("view" to "camera", "t" to "3"))
+        assertEquals(200, c.status)
+        assertEquals("image/jpeg", c.contentType)
+        assertArrayEquals(byteArrayOf(7, 8, 9), c.body)
+        assertEquals("1.900", c.headers["X-Zoom-Ratio"])
+        assertEquals("1200x1600", c.headers["X-Frame-Size"])
+        assertEquals(3, baseShots); assertEquals(1, cameraShots)
+        cameraPic = DeviceApi.Picture(byteArrayOf(5), 1.0 + 1.0 / 3, 1600, 1200)
+        assertEquals("1.333", get(mapOf("view" to "camera")).headers["X-Zoom-Ratio"])
+        // The screen is open but no frame came within 2 s (the zoom settling): said so.
+        cameraPic = null
+        val settling = get(mapOf("view" to "camera"))
+        assertEquals(503, settling.status)
+        assertEquals("no picture within 2 s — the camera's zoom is changing; try again", error(settling))
+        // No scan screen: today's words.
+        live = false
+        val closed = get(mapOf("view" to "camera"))
+        assertEquals(503, closed.status)
+        assertEquals(error(api.handle(ApiRequest("GET", "/api/device/snapshot.jpg"))!!), error(closed))
+        assertTrue(error(closed), error(closed).contains("open the scan screen"))
+        live = true
+        // A control that has no camera view (an older one): 503, never the base picture in its place.
+        var oldShots = 0
+        val old = DeviceApi(object : DeviceApi.DeviceControl {
+            override fun read() = st
+            override fun write(s: DeviceApi.DeviceState) {}
+            override fun snapshot(): ByteArray? { oldShots++; return byteArrayOf(1, 2) }
+            override fun cameraLive() = true
+        })
+        assertEquals(503, old.handle(ApiRequest("GET", "/api/device/snapshot.jpg", query = mapOf("view" to "camera")))!!.status)
+        assertEquals(0, oldShots)
+        // Anything else: 400, and neither picture is taken.
+        val b0 = baseShots; val c0 = cameraShots
+        for (v in listOf("wide", "", "CAMERA", "base ")) {
+            val r = get(mapOf("view" to v))
+            assertEquals("view=$v", 400, r.status)
+            assertEquals("view must be \"base\" or \"camera\"", error(r))
+        }
+        assertEquals(b0, baseShots); assertEquals(c0, cameraShots)
+    }
+
     @Test fun guestsCannotSeeOrChangeTheSettings() {
         for ((m, p) in listOf("GET" to "/api/device", "PATCH" to "/api/device", "GET" to "/api/device/snapshot.jpg")) {
             assertEquals("$m $p", true, ScanServer.adminOnly(ApiRequest(m, p, role = ROLE_GUEST)))
         }
+        // The camera view too: the rule reads the path, which never carries the query.
+        assertEquals(true, ScanServer.adminOnly(ApiRequest("GET", "/api/device/snapshot.jpg",
+            query = mapOf("view" to "camera"), role = ROLE_GUEST)))
     }
 
     @Test fun checkMarkTimeIsWholeMsInRange() {

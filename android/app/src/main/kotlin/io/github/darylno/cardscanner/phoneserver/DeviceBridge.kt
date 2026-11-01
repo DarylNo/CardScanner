@@ -29,6 +29,8 @@ class DeviceBridge(
         fun applyRemoteSettings(): java.util.concurrent.Future<*>?
         /** The current upright frame as JPEG, or null. Called off the UI thread. */
         fun snapshotJpeg(): ByteArray?
+        /** `snapshot.jpg?view=camera`: the zoomed frame as the camera delivers it, or null. Off the UI thread. */
+        fun cameraSnapshot(): DeviceApi.Picture? = null
         /** The camera's zoom now (any thread), or null. */
         fun zoomState(): io.github.darylno.cardscanner.core.ZoomCoordinator.State? = null
     }
@@ -86,6 +88,8 @@ class DeviceBridge(
     }
 
     override fun snapshot(): ByteArray? = screen?.snapshotJpeg()
+
+    override fun cameraSnapshot(): DeviceApi.Picture? = screen?.cameraSnapshot()
 
     override fun zoom() = screen?.zoomState()
 

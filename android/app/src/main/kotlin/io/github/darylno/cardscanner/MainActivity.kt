@@ -312,7 +312,8 @@ class MainActivity : AppCompatActivity() {
     /**
      * The phone server's browser settings (DeviceApi): a change made on the computer is
      * re-read from AppSettings and applied here at once, like the phone's own controls;
-     * the browser draws the scan Area on [snapshotJpeg]'s picture of the tray.
+     * the browser draws the scan Area on [snapshotJpeg]'s picture of the tray (and shows
+     * [cameraSnapshot]'s zoomed one, "Camera view", to judge what the scanner sees).
      */
     private val remoteScreen = object : io.github.darylno.cardscanner.phoneserver.DeviceBridge.Screen {
         /** Applied on the UI thread; the future completes once it ran (the bridge waits for it ≤ 500 ms). */
@@ -339,6 +340,8 @@ class MainActivity : AppCompatActivity() {
         }
 
         override fun snapshotJpeg(): ByteArray? = camera?.snapshotJpeg()
+
+        override fun cameraSnapshot() = camera?.cameraSnapshot()
 
         override fun zoomState() = camera?.zoomState()
     }

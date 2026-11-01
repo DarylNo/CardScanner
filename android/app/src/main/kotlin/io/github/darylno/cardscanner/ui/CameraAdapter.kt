@@ -160,4 +160,5 @@ class CameraAdapter(private val context: Context, private val settings: AppSetti
 
     override fun diagnostics(): String = controller?.diagnostics() ?: "camera not bound"
     override fun snapshotJpeg(): ByteArray? = controller?.snapshotJpeg()
+    override fun cameraSnapshot(): io.github.darylno.cardscanner.core.server.DeviceApi.Picture? = controller?.cameraSnapshot()
 }

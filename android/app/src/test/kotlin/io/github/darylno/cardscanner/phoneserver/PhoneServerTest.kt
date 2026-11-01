@@ -273,10 +273,14 @@ class PhoneServerTest {
         settings.roi = null
         val bridge = DeviceBridge(settings)
         var applied = 0
-        bridge.screen = object : DeviceBridge.Screen {
+        var cameraPic: io.github.darylno.cardscanner.core.server.DeviceApi.Picture? =
+            io.github.darylno.cardscanner.core.server.DeviceApi.Picture(byteArrayOf(-1, -40, -1, 7), 1.9, 1200, 1600)
+        val screen = object : DeviceBridge.Screen {
             override fun applyRemoteSettings(): java.util.concurrent.Future<*>? { applied++; return null }
             override fun snapshotJpeg(): ByteArray? = byteArrayOf(-1, -40, -1)
+            override fun cameraSnapshot() = cameraPic
         }
+        bridge.screen = screen
         val b = PhoneBackend(store, PhotoDir(tmp.newFolder("p2")), pages = { null }, version = "t",
             search = { emptyList() }, lanIp = { null }, packRows = { 0 },
             f2f = { _, _, _, _, _ -> F2fAnswer.NotListed }, launch = { it.run() }, now = { 0.0 },
@@ -309,11 +313,42 @@ class PhoneServerTest {
         assertEquals(2, applied)
         assertEquals(400, req(base, admin, "PATCH", "/api/device", """{"zoom_fit":"on"}"""))
         settings.zoomFit = false
-        client.newCall(Request.Builder().url("$base/api/device/snapshot.jpg").header("Cookie", admin).build())
-            .execute().use { r -> assertEquals(200, r.code); assertEquals("image/jpeg", r.header("Content-Type")) }
+        fun snap(cookie: String, q: String = "") =
+            client.newCall(Request.Builder().url("$base/api/device/snapshot.jpg$q").header("Cookie", cookie).build()).execute()
+        snap(admin).use { r ->
+            assertEquals(200, r.code); assertEquals("image/jpeg", r.header("Content-Type"))
+            assertEquals(null, r.header("X-Zoom-Ratio"))
+            assertEquals(listOf(-1, -40, -1), r.body!!.bytes().map { it.toInt() })
+        }
+        // 1.1.17: the camera view — the zoomed frame, its own zoom relayed through the gateway.
+        assertEquals(listOf("base", "camera"), st["snapshot_views"])
+        snap(admin, "?view=camera&t=1").use { r ->
+            assertEquals(200, r.code); assertEquals("image/jpeg", r.header("Content-Type"))
+            assertEquals("1.900", r.header("X-Zoom-Ratio"))
+            assertEquals("1200x1600", r.header("X-Frame-Size"))
+            assertEquals(listOf(-1, -40, -1, 7), r.body!!.bytes().map { it.toInt() })
+        }
+        snap(admin, "?view=base").use { r -> assertEquals(200, r.code); assertEquals(null, r.header("X-Zoom-Ratio")) }
+        snap(admin, "?view=wide").use { r -> assertEquals(400, r.code) }
+        assertEquals(403, req(base, guest, "GET", "/api/device/snapshot.jpg?view=camera"))
+        cameraPic = null                                                // open, but no frame within 2 s
+        snap(admin, "?view=camera").use { r ->
+            assertEquals(503, r.code)
+            assertTrue(r.body!!.string().contains("no picture within 2 s"))
+        }
         bridge.screen = null                                            // scan screen closed
-        client.newCall(Request.Builder().url("$base/api/device/snapshot.jpg").header("Cookie", admin).build())
-            .execute().use { r -> assertEquals(503, r.code) }
+        snap(admin).use { r -> assertEquals(503, r.code) }
+        snap(admin, "?view=camera").use { r ->
+            assertEquals(503, r.code)
+            assertTrue(r.body!!.string().contains("open the scan screen on the phone"))
+        }
+        // A screen that has no camera view (DeviceBridge.Screen's default): 503, not the base picture.
+        bridge.screen = object : DeviceBridge.Screen {
+            override fun applyRemoteSettings(): java.util.concurrent.Future<*>? = null
+            override fun snapshotJpeg(): ByteArray? = byteArrayOf(-1, -40, -1)
+        }
+        snap(admin, "?view=camera").use { r -> assertEquals(503, r.code) }
+        assertEquals(403, req(base, guest, "GET", "/api/device/snapshot.jpg?view=camera"))
     }
 
     /** Stage 4: the phone's own review screen (a WebView on loopback) is admin through the owner token. */

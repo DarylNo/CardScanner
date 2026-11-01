@@ -25,6 +25,17 @@ server and check the 📱 Scanner panel's "Zoom to fit the Area" controls
   through "applying…" too — the stale answer's "would" / "Off-centre" words
   for the OLD Area and its ghost are never on screen, and the ghost needs an
   Area (review of 39ef7cf);
+- Whole frame | Camera view (1.1.17, `snapshot.jpg?view=camera`): the toggle
+  shows only when /api/device lists `snapshot_views` with "camera" (an older
+  phone app: none); the panel opens on Whole frame, every time; Camera view
+  GETs `view=camera` (the camera's full-bleed picture, no grey ring), says
+  "Camera view at 1.90× — what the scanner sees (600×800 px)" and draws the
+  Area where it sits in THAT frame — ½ + (b − ½)·z with z from the picture's
+  own X-Zoom-Ratio header, never the polled zoom (roi 0.25..0.75 at 1.9 →
+  0.025..0.975); a drag there PATCHes nothing and says to switch to Whole
+  frame; ↻ and the re-take after a PATCH keep the view; it refreshes every
+  2 s only while the zoom probe runs (`zoom.probing`); a 503 shows the
+  phone's words; back to Whole frame is a base GET and drawing works 1:1;
 - the banner reads d51 and the page throws nothing.
 
     pip install playwright        # the browser: Chromium, see EXE below
@@ -32,9 +43,10 @@ server and check the 📱 Scanner panel's "Zoom to fit the Area" controls
 
 Not part of CI (it needs a browser); run it after any edit to the panel.
 """
-import glob, io, json, os, sys, threading
+import glob, io, json, os, sys, threading, time
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
+from urllib.parse import parse_qs, urlsplit
 
 from PIL import Image, ImageDraw
 from playwright.sync_api import sync_playwright
@@ -62,13 +74,20 @@ STATE = {
     "dev": None,          # set per scenario
     "patches": [],
     "snap_gets": 0,
+    "cam_snap_gets": 0,   # snapshot.jpg?view=camera
+    "cam_ratio": None,    # the camera picture's X-Zoom-Ratio (None: the phone's zoom.ratio)
+    "cam_503": None,      # the camera view answers 503 with these words
 }
+CAM_W, CAM_H = 600, 800
+NO_PICTURE = "no picture within 2 s — the camera's zoom is changing; try again"
 
 
-def device(zoom_fit=False, with_zoom=True):
+def device(zoom_fit=False, with_zoom=True, with_views=True):
     d = {"mode": "tray", "roi": {"x0": 0.25, "y0": 0.25, "x1": 0.75, "y1": 0.75}, "torch": False,
          "vibration": True, "high_res": False, "ae_lock": False, "check_ms": 2500, "camera": "auto",
          "cameras": [{"id": "0", "label": "Camera 0 · back · 13 MP · autofocus"}], "camera_live": True}
+    if with_views:
+        d["snapshot_views"] = ["base", "camera"]
     if with_zoom:
         d["zoom_fit"] = zoom_fit
         d["zoom"] = dict(ZOOMED if zoom_fit else UNZOOMED)
@@ -85,17 +104,26 @@ def snapshot_png():
     b = io.BytesIO(); im.save(b, "PNG"); return b.getvalue()
 
 
+def camera_png():
+    # The camera view: the zoomed frame as the camera delivers it — full bleed, no grey ring.
+    im = Image.new("RGB", (CAM_W, CAM_H), (150, 200, 120))
+    ImageDraw.Draw(im).rectangle([CAM_W // 4, CAM_H // 4, 3 * CAM_W // 4, 3 * CAM_H // 4], outline=(40, 40, 40), width=6)
+    b = io.BytesIO(); im.save(b, "PNG"); return b.getvalue()
+
+
 class H(BaseHTTPRequestHandler):
     def log_message(self, *a): pass
 
-    def send(self, code, body, ctype="application/json"):
+    def send(self, code, body, ctype="application/json", headers=None):
         if isinstance(body, (dict, list)): body = json.dumps(body).encode()
         self.send_response(code); self.send_header("Content-Type", ctype)
         self.send_header("Cache-Control", "no-store"); self.send_header("Content-Length", str(len(body)))
+        for k, v in (headers or {}).items(): self.send_header(k, v)
         self.end_headers(); self.wfile.write(body)
 
     def do_GET(self):
-        p = self.path.split("?")[0]
+        u = urlsplit(self.path)
+        p, q = u.path, parse_qs(u.query, keep_blank_values=True)
         if p == "/": return self.send(200, (STATIC / "desktop.html").read_bytes(), "text/html")
         if p == "/api/me": return self.send(200, {"role": "admin"})
         if p == "/api/version": return self.send(200, {"version": "stub"})
@@ -106,8 +134,17 @@ class H(BaseHTTPRequestHandler):
         if p == "/api/scans": return self.send(200, [])
         if p == "/api/device": return self.send(200, STATE["dev"])
         if p == "/api/device/snapshot.jpg":
-            STATE["snap_gets"] += 1
-            return self.send(200, snapshot_png(), "image/png")
+            view = q.get("view", [None])[-1]
+            if view in (None, "base"):
+                STATE["snap_gets"] += 1
+                return self.send(200, snapshot_png(), "image/png")
+            if view != "camera":
+                return self.send(400, {"error": 'view must be "base" or "camera"'})
+            STATE["cam_snap_gets"] += 1
+            if STATE["cam_503"]: return self.send(503, {"error": STATE["cam_503"]})
+            z = STATE["cam_ratio"] or (STATE["dev"].get("zoom") or {}).get("ratio") or 1.0
+            return self.send(200, camera_png(), "image/png",
+                             {"X-Zoom-Ratio": "%.3f" % z, "X-Frame-Size": f"{CAM_W}x{CAM_H}"})
         return self.send(404, {"error": "stub: no such route"})
 
     def do_PATCH(self):
@@ -166,14 +203,24 @@ with sync_playwright() as pw:
     pg = ctx.new_page()
     errs = []
     pg.on("pageerror", lambda e: errs.append(str(e)))
-    pg.on("console", lambda m: m.type == "error" and "404" not in m.text and errs.append(m.text))
+    # The network's own console line for an answered 404 / the camera view's deliberate 503 is not a page error.
+    pg.on("console", lambda m: m.type == "error" and "404" not in m.text and "status of 503" not in m.text and errs.append(m.text))
 
     print("an older phone app (no zoom_fit)")
-    STATE["dev"] = device(with_zoom=False)
+    STATE["dev"] = device(with_zoom=False, with_views=False)
     open_panel(pg)
     check(pg.locator("#dver").text_content().startswith(VERSION), f"banner reads {VERSION}")
     check(not pg.locator("#devZoomRow").is_visible(), "no zoom checkbox")
     check(not pg.locator("#devZoom").is_visible(), "no zoom line")
+    check(not pg.locator("#devViewSeg").is_visible(), "no Whole frame | Camera view toggle")
+    pg.click("#devClose")
+
+    print("a 1.1.16 phone app (zoom, no snapshot_views), zoomed")
+    STATE["dev"] = device(zoom_fit=True, with_views=False)
+    open_panel(pg)
+    check(not pg.locator("#devViewSeg").is_visible(), "no Whole frame | Camera view toggle")
+    check(pg.locator("#devZoomNote").is_visible() and "grey ring" in pg.locator("#devZoomNote").inner_text(),
+          "the zoomed whole-frame note as before")
     pg.click("#devClose")
 
     print("zoom off")
@@ -211,6 +258,122 @@ with sync_playwright() as pw:
     check(STATE["snap_gets"] > snaps_before, f"a new snapshot after the zoom PATCH ({STATE['snap_gets'] - snaps_before})")
     check(pg.locator("#devZoomNote").is_visible(), "the zoomed-picture note shows")
 
+    def fracs(sel):
+        g = pg.locator(sel).bounding_box(); s = pg.locator("#devSnap").bounding_box()
+        return ((g["x"] - s["x"]) / s["width"], (g["y"] - s["y"]) / s["height"],
+                (g["x"] + g["width"] - s["x"]) / s["width"], (g["y"] + g["height"] - s["y"]) / s["height"])
+
+    def near(a, b, tol=0.01):
+        return all(abs(x - y) <= tol for x, y in zip(a, b))
+
+    def active_view():
+        return pg.evaluate("[...document.querySelectorAll('#devViewSeg [data-view]')]"
+                           ".filter(b => !b.classList.contains('ghost')).map(b => b.dataset.view).join(',')")
+
+    def drag(f0, f1):
+        bb = pg.locator("#devSnap").bounding_box()
+        pg.mouse.move(bb["x"] + bb["width"] * f0[0], bb["y"] + bb["height"] * f0[1])
+        pg.mouse.down()
+        pg.mouse.move(bb["x"] + bb["width"] * 0.5, bb["y"] + bb["height"] * 0.5, steps=4)
+        pg.mouse.move(bb["x"] + bb["width"] * f1[0], bb["y"] + bb["height"] * f1[1], steps=4)
+        pg.mouse.up()
+
+    def wait_count(key, n, timeout_s):
+        end = time.time() + timeout_s
+        while time.time() < end and STATE[key] < n: pg.wait_for_timeout(100)
+        return STATE[key] >= n
+
+    BASE_NOTE = pg.locator("#devZoomNote").inner_text()
+    CAM_NOTE = "Camera view at 1.90× — what the scanner sees (600×800 px)"
+
+    print("Camera view (1.1.17)")
+    check(pg.locator("#devViewSeg").is_visible(), "the Whole frame | Camera view toggle shows")
+    check(active_view() == "base", f"…on Whole frame ({active_view()!r})")
+    cam0, base0, n0 = STATE["cam_snap_gets"], STATE["snap_gets"], len(STATE["patches"])
+    pg.click("#devViewSeg [data-view=camera]")
+    pg.wait_for_function("document.querySelector('#devZoomNote').textContent.startsWith('Camera view at')", timeout=4000)
+    check(STATE["cam_snap_gets"] == cam0 + 1 and STATE["snap_gets"] == base0,
+          f"a view=camera GET, no base one ({STATE['cam_snap_gets'] - cam0} / {STATE['snap_gets'] - base0})")
+    check(active_view() == "camera", "Camera view is the active button")
+    px = pg.evaluate("""() => { const i = document.querySelector('#devSnap'), c = document.createElement('canvas');
+        c.width = i.naturalWidth; c.height = i.naturalHeight; const x = c.getContext('2d'); x.drawImage(i, 0, 0);
+        return Array.from(x.getImageData(2, 2, 1, 1).data).slice(0, 3); }""")
+    check(px != [96, 96, 96] and abs(px[0] - 150) <= 2, f"the camera's own picture, no grey ring (corner {px})")
+    note = pg.locator("#devZoomNote").inner_text() if pg.locator("#devZoomNote").is_visible() else ""
+    check(note == CAM_NOTE, f"the note: {note!r}")
+    rf = fracs("#devRoi")
+    check(near(rf, (0.025, 0.025, 0.975, 0.975)), f"the Area where it sits in the 1.90× frame: {tuple(round(v, 4) for v in rf)}")
+    check(not pg.locator("#devRoiCentred").is_visible(), "no off-centre ghost in the camera view")
+    drag((0.30, 0.30), (0.70, 0.70))
+    pg.wait_for_timeout(300)
+    check(len(STATE["patches"]) == n0, "a drag on the camera view PATCHes nothing")
+    msg = pg.locator("#devMsg").inner_text()
+    check("Switch to Whole frame to draw the Area" in msg and "zoomed (1.90×)" in msg, f"…and says why: {msg!r}")
+    check(not pg.locator("#devRoiSave").is_visible() and pg.evaluate("!document.querySelector('#devRoi').classList.contains('draft')"),
+          "…no draft, no Save")
+    check(near(fracs("#devRoi"), (0.025, 0.025, 0.975, 0.975)), "…the Area box untouched")
+
+    print("Camera view: the picture's own zoom, never the polled one; ↻ keeps the view")
+    STATE["cam_ratio"] = 1.5                                       # the frame says 1.5× while the poll says 1.9×
+    c1 = STATE["cam_snap_gets"]
+    pg.click("#devShot")
+    pg.wait_for_function("document.querySelector('#devZoomNote').textContent.startsWith('Camera view at 1.50×')", timeout=4000)
+    check(STATE["cam_snap_gets"] == c1 + 1 and STATE["snap_gets"] == base0, "↻ took a camera picture again, no base one")
+    rf = fracs("#devRoi")
+    check(near(rf, (0.125, 0.125, 0.875, 0.875)), f"the Area mapped at the header's 1.50×: {tuple(round(v, 4) for v in rf)}")
+    STATE["cam_ratio"] = None
+    pg.click("#devShot")
+    pg.wait_for_function(f"document.querySelector('#devZoomNote').textContent === {json.dumps(CAM_NOTE)}", timeout=4000)
+
+    print("Camera view: the re-take after a PATCH keeps the view")
+    c2, b2 = STATE["cam_snap_gets"], STATE["snap_gets"]
+    pg.locator('#devCtl input[data-k="high_res"]').check()
+    check(wait_count("cam_snap_gets", c2 + 1, 4), f"a camera picture after the PATCH ({STATE['cam_snap_gets'] - c2})")
+    pg.wait_for_timeout(300)
+    check(STATE["snap_gets"] == b2, "…and no base one")
+    pg.locator('#devCtl input[data-k="high_res"]').uncheck()
+    wait_count("cam_snap_gets", c2 + 2, 4)
+    pg.wait_for_timeout(300)
+
+    print("Camera view: refreshed every 2 s while the zoom probe runs, only then")
+    c3 = STATE["cam_snap_gets"]
+    pg.wait_for_timeout(4500)
+    check(STATE["cam_snap_gets"] == c3, f"no refresh without the probe ({STATE['cam_snap_gets'] - c3})")
+    STATE["dev"]["zoom"]["probing"] = True
+    check(wait_count("cam_snap_gets", c3 + 2, 10), f"refreshed while probing ({STATE['cam_snap_gets'] - c3} in ≤ 10 s)")
+    STATE["dev"]["zoom"]["probing"] = False
+    pg.wait_for_timeout(3600)                                      # the panel's next poll reads it
+    c4 = STATE["cam_snap_gets"]
+    pg.wait_for_timeout(4500)
+    check(STATE["cam_snap_gets"] <= c4 + 1, f"…and stops once it ends ({STATE['cam_snap_gets'] - c4})")
+    check(STATE["snap_gets"] == b2, "never a base picture meanwhile")
+
+    print("Camera view: a 503 shows the phone's words")
+    STATE["cam_503"] = NO_PICTURE
+    pg.click("#devShot")
+    pg.wait_for_selector("#devNoCam", state="visible", timeout=4000)
+    t = pg.locator("#devNoCam").inner_text()
+    check(NO_PICTURE in t, f"the 503's error in place of the picture: {t!r}")
+    check(not pg.locator("#devStage").is_visible() and not pg.locator("#devZoomNote").is_visible(), "…no picture, no note")
+    STATE["cam_503"] = None
+    pg.click("#devShot")
+    pg.wait_for_selector("#devStage", state="visible", timeout=4000)
+    check(not pg.locator("#devNoCam").is_visible() and pg.locator("#devZoomNote").inner_text() == CAM_NOTE, "↻ again: the picture is back")
+
+    print("back to Whole frame")
+    b5 = STATE["snap_gets"]
+    pg.click("#devViewSeg [data-view=base]")
+    pg.wait_for_function(f"document.querySelector('#devZoomNote').textContent === {json.dumps(BASE_NOTE)}", timeout=4000)
+    check(STATE["snap_gets"] == b5 + 1, "a base GET")
+    check(active_view() == "base", "Whole frame is the active button")
+    rf = fracs("#devRoi")
+    check(near(rf, (0.25, 0.25, 0.75, 0.75)), f"the Area at its base fractions again: {tuple(round(v, 4) for v in rf)}")
+    px = pg.evaluate("""() => { const i = document.querySelector('#devSnap'), c = document.createElement('canvas');
+        c.width = i.naturalWidth; c.height = i.naturalHeight; const x = c.getContext('2d'); x.drawImage(i, 0, 0);
+        return Array.from(x.getImageData(2, 2, 1, 1).data).slice(0, 3); }""")
+    check(px == [96, 96, 96], f"the base picture's grey ring (corner {px})")
+    pg.evaluate("document.querySelector('#devMsg').textContent = ''")
+
     print("draw an Area on the base-space picture while zoomed")
     box = pg.locator("#devSnap").bounding_box()
     fx0, fy0, fx1, fy1 = 0.30, 0.22, 0.70, 0.78
@@ -246,6 +409,15 @@ with sync_playwright() as pw:
     check("1.00×" in line and "settling" not in line, f"the line says the phone is drawing, at 1×: {line!r}")
     check(not pg.locator("#devZoomNote").is_visible(), "no zoomed-picture note while drawing (the camera is at 1×)")
     check(not pg.locator("#devRoiCentred").is_visible(), "no off-centre ghost without the phone's off_centre")
+    print("the panel opens on Whole frame, whatever it was left on")
+    pg.click("#devViewSeg [data-view=camera]")
+    pg.wait_for_function("document.querySelector('#devZoomNote').textContent.startsWith('Camera view at')", timeout=4000)
+    pg.click("#devClose")
+    b6, c6 = STATE["snap_gets"], STATE["cam_snap_gets"]
+    open_panel(pg)
+    pg.wait_for_timeout(300)
+    check(active_view() == "base", f"Whole frame is active on reopening ({active_view()!r})")
+    check(STATE["snap_gets"] == b6 + 1 and STATE["cam_snap_gets"] == c6, "…a base GET, no camera one")
     pg.click("#devClose")
 
     def ghost_fracs():

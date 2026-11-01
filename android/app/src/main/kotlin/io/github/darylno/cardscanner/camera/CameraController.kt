@@ -40,13 +40,47 @@ import io.github.darylno.cardscanner.core.CameraChoice
 import io.github.darylno.cardscanner.core.DebugLog
 import io.github.darylno.cardscanner.core.FocusPoint
 import io.github.darylno.cardscanner.core.Gray
+import io.github.darylno.cardscanner.core.Nv21Bgr
+import io.github.darylno.cardscanner.core.Nv21Frame
 import io.github.darylno.cardscanner.core.RoiFrac
 import io.github.darylno.cardscanner.core.ZoomCoordinator
 import io.github.darylno.cardscanner.core.ZoomFit
 import io.github.darylno.cardscanner.core.ZoomSnapshot
+import io.github.darylno.cardscanner.core.server.DeviceApi
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
+
+/**
+ * `/api/device/snapshot.jpg`'s picture of one analysis frame taken at zoom `z`
+ * ([CameraController.snapshotJpeg] / [CameraController.cameraSnapshot]; pure OpenCV,
+ * so the JVM tests run it, SnapshotPictureTest).
+ */
+internal object SnapshotPicture {
+    /**
+     * [base]: the BASE-space picture — zoomed, the view scaled by 1/z on grey
+     * ([ZoomSnapshot]), so the browser draws the stored base Area on it 1:1 (what
+     * `snapshot.jpg` always served). Else the frame as it is (`?view=camera`). Long side
+     * ≤ [maxSide], never scaled up; the Picture's w×h is the encoded size.
+     */
+    fun encode(frame: Nv21Frame, z: Double, maxSide: Int, base: Boolean): DeviceApi.Picture {
+        val upright = Nv21Bgr.toUprightBgr(frame)
+        val bgr = if (base && z > 1.0) ZoomSnapshot.composeBase(upright, z).also { upright.release() } else upright
+        try {
+            val scale = maxSide.toDouble() / maxOf(bgr.cols(), bgr.rows())
+            if (scale < 1.0) {
+                val small = org.opencv.core.Mat()
+                org.opencv.imgproc.Imgproc.resize(bgr, small, org.opencv.core.Size(), scale, scale,
+                    org.opencv.imgproc.Imgproc.INTER_AREA)
+                try { return DeviceApi.Picture(CapturePipeline.encodeJpeg(small), z, small.cols(), small.rows()) }
+                finally { small.release() }
+            }
+            return DeviceApi.Picture(CapturePipeline.encodeJpeg(bgr), z, bgr.cols(), bgr.rows())
+        } finally {
+            bgr.release()
+        }
+    }
+}
 
 /** A Mount capture this much softer than the session's median re-arms the card-focus pass. */
 private const val SOFT_CAPTURE_RATIO = 0.5
@@ -846,26 +880,24 @@ class CameraController(
      * scan Area fractions live in, so a browser can draw the Area on it. Null when no frame
      * arrives within [timeoutMs] (camera not bound). Blocks the caller; never the UI thread.
      */
-    fun snapshotJpeg(maxSide: Int = 1280, timeoutMs: Long = 2_000): ByteArray? {
-        val got = java.util.concurrent.ArrayBlockingQueue<Pair<io.github.darylno.cardscanner.core.Nv21Frame, Double>>(1)
+    fun snapshotJpeg(maxSide: Int = 1280, timeoutMs: Long = 2_000): ByteArray? =
+        snapshot(maxSide, timeoutMs, base = true)?.jpeg
+
+    /**
+     * `snapshot.jpg?view=camera` (1.1.17): the upright analysis frame AS THE CAMERA DELIVERS
+     * IT — zoomed, no grey ring, long side ≤ [maxSide] (2048: the stream's own pixels, so
+     * focus can be judged) — with the zoom that frame was taken at. The same one-slot
+     * request as [snapshotJpeg], obeying the zoom settle gate (null: no frame in time).
+     */
+    fun cameraSnapshot(maxSide: Int = 2048, timeoutMs: Long = 2_000): DeviceApi.Picture? =
+        snapshot(maxSide, timeoutMs, base = false)
+
+    /** The next analyzed frame and its zoom ([ScanAnalyzer.requestSnapshotAt]) as a picture, or null in [timeoutMs]. */
+    private fun snapshot(maxSide: Int, timeoutMs: Long, base: Boolean): DeviceApi.Picture? {
+        val got = java.util.concurrent.ArrayBlockingQueue<Pair<Nv21Frame, Double>>(1)
         analyzer.requestSnapshotAt { f, z -> got.offer(f to z) }
         val (frame, z) = got.poll(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS) ?: return null
-        val upright = io.github.darylno.cardscanner.core.Nv21Bgr.toUprightBgr(frame)
-        // Zoomed: the BASE-space picture (the zoomed view scaled by 1/z on grey) — the browser
-        // draws the stored base Area on it 1:1.
-        val bgr = if (z > 1.0) ZoomSnapshot.composeBase(upright, z).also { upright.release() } else upright
-        try {
-            val scale = maxSide.toDouble() / maxOf(bgr.cols(), bgr.rows())
-            if (scale < 1.0) {
-                val small = org.opencv.core.Mat()
-                org.opencv.imgproc.Imgproc.resize(bgr, small, org.opencv.core.Size(), scale, scale,
-                    org.opencv.imgproc.Imgproc.INTER_AREA)
-                try { return CapturePipeline.encodeJpeg(small) } finally { small.release() }
-            }
-            return CapturePipeline.encodeJpeg(bgr)
-        } finally {
-            bgr.release()
-        }
+        return SnapshotPicture.encode(frame, z, maxSide, base)
     }
 
     /**
