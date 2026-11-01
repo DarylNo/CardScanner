@@ -19,6 +19,7 @@ class ZoomCoordinatorTest {
     private val other = RoiFrac(0.2, 0.3, 0.8, 0.7)               // fit 1/(2·0.3) = 1.67 → 1.55
 
     private class Map(val ratio: Double, val view: RoiFrac?, val settle: Boolean)
+    private class ProbeAt(val gen: Int, val asked: Double, val camera: Double, val readBack: Double?, val error: String?)
 
     private inner class FakePort : ZoomCoordinator.Port {
         val requests = mutableListOf<Pair<Int, Double>>()
@@ -27,11 +28,22 @@ class ZoomCoordinatorTest {
         var drawingReady = 0
         val timers = mutableListOf<Pair<Long, () -> Unit>>()
         var readBack: Double? = null
-        override fun request(gen: Int, ratio: Double) { requests += gen to ratio }
-        override fun closeGate(why: String) { closes += why }
-        override fun map(ratio: Double, view: RoiFrac?, settle: Boolean, why: String) { maps += Map(ratio, view, settle) }
+        /** Every call in order: "request 1.90", "close", "map 1.90", "drawing 1.00", "probeAt 1.50", "probeEnded". */
+        val events = mutableListOf<String>()
+        /** The probe's answers: (asked, camera, readBack, error). */
+        val probeAts = mutableListOf<ProbeAt>()
+        val probeEnds = mutableListOf<String>()
+        override fun request(gen: Int, ratio: Double) { requests += gen to ratio; events += "request %.2f".format(ratio) }
+        override fun closeGate(why: String) { closes += why; events += "close" }
+        override fun map(ratio: Double, view: RoiFrac?, settle: Boolean, why: String) {
+            maps += Map(ratio, view, settle); events += "map %.2f".format(ratio)
+        }
         val drawingRatios = mutableListOf<Double>()
-        override fun drawingReady(ratio: Double) { drawingReady++; drawingRatios += ratio }
+        override fun drawingReady(ratio: Double) { drawingReady++; drawingRatios += ratio; events += "drawing %.2f".format(ratio) }
+        override fun probeAt(gen: Int, asked: Double, camera: Double, readBack: Double?, error: String?) {
+            probeAts += ProbeAt(gen, asked, camera, readBack, error); events += "probeAt %.2f".format(asked)
+        }
+        override fun probeEnded(why: String) { probeEnds += why; events += "probeEnded" }
         override fun later(ms: Long, block: () -> Unit) { timers += ms to block }
         override fun readBack(): Double? = readBack
         /** Run the timers of exactly [ms] that are due (a fake clock that only knows the delays). */
@@ -384,5 +396,196 @@ class ZoomCoordinatorTest {
         assertTrue(port.requests.isEmpty())
         assertTrue(z.state().target.belowMin)
         assertTrue(z.state().describe().contains("below 1.10×"))
+    }
+
+    // ── the zoom probe (1.1.17): a coordinator mode that holds the gate for every rung ──
+
+    /** Switch on, the Area mapped at 1.90× — where a probe usually starts. */
+    private fun mappedAt19() { z.setEnabled(true); z.setArea(area); z.cameraBound(2.6, 8.0); answer() }
+
+    @Test fun aProbeHoldsTheGateForEveryRungAndNeverMaps() {
+        mappedAt19()
+        val maps = port.maps.size
+        assertEquals(1, port.closes.size)
+        assertTrue(z.beginProbe("run 1"))
+        assertEquals("exactly one more close", 2, port.closes.size)
+        assertTrue(z.state().probing)
+        for ((asked, rb) in listOf(1.0 to 1.0, 1.5 to 1.4999, 2.6 to 2.6)) {    // 2.6 is above MAX_ZOOM: the probe ignores it
+            z.probeTo(asked)
+            assertEquals(asked, port.requests.last().second, 0.0)
+            z.onApplied(port.lastGen, rb)
+            val a = port.probeAts.last()
+            assertEquals(asked, a.asked, 0.0); assertEquals("the RAW read-back", rb, a.readBack!!, 0.0)
+            assertEquals("a read-back within 1 % IS the request", asked, a.camera, 0.0)
+            assertEquals(null, a.error)
+        }
+        assertEquals(listOf(1.9, 1.0, 1.5, 2.6), port.requests.map { it.second })
+        assertEquals(3, port.probeAts.size)
+        assertEquals("nothing mapped during the probe", maps, port.maps.size)
+        assertEquals("the gate stays closed: no more closes", 2, port.closes.size)
+        val s = z.state()
+        assertTrue(s.probing)
+        assertEquals("the camera's ratio, the rung", 2.6, s.ratio, 0.0)
+        assertFalse("not settling — the gate is closed on purpose", s.settling)
+        assertEquals("the mapping is kept", 1.9, z.mapped, 0.0)
+        z.probeNote = "rung 3/18 · 2.60×"
+        assertTrue(z.state().describe(), z.state().describe().endsWith(" · ZOOM PROBE running (rung 3/18 · 2.60×)"))
+        assertTrue("$log", log.any { it.startsWith("zoom probe START (run 1)") && it.contains("camera at 1.90×") })
+        assertTrue("the request / applied lines are silent while probing: $log", log.none { it.startsWith("→ 1.50×") || it.startsWith("1.50× applied") })
+    }
+
+    @Test fun theProbeEndsOnTheSameMappingWithNoChange() {
+        mappedAt19()
+        val before = port.maps.last()
+        assertTrue(z.beginProbe("run 1"))
+        z.probeTo(1.0); answer()
+        z.probeTo(2.2); answer()
+        z.probeTo(1.9); answer()                                  // the RESTORE: back to the target
+        assertEquals(before.ratio, z.mapped, 0.0)
+        val n = port.maps.size
+        z.endProbe("zoom probe over")
+        assertEquals("one map", n + 1, port.maps.size)
+        val m = port.maps.last()
+        assertEquals(1.9, m.ratio, 0.0); assertEquals(before.view, m.view); assertTrue("the gate opens after the settle frames", m.settle)
+        assertEquals("no applied change: the analyzer keeps its tray", 1, z.changes)
+        assertEquals(null, z.state().problem)
+        assertFalse(z.state().probing); assertFalse(z.state().settling)
+        assertEquals(null, z.probeNote)
+        assertTrue("$log", log.any { it == "zoom probe END (zoom probe over) — back to 1.90× on the same mapping (no re-learn)" })
+        z.endProbe("again")                                       // ended already: nothing
+        assertEquals(n + 1, port.maps.size)
+    }
+
+    @Test fun aProbeWithTheSwitchOffEndsOnTheOldMapping() {
+        z.setArea(area); z.cameraBound(2.6, 8.0)
+        assertTrue(z.beginProbe("run 1"))
+        assertEquals("the only close is the probe's", 1, port.closes.size)
+        z.probeTo(1.6); answer()
+        z.probeTo(1.0); answer()                                  // restore = the switch-off target, 1×
+        z.endProbe("zoom probe over")
+        val m = port.maps.last()
+        assertEquals(1.0, m.ratio, 0.0)
+        assertTrue("the SAME Area object (MainActivity compares by equality; toView(1.0) is the identity)", m.view === area)
+        assertTrue(m.settle)
+        assertEquals(0, z.changes)
+        // The switch-off rules again: no camera calls, no gate, maps at once.
+        val n = port.requests.size
+        z.cameraStopped("screen stopped"); z.cameraStarted("camera re-open"); z.setArea(other)
+        assertEquals(n, port.requests.size)
+        assertEquals(1, port.closes.size)
+        assertEquals(other, port.maps.last().view); assertFalse(port.maps.last().settle)
+    }
+
+    @Test fun eachLifecycleInputAbortsTheProbeFirst() {
+        val inputs = linkedMapOf<String, (ZoomCoordinator) -> Unit>(
+            "stop" to { it.cameraStopped("the scan screen stopped") },
+            "opening" to { it.cameraOpening("camera opening") },
+            "bind" to { it.cameraBound(2.6, 8.0) },
+            "new Area" to { it.setArea(other) },
+            "switch" to { it.setEnabled(false) },
+            "drawing" to { it.setDrawing(true) },
+        )
+        for ((name, input) in inputs) {
+            val p = FakePort()
+            val l = mutableListOf<String>()
+            val c = ZoomCoordinator(p) { l += it }
+            c.setEnabled(true); c.setArea(area); c.cameraBound(2.6, 8.0); c.onApplied(p.lastGen, 1.9)
+            assertTrue(name, c.beginProbe("run 1"))
+            c.probeTo(1.5); c.onApplied(p.lastGen, 1.5)
+            val mark = p.events.size
+            input(c)
+            val after = p.events.drop(mark)
+            assertEquals("$name: probeEnded exactly once — $after", 1, p.probeEnds.size)
+            assertEquals("$name: before any map or request — $after", "probeEnded", after.first())
+            assertFalse(name, c.state().probing)
+            assertTrue("$name: $l", l.any { it.startsWith("zoom probe STOPPED (") })
+            c.probeTo(2.0)                                         // the runner's stale ask after the abort: nothing
+            assertTrue("$name: a probeTo after the abort asks nothing", p.events.drop(mark).none { it == "request 2.00" })
+            assertEquals(1, p.probeEnds.size)
+        }
+        // …then today's behaviour, e.g. aReApplyAfterAStopMapsIdentically after a mid-probe stop.
+        mappedAt19()
+        val before = port.maps.last()
+        assertTrue(z.beginProbe("run 1"))
+        z.probeTo(2.4); answer()
+        z.cameraStopped("the scan screen stopped")
+        z.cameraStarted("camera re-open")
+        assertEquals(1.9, port.requests.last().second, 0.0)
+        answer()
+        assertEquals(before.ratio, port.maps.last().ratio, 0.0); assertEquals(before.view, port.maps.last().view)
+        assertTrue(port.maps.last().settle)
+        assertEquals(1, z.changes)
+        assertEquals(1, port.probeEnds.size)
+    }
+
+    @Test fun aResyncDuringTheProbeAsksNothing() {
+        mappedAt19()
+        assertTrue(z.beginProbe("run 1"))
+        val n = port.events.size
+        z.cameraStarted("frames arriving at a closed gate")
+        z.cameraStarted("camera open")
+        assertEquals("no request, no probeAt, no map", n, port.events.size)
+        assertTrue(z.state().probing)
+    }
+
+    @Test fun aRefusedSilentOrClampedRungIsReportedNeverMapped() {
+        mappedAt19()
+        val maps = port.maps.size; val closes = port.closes.size
+        assertTrue(z.beginProbe("run 1"))
+        z.probeTo(2.8)
+        z.onFailed(port.lastGen, notActive = false, "zoom ratio out of range")
+        assertEquals("zoom ratio out of range", port.probeAts.last().error)
+        assertEquals(2.8, port.probeAts.last().asked, 0.0)
+        z.probeTo(2.2)                                             // the camera never answers
+        val g = port.lastGen
+        port.readBack = 1.9
+        port.fire(ZoomCoordinator.SETTLE_TIMEOUT_MS)
+        assertEquals(ZoomCoordinator.PROBE_NO_ANSWER, port.probeAts.last().error)
+        assertEquals("no answer in 2000 ms", ZoomCoordinator.PROBE_NO_ANSWER)
+        z.onApplied(g, 2.2)                                        // …and then it answers after all
+        assertEquals("a late answer after a probe timeout re-maps nothing", maps, port.maps.size)
+        assertEquals(closes + 1, port.closes.size)
+        z.probeTo(2.0); z.onApplied(port.lastGen, 1.6)             // clamped
+        assertEquals(1.6, port.probeAts.last().camera, 0.0); assertEquals(1.6, port.probeAts.last().readBack!!, 0.0)
+        assertEquals(maps, port.maps.size)
+        z.probeTo(1.9); answer()
+        z.endProbe("zoom probe over")
+        assertEquals("a clamped rung leaves no problem behind", null, z.state().problem)
+        assertEquals(1.9, port.maps.last().ratio, 0.0)
+        assertEquals(1, z.changes)
+    }
+
+    @Test fun aProbeIsRefusedWhileSettlingDrawingUnboundOrGated() {
+        assertFalse("no camera bound", z.beginProbe("run 1"))
+        z.setEnabled(true); z.setArea(area); z.cameraBound(2.6, 8.0)
+        assertFalse("a request on its way (settling)", z.beginProbe("run 1"))
+        answer()
+        z.setDrawing(true); answer()
+        assertFalse("drawing an Area", z.beginProbe("run 1"))
+        z.setDrawing(false); answer()
+        z.cameraOpening("camera opening")
+        assertFalse("the gate is closed (the camera is reopening)", z.beginProbe("run 1"))
+        z.cameraStarted("camera open")                            // already there: maps behind the closed gate
+        val closes = port.closes.size
+        assertTrue(z.beginProbe("run 1"))
+        assertFalse("a probe already running", z.beginProbe("run 2"))
+        assertEquals(closes + 1, port.closes.size)
+        assertTrue(port.probeEnds.isEmpty())
+    }
+
+    /**
+     * Documents the re-entrancy the CameraController glue handles with main.post: a
+     * probeTo at the camera's current ratio has nothing to ask, so its probeAt comes
+     * back INSIDE the probeTo call (reconcile's "camera already there" branch).
+     */
+    @Test fun probeToAtTheCurrentRatioAnswersSynchronously() {
+        mappedAt19()
+        assertTrue(z.beginProbe("run 1"))
+        val n = port.requests.size
+        z.probeTo(1.9)
+        assertEquals("nothing asked of the camera", n, port.requests.size)
+        assertEquals("answered inside the call", 1, port.probeAts.size)
+        val a = port.probeAts.single()
+        assertEquals(1.9, a.asked, 0.0); assertEquals(1.9, a.camera, 0.0); assertEquals(null, a.readBack); assertEquals(null, a.error)
     }
 }

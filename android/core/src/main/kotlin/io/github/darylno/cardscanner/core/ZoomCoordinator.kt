@@ -45,6 +45,16 @@ import kotlin.math.abs
  *   whatever the switch says, and the log says it once per change of its words
  *   (and why, when it goes) — from the first [cameraBound] on, when the lens's
  *   caps are known. It never reaches the [Port].
+ * - THE ZOOM PROBE (1.1.17, a measured ratio ladder; the sequencer is
+ *   [ZoomProbeRun]) is a MODE of this machine, so the gate has one owner and can
+ *   never be left closed by someone else: [beginProbe] closes the analyzer's gate
+ *   and keeps it closed for every rung ([probeTo] asks the camera; the answer is
+ *   [Port.probeAt], never a [Port.map]); [endProbe] maps the IDENTICAL (ratio,
+ *   view) the analyzer had, behind the gate — no re-learn, `changes` unchanged —
+ *   or asks for the target first if the camera is elsewhere. Any lifecycle input
+ *   (stop, opening, bind, a new Area, the switch, drawing) stops the probe FIRST
+ *   ([Port.probeEnded]) and then does exactly what it does today, so an aborted
+ *   probe is today's Scans / Settings round trip. Nothing here files a scan.
  */
 class ZoomCoordinator(private val port: Port, private val log: (String) -> Unit = {}) {
 
@@ -72,6 +82,17 @@ class ZoomCoordinator(private val port: Port, private val log: (String) -> Unit 
          * says what the camera WAS) — or null.
          */
         fun readBack(): Double?
+        /**
+         * The zoom probe's rung: the camera answered [probeTo]'s [asked] — it is at
+         * [camera] (a read-back within [AGREE] is the request), [readBack] is the RAW
+         * read-back (null = none), or [error] says why not ([PROBE_NO_ANSWER] = no
+         * answer within [SETTLE_TIMEOUT_MS]; anything else = refused / failed). The
+         * gate stays closed. May come back INSIDE [probeTo] (the camera already there):
+         * the glue posts it on. [gen] is the request's (or the current one).
+         */
+        fun probeAt(gen: Int, asked: Double, camera: Double, readBack: Double?, error: String?) {}
+        /** A lifecycle input stopped the probe ([why]) before it ended; what follows is today's path. */
+        fun probeEnded(why: String) {}
     }
 
     /** What Diagnostics, the zoom log and `/api/device` report. */
@@ -89,6 +110,10 @@ class ZoomCoordinator(private val port: Port, private val log: (String) -> Unit 
         val area: ZoomFit.Choice? = null,
         /** The off-centre hint ([ZoomFit.offCentre]): what the same Area would zoom centred, or null. */
         val offCentre: ZoomFit.OffCentre? = null,
+        /** The zoom probe holds the gate ([ratio] is then the camera's rung, not settling). */
+        val probing: Boolean = false,
+        /** The probe runner's words for where it is ("rung 7/18 · 1.60×"), or null. */
+        val probeNote: String? = null,
     ) {
         /** "zoom: target 1.85× (limited by the Area fit) · applied 1.85× · lossless 2.60× · lens max 10.00× · MAX_ZOOM 2.00×" */
         fun describe(): String = buildString {
@@ -103,6 +128,7 @@ class ZoomCoordinator(private val port: Port, private val log: (String) -> Unit 
             if (drawing) append(" · drawing an Area")
             problem?.let { append(" · last problem: ").append(it) }
             offCentre?.let { append(" · off-centre: ").append(it.describe()) }
+            if (probing) append(" · ZOOM PROBE running").append(probeNote?.let { " ($it)" } ?: "")
         }
     }
 
@@ -138,13 +164,23 @@ class ZoomCoordinator(private val port: Port, private val log: (String) -> Unit 
     @Volatile var changes = 0
         private set
 
+    /** The zoom probe holds the gate ([beginProbe] … [endProbe]). */
+    @Volatile var probing = false
+        private set
+    /** The rung the probe wants the camera at. */
+    private var probeWant = 1.0
+    /** [problem] when the probe began: a rung's clamp or refusal is the probe's finding, not the scanner's. */
+    private var problemBeforeProbe: String? = null
+    /** Where the probe is, in the runner's words (Diagnostics / `/api/device`); cleared when it ends. */
+    @Volatile var probeNote: String? = null
+
     /** What the Area asks for now (drawing aside). */
     fun target(): ZoomFit.Choice = when {
         !enabled -> ZoomFit.Choice.none(ZoomFit.Limit.OFF, lossless, lensMax)
         else -> ZoomFit.choose(base, lossless, lensMax)
     }
 
-    private fun want(): Double = if (drawing) 1.0 else target().z
+    private fun want(): Double = if (probing) probeWant else if (drawing) 1.0 else target().z
 
     /**
      * While an Area is drawn and the camera has answered, the camera's ratio (1×) is
@@ -156,6 +192,8 @@ class ZoomCoordinator(private val port: Port, private val log: (String) -> Unit 
         // once a lens is bound: before it, its caps are unknown and the ratios would be wrong.
         val area = ZoomFit.choose(base, lossless, lensMax)
         val oc = if (lensKnown) ZoomFit.offCentre(base, lossless, lensMax) else null
+        // The probe: the camera's rung, never "settling" (the gate is closed on purpose), the scanner's own problem.
+        if (probing) return State(enabled, camera, target(), false, drawing, problemBeforeProbe, area, oc, true, probeNote)
         return if (drawing && pending == null) State(enabled, camera, target(), false, true, problem, area, oc)
         else State(enabled, mapped, target(), pending != null || gateClosed, drawing, problem, area, oc)
     }
@@ -165,6 +203,7 @@ class ZoomCoordinator(private val port: Port, private val log: (String) -> Unit 
     /** The Settings switch. */
     fun setEnabled(on: Boolean) {
         if (on == enabled) return
+        abortProbe("Zoom to fit switched ${if (on) "on" else "off"}")
         enabled = on
         log("Zoom to fit the Area switched ${if (on) "ON" else "off"} → ${target().describe()}")
         reconcile("the switch turned ${if (on) "on" else "off"}")
@@ -173,6 +212,7 @@ class ZoomCoordinator(private val port: Port, private val log: (String) -> Unit 
 
     /** The stored (BASE) Area; null = the full frame. Always re-maps (a new Area re-learns, as before zoom). */
     fun setArea(a: RoiFrac?) {
+        abortProbe("a new Area")
         base = a
         reconcile("new Area", forceMap = true)
         noteOffCentre()
@@ -181,6 +221,7 @@ class ZoomCoordinator(private val port: Port, private val log: (String) -> Unit 
     /** Drawing an Area on the phone: zoom out to 1× (true), back to the Area's zoom (false). */
     fun setDrawing(on: Boolean) {
         if (on == drawing) return
+        if (on) abortProbe("drawing an Area")
         drawing = on
         reconcile(if (on) "drawing an Area — zoomed out to the whole frame" else "Area drawing over")
     }
@@ -190,6 +231,7 @@ class ZoomCoordinator(private val port: Port, private val log: (String) -> Unit 
      * [lossless] / [lensMax] are this lens's limits (null = unknown).
      */
     fun cameraBound(lossless: Double?, lensMax: Double?) {
+        abortProbe("the camera was bound again")
         this.lossless = lossless
         this.lensMax = lensMax
         gen++
@@ -210,6 +252,7 @@ class ZoomCoordinator(private val port: Port, private val log: (String) -> Unit 
      */
     fun cameraStopped(why: String) {
         if (!active) return
+        abortProbe(why)
         active = false
         val inUse = pending != null || requested != 1.0 || camera != 1.0 || mapped != 1.0
         gen++
@@ -227,6 +270,7 @@ class ZoomCoordinator(private val port: Port, private val log: (String) -> Unit 
      * close the gate while a zoom is in use; [cameraStarted] re-applies.
      */
     fun cameraOpening(why: String) {
+        abortProbe(why)
         if (pending != null || requested != 1.0 || mapped != 1.0) closeGate(why)
     }
 
@@ -238,7 +282,70 @@ class ZoomCoordinator(private val port: Port, private val log: (String) -> Unit 
     fun cameraStarted(why: String) {
         if (active && pending != null) return
         active = true
+        if (probing) return                                   // the probe asks for its own rungs; a resync asks nothing
         reconcile(why)
+    }
+
+    // ── the zoom probe ──
+
+    /**
+     * Start the zoom probe: refused (false, nothing changed) unless a camera is
+     * active, no Area is being drawn, nothing is on its way to the camera, no
+     * probe runs and the gate is open. Closes the analyzer's gate — it stays
+     * closed until [endProbe] (or an abort) — and starts at the camera's ratio.
+     */
+    fun beginProbe(why: String): Boolean {
+        if (!active || drawing || pending != null || probing || gateClosed) {
+            log("zoom probe refused ($why) — " + when {
+                !active -> "no camera active"
+                drawing -> "an Area is being drawn"
+                pending != null -> "the zoom is settling"
+                probing -> "a probe is already running"
+                else -> "the analyzer's gate is closed (the camera is reopening)"
+            })
+            return false
+        }
+        problemBeforeProbe = problem
+        probing = true
+        probeWant = camera
+        lastTimedOut = null                                   // a late answer from before the probe must never map mid-probe
+        log("zoom probe START (%s) — the analyzer stays paused; camera at %.2f×, frames mapped at %.2f× (kept)".format(why, camera, mapped))
+        closeGate("zoom probe ($why)")
+        return true
+    }
+
+    /** The probe's next rung: ask the camera for [ratio] (any ratio — the probe ignores MAX_ZOOM); answered by [Port.probeAt]. */
+    fun probeTo(ratio: Double) {
+        if (!probing) return
+        probeWant = ratio
+        reconcile("zoom probe → %.2f×".format(ratio))
+    }
+
+    /**
+     * The probe is over: map what the analyzer had — the IDENTICAL (ratio, view)
+     * when the camera is back at the target (no re-learn), else the target is
+     * asked for first — behind the gate, which opens after the settle frames.
+     */
+    fun endProbe(why: String) {
+        if (!probing) return
+        probing = false
+        probeNote = null
+        problem = problemBeforeProbe
+        val t = target().z
+        val same = pending == null && requested == t && camera == mapped && ZoomFit.toView(base, camera) == mappedView
+        log("zoom probe END ($why) — " + if (same) "back to %.2f× on the same mapping (no re-learn)".format(camera)
+            else "the target %.2f× is asked for (the camera is at %.2f×)".format(t, camera))
+        reconcile("zoom probe over")
+    }
+
+    /** A lifecycle input stops a running probe first; the caller then does what it does today. */
+    private fun abortProbe(why: String) {
+        if (!probing) return
+        probing = false
+        probeNote = null
+        problem = problemBeforeProbe
+        log("zoom probe STOPPED ($why)")
+        port.probeEnded(why)
     }
 
     // ── the camera's answers ──
@@ -250,6 +357,7 @@ class ZoomCoordinator(private val port: Port, private val log: (String) -> Unit 
         pending = null
         requested = p.ratio
         camera = agreed(p.ratio, readBack)
+        if (probing) { port.probeAt(g, p.ratio, camera, readBack, null); return }    // no problem, no settle: the rung line says it
         problem = if (camera != p.ratio) "asked for %.2f×, the camera reports %.2f× — mapping with %.2f×".format(p.ratio, readBack, camera) else null
         log("%.2f× applied (%s) · read back %s".format(camera, p.why, readBack?.let { "%.3f×".format(it) } ?: "nothing — the request is assumed") +
             (if (camera != p.ratio) " — NOT what was asked (%.2f×): frames are mapped at what the camera reports".format(p.ratio) else ""))
@@ -266,6 +374,12 @@ class ZoomCoordinator(private val port: Port, private val log: (String) -> Unit 
             return
         }
         pending = null
+        if (probing) {
+            // The rung's finding (the runner ends the ladder there); the scanner's problem is untouched.
+            if (notActive) { requested = 1.0; camera = 1.0 } else requested = p.ratio
+            port.probeAt(g, p.ratio, camera, null, message)
+            return
+        }
         problem = "%.2f× could not be applied (%s%s)".format(p.ratio, message, if (notActive) ", ${p.tries + 1} tries" else "")
         if (notActive) {
             // An inactive camera comes back at 1.0: map there; the next start asks again.
@@ -373,6 +487,8 @@ class ZoomCoordinator(private val port: Port, private val log: (String) -> Unit 
             // The camera is already there (a stopped camera is at 1.0): only the mapping
             // (or the drawing) moves. With the zoom off this is the ONLY path — the Area
             // reaches the analyzer at once, exactly as before zoom existed.
+            // The probe: answered at once, inside probeTo (never a map while probing).
+            if (probing) { port.probeAt(gen, t, camera, null, null); return }
             if (drawing) { port.drawingReady(camera); return }
             val view = ZoomFit.toView(base, camera)
             if (forceMap || gateClosed || view != mappedView || camera != mapped) mapTo(camera, view, why)
@@ -388,7 +504,7 @@ class ZoomCoordinator(private val port: Port, private val log: (String) -> Unit 
         pending = p
         lastTimedOut = null
         closeGate("zoom → %.2f× ($why)".format(t))
-        log("→ %.2f× requested ($why)%s".format(t, if (t != 1.0 && !drawing) " · ${target().describe()}" else ""))
+        if (!probing) log("→ %.2f× requested ($why)%s".format(t, if (t != 1.0 && !drawing) " · ${target().describe()}" else ""))
         port.request(g, t)
         port.later(SETTLE_TIMEOUT_MS) { onTimeout(g) }
     }
@@ -398,9 +514,15 @@ class ZoomCoordinator(private val port: Port, private val log: (String) -> Unit 
         if (p.gen != g) return
         val rb = port.readBack()
         pending = null
-        lastTimedOut = p
         requested = p.ratio
         camera = agreed(p.ratio, rb)
+        if (probing) {
+            // No late re-map: the runner skips the rung; the next rung (or the end) asks the camera again.
+            lastTimedOut = null
+            port.probeAt(g, p.ratio, camera, rb, PROBE_NO_ANSWER)
+            return
+        }
+        lastTimedOut = p
         problem = "no answer for %.2f× within %d ms (read back %s)".format(p.ratio, SETTLE_TIMEOUT_MS, rb?.let { "%.2f×".format(it) } ?: "nothing")
         log("$problem — mapping with %.2f×".format(camera))
         settle(p.why)
@@ -434,5 +556,7 @@ class ZoomCoordinator(private val port: Port, private val log: (String) -> Unit 
         const val SETTLE_TIMEOUT_MS = 2_000L
         /** A read-back within this share of the request IS the request (bit-identical re-applies). */
         const val AGREE = 0.01
+        /** [Port.probeAt]'s error for a rung the camera did not answer within [SETTLE_TIMEOUT_MS]. */
+        const val PROBE_NO_ANSWER = "no answer in 2000 ms"
     }
 }
