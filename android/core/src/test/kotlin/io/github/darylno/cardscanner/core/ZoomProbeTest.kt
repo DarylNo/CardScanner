@@ -466,6 +466,56 @@ class ZoomProbeTest {
         assertEquals("Run 4 stopped (the scan screen stopped) — nothing filed; Run again when ready", stopped.words())
     }
 
+    /**
+     * A result holds only for the camera and the stream it was measured on (review of a60e51d:
+     * a valid run at 1600×1200 on camera 0 and one at 2048×1536 on camera 2 read "2 cards
+     * agree"): the runs on the NEWEST run's camera and stream count together, and the words
+     * say which runs count apart.
+     */
+    @Test
+    fun combineCountsOnlyTheNewestRunsCameraAndStream() {
+        val plan = planFor()
+        val hiRes = ZoomProbe.Facts("0", 2048, 1536, true, 4160, 3120, 2.03, 10.0, 1.0)
+        val lens2 = ZoomProbe.Facts("2", W, H, false, 4160, 3120, 2.6, 10.0, 1.0)
+        fun valid(n: Int, f: ZoomProbe.Facts = facts) = ZoomProbe.verdict(n, plan, run(plan), focused, focused, f)
+        assertEquals("1600×1200", valid(1).stream); assertEquals("2048×1536", valid(2, hiRes).stream)
+        val hi = ZoomProbe.combine(listOf(valid(1), valid(2, hiRes)))
+        assertEquals("another stream is not a second card", 1, hi.validCards)
+        assertFalse(hi.enough)
+        assertEquals("run 2 valid — lift this card, put a DIFFERENT card down, let it scan, then Run again · " +
+            "run 1 (camera 0 · 1600×1200) counts apart: another camera or stream", hi.words)
+        val lens = ZoomProbe.combine(listOf(valid(1), valid(2, hiRes), valid(3, lens2)))
+        assertEquals("another lens neither", 1, lens.validCards)
+        assertTrue(lens.words, lens.words.endsWith(" · run 1 (camera 0 · 1600×1200), run 2 (camera 0 · 2048×1536) count apart: another camera or stream"))
+        // Back on camera 0 at 1600×1200: runs 1 and 4 agree; 2 and 3 count apart.
+        val back = ZoomProbe.combine(listOf(valid(1), valid(2, hiRes), valid(3, lens2), valid(4)))
+        assertEquals(2, back.validCards)
+        assertTrue(back.words, back.words.startsWith("2 cards agree: the zoom is the centred crop"))
+        assertTrue(back.words, back.words.endsWith(" — Next · run 2 (camera 0 · 2048×1536), run 3 (camera 2 · 1600×1200) count apart: another camera or stream"))
+        // A run NOT centred on another camera does not speak for this one, and the reverse.
+        val bent = ZoomProbe.verdict(5, plan, run(plan) { i, z -> rung(i, z, crop = { 0.03 * (it - 1) }) }, focused, focused, lens2)
+        assertEquals(false, bent.centred)
+        assertEquals(true, ZoomProbe.combine(listOf(bent, valid(6), valid(7))).centred)
+        assertEquals(false, ZoomProbe.combine(listOf(valid(6), valid(7), bent)).centred)
+        // One camera and stream throughout: nothing counts apart (the words as before).
+        assertFalse(ZoomProbe.combine(listOf(valid(1), valid(4))).words.contains("apart"))
+    }
+
+    /** The probe half by short names for the done card (review of a60e51d: the full words pushed it past 45 % of the screen). */
+    @Test
+    fun theProbeHalfHasShortNamesForTheDoneCard() {
+        val plan = planFor()
+        fun valid(n: Int) = ZoomProbe.verdict(n, plan, run(plan), focused, focused, facts)
+        val two = ZoomProbe.combine(listOf(valid(1), valid(2)))
+        assertEquals("✓ 2 cards ✓ centred ✓ settle ✗ knee not measured", two.shortChecks())
+        assertEquals("the same rules as the full words", two.checkList().map { it.first }, two.shortChecks().split(" ").filter { it == "✓" || it == "✗" }.map { it == "✓" })
+        assertEquals("✗ 1 of 2 cards ✓ centred ✓ settle ✗ knee not measured", ZoomProbe.combine(listOf(valid(1))).shortChecks())
+        val bent = ZoomProbe.verdict(3, plan, run(plan) { i, z -> rung(i, z, crop = { 0.03 * (it - 1) }) }, focused, focused, facts)
+        assertEquals("✓ 2 cards ✗ NOT centred ✓ settle ✗ knee not measured", ZoomProbe.combine(listOf(valid(1), bent)).shortChecks())
+        assertEquals("✗ 0 of 2 cards ✗ centred ✗ settle ✗ knee not measured",
+            ZoomProbe.combine(listOf(ZoomProbe.stopped(1, plan, "the scan screen stopped", facts))).shortChecks())
+    }
+
     @Test
     fun zPipeIs880OverH1x() {
         val plan = planFor(612.0)

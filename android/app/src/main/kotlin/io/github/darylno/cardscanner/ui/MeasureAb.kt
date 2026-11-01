@@ -320,7 +320,10 @@ class AbSummary(records: List<AbRecord>, val target: Int = MeasureSession.AB_CAR
     /** The summary, the per-card line and the verdict ([probe]: its probe half) — logged before "session END". */
     fun logLines(probe: List<Check>? = null): List<String> = listOf(summaryLine(), perCardLine(), verdictLine(probe))
 
-    /** The done card's two lines (the full ones are in the debug report); [probe] as in [verdictLine]. */
+    /**
+     * The done card's two lines (the full ones are in the debug report); [probe] as in [verdictLine]
+     * — the card names no probe check: the session's "Probe:" line under it does, by short names.
+     */
     fun cardText(probe: List<Check>? = null): String = buildString {
         append("A/B, same ${cards.size} cards (B ${x(zB)}): OCR ✓ ${counts(::ocr)} · B better $better / worse $worse · still identifying $pending\n")
         val yes = state == State.PASS && probe != null && probe.all { it.ok }
@@ -332,7 +335,8 @@ class AbSummary(records: List<AbRecord>, val target: Int = MeasureSession.AB_CAR
             State.PASS -> when {
                 probe == null -> "the A/B half passes; no zoom probe ran"
                 yes -> "both halves pass"
-                else -> "the A/B half passes; the probe half fails (" + probe.filter { !it.ok }.joinToString(" · ") + ")"
+                // Which of its rules fail: the "Probe:" line under this one (MeasureSession.countExtra).
+                else -> "the A/B half passes; the probe half fails (see Probe)"
             }
         })
         if (noJob) append(" · zoom has no job at this mount height")

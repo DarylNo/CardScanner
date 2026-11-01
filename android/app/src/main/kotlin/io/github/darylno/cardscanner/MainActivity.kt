@@ -131,6 +131,11 @@ class MainActivity : AppCompatActivity() {
     /** A change from the computer came while the probe ran: it is applied once the probe has ended ([applyRemoteNow]). */
     private var remoteDeferred = false
     /**
+     * What the last identification said while the probe ran (review of a60e51d): the status pill
+     * is the probe's until it ends, then this comes under its end ([outcomeStatus]); null = none.
+     */
+    private var probeHeldStatus: String? = null
+    /**
      * The Back key, during a measurement session: while the probe runs it only cancels it (the
      * touch policy); otherwise it does what Back always does. Enabled only while a session is
      * on, so the system's own back stays untouched outside one.
@@ -659,9 +664,11 @@ class MainActivity : AppCompatActivity() {
         val lockCard = chrome.card().apply {
             addView(chrome.text(getString(R.string.update_required_title), 20f, bold = true))
             addView(lockText)
-            addView(chrome.primaryButton(getString(R.string.update_download)) { downloadUpdate() },
+            // The touch policy (review of a60e51d): the lock can come up mid-probe (UpdateLock's check
+            // answers late) and covers the card's Cancel probe; leaving would stop it with no restore.
+            addView(chrome.primaryButton(getString(R.string.update_download)) { if (!cancelProbeFor("Download update")) downloadUpdate() },
                 LinearLayout.LayoutParams(match(), wrap()))
-            addView(chrome.secondaryButton(getString(R.string.scans)) { openPanel(0L) },
+            addView(chrome.secondaryButton(getString(R.string.scans)) { if (!cancelProbeFor("Scans")) openPanel(0L) },
                 LinearLayout.LayoutParams(match(), wrap()).apply { topMargin = dp(10) })
         }
         lockView = FrameLayout(this).apply {
@@ -1318,6 +1325,7 @@ class MainActivity : AppCompatActivity() {
         dlog.i("ui", "Run probe tapped — zoom probe run $run")
         probeRun = run
         probeCount = null
+        probeHeldStatus = null
         hideRetry()
         refreshMeasure()
         awake.poke("zoom probe")
@@ -1349,12 +1357,16 @@ class MainActivity : AppCompatActivity() {
             if (isFinishing || isDestroyed) return
             if (mine) probeWords = words
             // The coordinator's end maps the Area again (onZoom): the chip and the overlay follow it there.
-            when (outcome.kind) {
-                ZoomProbeRun.Kind.DONE -> setStatus(StatusText.PROBE_DONE, Tone.OK)
-                ZoomProbeRun.Kind.REFUSED -> setStatus(StatusText.PROBE_REFUSED, Tone.ERR)
-                ZoomProbeRun.Kind.CANCELLED -> setStatus(outcome.words)
-                ZoomProbeRun.Kind.STOPPED -> setStatus(StatusText.PROBE_STOPPED, Tone.ERR)
+            val (msg, tone) = when (outcome.kind) {
+                ZoomProbeRun.Kind.DONE -> StatusText.PROBE_DONE to Tone.OK
+                ZoomProbeRun.Kind.REFUSED -> StatusText.PROBE_REFUSED to Tone.ERR
+                ZoomProbeRun.Kind.CANCELLED -> outcome.words to Tone.NORMAL
+                ZoomProbeRun.Kind.STOPPED -> StatusText.PROBE_STOPPED to Tone.ERR
             }
+            // A scan identified meanwhile: what it said, under the probe's end (it was not opened).
+            val held = probeHeldStatus.takeIf { !probing() }
+            if (held != null) probeHeldStatus = null
+            setStatus(held?.let { msg + "\n" + it } ?: msg, tone)
             refreshMeasure()
             if (remoteDeferred) { remoteDeferred = false; applyRemoteNow() }
         }
@@ -1416,7 +1428,7 @@ class MainActivity : AppCompatActivity() {
                 queueView.text = t
                 queueView.visibility = if (t.isEmpty()) View.GONE else View.VISIBLE
                 if (lastError != null && awaitingOpen > 0) {
-                    setStatus(StatusText.QUEUED_OPEN)
+                    outcomeStatus(StatusText.QUEUED_OPEN)
                 }
             }
         }
@@ -1426,6 +1438,9 @@ class MainActivity : AppCompatActivity() {
 
     /** Tests drive the camera's callbacks (Robolectric has no camera to bind). */
     internal val cameraListenerForTest: CameraPort.Listener get() = cameraListener
+
+    /** Tests hand the screen an identification's outcome (Robolectric has no upload queue running). */
+    internal val uploadListenerForTest: UploadPort.Listener get() = uploadListener
 
     /** Tests read what the status line says now. */
     internal val statusForTest: String get() = statusView.text.toString()
@@ -1447,40 +1462,52 @@ class MainActivity : AppCompatActivity() {
         })
         when (outcome) {
             is Outcome.NoCard -> {
-                setStatus(StatusText.NO_CARD, Tone.ERR)
+                outcomeStatus(StatusText.NO_CARD, Tone.ERR)
                 camera?.noCard(scene)
                 // A Retry that came back no_card left the failed row in place — keep offering
                 // Retry for it (phone.html does), but only while that card is still the current one.
                 if (current && replaceScanId != null && replaceScanId > 0) offerRetry(replaceScanId)
             }
             is Outcome.AutoFiled -> {
-                setStatus(StatusText.identified(outcome.json, manual), Tone.OK)
+                outcomeStatus(StatusText.identified(outcome.json, manual), Tone.OK)
                 if (openScan) openPick(outcome.scanId, true, outcome.json)
             }
             is Outcome.NeedsPick -> {
-                setStatus(StatusText.identified(outcome.json, manual), Tone.OK)
+                outcomeStatus(StatusText.identified(outcome.json, manual), Tone.OK)
                 if (manual) openPick(outcome.scanId, openScan, outcome.json)
             }
             is Outcome.BestGuess -> {
-                setStatus(StatusText.bestGuess(outcome.json, manual), Tone.ERR)
+                outcomeStatus(StatusText.bestGuess(outcome.json, manual), Tone.ERR)
                 if (manual) openPick(outcome.scanId, openScan, outcome.json)
             }
             is Outcome.NoMatch -> {
-                setStatus(StatusText.noMatch(outcome.json), Tone.ERR)
+                outcomeStatus(StatusText.noMatch(outcome.json), Tone.ERR)
                 // A stale job's NoMatch only sets the status line: another card is in view now.
                 if (current && outcome.scanId > 0) offerRetry(outcome.scanId)
             }
-            is Outcome.Rejected -> setStatus(getString(R.string.upload_rejected, outcome.code), Tone.ERR)
+            is Outcome.Rejected -> outcomeStatus(getString(R.string.upload_rejected, outcome.code), Tone.ERR)
         }
+    }
+
+    /**
+     * An identification's status line — held while the zoom probe runs (review of a60e51d): the
+     * pill is the probe's ("Zoom probe 7/15 · 1.60× — hands off the tray") until it ends, and the
+     * last line held comes under its end. Otherwise it is [setStatus].
+     */
+    private fun outcomeStatus(msg: String, tone: Tone = Tone.NORMAL) {
+        if (probing()) probeHeldStatus = msg else setStatus(msg, tone)
     }
 
     private fun openPick(scanId: Long, openScan: Boolean, json: org.json.JSONObject) {
         if (scanId <= 0) return
-        if (resumed) {
+        if (resumed && !probing()) {
             if (openScan) setStatus(StatusText.opening(json), Tone.OK)
             openPanel(scanId)
         } else {
-            setStatus(getString(R.string.open_scans_hint, StatusText.name(json)), Tone.OK)
+            // Mid-probe (review of a60e51d): opening it would leave this screen — a lifecycle stop that
+            // ends the probe with no verified restore. It is filed; it waits in Scans, as when away.
+            if (resumed) dlog.i("ui", "scan #$scanId identified during the zoom probe — not opened (leaving would stop the probe); it is in Scans")
+            outcomeStatus(getString(R.string.open_scans_hint, StatusText.name(json)), Tone.OK)
         }
     }
 }

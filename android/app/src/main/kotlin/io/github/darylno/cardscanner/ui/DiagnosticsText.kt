@@ -44,7 +44,9 @@ object DiagnosticsText {
         val words = m?.get("words") as? String ?: return "zoom probe: never run"
         val at = (m["at"] as? Number)?.toLong()
         return "zoom probe: " + listOfNotNull(
-            at?.let { java.text.SimpleDateFormat("d MMM HH:mm", Locale.ROOT).format(java.util.Date(it)) },
+            // Locale.US, as the app's other dates (review of a60e51d): on Android java.text's month names
+            // come from ICU, whose ROOT locale has none in English — "31 M10 14:03" on the phone.
+            at?.let { java.text.SimpleDateFormat("d MMM HH:mm", Locale.US).format(java.util.Date(it)) },
             (m["camera"] as? String)?.let { "camera $it" },
             m["stream"] as? String,
         ).joinToString(" · ") + " — " + words

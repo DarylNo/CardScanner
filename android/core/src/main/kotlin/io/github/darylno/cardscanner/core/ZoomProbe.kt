@@ -594,6 +594,18 @@ object ZoomProbe {
         /** "✓ 2 valid runs on different cards ✓ centred ✓ settle ✗ knee: not measured …" */
         fun checks(): String = checkList().joinToString(" ") { (ok, words) -> (if (ok) "✓ " else "✗ ") + words }
 
+        /**
+         * [checkList]'s rules by short names, in its order — "✓ 2 cards ✓ centred ✓ settle ✗ knee not
+         * measured" — for the session's done card, which has no room for their words (review of
+         * a60e51d: they pushed it past 45 % of the N200's screen); [checks] is the log's.
+         */
+        fun shortChecks(): String = checkList().zip(listOf(
+            if (enough) "$validCards cards" else "$validCards of 2 cards",
+            if (centred == false) "NOT centred" else "centred",
+            "settle",
+            "knee not measured",
+        )).joinToString(" ") { (c, name) -> (if (c.first) "✓ " else "✗ ") + name }
+
         fun logLine(): String = "probe VERDICT: $words · probe half of default-on: ${checks()}"
     }
 
@@ -603,8 +615,16 @@ object ZoomProbe {
      * centred only when every valid run is (any run not centred → no decision: the zoom
      * is not the crop the app maps with); the settle rule on every valid run. MAX_ZOOM
      * is never recommended ([DETAIL_VALIDATED] is false).
+     *
+     * Only the runs on the NEWEST run's camera and stream count together (review of
+     * a60e51d): a result holds only for the camera and the stream it was measured on, and
+     * the owner can change the lens or High res between runs. The others are named at the
+     * end of the words ("run 1 (camera 0 · 1600×1200) counts apart: …").
      */
-    fun combine(runs: List<Result>): Combined {
+    fun combine(all: List<Result>): Combined {
+        val newest = all.lastOrNull()
+        val runs = all.filter { it.camera == newest?.camera && it.stream == newest?.stream }
+        val apart = all.filter { r -> runs.none { it === r } }
         val valid = runs.filter { it.valid && it.stoppedAt == null }
         val validRuns = valid.map { it.run }.toSet()
         val cards = valid.filter { r -> r.sameCardAs == null || r.sameCardAs !in validRuns }
@@ -632,7 +652,16 @@ object ZoomProbe {
                 zPipe?.let { " · z_pipe %.2f×".format(Locale.ROOT, it) } ?: "")
             else -> "run ${cards[0].run} valid — lift this card, put a DIFFERENT card down, let it scan, then Run again"
         }
-        return Combined(cards.size, centred, settle, reports, zPipe, words)
+        return Combined(cards.size, centred, settle, reports, zPipe, words + apartWords(apart))
+    }
+
+    /** " · run 1 (camera 0 · 1600×1200), runs 2, 3 (camera 2 · 1600×1200) count apart: another camera or stream", or "". */
+    private fun apartWords(apart: List<Result>): String {
+        if (apart.isEmpty()) return ""
+        val groups = apart.groupBy { r -> listOfNotNull(r.camera?.let { "camera $it" }, r.stream).joinToString(" · ") }
+        return " · " + groups.entries.joinToString(", ") { (where, rs) ->
+            (if (rs.size == 1) "run " else "runs ") + rs.joinToString(", ") { it.run.toString() } + " ($where)"
+        } + (if (apart.size == 1) " counts" else " count") + " apart: another camera or stream"
     }
 
     // ── the restore: is it the same card in the same place? ──

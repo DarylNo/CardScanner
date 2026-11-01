@@ -210,7 +210,10 @@ class MeasureSession(
     /** The thumbnails the next run compares its card with ([ZoomProbeRun]'s `earlier`). */
     fun probeEarlier(): List<ZoomProbeRun.Earlier> = probeThumbs.toList()
 
-    /** What this session's measured runs say together (ZoomProbe.combine), or null when none measured. */
+    /**
+     * What this session's measured runs say together (ZoomProbe.combine: those on the newest run's
+     * camera and stream — the owner may change the lens or High res between runs), or null when none measured.
+     */
     fun probeCombined(): ZoomProbe.Combined? =
         probeRuns.mapNotNull { it.result }.takeIf { it.isNotEmpty() }?.let { ZoomProbe.combine(it) }
 
@@ -266,9 +269,11 @@ class MeasureSession(
                     notes(s, auto, zoom).joinToString("") { "\n$it" }
             }
             isLast -> {
+                // The probe half by its rules' short names (review of a60e51d: its words pushed the done card
+                // past 45 % of the screen); the words are on the probe's step and in the log's probe VERDICT.
                 val probe = probeCombined()
                 (records.takeIf { it.isNotEmpty() }?.let { "\n" + abSummary(it).cardText(probe?.let(::probeChecks)) } ?: "") +
-                    (probe?.let { "\nProbe: " + it.words } ?: "")
+                    (probe?.let { "\nProbe: " + it.shortChecks() } ?: "")
             }
             else -> ""
         }
