@@ -6,6 +6,7 @@ import io.github.darylno.cardscanner.core.ZoomFit
 import io.github.darylno.cardscanner.core.server.DeviceApi
 import org.json.JSONArray
 import java.util.Locale
+import kotlin.math.abs
 
 /**
  * The guided measurement session (owner, 2026-10-02: "a test mode that prompts
@@ -232,6 +233,7 @@ class MeasureSession(
         s.aeLock?.let { settings.aeLock = it }
         s.vibration?.let { settings.vibration = it }
         s.checkMs?.let { settings.checkMs = it }
+        if (s.zoomFit != null) keepOwnersZoomFit()
         s.zoomFit?.let { settings.zoomFit = it }
         // Entering an arm (by Next or Back) starts it afresh: a re-run replaces its records.
         s.arm?.let { arm -> records.let { r -> if (r.any { it.arm == arm }) save(r.filter { it.arm != arm }) } }
@@ -257,13 +259,29 @@ class MeasureSession(
             (settings.measureAnswer?.let { " · answer ${if (it) "YES" else "NO"}" } ?: ""))
     }
 
+    /**
+     * A session started on 1.1.16 saved three fields ("aeLock,vibration,checkMs"): none of
+     * its steps touched Zoom to fit, so the first time one of ours is about to pin it the
+     * switch is still the owner's own — save it now, as the 4th field, or Stop / Finish
+     * would leave it wherever the last zoom step put it (review of 9df0293: a 1.1.16
+     * session resumed after the update lock's update walked into the zoom steps and ended
+     * with the owner's Zoom to fit off). Once only: the original then has four fields.
+     */
+    private fun keepOwnersZoomFit() {
+        val o = settings.measureOriginal ?: return
+        if (o.split(",").size != 3) return
+        settings.measureOriginal = "$o,${settings.zoomFit}"
+        log.i("test", "a session started on an older build: your Zoom to fit (${settings.zoomFit}) is kept now, before this step sets it")
+    }
+
     private fun restore() {
         val o = settings.measureOriginal?.split(",") ?: return
         if (o.size < 3) return
         o[0].toBooleanStrictOrNull()?.let { settings.aeLock = it }
         o[1].toBooleanStrictOrNull()?.let { settings.vibration = it }
         o[2].toIntOrNull()?.let { settings.checkMs = it }
-        // 1.1.17 saves Zoom to fit too; a session started on 1.1.16 saved three fields and leaves it alone.
+        // 1.1.17 saves Zoom to fit too; a session started on 1.1.16 saved three fields — the 4th is
+        // added when one of our steps first pins the switch ([keepOwnersZoomFit]), else it is left alone.
         o.getOrNull(3)?.toBooleanStrictOrNull()?.let { settings.zoomFit = it }
     }
 
@@ -313,11 +331,21 @@ class MeasureSession(
         fun notes(step: Step, auto: Boolean, zoom: ZoomCoordinator.State?): List<String> {
             val out = ArrayList<String>()
             val area = zoom?.let { it.area ?: it.target }
-            if (step.arm == "B" && area != null) out += when {
+            // B says what the camera is AT, not only what the Area asks (review of 9df0293: a
+            // zoom that failed — the coordinator maps 1× — still read "zoom 1.90×", and the
+            // owner learnt it only from Finish's "void"): the target only while it settles
+            // or once applied; a ratio more than ZoomCoordinator.AGREE off it is said plainly.
+            if (step.arm == "B" && zoom != null && area != null) out += when {
                 area.limit == ZoomFit.Limit.NO_AREA -> "B is at 1.00× — no Area is drawn: go Back and draw one tight round where the cards land"
                 area.belowMin -> "B is at 1.00× — the ${if (area.limit == ZoomFit.Limit.FIT) "Area" else "camera"} allows only ${f2(area.raw)}×: " +
                     "go Back and draw a tighter Area"
-                else -> "zoom " + area.describe()
+                !zoom.enabled -> "B is at ${f2(zoom.ratio)}× — Zoom to fit is off on the camera (changed from the computer?): go Back, then Next to try again"
+                zoom.drawing -> "zoom " + area.describe() + " once the Area is drawn"
+                zoom.settling -> "zoom → " + area.describe() + " — settling…"
+                abs(zoom.ratio - area.z) <= ZoomCoordinator.AGREE * area.z -> "zoom " + area.describe()
+                zoom.ratio < ZoomFit.MIN_USEFUL -> "B is at ${f2(zoom.ratio)}× — the camera did not zoom" +
+                    (zoom.problem?.let { " ($it)" } ?: "") + ": go Back, then Next to try again"
+                else -> "zoom ${f2(zoom.ratio)}× — the camera's answer to " + area.describe()
             }
             if (step.arm != null && !auto) out += "Tap to scan is on — switch to Tray"
             if (step.arm == "A1" && zoom != null && area != null) {

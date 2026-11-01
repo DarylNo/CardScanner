@@ -168,6 +168,53 @@ class MeasureSessionTest {
     }
 
     /**
+     * A 1.1.16 session resumed on this build walks INTO steps that pin Zoom to fit (the
+     * zoom steps, AE lock, set-up on Back) — its 3-field original never saved the switch,
+     * so the first pin saves the owner's own first, and Stop / Finish put it back (review
+     * of 9df0293: it was left wherever the last zoom step had put it — off). The update
+     * lock makes this likely: it stops a 1.1.16 phone scanning mid-session.
+     */
+    @Test
+    fun aSessionResumedFromAnOlderBuildPutsTheOwnersZoomToFitBack() {
+        val prefs = app.getSharedPreferences("ui_settings", android.content.Context.MODE_PRIVATE)
+        /** A 1.1.16 session on its step [index] (its own list: LEGACY_IDS), no step id. */
+        fun legacy(index: Int, zoomFit: Boolean): MeasureSession {
+            settings.zoomFit = zoomFit
+            settings.measureStep = index
+            prefs.edit().remove("measure_step_id").apply()
+            settings.measureOriginal = "false,true,2500"
+            return session().also { assertTrue(it.active); assertEquals(MeasureSession.LEGACY_IDS[index], it.step.id) }
+        }
+        // At "lights", Next through the zoom steps (B pins it on, A2 / AE lock off) to Finish.
+        val walked = legacy(6, zoomFit = true)
+        while (walked.active && !walked.isLast) walked.next()
+        assertFalse("AE lock pinned it off", settings.zoomFit)
+        walked.next()
+        assertFalse(walked.active)
+        assertTrue("the owner's own (on) is back after Finish", settings.zoomFit)
+        assertFalse(settings.aeLock); assertTrue(settings.vibration); assertEquals(2500, settings.checkMs)
+        // At 1.1.16's "ae-lock", Back once lands on zoom-a2 (off), then Stop.
+        val back = legacy(8, zoomFit = true)
+        back.back()
+        assertEquals("zoom-a2", back.step.id); assertFalse(settings.zoomFit)
+        back.finish(abandoned = true)
+        assertTrue("the owner's own (on) is back after Stop", settings.zoomFit)
+        // At "lift", Back to set-up (it pins it off now), then Stop.
+        val setup = legacy(3, zoomFit = true)
+        repeat(3) { setup.back() }
+        assertEquals("setup", setup.step.id); assertFalse(settings.zoomFit)
+        setup.finish(abandoned = true)
+        assertTrue(settings.zoomFit)
+        // An owner with it OFF, stopped on B (on): off again.
+        val off = legacy(7, zoomFit = false)
+        off.goTo("zoom-b")
+        assertTrue(settings.zoomFit)
+        off.finish(abandoned = true)
+        assertFalse(settings.zoomFit)
+        assertNull(settings.measureOriginal)
+    }
+
+    /**
      * The step is resumed by its id, not a bare index: four steps went in before "ae-lock",
      * so an index taken from another step list lands somewhere else. A session saved by
      * 1.1.16 (an index, no id) is read against 1.1.16's own list.
@@ -326,6 +373,85 @@ class MeasureSessionTest {
         assertTrue(s.perCardLine(), s.perCardLine().contains("4 c4 A1 1 · B 3 · A2 1 (name mismatch: c4 / Wrong Card)"))
     }
 
+    /**
+     * Captures still identifying (or whose outcome was missed — no name, no rank) take
+     * their cards' places by position, however many sit side by side: they are "still
+     * identifying", never "missing" (rank 0). Review of 9df0293: two adjacent ones in B
+     * were scored as two extra B captures plus two cards B made worse — rule 1 failed on
+     * no evidence — and two at A2's tail became two phantom "?" cards and two unstable ones.
+     */
+    @Test
+    fun capturesStillIdentifyingSideBySideTakeTheirCardsPlaces() {
+        fun rec(arm: String, burst: Long, z: Double, rank: Int?, card: Int) =
+            AbRecord(arm, burst, z, if (z > 1) 1163 else 612, 200.0, 400, false, rank = rank, name = if (rank == null) null else "c$card")
+        val a1 = (1..10).map { rec("A1", it.toLong(), 1.0, 1, it) }
+        val a2 = (1..10).map { rec("A2", 40L + it, 1.0, 1, it) }
+        // B: cards 5 and 6 still identifying, side by side.
+        val b = (1..10).map { rec("B", 20L + it, 1.9, if (it == 5 || it == 6) null else 3, it) }
+        val s = MeasureSession.abSummary(a1 + b + a2)
+        assertEquals(10, s.cards.size)
+        assertEquals("no extra B captures", 0, s.extraB)
+        assertEquals("still identifying is not worse", 0, s.worse)
+        assertEquals(8, s.better); assertEquals(2, s.pending)
+        assertEquals(listOf(25L, 26L), listOf(s.cards[4].b?.burst, s.cards[5].b?.burst))
+        val per = s.perCardLine()
+        assertTrue(per, per.contains("5 c5 A1 1 · B … · A2 1; 6 c6 A1 1 · B … · A2 1;"))
+        assertTrue(s.checks[0].words, s.checks[0].ok)
+        assertTrue(s.checks[2].words, s.checks[2].ok)
+        assertFalse(s.summaryLine(), s.summaryLine().contains("left out"))
+        // A2: the last two still identifying.
+        val tail = MeasureSession.abSummary(a1 + (1..10).map { rec("B", 20L + it, 1.9, 3, it) } +
+            (1..10).map { rec("A2", 40L + it, 1.0, if (it >= 9) null else 1, it) })
+        assertEquals(10, tail.cards.size)
+        assertEquals(2, tail.pending); assertEquals(8, tail.better); assertEquals(0, tail.worse)
+        assertTrue(tail.summaryLine(), tail.summaryLine().startsWith("zoom A/B (same 10 cards;"))
+        assertTrue(tail.summaryLine(), tail.summaryLine().contains("unstable at 1× 0 ·"))
+        assertTrue(tail.perCardLine(), tail.perCardLine().endsWith("9 c9 A1 1 · B 3 · A2 …; 10 c10 A1 1 · B 3 · A2 …"))
+        assertFalse(tail.perCardLine(), tail.perCardLine().contains("?"))
+        // One card B never shot beside one still identifying: one missing, one identifying —
+        // which of the two is a guess (the first takes the capture), the counts are not.
+        val gap = MeasureSession.abSummary(a1 + (1..10).filter { it != 5 }.map { rec("B", 20L + it, 1.9, if (it == 6) null else 3, it) } + a2)
+        assertEquals(10, gap.cards.size)
+        assertEquals(0, gap.extraB); assertEquals(1, gap.pending); assertEquals(1, gap.worse); assertEquals(8, gap.better)
+    }
+
+    /**
+     * "Zoom has no job at this mount height" is said on A1 alone — A1 already OCR-confirms
+     * nearly every card (fewer than MIN_NET_BETTER left to improve). Rule 2 out of reach
+     * for another reason (cards unstable at 1×, still identifying) says THAT, and what to
+     * do: review of 9df0293 — A1 confirming 0 of 10 with 7 cards unstable read "no job".
+     */
+    @Test
+    fun zoomHasNoJobOnlyWhenA1AlreadyConfirmsNearlyEveryCard() {
+        fun rec(arm: String, burst: Long, z: Double, rank: Int?, card: Int) =
+            AbRecord(arm, burst, z, if (z > 1) 1163 else 612, 200.0, 400, false, rank = rank, name = "c$card",
+                ocr = rank == 3, autoPicked = rank != null && rank >= 2)
+        val a1 = (1..10).map { rec("A1", it.toLong(), 1.0, 1, it) }
+        val b = (1..10).map { rec("B", 20L + it, 1.9, 3, it) }
+        val a2 = (1..10).map { rec("A2", 40L + it, 1.0, if (it <= 7) 3 else 1, it) }      // 7 unstable at 1×
+        val s = MeasureSession.abSummary(a1 + b + a2)
+        assertFalse("A1 confirms none: zoom has a job", s.noJob)
+        val v = s.verdictLine()
+        assertFalse(v, v.contains("no job"))
+        assertTrue(v, v.contains("✗ B better − worse = 3 (needs 4)"))
+        assertTrue(v, v.contains("note: rule 2 is out of reach this run — at most 3 stable cards can improve (7 unstable at 1×, 0 still identifying); " +
+            "run the zoom steps again with 10 other cards"))
+        val card = s.cardText()
+        assertFalse(card, card.contains("no job"))
+        assertTrue(card, card.contains("rule 2 out of reach this run (7 unstable at 1×, 0 still identifying)"))
+        // Still identifying: wait first.
+        val waiting = MeasureSession.abSummary(a1 + b.map { if (it.burst > 23) it.copy(rank = null, name = null) else it } + a2.map { it.copy(rank = 1) })
+        assertTrue(waiting.verdictLine(), waiting.verdictLine().contains("at most 3 stable cards can improve (0 unstable at 1×, 7 still identifying); wait until no card is still identifying"))
+        // A1 confirms 7 of 10: at most 3 can improve whatever B does — no job.
+        val easy = MeasureSession.abSummary(a1.map { if (it.burst <= 7) it.copy(rank = 3, ocr = true, autoPicked = true) else it } + b + a2.map { it.copy(rank = if (it.burst <= 47) 3 else 1) })
+        assertTrue(easy.noJob)
+        assertTrue(easy.verdictLine(), easy.verdictLine().contains("note: zoom has no job at this mount height — A1 already OCR-confirms 7 of 10"))
+        assertFalse(easy.verdictLine(), easy.verdictLine().contains("out of reach"))
+        // A1 with captures missing: a missed card is not a confirmed one (5 of 5 shot, 10 cards).
+        val missed = MeasureSession.abSummary(a1.filter { it.burst <= 5 }.map { it.copy(rank = 3, ocr = true, autoPicked = true) } + b + a2)
+        assertFalse(missed.verdictLine(), missed.noJob)
+    }
+
     /** An upload outcome's rank: 3 OCR ✓ · 2 auto-filed without OCR · 1 needs a pick or a best guess · 0 none. */
     @Test
     fun anOutcomeIsRankedFromItsJson() {
@@ -375,9 +501,11 @@ class MeasureSessionTest {
      */
     @Test
     fun theArmNotesSayWhatBWillZoom() {
+        // The camera answers each zoom request with what was asked (the B line says what it is AT).
         fun state(area: io.github.darylno.cardscanner.core.RoiFrac?, enabled: Boolean): io.github.darylno.cardscanner.core.ZoomCoordinator.State {
+            var asked: Pair<Int, Double>? = null
             val z = io.github.darylno.cardscanner.core.ZoomCoordinator(object : io.github.darylno.cardscanner.core.ZoomCoordinator.Port {
-                override fun request(gen: Int, ratio: Double) {}
+                override fun request(gen: Int, ratio: Double) { asked = gen to ratio }
                 override fun closeGate(why: String) {}
                 override fun map(ratio: Double, view: io.github.darylno.cardscanner.core.RoiFrac?, settle: Boolean, why: String) {}
                 override fun drawingReady(ratio: Double) {}
@@ -385,6 +513,7 @@ class MeasureSessionTest {
                 override fun readBack(): Double? = null
             })
             z.cameraBound(2.6, 10.0); z.setArea(area); z.setEnabled(enabled)
+            asked?.let { (g, r) -> z.onApplied(g, r) }
             return z.state()
         }
         val a1 = MeasureSession.STEPS.first { it.id == "zoom-a1" }
@@ -404,5 +533,53 @@ class MeasureSessionTest {
         assertEquals(listOf("zoom 1.90× (limited by the Area fit)"), MeasureSession.notes(b, auto = true, zoom = state(good, true)))
         assertEquals(listOf("B is at 1.00× — the Area allows only 1.06×: go Back and draw a tighter Area"),
             MeasureSession.notes(b, auto = true, zoom = state(edge, true)))
+    }
+
+    /**
+     * B's line says the zoom the camera is AT, not only what the Area asks: while it
+     * settles, once applied, and plainly when the camera did not zoom — review of
+     * 9df0293: a "Camera is not active" failure (the coordinator maps 1×) still read
+     * "zoom 1.90× (limited by the Area fit)", so all 10 B cards would be shot at 1× and
+     * the owner would learn it only from Finish's "void".
+     */
+    @Test
+    fun theBLineSaysWhatTheCameraIsAtNotOnlyWhatTheAreaAsks() {
+        val b = MeasureSession.STEPS.first { it.id == "zoom-b" }
+        val good = io.github.darylno.cardscanner.core.RoiFrac(0.25, 0.25, 0.75, 0.75)
+        val asks = io.github.darylno.cardscanner.core.ZoomFit.choose(good, 2.6, 10.0)
+        fun st(ratio: Double, settling: Boolean = false, enabled: Boolean = true, problem: String? = null, drawing: Boolean = false) =
+            io.github.darylno.cardscanner.core.ZoomCoordinator.State(enabled, ratio,
+                if (enabled) asks else io.github.darylno.cardscanner.core.ZoomFit.Choice.none(io.github.darylno.cardscanner.core.ZoomFit.Limit.OFF),
+                settling, drawing, problem, area = asks)
+        fun notes(z: io.github.darylno.cardscanner.core.ZoomCoordinator.State) = MeasureSession.notes(b, auto = true, zoom = z)
+        assertEquals(listOf("zoom 1.90× (limited by the Area fit)"), notes(st(1.9)))
+        assertEquals("a read-back within 1 % IS the request", listOf("zoom 1.90× (limited by the Area fit)"), notes(st(1.885)))
+        assertEquals(listOf("zoom → 1.90× (limited by the Area fit) — settling…"), notes(st(1.0, settling = true)))
+        val failed = "1.90× could not be applied (Camera is not active, 6 tries)"
+        assertEquals(listOf("B is at 1.00× — the camera did not zoom ($failed): go Back, then Next to try again"), notes(st(1.0, problem = failed)))
+        assertEquals(listOf("B is at 1.00× — the camera did not zoom: go Back, then Next to try again"), notes(st(1.0)))
+        val clamped = "asked for 1.90×, the camera reports 1.70× — mapping with 1.70×"
+        assertEquals(listOf("zoom 1.70× — the camera's answer to 1.90× (limited by the Area fit)"), notes(st(1.7, problem = clamped)))
+        assertEquals(listOf("B is at 1.00× — Zoom to fit is off on the camera (changed from the computer?): go Back, then Next to try again"),
+            notes(st(1.0, enabled = false)))
+        assertEquals(listOf("zoom 1.90× (limited by the Area fit) once the Area is drawn"), notes(st(1.0, drawing = true)))
+        // The real coordinator: asked → settling; answered → applied; the camera inactive past the retries → 1×, said so.
+        var asked: Pair<Int, Double>? = null
+        val z = io.github.darylno.cardscanner.core.ZoomCoordinator(object : io.github.darylno.cardscanner.core.ZoomCoordinator.Port {
+            override fun request(gen: Int, ratio: Double) { asked = gen to ratio }
+            override fun closeGate(why: String) {}
+            override fun map(ratio: Double, view: io.github.darylno.cardscanner.core.RoiFrac?, settle: Boolean, why: String) {}
+            override fun drawingReady(ratio: Double) {}
+            override fun later(ms: Long, block: () -> Unit) {}
+            override fun readBack(): Double? = null
+        })
+        z.cameraBound(2.6, 10.0); z.setArea(good); z.setEnabled(true)
+        assertEquals(listOf("zoom → 1.90× (limited by the Area fit) — settling…"), notes(z.state()))
+        asked!!.let { (g, r) -> z.onApplied(g, r) }
+        assertEquals(listOf("zoom 1.90× (limited by the Area fit)"), notes(z.state()))
+        z.cameraStopped("the scan screen stopped"); z.cameraStarted("the scan screen started")
+        val g = asked!!.first
+        repeat(io.github.darylno.cardscanner.core.ZoomCoordinator.MAX_TRIES + 1) { z.onFailed(g, notActive = true, message = "Camera is not active") }
+        assertEquals(listOf("B is at 1.00× — the camera did not zoom ($failed): go Back, then Next to try again"), notes(z.state()))
     }
 }

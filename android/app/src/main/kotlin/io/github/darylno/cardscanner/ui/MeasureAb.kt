@@ -62,8 +62,11 @@ data class AbRecord(
  * art_decisive), 1 = identified but needs a pick, or a best guess, 0 = no match,
  * no card, or missing.
  *
- * PAIRING: by name across A1 / B / A2 (a name unique in its arm), the rest by
- * order. Three named captures paired by order whose names differ are a name
+ * PAIRING: by name across A1 / B / A2 (a name unique in its arm); a capture with
+ * no name (still identifying, its outcome missed, a no-match) takes its card's
+ * place between its neighbours' captures, by position; the rest by order. A
+ * capture still identifying is "still identifying", never "missing" (rank 0).
+ * Three named captures paired by order whose names differ are a name
  * mismatch: flagged and left out. A B capture with no 1× partner is an extra B
  * capture. "Stable" = rank(A1) == rank(A2); among stable cards, B is better if its
  * rank is higher, worse if lower.
@@ -123,18 +126,30 @@ class AbSummary(records: List<AbRecord>, val target: Int = MeasureSession.AB_CAR
             r.filterNotNull().forEach { used += it }
             slots += Slot(r)
         }
-        // 2. A paired card missing an arm takes that arm's leftover shot BETWEEN its neighbours'
-        //    captures there (in burst order) — a capture still identifying has no name yet, a
-        //    no-match never has one; a card scanned twice there leaves the other as an extra.
+        // 2. Paired cards missing an arm take that arm's leftover shots BETWEEN their neighbours'
+        //    captures there (in burst order) — a capture still identifying has no name yet (nor
+        //    one whose outcome was missed), a no-match never has one. A run of such cards side by
+        //    side shares the shots between the same neighbours: its own name first, then by
+        //    position, k-th shot to k-th card (review of 9df0293: with two side by side neither
+        //    was placed, so a card still identifying scored as MISSING). More shots than cards:
+        //    the rest are extras (a card scanned twice); fewer: the first cards take them —
+        //    which card went unshot is a guess there, how many is not.
         val ordered = slots.sortedBy { it.ref(::pos) }
-        for ((k, s) in ordered.withIndex()) for (a in 0 until 3) {
-            if (s.r[a] != null) continue
-            val lo = (k - 1 downTo 0).firstNotNullOfOrNull { ordered[it].r[a] }?.burst ?: Long.MIN_VALUE
-            val hi = (k + 1 until ordered.size).firstNotNullOfOrNull { ordered[it].r[a] }?.burst ?: Long.MAX_VALUE
-            val n = s.r.firstNotNullOfOrNull { it?.name }
-            val between = lists[a].filter { it !in used && it.burst > lo && it.burst < hi }
-            val pick = between.singleOrNull { it.name == n } ?: between.singleOrNull()
-            pick?.let { s.r[a] = it; used += it }
+        for (a in 0 until 3) {
+            var k = 0
+            while (k < ordered.size) {
+                if (ordered[k].r[a] != null) { k++; continue }
+                val run = (k until ordered.size).takeWhile { ordered[it].r[a] == null }.map { ordered[it] }
+                val lo = ordered.getOrNull(k - 1)?.r?.get(a)?.burst ?: Long.MIN_VALUE
+                val hi = ordered.getOrNull(k + run.size)?.r?.get(a)?.burst ?: Long.MAX_VALUE
+                val between = lists[a].filter { it !in used && it.burst > lo && it.burst < hi }.toMutableList()
+                for (s in run) {
+                    val n = s.r.firstNotNullOfOrNull { it?.name } ?: continue
+                    between.singleOrNull { it.name == n }?.let { r -> s.r[a] = r; used += r; between.removeAll { it === r } }
+                }
+                for ((s, r) in run.filter { it.r[a] == null }.zip(between)) { s.r[a] = r; used += r }
+                k += run.size
+            }
         }
         // 3. The rest by order.
         val rest = lists.map { l -> l.filter { it !in used } }
@@ -167,8 +182,13 @@ class AbSummary(records: List<AbRecord>, val target: Int = MeasureSession.AB_CAR
     }
     val better = stable.count { rankOf(it.b)!! > rankOf(it.a1)!! }
     val worse = stable.count { rankOf(it.b)!! < rankOf(it.a1)!! }
-    /** Stable cards B could still beat (A1 below OCR ✓): fewer than [MIN_NET_BETTER] and rule 2 is out of reach. */
+    /** Stable cards B could still beat (A1 below OCR ✓): fewer than [MIN_NET_BETTER] and rule 2 is out of reach this run. */
     private val room = stable.count { rankOf(it.a1)!! < 3 }
+    /**
+     * A1's cards NOT OCR-confirmed — a card A1 never shot counts as one (the target, if
+     * A1 has fewer captures): the most B could improve, whatever 1× does the second time.
+     */
+    private val a1Open = maxOf(tray.getValue("A1").size, target) - tray.getValue("A1").count { it.rank == 3 }
     private val mismatches = cards.count { it.mismatch }
 
     private fun median(v: List<Double>): Double? = if (v.isEmpty()) null else v.sorted().let { s ->
@@ -213,8 +233,23 @@ class AbSummary(records: List<AbRecord>, val target: Int = MeasureSession.AB_CAR
         else -> State.FAIL
     }
 
-    /** "zoom has no job at this mount height": A1 already OCR-confirms so many cards that rule 2 cannot pass. */
-    val noJob: Boolean get() = state != State.INCOMPLETE && state != State.VOID && room < MIN_NET_BETTER
+    /**
+     * "zoom has no job at this mount height": A1 ALONE already OCR-confirms so many cards
+     * that rule 2 cannot pass ([a1Open] < [MIN_NET_BETTER]) — the plan's condition. Cards
+     * unstable at 1×, still identifying or mismatched say nothing about the mount height
+     * (review of 9df0293: A1 confirming 0 of 10 with 7 unstable read "no job"): that is
+     * [outOfReach], with its own words.
+     */
+    val noJob: Boolean get() = state != State.INCOMPLETE && state != State.VOID && a1Open < MIN_NET_BETTER
+    /** Rule 2 out of reach THIS run for another reason: too few stable cards left to improve. Run again, never a lower bar. */
+    val outOfReach: Boolean get() = state != State.INCOMPLETE && state != State.VOID && !noJob && room < MIN_NET_BETTER
+
+    /** Why the stable pool is small, and what to do: "(7 unstable at 1×, 0 still identifying); run the zoom steps again …". */
+    private fun outOfReachWhy(): String =
+        "(${listOfNotNull("$unstable unstable at 1×", "$pending still identifying",
+            mismatches.takeIf { it > 0 }?.let { plural(it, "name mismatch", "name mismatches") }).joinToString(", ")})"
+    private fun outOfReachDo(): String =
+        if (pending > 0) "wait until no card is still identifying" else "run the zoom steps again with $target other cards"
 
     private fun x(z: Double?) = z?.let { "%.2f×".format(Locale.ROOT, it) } ?: "—"
     private fun n(v: Double?) = v?.let { "%.0f".format(Locale.ROOT, it) } ?: "—"
@@ -274,8 +309,10 @@ class AbSummary(records: List<AbRecord>, val target: Int = MeasureSession.AB_CAR
         }
         probe?.forEach { append(" · ").append(it) }
         checks.forEach { append(" · ").append(it) }
-        if (noJob) append(" · note: zoom has no job at this mount height — A1 already OCR-confirms ${ocr("A1")} of ${arm("A1").size} " +
-            "(at most ${plural(room, "stable card", "stable cards")} can improve; rule 2 needs $MIN_NET_BETTER)")
+        if (noJob) append(" · note: zoom has no job at this mount height — A1 already OCR-confirms ${ocr("A1")} of " +
+            "${maxOf(arm("A1").size, target)} (B can improve at most $a1Open; rule 2 needs $MIN_NET_BETTER)")
+        if (outOfReach) append(" · note: rule 2 is out of reach this run — at most ${plural(room, "stable card", "stable cards")} can improve " +
+            "${outOfReachWhy()}; ${outOfReachDo()}")
         append(" · note: MAX_ZOOM is still %.2f× in this build".format(Locale.ROOT, ZoomFit.MAX_ZOOM))
     }
 
@@ -293,6 +330,7 @@ class AbSummary(records: List<AbRecord>, val target: Int = MeasureSession.AB_CAR
             State.PASS -> "the A/B half passes; the probe half is not measured yet"
         })
         if (noJob) append(" · zoom has no job at this mount height")
+        if (outOfReach) append(" · rule 2 out of reach this run ${outOfReachWhy()}")
     }
 
     companion object {

@@ -245,7 +245,8 @@ class ScreensSmokeTest {
     /**
      * The zoom steps' prompt card at the N200's size, with their longest words: A1's
      * instruction with every note (Tap to scan, an Area that can't zoom where it is, the
-     * off-centre hint), B's question and its "B is at 1.00×" note, and the done step's
+     * off-centre hint), B's question and its "B is at 1.00×" notes (the Area too wide; the
+     * camera that did not zoom, its problem quoted), and the done step's
      * A/B summary and verdict. Back, Stop, Next and Yes/No each have a size and sit on
      * screen, the card stays ≤ 45 % of the screen height (the preview must still show the
      * tray), and the bottom row is still on screen. NATIVE graphics: real text widths.
@@ -313,15 +314,24 @@ class ScreensSmokeTest {
         next()
         assertEquals("zoom-b", m.step.id)
         checkCard(m.step.instruction, m.step.question!!, "B is at 1.00× — the Area allows only 1.06×")
+        // B's longest line: a centred Area whose zoom the camera never applied ("Camera is not
+        // active" past the retries — the coordinator maps 1×), its problem quoted; Yes refreshes it.
+        cam.zoom.setArea(io.github.darylno.cardscanner.core.RoiFrac(0.25, 0.25, 0.75, 0.75))
+        val (g, _) = cam.asked!!
+        repeat(io.github.darylno.cardscanner.core.ZoomCoordinator.MAX_TRIES + 1) { cam.zoom.onFailed(g, notActive = true, message = "Camera is not active") }
+        findText(root, a.getString(R.string.measure_yes))!!.performClick()
+        checkCard(m.step.instruction, m.step.question!!,
+            "B is at 1.00× — the camera did not zoom (1.90× could not be applied (Camera is not active, 6 tries)): go Back, then Next to try again")
         // The worst B the summary can carry: worse on some, extra captures, more no-cards, off the post-fit.
         arm(11, 1.9, 1400, listOf(1, 1, 1, 0, 0, 0, 0, 3, 1, 1, 0, 0))
         next()
         assertEquals("zoom-a2", m.step.id)
         checkCard(m.step.instruction, "Tap to scan is on — switch to Tray")
-        arm(31, 1.0, 612, listOf(3, 1, 1, 0, 1, 2, 0, 3, 3, 1))
+        // A2 unstable on five cards: every A/B rule but "B zoomed" fails AND rule 2 is out of reach this run.
+        arm(31, 1.0, 612, listOf(3, 3, 3, 3, 1, 2, 0, 3, 3, 3))
         next()
         assertEquals("zoom-done", m.step.id)
-        checkCard(m.step.instruction, "Zoom to fit ON by default: NO")
+        checkCard(m.step.instruction, "Zoom to fit ON by default: NO", "✗ post-fit", "rule 2 out of reach this run (5 unstable at 1×, 0 still identifying)")
     }
 
     /**
@@ -759,8 +769,10 @@ class ScreensSmokeTest {
      * the scan screen reads (a lens with lossless 2.6× and a 10× max, the switch off).
      */
     private class ZoomStateCamera(val rec: RecordingCamera = RecordingCamera()) : io.github.darylno.cardscanner.ui.CameraPort by rec {
+        /** The last zoom request (gen, ratio): never answered unless a test answers it. */
+        var asked: Pair<Int, Double>? = null
         val zoom = io.github.darylno.cardscanner.core.ZoomCoordinator(object : io.github.darylno.cardscanner.core.ZoomCoordinator.Port {
-            override fun request(gen: Int, ratio: Double) {}
+            override fun request(gen: Int, ratio: Double) { asked = gen to ratio }
             override fun closeGate(why: String) {}
             override fun map(ratio: Double, view: io.github.darylno.cardscanner.core.RoiFrac?, settle: Boolean, why: String) {}
             override fun drawingReady(ratio: Double) {}
