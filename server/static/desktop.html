@@ -2790,9 +2790,10 @@ function devDrawRoi(){
   $("#devRoiUndo").style.display = devDraft ? "" : "none";
   $("#devRoiClear").disabled = !dev?.roi && !devDraft;
   // The off-centre ghost (1.1.17): the stored Area moved to the frame centre (base fractions, 1:1 like
-  // the Area) — hidden while a new Area is drawn (here or on the phone) and while a change is being applied.
+  // the Area) — hidden while a new Area is drawn (here or on the phone), while a change is being applied,
+  // and with no Area (the full frame: nothing to move).
   const ghost = $("#devRoiCentred"), oc = dev?.zoom?.off_centre;
-  const c = !devDraft && !dev?.zoom?.applying && !dev?.zoom?.drawing && oc?.centred_roi;
+  const c = !devDraft && dev?.roi && !dev?.zoom?.applying && !dev?.zoom?.drawing && oc?.centred_roi;
   if (c && $("#devSnap").naturalWidth) {
     ghost.style.display = "block";
     ghost.style.left = (c.x0 * 100) + "%"; ghost.style.top = (c.y0 * 100) + "%";
@@ -2813,7 +2814,11 @@ async function devPatch(body){
     // it on its own UI thread; 1.1.14 before its review answered at once). Show "applying…"
     // instead of a zoom line that contradicts the box just ticked, and read the phone again.
     const camChange = ["roi", "zoom_fit", "camera", "high_res"].some(k => k in body);
-    const zoomInPlay = r.zoom_fit || dev?.zoom_fit || (dev?.zoom?.ratio > 1);
+    // The off-centre hint (1.1.17) is said with the switch OFF too: a phone that sends it
+    // (`would` / `off_centre`) gets "applying…" as well, or the stale answer's hint for the
+    // OLD Area sat beside the new one, its ghost at the old spot (review of 39ef7cf).
+    const hintInPlay = !!r.zoom && ("would" in r.zoom || "off_centre" in r.zoom);
+    const zoomInPlay = r.zoom_fit || dev?.zoom_fit || (dev?.zoom?.ratio > 1) || hintInPlay;
     if (camChange && r.zoom && zoomInPlay) r.zoom = Object.assign({}, dev?.zoom || r.zoom, { applying: true });
     dev = r; devRender(); devMsg("Saved — applied on the phone.");
     if (camChange) {

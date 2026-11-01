@@ -20,7 +20,11 @@ server and check the 📱 Scanner panel's "Zoom to fit the Area" controls
   the same Area would be centred (the centred fractions, ±1 %), hidden while a
   new Area is drawn (here or on the phone); `would` null or absent (an older
   phone app) → the line stays hidden as before; ticking the box never shows
-  "Zoom to fit is off";
+  "Zoom to fit is off"; with the switch OFF, an Area saved or cleared (or a
+  lens / High resolution change) against a phone that sends the hint goes
+  through "applying…" too — the stale answer's "would" / "Off-centre" words
+  for the OLD Area and its ghost are never on screen, and the ghost needs an
+  Area (review of 39ef7cf);
 - the banner reads d51 and the page throws nothing.
 
     pip install playwright        # the browser: Chromium, see EXE below
@@ -125,6 +129,8 @@ class H(BaseHTTPRequestHandler):
                     d["zoom"] = dict(ZOOMED if v else UNZOOMED, settling=True)
             elif k == "roi":
                 d["roi"] = v
+                # What /api/device reads once the phone has applied the new Area (its own hint).
+                if STATE.get("roi_zoom"): d["zoom"] = STATE["roi_zoom"](v)
             else:
                 d[k] = v
         # The ANSWER carries the zoom from before the change — what a busy phone (or 1.1.14
@@ -315,6 +321,91 @@ with sync_playwright() as pw:
           f"switched on, the Area still zooms 1× and the hint stays: {line!r}")
     check(pg.locator("#devRoiCentred").is_visible(), "the ghost is back once the phone answered")
     STATE["edge"] = False
+
+    # Review of 39ef7cf: with the switch OFF at 1×, a camera-change PATCH skipped "applying…", so
+    # the stale answer's hint for the OLD Area was drawn beside the NEW Area (and after "Full
+    # frame", the ghost stayed with no Area at all) until the 600 ms re-read.
+    def zoom_for(roi):
+        # The phone's own zoom once it applied a new Area, the switch off.
+        if roi is None:
+            return dict(UNZOOMED, fit=1.0, would={"z": 1.0, "limit": "no scan Area — the full frame is scanned", "fit": 1.0},
+                        off_centre=None)
+        return dict(UNZOOMED, fit=2.5, would={"z": 2.0, "limit": "MAX_ZOOM", "fit": 2.5}, off_centre=None)
+
+    def watch_line_and_ghost():
+        # Every zoom-line text and every ghost transition (sampled each frame), with the time.
+        pg.evaluate("""() => { window.__zl = []; window.__gl = []; let last = null;
+            const el = document.querySelector('#devZoom'), g = document.querySelector('#devRoiCentred');
+            new MutationObserver(() => window.__zl.push(el.style.display === 'none' ? '' : el.textContent))
+              .observe(el, {childList: true, subtree: true, characterData: true, attributes: true});
+            (function f(){ const v = getComputedStyle(g).display !== 'none' ? 'shown ' + g.style.left : 'hidden';
+              if (v !== last) { window.__gl.push([performance.now(), v]); last = v; } requestAnimationFrame(f); })(); }""")
+
+    def stale(texts):
+        return [t for t in texts if "would zoom 1.00×" in t or "Off-centre" in t]
+
+    def edge_panel():
+        STATE["dev"] = device(zoom_fit=False)
+        STATE["dev"]["roi"] = dict(EDGE_ROI)
+        STATE["dev"]["zoom"] = dict(EDGE_OFF)
+        STATE["roi_zoom"] = zoom_for
+        open_panel(pg)
+        pg.wait_for_selector("#devRoiCentred", state="visible")
+        watch_line_and_ghost()
+
+    print("the switch off, an off-centre Area: Full frame with a stale answer")
+    edge_panel()
+    pg.evaluate("window.__zl = []")
+    t0 = pg.evaluate("performance.now()")
+    pg.click("#devRoiClear")
+    pg.wait_for_timeout(250)                                       # the answer is in, the re-read is not
+    check(STATE["patches"][-1] == {"roi": None}, f"PATCH {{roi: null}} (got {STATE['patches'][-1]})")
+    check(not pg.locator("#devRoiCentred").is_visible(), "no ghost once the answer is in (no Area, the hint not re-read)")
+    pg.wait_for_timeout(1000)                                      # …and after the re-read
+    zl, gl = pg.evaluate("window.__zl"), [g for g in pg.evaluate("window.__gl") if g[0] >= t0]
+    check(not stale(zl), f"the old Area's words never shown: {zl}")
+    hid = [i for i, g in enumerate(gl) if g[1] == "hidden"]
+    check(bool(hid) and all(g[1] == "hidden" for g in gl[hid[0]:]), f"the ghost went and never came back: {gl}")
+    check(not pg.locator("#devZoom").is_visible() and not pg.locator("#devRoiCentred").is_visible(),
+          "read again: no Area, no line and no ghost")
+    pg.click("#devClose")
+
+    print("the switch off, an off-centre Area: Save a centred one with a stale answer")
+    edge_panel()
+    box = pg.locator("#devSnap").bounding_box()
+    pg.mouse.move(box["x"] + box["width"] * 0.30, box["y"] + box["height"] * 0.30)
+    pg.mouse.down()
+    pg.mouse.move(box["x"] + box["width"] * 0.70, box["y"] + box["height"] * 0.70, steps=4)
+    pg.mouse.up()
+    check(not pg.locator("#devRoiCentred").is_visible(), "no ghost while the new Area is a draft")
+    pg.evaluate("window.__zl = []")
+    t0 = pg.evaluate("performance.now()")
+    pg.click("#devRoiSave")
+    pg.wait_for_timeout(250)
+    roi = STATE["patches"][-1].get("roi")
+    check(roi is not None and abs(roi["x0"] - 0.30) < 0.01 and abs(roi["x1"] - 0.70) < 0.01, f"PATCH the new Area: {roi}")
+    check(not pg.locator("#devRoiCentred").is_visible(), "no ghost at the OLD Area's centred spot once the answer is in")
+    pg.wait_for_function("document.querySelector('#devZoom').textContent.includes('would zoom 2.00×')", timeout=3000)
+    pg.wait_for_timeout(300)
+    zl, gl = pg.evaluate("window.__zl"), [g for g in pg.evaluate("window.__gl") if g[0] >= t0]
+    check(not stale(zl), f"the old Area's would / off-centre words never shown beside the new Area: {zl}")
+    check(any("applying" in t for t in zl), f"…the stale answer showed as applying: {zl}")
+    check(all(g[1] == "hidden" for g in gl), f"the ghost never showed after Save: {gl}")
+    line = pg.locator("#devZoom").inner_text()
+    check(line == "Off — this Area would zoom 2.00× (MAX_ZOOM)", f"read again: what the NEW Area would zoom: {line!r}")
+    pg.click("#devClose")
+
+    print("the switch off, an off-centre Area: High resolution goes through applying too")
+    edge_panel()
+    pg.evaluate("window.__zl = []")
+    pg.locator('#devCtl input[data-k="high_res"]').check()
+    pg.wait_for_timeout(1200)
+    zl = pg.evaluate("window.__zl")
+    check(STATE["patches"][-1] == {"high_res": True}, f"PATCH {{high_res: true}} (got {STATE['patches'][-1]})")
+    check(any("applying" in t for t in zl), f"a lens-side change with the switch off shows applying: {zl}")
+    check("Off-centre: " + EDGE_WORDS in pg.locator("#devZoom").inner_text(), "…then the phone's own hint, read again")
+    check(pg.locator("#devRoiCentred").is_visible(), "…and its ghost")
+    STATE["roi_zoom"] = None
 
     check(not errs, f"no page errors: {errs}")
     b.close()
