@@ -832,8 +832,23 @@ class MainActivity : AppCompatActivity() {
         appliedRoi = r
         updateAreaBtn()
         // The off-centre hint (1.1.17): setArea ran just now on this thread, so the state has the new Area.
-        setStatus(StatusText.areaSet(camera?.zoomState()?.offCentre?.short()))
+        areaHintFor = r
+        setStatus(StatusText.areaSet(areaHint()))
     }
+
+    /**
+     * The Area the off-centre hint was said for (1.1.17), or null. After an Area is saved
+     * here the hint stays on the Tray's own lines — the area-set line while the new Area's
+     * tray is learned, then "watching for a card…" — until the next capture or another
+     * Area. The scanner's very next tick (Learning, ~200 ms: a new Area re-learns the tray)
+     * used to replace it, so in Tray, where switching asks for the box, the owner never
+     * read it (review of 39ef7cf). Tap to scan is unaffected (the scanner says nothing).
+     */
+    private var areaHintFor: RoiFrac? = null
+
+    /** The off-centre hint's short words while it is due ([areaHintFor] is still the Area) — read live — else null. */
+    private fun areaHint(): String? =
+        areaHintFor?.takeIf { it == settings.roi }?.let { camera?.zoomState()?.offCentre?.short() }
 
     private fun onScanTap() {
         if (camera == null || app.updates.locked) return
@@ -1007,7 +1022,10 @@ class MainActivity : AppCompatActivity() {
             // freezes there until the pipeline answers — not when it returns, which
             // painted the box grey in between (blue → grey → blue). Cancelled if
             // THIS capture fails (tagged by burst: two can be in flight).
-            runOnUiThread { vibrateTick(); overlay.beginHold(settings.checkMs.toLong(), id) }
+            runOnUiThread {
+                vibrateTick(); overlay.beginHold(settings.checkMs.toLong(), id)
+                areaHintFor = null       // the off-centre hint has had its say: scanning has started
+            }
             awake.poke(if (manual) "shutter" else "scan")   // a dimmed screen lights for the ✓
         }
 
@@ -1070,8 +1088,11 @@ class MainActivity : AppCompatActivity() {
         when (event) {
             is AutoScanner.Event.Idle -> Unit
             is AutoScanner.Event.Learning -> {
-                if (event.learned) setStatus(StatusText.WATCHING)
-                else if (settings.auto) setStatus(StatusText.WAITING)
+                // An off-centre hint still due stays on screen: the area-set line while the new
+                // Area's tray is learned, then on the watching line ([areaHintFor]).
+                val hint = areaHint()
+                if (event.learned) setStatus(StatusText.withAreaHint(StatusText.WATCHING, hint))
+                else if (settings.auto) setStatus(if (hint != null) StatusText.areaSet(hint) else StatusText.WAITING)
             }
             is AutoScanner.Event.Watching -> {
                 overlay.setBox(event.box, sw, sh,

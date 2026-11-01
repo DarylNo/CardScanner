@@ -37,6 +37,15 @@ object StatusText {
     fun areaSet(offCentre: String?): String =
         if (offCentre == null) AREA_SET else "Scan area set — $offCentre. Empty the tray to re-learn…"
 
+    /**
+     * A Tray line ([WATCHING]) with the off-centre hint after it while the hint is due —
+     * "Tray: watching for a card… Off-centre Area: centred, it would zoom 1.90× (this
+     * Area: 1.00×)." — or [line] as it is (review of 1.1.17: the scanner's next tick put
+     * its own line over [areaSet]'s, so in Tray the hint was never read).
+     */
+    fun withAreaHint(line: String, offCentre: String?): String =
+        if (offCentre == null) line else "$line Off-centre Area: $offCentre."
+
     private val POP_CALLOUT = mapOf("staple" to "★ staple", "strong" to "very popular", "solid" to "popular")
 
     /** phone.html popOf(): the SELECTION's popularity first, else candidates[0]'s. */

@@ -602,9 +602,11 @@ class ScreensSmokeTest {
             override fun later(ms: Long, block: () -> Unit) {}
             override fun readBack(): Double? = null
         })
+        /** The scan screen's camera listener: the test delivers the scanner's ticks through it. */
+        var listener: io.github.darylno.cardscanner.ui.CameraPort.Listener? = null
         override fun bind(owner: LifecycleOwner, preview: androidx.camera.view.PreviewView,
                           listener: io.github.darylno.cardscanner.ui.CameraPort.Listener) {
-            rec.bind(owner, preview, listener); zoom.cameraBound(2.6, 10.0)
+            rec.bind(owner, preview, listener); this.listener = listener; zoom.cameraBound(2.6, 10.0)
         }
         override fun setRoi(roi: io.github.darylno.cardscanner.core.RoiFrac?) { rec.setRoi(roi); zoom.setArea(roi) }
         override fun setZoomFit(on: Boolean) { rec.setZoomFit(on); zoom.setEnabled(on) }
@@ -643,6 +645,86 @@ class ScreensSmokeTest {
         assertEquals("setRoi(0.45,0.25,0.95,0.75)", cam.rec.calls.last { it.startsWith("setRoi(") })
         val expected = "Scan area set — centred, it would zoom 1.90× (this Area: 1.00×). Empty the tray to re-learn…"
         assertEquals(expected, a.statusForTest)
+        assertStatusFitsThePill(a, expected)
+    }
+
+    /**
+     * Review of 39ef7cf: in Tray the "Scan area set — centred, it would zoom …" line was
+     * gone within one analyzer tick — the new Area re-learns the tray, and the scanner's
+     * very next tick (Learning, ~200 ms) put "Tray: waiting for a steady view…" over it,
+     * then "watching for a card…". Tray is where the hint matters most (switching to Tray
+     * asks for the box). The hint now stays: the area-set line while the tray is learned,
+     * then on "watching for a card…" — until the next capture or another Area. Each fits
+     * the 2-line pill at the N200's size (NATIVE graphics: real text widths).
+     */
+    @Test
+    @Config(qualifiers = "w411dp-h914dp-xxhdpi")
+    @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
+    fun mainActivity_offCentreHint_staysOnTheTrayLines() {
+        app.settings.roi = io.github.darylno.cardscanner.core.RoiFrac(0.25, 0.25, 0.75, 0.75)
+        app.settings.auto = true
+        app.settings.zoomFit = false
+        val cam = ZoomStateCamera()
+        app.cameraFactory = { _, _ -> cam }
+        grantCamera(true)
+        val a = launch(MainActivity::class.java)
+        val root = a.window.decorView
+        val overlay = findOverlay(root)!!
+        val l = cam.listener!!
+        fun tick(e: io.github.darylno.cardscanner.core.AutoScanner.Event) {
+            l.onDetection(e, 176, 235, null); ShadowLooper.idleMainLooper()
+        }
+        val learning = io.github.darylno.cardscanner.core.AutoScanner.Event.Learning(false)
+        val learned = io.github.darylno.cardscanner.core.AutoScanner.Event.Learning(true)
+        val edge = io.github.darylno.cardscanner.core.RoiFrac(0.45, 0.25, 0.95, 0.75)
+        val set = "Scan area set — centred, it would zoom 1.90× (this Area: 1.00×). Empty the tray to re-learn…"
+        val watching = "Tray: watching for a card… Off-centre Area: centred, it would zoom 1.90× (this Area: 1.00×)."
+        overlay.onAreaDrawn!!.invoke(edge)
+        ShadowLooper.idleMainLooper()
+        assertEquals(set, a.statusForTest)
+        tick(learning); tick(learning)
+        assertEquals("the scanner's next ticks (learning the new Area's tray) keep the hint", set, a.statusForTest)
+        tick(learned)
+        assertEquals("the tray is learned: watching, with the hint", watching, a.statusForTest)
+        assertStatusFitsThePill(a, watching)
+        tick(learned)                                                   // a re-learn (double-tap): still said
+        assertEquals(watching, a.statusForTest)
+        // The first capture ends it: the Tray's own lines again.
+        l.onCaptureStarted(1L, false); ShadowLooper.idleMainLooper()
+        tick(learned)
+        assertEquals(io.github.darylno.cardscanner.ui.StatusText.WATCHING, a.statusForTest)
+        tick(learning)
+        assertEquals(io.github.darylno.cardscanner.ui.StatusText.WAITING, a.statusForTest)
+        // Another Area ends it too: drawn again, then cleared to the full frame (Tray's Area button).
+        overlay.onAreaDrawn!!.invoke(edge)
+        ShadowLooper.idleMainLooper()
+        tick(learned)
+        assertEquals(watching, a.statusForTest)
+        findText(root, a.getString(R.string.area_set))!!.performClick()
+        ShadowLooper.idleMainLooper()
+        assertEquals(io.github.darylno.cardscanner.ui.StatusText.AREA_CLEARED, a.statusForTest)
+        tick(learning)
+        assertEquals(io.github.darylno.cardscanner.ui.StatusText.WAITING, a.statusForTest)
+        tick(learned)
+        assertEquals(io.github.darylno.cardscanner.ui.StatusText.WATCHING, a.statusForTest)
+        // A centred Area has no hint: the old lines, unchanged.
+        overlay.onAreaDrawn!!.invoke(io.github.darylno.cardscanner.core.RoiFrac(0.3, 0.3, 0.7, 0.7))
+        ShadowLooper.idleMainLooper()
+        assertEquals(io.github.darylno.cardscanner.ui.StatusText.AREA_SET, a.statusForTest)
+        tick(learning)
+        assertEquals(io.github.darylno.cardscanner.ui.StatusText.WAITING, a.statusForTest)
+        tick(learned)
+        assertEquals(io.github.darylno.cardscanner.ui.StatusText.WATCHING, a.statusForTest)
+    }
+
+    /**
+     * Laid out at the activity's size: [expected] is the status pill's text, it sits whole
+     * inside the pill (≤ its lines, nothing ellipsized, within its width and height), the
+     * pill on screen, the text long enough to need its 2 lines (so real widths were
+     * measured), and the bottom row still on screen under it.
+     */
+    private fun assertStatusFitsThePill(a: MainActivity, expected: String) {
+        val root = a.window.decorView
         root.measure(View.MeasureSpec.makeMeasureSpec(root.width, View.MeasureSpec.EXACTLY),
             View.MeasureSpec.makeMeasureSpec(root.height, View.MeasureSpec.EXACTLY))
         root.layout(0, 0, root.width, root.height)
