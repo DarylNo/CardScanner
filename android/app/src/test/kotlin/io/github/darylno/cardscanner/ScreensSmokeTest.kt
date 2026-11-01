@@ -1698,6 +1698,20 @@ class ScreensSmokeTest {
         assertEquals("", app.settings.cardListUrl)
     }
 
+    /**
+     * Unit tests never download the card database: every Robolectric test builds a fresh App, and
+     * each App's start fetched the real art pack from GitHub on its own thread — 1.1.17's larger
+     * suite ran the 1 GB test heap out of memory ("OutOfMemoryError … in thread artpack").
+     */
+    @Test
+    fun appStart_inUnitTests_neverFetchesTheCardDatabase() {
+        val deadline = System.currentTimeMillis() + 5_000
+        while (app.identify.lastCheck == null && System.currentTimeMillis() < deadline) Thread.sleep(20)
+        val c = app.identify.lastCheck
+        assertTrue("the start-up check is skipped, not fetched: $c",
+            c is io.github.darylno.cardscanner.ident.ArtPackStore.Check.Skipped)
+    }
+
     @Test
     fun settingsActivity_showsThePhonesServer() {
         val a = launch(SettingsActivity::class.java)
