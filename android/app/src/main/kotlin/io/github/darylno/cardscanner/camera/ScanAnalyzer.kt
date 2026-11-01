@@ -187,7 +187,9 @@ class CaptureBurst(
  * browser's picture from being labelled with a rung the camera has not answered;
  * [rebaseAfterProbe] re-takes the scanned scene after a VERIFIED end (the same
  * card in the same place — the probe's AF pass and AE lock change how it looks),
- * never after an abort. Nothing here calls [fire] for the probe.
+ * never after an abort, and only on the first sample of the reopening that end
+ * started: a later closure or the camera going away ([cameraAway]) drops it.
+ * Nothing here calls [fire] for the probe.
  */
 class ScanAnalyzer(
     private val commands: Executor,
@@ -244,8 +246,16 @@ class ScanAnalyzer(
     private var deferring = false
     /** The last hold timed out before its focus answered (its scene may be a blur). */
     private var heldTimedOut = false
-    /** Re-take the scanned scene from the next sample (a late focus settled, or the zoom probe's verified end). */
+    /** Re-take the scanned scene from the next sample (a late focus settled). */
     private var rebaseNext = false
+    /**
+     * The zoom probe's VERIFIED end owes the same rebase — but only to the first sample of the reopening
+     * that end started ([rebaseAfterProbe]). Any later gate closure ([closeZoomGate]), the camera going away
+     * ([cameraAway]: stopped, closed, reopening — also with no zoom in use, when no gate closes) or a rebind
+     * drops it: carried across a round trip, the first sample back took a card swapped while the screen
+     * was away into the scanned scene and it was never filed (review of a43cb5b).
+     */
+    private var probeRebaseNext = false
     private var deferredBox: Box? = null
     private var deferStartTs = NONE
     private var focusReadyTs = NONE
@@ -452,8 +462,8 @@ class ScanAnalyzer(
             ticks++
             lastSample = g
             lastGrayDims = intArrayOf(g.w, g.h)
-            if (rebaseNext) {
-                rebaseNext = false
+            if (rebaseNext || probeRebaseNext) {
+                rebaseNext = false; probeRebaseNext = false
                 if (scanner.mode == AutoScanner.Mode.AWAIT_NEXT) scanner.rebaseScene(g)
             }
             val ev = scanner.tick(g)
@@ -1036,7 +1046,7 @@ class ScanAnalyzer(
             currentZoom = ratio
             scanner.reset()
             cancelHold(if (newRatio) "zoom change" else "new Area")
-            if (newRatio) { rebaseNext = false; heldTimedOut = false; zoomChanges++ }
+            if (newRatio) { rebaseNext = false; probeRebaseNext = false; heldTimedOut = false; zoomChanges++ }
             lastSample = null; lastBox = null; lastBoxInfo = null
             clearWatch(if (newRatio) "zoom change" else "new area")
             if (newRatio) safeLog("zoom") { "frames now at %.2f× ($why) — the Area is %s of the zoomed frame; re-learning the empty tray"
@@ -1066,6 +1076,7 @@ class ScanAnalyzer(
         zoomResyncAsked = false
         snapZ = null
         cancelProbe()                                  // a new closure is someone else's: the probe closes the gate BEFORE it asks
+        dropProbeRebase(why)                           // owed to the reopening the probe's end started, not to this one
         manualStartTs = NONE
         if (deferring) {
             cancelHold("the camera's zoom is changing")
@@ -1122,7 +1133,21 @@ class ScanAnalyzer(
      * scanned (AWAIT_NEXT / capturing); a real zoom change afterwards drops it (it re-learns). Never
      * asked after an abort: a card swapped while the screen was away must scan.
      */
-    fun rebaseAfterProbe() = post { rebaseNext = true }
+    fun rebaseAfterProbe() = post { probeRebaseNext = true }
+
+    /**
+     * The camera stopped, closed or is reopening (ZoomCoordinator.Port.cameraAway — also with no zoom in
+     * use, when no gate closes): a rebase the probe's verified end still owes is dropped. The owner may
+     * swap the card while the screen is away, and that card must scan; the worst the drop can do is
+     * re-scan the still card the probe's AF / AE made look different.
+     */
+    fun cameraAway(why: String) = post { dropProbeRebase(why) }
+
+    private fun dropProbeRebase(why: String) {
+        if (!probeRebaseNext) return
+        probeRebaseNext = false
+        safeLog("zoom") { "the zoom probe's rebase is dropped before any sample took it — $why (a card swapped meanwhile will scan)" }
+    }
 
     /**
      * May the zoom probe run now? Read on the analysis thread AFTER the probe closed the gate
@@ -1174,7 +1199,7 @@ class ScanAnalyzer(
         // would stay SCANNING (capturing, owed a captureDone) — Auto dead.
         if (deferring) scanner.reset()
         cancelHold("camera restarted")
-        rebaseNext = false; heldTimedOut = false
+        rebaseNext = false; probeRebaseNext = false; heldTimedOut = false
         cancelProbe()
         scanner.cameraRestarted()
         ring.clear()

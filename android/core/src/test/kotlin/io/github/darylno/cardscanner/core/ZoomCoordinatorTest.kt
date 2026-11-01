@@ -45,6 +45,9 @@ class ZoomCoordinatorTest {
         }
         override fun probeEnded(why: String) { probeEnds += why; events += "probeEnded" }
         override fun probeRebase(why: String) { events += "rebase" }
+        /** Kept out of [events]: it is no camera call, gate or map, and the event-for-event tests stay as they are. */
+        val aways = mutableListOf<String>()
+        override fun cameraAway(why: String) { aways += why }
         override fun later(ms: Long, block: () -> Unit) { timers += ms to block }
         override fun readBack(): Double? = readBack
         /** Run the timers of exactly [ms] that are due (a fake clock that only knows the delays). */
@@ -71,6 +74,26 @@ class ZoomCoordinatorTest {
         assertEquals(listOf(area, area, other), port.maps.map { it.view })
         assertEquals(1, port.drawingReady)                        // drawing at 1× needs no zoom-out
         assertEquals(1.0, z.mapped, 0.0)
+    }
+
+    /**
+     * Review of a43cb5b: every stop, close and reopen tells the analyzer ([ZoomCoordinator.Port.cameraAway]) —
+     * with the switch OFF too, where nothing else reaches it (no gate, no map) — so a rebase the zoom probe's
+     * verified end still owes dies with the round trip. It is never a gate or a map, and the switch-off path
+     * stays the pre-zoom one.
+     */
+    @Test fun everyStopAndReopenTellsTheAnalyzerEvenWithTheSwitchOff() {
+        z.setArea(area)
+        z.cameraBound(2.6, 8.0)
+        assertTrue(port.aways.isEmpty())
+        z.cameraStopped("the scan screen stopped")
+        z.cameraStopped("camera CLOSED")                          // already stopped: still said (it is only a drop)
+        z.cameraOpening("camera OPENING")
+        z.cameraStarted("the scan screen started")
+        assertEquals(listOf("the scan screen stopped", "camera CLOSED", "camera OPENING"), port.aways)
+        assertTrue("no zoom call", port.requests.isEmpty())
+        assertTrue("no gate", port.closes.isEmpty())
+        assertTrue(port.maps.all { it.ratio == 1.0 && !it.settle })
     }
 
     /**

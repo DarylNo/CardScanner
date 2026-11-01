@@ -139,11 +139,25 @@ class ZoomProbeGlueTest {
         var answers = 0
 
         fun later(ms: Long, block: () -> Unit) { tasks += Triple(now + ms, seq++, block) }
+        /** The glue's tagged timers (as the main Handler's tokens): seq → token, until run or removed. */
+        private val tagged = HashMap<Int, Any>()
+        fun laterTagged(ms: Long, token: Any, block: () -> Unit) {
+            val n = seq
+            tagged[n] = token
+            later(ms) { if (tagged.remove(n) != null) block() }
+        }
+        /** Timers still queued for the glue (any run's): each one keeps its closure — the run, its side, the screen. */
+        fun pendingTagged(): List<Long> = tasks.filter { it.second in tagged }.map { it.first - now }
 
         lateinit var coord: ZoomCoordinator
         val glue: ZoomProbeGlue = ZoomProbeGlue(analyzer, object : ZoomProbeGlue.Cam {
             override fun post(block: () -> Unit) = later(0, block)
-            override fun postDelayed(ms: Long, block: () -> Unit) = later(ms, block)
+            override fun postDelayed(ms: Long, token: Any, block: () -> Unit) = laterTagged(ms, token, block)
+            override fun cancelDelayed(token: Any) {
+                val gone = tagged.filterValues { it === token }.keys
+                gone.forEach { tagged.remove(it) }
+                tasks.removeAll { it.second in gone }          // removed from the queue, as Handler.removeCallbacksAndMessages does
+            }
             override fun now(): Long = now
             override fun ready(): Boolean = true
             override fun applyAeLock() { aeLocks += glue.probeLocked }
@@ -192,6 +206,7 @@ class ZoomProbeGlueTest {
                     glue.probeAt(gen, asked, camera, readBack, error)
                 override fun probeEnded(why: String) = glue.probeEnded(why)
                 override fun probeRebase(why: String) { rebases++; if (allowRebase) glue.probeRebase(why) }
+                override fun cameraAway(why: String) = analyzer.cameraAway(why)
             }, log = { log.i("zoom", it) })
             glue.zoom = coord
             sink.resync = { later(0) { coord.cameraStarted("frames arriving at the closed zoom gate") } }
@@ -335,6 +350,29 @@ class ZoomProbeGlueTest {
         }
     }
 
+    /**
+     * Review of a43cb5b: a run's guards (3–10 s) and its 90 s budget stayed queued on the main looper after the run
+     * ended — each holding the controller, the scan screen and the analyzer's frame rings, so a scan screen closed
+     * after the probe lived on for up to 90 s beside its replacement. The run's end removes them all, every
+     * ending: done, cancelled, stopped by the screen, refused at the check.
+     */
+    @Test fun aFinishedRunLeavesNoTimerQueued() {
+        for (ending in listOf("done", "cancelled", "stopped", "refused")) {
+            val r = Rig()
+            if (ending == "refused") { r.scene = empty; r.advance(2_500); r.scene = card; r.advance(100) } else r.scanTheCard()
+            assertTrue(ending, r.glue.start(1, emptyList(), r.listener, seed = 7))
+            if (ending != "done" && ending != "refused") r.until { r.progresses.any { it.status.startsWith("Zoom probe 3/") } }
+            assertTrue("$ending: the run's timers are queued while it runs", ending == "refused" || r.pendingTagged().isNotEmpty())
+            when (ending) {
+                "cancelled" -> r.glue.cancel("Cancel probe")
+                "stopped" -> { r.coord.cameraStopped("the scan screen stopped"); r.streaming = false }
+            }
+            r.until { r.outcomes.isNotEmpty() }
+            assertEquals(ending, ending, r.outcomes.single().kind.word)
+            assertEquals("$ending: timers still queued (ms from now)", emptyList<Long>(), r.pendingTagged())
+        }
+    }
+
     /** THE CONTROL: the same run with the coordinator's rebase withheld — the still card, looking different, is shot again. */
     @Test fun withoutTheRebaseTheStillCardIsShotAgain() {
         val r = Rig(allowRebase = false)
@@ -384,6 +422,38 @@ class ZoomProbeGlueTest {
         assertTrue("every picture labelled with its frame's own zoom: ${r.snaps}",
             r.snaps.all { (label, real) -> kotlin.math.abs(label - real) < 1e-4 })
         assertTrue(r.sink.errors.isEmpty())
+    }
+
+    /**
+     * Review of a43cb5b: a VERIFIED end, then the screen stops before the first sample after it (inside the
+     * settle frames, ~100 ms at 30 fps), and a different card is put down while away. The end's rebase is
+     * owed to that first sample only — carried across the round trip it took the swapped card into the
+     * scanned scene and it was never filed. Switch off (nothing but the new cameraAway reaches the analyzer)
+     * and on (the stop closes the gate).
+     */
+    @Test fun aStopRightAfterAVerifiedEndDropsTheRebaseAndASwappedCardScans() {
+        for (on in listOf(false, true)) {
+            val r = Rig()
+            if (on) { r.coord.setEnabled(true); r.advance(1_000) }
+            r.scanTheCard()
+            assertTrue(r.glue.start(1, emptyList(), r.listener, seed = 7))
+            var guard = 0
+            while (r.coord.probing && guard++ < 200_000) r.advance(1)       // to the end's map, to the millisecond
+            assertFalse("switch $on", r.coord.probing)
+            assertEquals("switch $on: the restore was verified", 1, r.rebases)
+            val ticks = r.sink.updates.size
+            r.coord.cameraStopped("the scan screen stopped")
+            r.streaming = false; r.cameraZ = 1.0
+            r.advance(2_000)
+            assertEquals("switch $on: no sample between the end and the stop", ticks, r.sink.updates.size)
+            r.scene = card2
+            r.coord.cameraStarted("the scan screen started")
+            r.streaming = true
+            r.advance(4_000)
+            assertEquals("switch $on: the swapped card IS scanned", 2, r.sink.bursts.size)
+            assertTrue("switch $on", r.log.all().any { it.msg.startsWith("the zoom probe's rebase is dropped before any sample took it — the scan screen stopped") })
+            assertTrue(r.sink.errors.isEmpty())
+        }
     }
 
     /** The owner's cancel mid-ladder goes through the verified restore: AE back, the same card → rebased, nothing shot. */

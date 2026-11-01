@@ -40,8 +40,14 @@ internal class ZoomProbeGlue(private val analyzer: ScanAnalyzer, private val cam
     interface Cam {
         /** Run [block] on the main thread after the current step (FIFO). */
         fun post(block: () -> Unit)
-        /** …after [ms] — dropped once the camera is released. */
-        fun postDelayed(ms: Long, block: () -> Unit)
+        /** …after [ms] — dropped once the camera is released, or by [cancelDelayed] of the same [token]. */
+        fun postDelayed(ms: Long, token: Any, block: () -> Unit)
+        /**
+         * Drop every [postDelayed] block posted with [token] that has not run yet. A run's guards and its 90 s budget
+         * otherwise stay queued on the app-lifetime main looper after the run is over, holding the controller, the
+         * scan screen and the analyzer's frame rings with them (review of a43cb5b).
+         */
+        fun cancelDelayed(token: Any)
         fun now(): Long
         /** A camera is bound and not released. */
         fun ready(): Boolean
@@ -131,6 +137,8 @@ internal class ZoomProbeGlue(private val analyzer: ScanAnalyzer, private val cam
     private inner class Side(private val l: CameraController.ProbeListener, private val n: Int) : ZoomProbeRun.Port {
         /** The run this side serves (set right after it is built). */
         lateinit var runner: ZoomProbeRun
+        /** This run's delayed blocks ([Cam.postDelayed]): all dropped when it finishes ([finished]). */
+        val timers = Any()
         /**
          * This run's NV21 copies handed to [measure] and not yet measured, and the most at once (count, bytes):
          * the probe's frame memory, logged when the run ends (review of c758bc7: the worker lags the camera by
@@ -215,7 +223,7 @@ internal class ZoomProbeGlue(private val analyzer: ScanAnalyzer, private val cam
             // The frames' own CaptureResults, read once late ones have landed — here, before the worker's
             // queue could age them out of the ~2 s ring.
             val wait = (META_WAIT_MS - (cam.now() - pf.at)).coerceAtLeast(0)
-            cam.postDelayed(wait) {
+            cam.postDelayed(wait, timers) {
                 val metas = pf.frames.map { cam.metaAt(it.timestampNs) }
                 val queued = runCatching {
                     cam.worker().execute {
@@ -240,7 +248,7 @@ internal class ZoomProbeGlue(private val analyzer: ScanAnalyzer, private val cam
             return zoom.endProbe(why, rebase = verified)
         }
 
-        override fun later(ms: Long, block: () -> Unit) = cam.postDelayed(ms, block)
+        override fun later(ms: Long, block: () -> Unit) = cam.postDelayed(ms, timers, block)
         override fun now(): Long = cam.now()
         override fun log(line: String) { runCatching { log.i("probe", line) } }
 
@@ -250,6 +258,9 @@ internal class ZoomProbeGlue(private val analyzer: ScanAnalyzer, private val cam
         }
 
         override fun finished(o: ZoomProbeRun.Outcome) {
+            // Every guard, the budget and a measure still waiting for its CaptureResults: the run is over, they only
+            // hold memory now (the runner ignores whatever they would answer).
+            cam.cancelDelayed(timers)
             if (run === runner) run = null
             if (probeLocked) { probeLocked = false; cam.applyAeLock() }
             // The lens moved for the probe: the next card gets its own pass — and NO Area-centre lock, which

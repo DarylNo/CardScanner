@@ -167,8 +167,15 @@ object ZoomFit {
             "%.2f× (this Area: %.2f×%s)".format(java.util.Locale.ROOT, centred.z, now.z,
                 if (now.belowMin) ", its fit allows only %.2f×".format(java.util.Locale.ROOT, now.raw) else "")
 
-        /** "centred, it would zoom 1.90× (this Area: 1.00×)" — the scan screen's status after an Area is saved. */
-        fun short(): String = "centred, it would zoom %.2f× (this Area: %.2f×)".format(java.util.Locale.ROOT, centred.z, now.z)
+        /**
+         * "centred, it would zoom 1.90× (this Area: 1.00×)" — the scan screen's status after an Area is saved.
+         * [on] = Zoom to fit is on; off, nothing zooms either way, so it names who would (review of a43cb5b:
+         * "it would zoom 1.90×" read as a fact with the switch off, this build's default): "centred, Zoom to fit
+         * would zoom 1.90× (here 1.00×)" — as short as the on words, so both fit the scan screen's 2-line pill.
+         */
+        fun short(on: Boolean = true): String =
+            if (on) "centred, it would zoom %.2f× (this Area: %.2f×)".format(java.util.Locale.ROOT, centred.z, now.z)
+            else "centred, Zoom to fit would zoom %.2f× (here %.2f×)".format(java.util.Locale.ROOT, centred.z, now.z)
 
         private fun where(): String {
             val x = Math.round(abs(dx) * 100); val y = Math.round(abs(dy) * 100)

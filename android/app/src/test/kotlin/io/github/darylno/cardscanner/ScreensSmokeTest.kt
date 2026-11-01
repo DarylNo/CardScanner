@@ -213,6 +213,9 @@ class ScreensSmokeTest {
         app.settings.auto = true
         app.settings.zoomFit = false
         grantCamera(true)
+        // Only this test's log lines (review of a43cb5b: all() of the process-wide ring was satisfied by an EARLIER test's
+        // Plan.ZOOM line, so the check passed in the class run with the full session's B logging nothing).
+        val t0 = io.github.darylno.cardscanner.core.DebugLog.global.lastSeq
         app.measure.start()                                      // the full session: Next through to B
         val a = launch(MainActivity::class.java)
         val root = a.window.decorView
@@ -234,10 +237,9 @@ class ScreensSmokeTest {
         val zoom = on["zoom"] as Map<*, *>
         assertEquals("B zooms the camera: $on", 1.9, (zoom["target"] as Number).toDouble(), 0.0)
         assertEquals("the Area fit", zoom["limit"])
-        assertTrue("the test marker records the zoom B runs at",
-            io.github.darylno.cardscanner.core.DebugLog.global.all().any {
-                it.tag == "test" && it.msg.contains(" zoom-b zoom: zoom to fit the Area: on · target 1.90× (limited by the Area fit)")
-            })
+        val marker = "step ${app.measure.index + 1}/${app.measure.steps.size} zoom-b zoom: zoom to fit the Area: on · target 1.90× (limited by the Area fit)"
+        assertTrue("the test marker records the zoom B runs at: $marker",
+            io.github.darylno.cardscanner.core.DebugLog.global.since(t0, limit = 3000).any { it.tag == "test" && it.msg.startsWith(marker) })
         findText(root, a.getString(R.string.measure_stop))!!.performClick()
         ShadowLooper.idleMainLooper()
         assertFalse(app.measure.active)
@@ -363,7 +365,7 @@ class ScreensSmokeTest {
         if (m.step.id == "ae-lock") next()
         assertEquals(if (plan == io.github.darylno.cardscanner.ui.MeasureSession.Plan.ZOOM) "zoom-done" else "done", m.step.id)
         checkCard(m.step.instruction, "Zoom to fit ON by default: NO", "✗ post-fit", "rule 2 out of reach this run (5 unstable at 1×, 0 still identifying)",
-            "\nProbe: ✓ 2 cards ✗ NOT centred ✓ settle ✗ knee not measured")
+            "\nProbe: ✓ 2 cards ✗ NOT centred ✓ settle · knee not measured")
     }
 
     /**
@@ -465,7 +467,8 @@ class ScreensSmokeTest {
         val api = io.github.darylno.cardscanner.core.server.DeviceApi(app.phoneServer.device)
         val dev = io.github.darylno.cardscanner.core.MiniJson.parse(String(
             api.handle(io.github.darylno.cardscanner.core.server.ApiRequest("GET", "/api/device"))!!.body)) as Map<*, *>
-        assertEquals(valid, (dev["zoom_probe"] as Map<*, *>)["words"])
+        // The computer gets what the run FOUND — no "Run again" there (review of a43cb5b).
+        assertEquals("run 2 valid (one more card needed)", (dev["zoom_probe"] as Map<*, *>)["words"])
         // Run 3 compares its card with run 2's; refused before it began — its words, and the number is kept.
         findText(root, "Run again")!!.performClick(); ShadowLooper.idleMainLooper()
         assertEquals(3 to listOf(2), cam.started.last())
@@ -583,9 +586,8 @@ class ScreensSmokeTest {
         assertFalse(a.isFinishing)
         assertEquals("the status pill stays the probe's", rung, a.statusForTest)
         cam.finish(probeOutcome(io.github.darylno.cardscanner.core.ZoomProbeRun.Kind.DONE, "Run 1", probeResult(1)))
-        assertTrue(a.statusForTest, a.statusForTest.startsWith(io.github.darylno.cardscanner.ui.StatusText.PROBE_DONE))
-        assertTrue("what the last scan said, under the probe's end: ${a.statusForTest}",
-            a.statusForTest.endsWith("\n" + a.getString(R.string.open_scans_hint, "Duress")))
+        // The probe's end in a few words, then what the last scan said (the card above has the probe's own words).
+        assertEquals("Zoom probe over · " + a.getString(R.string.open_scans_hint, "Duress"), a.statusForTest)
         assertEquals("still nothing opened", null, nextStarted()?.component?.className)
         // The pill's two lines leave every control on screen at the N200's size.
         root.measure(View.MeasureSpec.makeMeasureSpec(root.width, View.MeasureSpec.EXACTLY),
@@ -604,6 +606,50 @@ class ScreensSmokeTest {
         l.onOutcome("job-4", true, true, null, io.github.darylno.cardscanner.ui.Outcome.AutoFiled(scan("Opt"), 44, false))
         ShadowLooper.idleMainLooper()
         assertEquals(PanelActivity::class.java.name, nextStarted()?.component?.className)
+    }
+
+    /**
+     * Review of a43cb5b: the scan identified during the probe — its line held, then shown when the probe ends — was
+     * never READ on the N200: the pill has 2 lines, and the end line ("Zoom probe over — nothing filed. What it found
+     * is on the card above") filled both, so the held line was ellipsized away (the old test read the TextView's text,
+     * in legacy graphics, 1 px a character). The end is a few words in front of it now ("Zoom probe over · ✓ …"):
+     * whole in the pill with a long card name, for each way a run ends. NATIVE graphics: real text widths.
+     */
+    @Test
+    @Config(qualifiers = "w411dp-h914dp-xxhdpi")
+    @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
+    fun mainActivity_theHeldScanLineFitsThePillWhenTheProbeEnds() {
+        app.settings.roi = io.github.darylno.cardscanner.core.RoiFrac(0.25, 0.25, 0.75, 0.75)
+        app.settings.auto = false
+        val cam = ProbeCamera()
+        app.cameraFactory = { _, _ -> cam }
+        grantCamera(true)
+        app.measure.start(io.github.darylno.cardscanner.ui.MeasureSession.Plan.ZOOM)
+        app.measure.next()
+        val a = launch(MainActivity::class.java)
+        val root = a.window.decorView
+        while (nextStarted() != null) { }
+        fun scan(name: String) = org.json.JSONObject().put("card_read", org.json.JSONObject().put("name", name))
+        val kinds = listOf(
+            io.github.darylno.cardscanner.core.ZoomProbeRun.Kind.DONE to "Run 1",
+            io.github.darylno.cardscanner.core.ZoomProbeRun.Kind.STOPPED to "Zoom probe stopped — the scan screen stopped. Nothing was filed; Run again when ready",
+            io.github.darylno.cardscanner.core.ZoomProbeRun.Kind.CANCELLED to "The zoom probe ran past 90 s — stopped; nothing filed. Run again",
+        )
+        for ((i, kw) in kinds.withIndex()) {
+            val (kind, words) = kw
+            findText(root, if (i == 0) "Run probe" else "Run again")!!.performClick(); ShadowLooper.idleMainLooper()
+            cam.probe!!.onProgress("Zoom probe 7/15 · 1.60× — hands off the tray", "rung 7/15 · 1.60×", 1.6); ShadowLooper.idleMainLooper()
+            a.uploadListenerForTest.onOutcome("job-$i", true, true, null,
+                io.github.darylno.cardscanner.ui.Outcome.AutoFiled(scan("Emrakul, the Promised End"), 50L + i, false))
+            ShadowLooper.idleMainLooper()
+            cam.finish(probeOutcome(kind, words, if (kind == io.github.darylno.cardscanner.core.ZoomProbeRun.Kind.DONE) probeResult(1) else null,
+                numbered = true))
+            val held = a.getString(R.string.open_scans_hint, "Emrakul, the Promised End")
+            val expected = io.github.darylno.cardscanner.ui.StatusText.probeEndShort(kind) + " · " + held
+            assertEquals("$kind", expected, a.statusForTest)
+            assertStatusFitsThePill(a, expected)
+            while (nextStarted() != null) { }
+        }
     }
 
     /**
@@ -1278,6 +1324,28 @@ class ScreensSmokeTest {
         overlay.onAreaDrawn!!.invoke(io.github.darylno.cardscanner.core.RoiFrac(0.45, 0.25, 0.95, 0.75))
         ShadowLooper.idleMainLooper()
         assertEquals("setRoi(0.45,0.25,0.95,0.75)", cam.rec.calls.last { it.startsWith("setRoi(") })
+        // Zoom to fit is OFF (this build's default): nothing zooms either way, so the hint says the condition
+        // (review of a43cb5b: "it would zoom 1.90×" read as a fact with the switch off).
+        val expected = "Scan area set — centred, Zoom to fit would zoom 1.90× (here 1.00×). Empty the tray to re-learn…"
+        assertEquals(expected, a.statusForTest)
+        assertStatusFitsThePill(a, expected)
+    }
+
+    /** The off-centre hint with Zoom to fit ON: "centred, it would zoom 1.90× (this Area: 1.00×)", in the 2-line pill. */
+    @Test
+    @Config(qualifiers = "w411dp-h914dp-xxhdpi")
+    @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
+    fun mainActivity_offCentreAreaStatus_switchOn_fits() {
+        app.settings.roi = io.github.darylno.cardscanner.core.RoiFrac(0.25, 0.25, 0.75, 0.75)
+        app.settings.auto = true
+        app.settings.zoomFit = true
+        val cam = ZoomStateCamera()
+        app.cameraFactory = { _, _ -> cam }
+        grantCamera(true)
+        val a = launch(MainActivity::class.java)
+        val overlay = findOverlay(a.window.decorView)!!
+        overlay.onAreaDrawn!!.invoke(io.github.darylno.cardscanner.core.RoiFrac(0.45, 0.25, 0.95, 0.75))
+        ShadowLooper.idleMainLooper()
         val expected = "Scan area set — centred, it would zoom 1.90× (this Area: 1.00×). Empty the tray to re-learn…"
         assertEquals(expected, a.statusForTest)
         assertStatusFitsThePill(a, expected)
@@ -1312,8 +1380,8 @@ class ScreensSmokeTest {
         val learning = io.github.darylno.cardscanner.core.AutoScanner.Event.Learning(false)
         val learned = io.github.darylno.cardscanner.core.AutoScanner.Event.Learning(true)
         val edge = io.github.darylno.cardscanner.core.RoiFrac(0.45, 0.25, 0.95, 0.75)
-        val set = "Scan area set — centred, it would zoom 1.90× (this Area: 1.00×). Empty the tray to re-learn…"
-        val watching = "Tray: watching for a card… Off-centre Area: centred, it would zoom 1.90× (this Area: 1.00×)."
+        val set = "Scan area set — centred, Zoom to fit would zoom 1.90× (here 1.00×). Empty the tray to re-learn…"
+        val watching = "Tray: watching for a card… Off-centre Area: centred, Zoom to fit would zoom 1.90× (here 1.00×)."
         overlay.onAreaDrawn!!.invoke(edge)
         ShadowLooper.idleMainLooper()
         assertEquals(set, a.statusForTest)
@@ -1375,7 +1443,9 @@ class ScreensSmokeTest {
         assertTrue("within the pill's ${pill.maxLines} lines (${lay.lineCount})", lay.lineCount <= pill.maxLines)
         for (i in 0 until lay.lineCount) {
             assertEquals("line $i is not ellipsized", 0, lay.getEllipsisCount(i))
-            assertTrue("line $i fits the pill's width (${lay.getLineWidth(i)} of $innerW px)", lay.getLineWidth(i) <= innerW + 1)
+            // getLineMax: the ink, without the trailing space a wrapped line may end on (it hangs past the edge
+            // unseen; getLineWidth counts it — a line ending "… — " read 3 px wide).
+            assertTrue("line $i fits the pill's width (${lay.getLineMax(i)} of $innerW px)", lay.getLineMax(i) <= innerW + 1)
         }
         assertTrue("the text fits the pill's height (${lay.height} of $innerH px)", lay.height <= innerH + 1)
         val wide = pill.paint.measureText(expected)
@@ -1677,10 +1747,10 @@ class ScreensSmokeTest {
         val d0 = device()
         assertTrue("$d0", d0.containsKey("zoom_probe") && d0["zoom_probe"] == null)
         val at = java.util.Calendar.getInstance().apply { set(2026, java.util.Calendar.OCTOBER, 31, 14, 3, 0) }.timeInMillis
-        val words = "2 cards agree: the zoom is the centred crop, frames settle within the dropped ones · z_pipe 1.43× — Next"
+        val words = "2 cards agree: the zoom is the centred crop, frames settle within the dropped ones"
         app.settings.zoomProbeLast = io.github.darylno.cardscanner.core.MiniJson.stringify(linkedMapOf(
             "at" to at, "camera" to "0", "stream" to "1600×1200", "run" to 3, "runs" to 2, "valid_cards" to 2, "words" to words,
-            "probe_half" to "✓ 2 valid run(s) on different cards (needs 2) ✓ centred ✓ settle ✗ knee: not measured"))
+            "probe_half" to "✓ 2 valid run(s) on different cards (needs 2) ✓ centred ✓ settle · knee: not measured in this build (MAX_ZOOM stays 2.00×)"))
         val diag = io.github.darylno.cardscanner.ui.DiagnosticsText.build(app)
         assertTrue(diag, diag.lines().contains("zoom probe: 31 Oct 14:03 · camera 0 · 1600×1200 — $words"))
         val p = device()["zoom_probe"] as Map<*, *>

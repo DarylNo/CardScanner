@@ -56,7 +56,9 @@ import kotlin.math.abs
  *   the end) goes to the camera; and a request the timeout gave up on just before
  *   the probe keeps its late re-map (noted mid-probe, mapped at the end — review of
  *   08a77d1). The end's rebase ([Port.probeRebase]) is asked only while the probe
- *   still runs, before its map: never after an abort. Any lifecycle input
+ *   still runs, before its map: never after an abort — and every stop / close /
+ *   reopen tells the analyzer ([Port.cameraAway], with or without a zoom in use),
+ *   so a rebase no sample took yet dies with the round trip. Any lifecycle input
  *   (stop, opening, bind, a new Area, the switch, drawing) stops the probe FIRST
  *   ([Port.probeEnded]) and then does exactly what it does today, so an aborted
  *   probe is today's Scans / Settings round trip. Nothing here files a scan.
@@ -104,6 +106,14 @@ class ZoomCoordinator(private val port: Port, private val log: (String) -> Unit 
          * request, and never after an abort (a card swapped while the screen was away must scan).
          */
         fun probeRebase(why: String) {}
+        /**
+         * The camera stopped, closed or is (re)opening ([cameraStopped] / [cameraOpening]) — ALSO with no
+         * zoom in use, when no gate closes: the analyzer drops a rebase the probe's verified end still owes
+         * (ScanAnalyzer.cameraAway). Never a gate, never a map. Review of a43cb5b: a stop between a verified
+         * end and the first sample carried the rebase across the round trip, and the first sample back took
+         * a card swapped while the screen was away into the scanned scene — it was never filed.
+         */
+        fun cameraAway(why: String) {}
     }
 
     /** What Diagnostics, the zoom log and `/api/device` report. */
@@ -268,6 +278,7 @@ class ZoomCoordinator(private val port: Port, private val log: (String) -> Unit 
      * A zoom in use closes the gate until [cameraStarted] re-applies it.
      */
     fun cameraStopped(why: String) {
+        port.cameraAway(why)
         if (!active) return
         abortProbe(why)
         active = false
@@ -287,6 +298,7 @@ class ZoomCoordinator(private val port: Port, private val log: (String) -> Unit 
      * close the gate while a zoom is in use; [cameraStarted] re-applies.
      */
     fun cameraOpening(why: String) {
+        port.cameraAway(why)
         abortProbe(why)
         if (pending != null || requested != 1.0 || mapped != 1.0) closeGate(why)
     }

@@ -83,12 +83,15 @@ data class AbRecord(
  *
  * The probe half of the default-on verdict (the zoom probe's runs this session,
  * MeasureSession.probeChecks) comes in as checks; with no probe run it is "not
- * measured". Its knee is never measured in this build (ZoomProbe.DETAIL_VALIDATED is
- * false), so the verdict is never YES.
+ * measured". The probe measures no knee in this build (ZoomProbe.DETAIL_VALIDATED is
+ * false, the pre-registered fallback): its half is its geometry facts — two cards,
+ * centred, settle — and the A/B's identification decides (review of a43cb5b: a knee
+ * hard-coded as a failing check made the verdict NO whatever the rig did).
  */
 class AbSummary(records: List<AbRecord>, val target: Int = MeasureSession.AB_CARDS) {
-    class Check(val ok: Boolean, val words: String) {
-        override fun toString() = (if (ok) "✓ " else "✗ ") + words
+    /** [ok] = passed; [judged] false = nothing measured it yet ("–", never "✗" — and not a pass). */
+    class Check(val ok: Boolean, val words: String, val judged: Boolean = true) {
+        override fun toString() = (if (!judged) "– " else if (ok) "✓ " else "✗ ") + words
     }
 
     /** One physical card: its capture in each arm (null = missing), and whether its names disagree. */
@@ -305,7 +308,7 @@ class AbSummary(records: List<AbRecord>, val target: Int = MeasureSession.AB_CAR
             State.PASS -> when {
                 probe == null -> append("Zoom to fit ON by default: NO — the A/B half passes; the probe half is not measured (no zoom probe ran this session)")
                 probe.all { it.ok } -> append("Zoom to fit ON by default: YES — both halves pass")
-                else -> append("Zoom to fit ON by default: NO — the A/B half passes, the probe half fails")
+                else -> append("Zoom to fit ON by default: NO — the A/B half passes, the probe half does not")
             }
         }
         probe?.forEach { append(" · ").append(it) }
@@ -314,6 +317,7 @@ class AbSummary(records: List<AbRecord>, val target: Int = MeasureSession.AB_CAR
             "${maxOf(arm("A1").size, target)} (B can improve at most $a1Open; rule 2 needs $MIN_NET_BETTER)")
         if (outOfReach) append(" · note: rule 2 is out of reach this run — at most ${plural(room, "stable card", "stable cards")} can improve " +
             "${outOfReachWhy()}; ${outOfReachDo()}")
+        if (probe != null) append(" · note: the probe measures no knee in this build — the A/B decides")
         append(" · note: MAX_ZOOM is still %.2f× in this build".format(Locale.ROOT, ZoomFit.MAX_ZOOM))
     }
 
@@ -335,8 +339,8 @@ class AbSummary(records: List<AbRecord>, val target: Int = MeasureSession.AB_CAR
             State.PASS -> when {
                 probe == null -> "the A/B half passes; no zoom probe ran"
                 yes -> "both halves pass"
-                // Which of its rules fail: the "Probe:" line under this one (MeasureSession.countExtra).
-                else -> "the A/B half passes; the probe half fails (see Probe)"
+                // Which of its rules do not pass: the "Probe:" line under this one (MeasureSession.countExtra).
+                else -> "the A/B half passes; the probe half does not (see Probe)"
             }
         })
         if (noJob) append(" · zoom has no job at this mount height")

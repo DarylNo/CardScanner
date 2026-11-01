@@ -35,9 +35,11 @@ import kotlin.math.abs
  * core ZoomProbeRun on the card A1 left; each run that used its number is kept for the
  * session ([recordProbe], AppSettings.zoomProbeRuns), the card shows what the runs say
  * TOGETHER (ZoomProbe.combine), and the session's verdict at the end is the A/B half
- * and the probe half together — never YES in this build: the probe measures no knee
- * (ZoomProbe.DETAIL_VALIDATED is false). The last verdict outlives the session
- * (AppSettings.zoomProbeLast, for Diagnostics and `/api/device`).
+ * and the probe half together. The probe measures no knee in this build
+ * (ZoomProbe.DETAIL_VALIDATED is false): its half is two cards, centred and settle, and
+ * the A/B's identification decides. The last verdict outlives the session
+ * (AppSettings.zoomProbeLast, for Diagnostics and `/api/device`) — what the runs FOUND,
+ * never the step's next-step prompt (there is no Next or Run again there).
  *
  * Pure state: the scan screen hosts the card, this decides what it says.
  */
@@ -249,7 +251,7 @@ class MeasureSession(
         "at" to at, "camera" to r.camera, "stream" to r.stream, "run" to r.run, "runs" to runs,
         "valid_cards" to c.validCards, "centred" to c.centred, "settle_ok" to c.settleOk,
         "reports_zoom_ratio" to c.reportsZoomRatio, "z_pipe" to c.zPipe,
-        "words" to c.words, "probe_half" to c.checks(), "last" to r.toMap(),
+        "words" to c.findings, "probe_half" to c.checks(), "last" to r.toMap(),
     )
 
     /**
@@ -399,9 +401,9 @@ class MeasureSession(
         /** The probe runs kept per session (2 agreeing runs decide; a third if they disagree): the oldest go first. */
         const val MAX_PROBE_RUNS = 12
 
-        /** The probe half of the session's verdict, as the A/B's checks read ("✓ probe: centred"). */
+        /** The probe half of the session's verdict, as the A/B's checks read ("✓ probe: centred"; "– probe: centred: not judged …"). */
         fun probeChecks(c: ZoomProbe.Combined): List<AbSummary.Check> =
-            c.checkList().map { (ok, words) -> AbSummary.Check(ok, "probe: $words") }
+            c.rules().map { AbSummary.Check(it.ok == true, "probe: ${it.words}", judged = it.ok != null) }
 
         /** 1.1.16's step ids, in its order: a session it saved kept only an index into these. */
         val LEGACY_IDS = listOf("setup", "short-check", "swaps", "lift", "hands", "lean", "lights", "foil", "ae-lock", "done")

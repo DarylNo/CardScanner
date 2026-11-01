@@ -1,5 +1,6 @@
 package io.github.darylno.cardscanner.ui
 
+import io.github.darylno.cardscanner.core.ZoomProbeRun
 import org.json.JSONObject
 
 /**
@@ -34,6 +35,18 @@ object StatusText {
     const val PROBE_REFUSED = "Zoom probe not run — the card above says why"
     const val PROBE_STOPPED = "Zoom probe stopped — nothing filed. The card above says why"
     const val PROBE_NOT_READY = "The camera is not ready — try again in a second"
+
+    /**
+     * The zoom probe's end in a few words, in front of a scan's line held while it ran ("Zoom probe over ·
+     * ✓ Duress — ready: tap Scans…"): the pill has 2 lines, and the card above carries the probe's own words.
+     * No "nothing filed" here — the scan beside it WAS filed (by the scanner, not the probe).
+     */
+    fun probeEndShort(kind: ZoomProbeRun.Kind): String = when (kind) {
+        ZoomProbeRun.Kind.DONE -> "Zoom probe over"
+        ZoomProbeRun.Kind.REFUSED -> "Zoom probe not run"
+        ZoomProbeRun.Kind.CANCELLED -> "Zoom probe cancelled"
+        ZoomProbeRun.Kind.STOPPED -> "Zoom probe stopped"
+    }
 
     /**
      * After an Area is saved on the phone: [offCentre] = the off-centre hint's short

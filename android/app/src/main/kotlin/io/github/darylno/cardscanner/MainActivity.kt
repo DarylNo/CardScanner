@@ -918,9 +918,12 @@ class MainActivity : AppCompatActivity() {
      */
     private var areaHintFor: RoiFrac? = null
 
-    /** The off-centre hint's short words while it is due ([areaHintFor] is still the Area) — read live — else null. */
+    /**
+     * The off-centre hint's short words while it is due ([areaHintFor] is still the Area) — read live — else null.
+     * With Zoom to fit off they name who would zoom ("centred, Zoom to fit would zoom …"): off, nothing zooms.
+     */
     private fun areaHint(): String? =
-        areaHintFor?.takeIf { it == settings.roi }?.let { camera?.zoomState()?.offCentre?.short() }
+        areaHintFor?.takeIf { it == settings.roi }?.let { camera?.zoomState()?.let { st -> st.offCentre?.short(on = st.enabled) } }
 
     private fun onScanTap() {
         if (camera == null || app.updates.locked) return
@@ -1363,10 +1366,12 @@ class MainActivity : AppCompatActivity() {
                 ZoomProbeRun.Kind.CANCELLED -> outcome.words to Tone.NORMAL
                 ZoomProbeRun.Kind.STOPPED -> StatusText.PROBE_STOPPED to Tone.ERR
             }
-            // A scan identified meanwhile: what it said, under the probe's end (it was not opened).
+            // A scan identified meanwhile (it was not opened): the probe's end in a few words, then what the scan said
+            // (review of a43cb5b: the pill has 2 lines, the long end line filled both and the held one was ellipsized
+            // away). The card above carries the probe's own words.
             val held = probeHeldStatus.takeIf { !probing() }
             if (held != null) probeHeldStatus = null
-            setStatus(held?.let { msg + "\n" + it } ?: msg, tone)
+            setStatus(held?.let { StatusText.probeEndShort(outcome.kind) + " · " + it } ?: msg, tone)
             refreshMeasure()
             if (remoteDeferred) { remoteDeferred = false; applyRemoteNow() }
         }

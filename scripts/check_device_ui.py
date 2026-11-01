@@ -707,9 +707,11 @@ with sync_playwright() as pw:
     STATE["roi_zoom"] = None
 
     # The zoom probe (1.1.17): reported by the phone (DeviceApiTest.theProbeIsReportedReadOnly), never driven here.
-    LAST_WORDS = "run 1 valid — lift this card, put a DIFFERENT card down, let it scan, then Run again"
+    # The phone stores what the runs FOUND — no "Next" / "Run again" off the phone (MeasureSession.lastProbe, ZoomProbe.Combined.findings).
+    LAST_WORDS = "run 1 valid (one more card needed)"
     LAST = {"at": 1793455380000, "camera": "0", "stream": "1600×1200", "run": 1, "runs": 1, "valid_cards": 1,
-            "words": LAST_WORDS, "probe_half": "✗ 1 valid run(s) on different cards (needs 2) ✓ centred ✓ settle ✗ knee: not measured"}
+            "words": LAST_WORDS,
+            "probe_half": "✗ 1 valid run(s) on different cards (needs 2) ✓ centred ✓ settle · knee: not measured in this build (MAX_ZOOM stays 2.00×)"}
     LAST_LINE = f"Last zoom probe (31 Oct 14:03, 1600×1200): {LAST_WORDS}"
 
     def probe_line():

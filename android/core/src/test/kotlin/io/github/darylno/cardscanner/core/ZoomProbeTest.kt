@@ -291,8 +291,10 @@ class ZoomProbeTest {
         assertTrue(r.logLine(), r.logLine().contains("knee: not measured (no validated detail metric)"))
         val c = ZoomProbe.combine(listOf(r, ZoomProbe.verdict(2, plan, run(plan), focused, focused, facts)))
         assertTrue(c.enough)
-        assertTrue(c.checks(), c.checks().endsWith("✗ knee: not measured (no validated detail metric — MAX_ZOOM is not decided by the probe)"))
-        assertFalse("never a default-on yes from the probe", c.checks().contains("✓ knee"))
+        // The knee is a NOTE in this build, not a rule (review of a43cb5b): never ✓, never ✗ — the A/B decides.
+        assertTrue(c.checks(), c.checks().endsWith(" · knee: not measured in this build (MAX_ZOOM stays 2.00×)"))
+        assertFalse(c.checks(), c.checks().contains("✓ knee") || c.checks().contains("✗ knee"))
+        assertTrue("two centred, settled cards: the probe half passes on its facts", c.passes)
         assertFalse(ZoomProbe.DETAIL_VALIDATED)
         // The JSON round-trips (it is what /api/device and Diagnostics will read).
         assertEquals(true, (MiniJson.parse(r.toJson()) as Map<*, *>)["centred"])
@@ -324,8 +326,9 @@ class ZoomProbeTest {
         // Nudged 2 % after the start: the middle 1× repeat disagrees.
         val moved = ZoomProbe.verdict(1, plan, run(plan) { i, z -> rung(i, z, bx = if (i >= midOne) 0.52 else 0.5) }, focused, focused, facts)
         assertFalse(moved.valid)
-        assertEquals("the card moved (1× again is 2 % off the start): leave the tray untouched and Run again", moved.reason)
-        assertEquals("Not conclusive — the card moved (1× again is 2 % off the start): leave the tray untouched and Run again", moved.words())
+        assertEquals("the card moved (1× again is 2 % off the start) — leave the tray untouched and Run again", moved.reason)
+        assertEquals("Not conclusive — the card moved (1× again is 2 % off the start) — leave the tray untouched and Run again", moved.words())
+        assertEquals("what it found, no next step", "run 1 not conclusive — the card moved (1× again is 2 % off the start)", moved.findings())
         // A lamp switched on half way (AE/AWB locked: only the card's luma shows it).
         val light = ZoomProbe.verdict(1, plan, run(plan) { i, z -> rung(i, z, luma = if (i >= midOne) 140.0 else 120.0) }, focused, focused, facts)
         assertFalse(light.valid)
@@ -457,8 +460,10 @@ class ZoomProbeTest {
         assertEquals("that is the same card as run 1 — use a different one", again.words)
         val two = ZoomProbe.combine(listOf(valid(1), valid(2, same = 1), valid(3)))
         assertTrue(two.enough); assertEquals(2, two.validCards)
-        assertTrue(two.words, two.words.startsWith("2 cards agree: the zoom is the centred crop, frames settle within the dropped ones · z_pipe 1.43× — Next"))
+        // No z_pipe in the owner's words (review of a43cb5b: the only ratio there, it read as a recommendation); the log explains it.
+        assertEquals("2 cards agree: the zoom is the centred crop, frames settle within the dropped ones — Next", two.words)
         assertTrue(two.logLine(), two.logLine().startsWith("probe VERDICT: 2 cards agree"))
+        assertTrue(two.logLine(), two.logLine().contains(" · z_pipe 1.43× (880 ÷ the 1× card: past it the identifier's 630×880 card image gains no pixels — not a zoom recommendation) · "))
         assertTrue(two.checks(), two.checks().startsWith("✓ 2 valid run(s) on different cards (needs 2) ✓ centred ✓ settle"))
         // An inconclusive run between them does not count, and stopped runs neither.
         val stopped = ZoomProbe.stopped(4, plan, "the scan screen stopped", facts)
@@ -507,13 +512,75 @@ class ZoomProbeTest {
         val plan = planFor()
         fun valid(n: Int) = ZoomProbe.verdict(n, plan, run(plan), focused, focused, facts)
         val two = ZoomProbe.combine(listOf(valid(1), valid(2)))
-        assertEquals("✓ 2 cards ✓ centred ✓ settle ✗ knee not measured", two.shortChecks())
-        assertEquals("the same rules as the full words", two.checkList().map { it.first }, two.shortChecks().split(" ").filter { it == "✓" || it == "✗" }.map { it == "✓" })
-        assertEquals("✗ 1 of 2 cards ✓ centred ✓ settle ✗ knee not measured", ZoomProbe.combine(listOf(valid(1))).shortChecks())
+        assertEquals("✓ 2 cards ✓ centred ✓ settle · knee not measured", two.shortChecks())
+        assertEquals("the same rules as the full words", two.rules().map { it.ok }, two.shortChecks().split(" ").filter { it == "✓" || it == "✗" }.map { it == "✓" })
+        assertEquals("✗ 1 of 2 cards ✓ centred ✓ settle · knee not measured", ZoomProbe.combine(listOf(valid(1))).shortChecks())
         val bent = ZoomProbe.verdict(3, plan, run(plan) { i, z -> rung(i, z, crop = { 0.03 * (it - 1) }) }, focused, focused, facts)
-        assertEquals("✓ 2 cards ✗ NOT centred ✓ settle ✗ knee not measured", ZoomProbe.combine(listOf(valid(1), bent)).shortChecks())
-        assertEquals("✗ 0 of 2 cards ✗ centred ✗ settle ✗ knee not measured",
+        assertEquals("✓ 2 cards ✗ NOT centred ✓ settle · knee not measured", ZoomProbe.combine(listOf(valid(1), bent)).shortChecks())
+        // Nothing valid: centring and settle were never judged — "not judged", never ✗ (review of a43cb5b).
+        assertEquals("✗ 0 of 2 cards · knee not measured",
             ZoomProbe.combine(listOf(ZoomProbe.stopped(1, plan, "the scan screen stopped", facts))).shortChecks())
+    }
+
+    /**
+     * Review of a43cb5b. (1) The knee was a hard-coded FAILING rule of the probe half, so the session's verdict
+     * could never say YES and called the probe "failed" on a rig where every fact it measures passed — the
+     * fallback says the A/B decides. Now two centred, settled cards PASS the probe half; the knee is a note.
+     * (2) With no valid run, centring and settle were shown ✗ ("NOT centred" means keep Zoom to fit off) though
+     * nothing judged them: "–", not judged, and not a pass. (3) A real failure is still ✗.
+     */
+    @Test
+    fun theProbeHalfPassesOnItsFactsAndNeverFailsWhatItDidNotJudge() {
+        val plan = planFor()
+        fun valid(n: Int) = ZoomProbe.verdict(n, plan, run(plan), focused, focused, facts)
+        val two = ZoomProbe.combine(listOf(valid(1), valid(2)))
+        assertTrue(two.checks(), two.passes)
+        assertEquals(listOf(true, true, true), two.rules().map { it.ok })
+        assertEquals("✓ 2 valid run(s) on different cards (needs 2) ✓ centred ✓ settle · knee: not measured in this build (MAX_ZOOM stays 2.00×)", two.checks())
+        val one = ZoomProbe.combine(listOf(valid(1)))
+        assertFalse("one card is not enough", one.passes)
+        val none = ZoomProbe.combine(listOf(ZoomProbe.verdict(1, plan, run(plan), ZoomProbe.Focus(false, 4.0, 4.0, 900, "NOT FOCUSED"), focused, facts)))
+        assertFalse(none.passes)
+        assertEquals(listOf(false, null, null), none.rules().map { it.ok })
+        assertEquals("✗ 0 valid run(s) on different cards (needs 2) – centred: not judged (no valid run) – settle: not judged (no valid run) · " +
+            "knee: not measured in this build (MAX_ZOOM stays 2.00×)", none.checks())
+        assertFalse(none.checks(), none.checks().contains("✗ centred") || none.checks().contains("✗ settle"))
+        val bent = ZoomProbe.verdict(3, plan, run(plan) { i, z -> rung(i, z, crop = { 0.03 * (it - 1) }) }, focused, focused, facts)
+        val notCentred = ZoomProbe.combine(listOf(valid(1), bent))
+        assertFalse(notCentred.passes)
+        assertTrue(notCentred.checks(), notCentred.checks().contains("✗ NOT centred"))
+    }
+
+    /**
+     * Review of a43cb5b: what is kept for Diagnostics and the computer (AppSettings.zoomProbeLast) carried the probe
+     * step's prompt — "— Next", "…then Run again" — where there is no Next and no Run again, days later. [findings]
+     * is what the runs found, no next step; [words] keeps the prompt for the step's card.
+     */
+    @Test
+    fun theFindingsCarryNoNextStep() {
+        val plan = planFor()
+        fun valid(n: Int, same: Int? = null) = ZoomProbe.verdict(n, plan, run(plan), focused, focused, facts, sameCardAs = same)
+        val bent = ZoomProbe.verdict(5, plan, run(plan) { i, z -> rung(i, z, crop = { 0.03 * (it - 1) }) }, focused, focused, facts)
+        val unfocused = ZoomProbe.verdict(6, plan, run(plan), ZoomProbe.Focus(false, 4.0, 4.0, 900, "NOT FOCUSED"), focused, facts)
+        val cases = listOf(
+            emptyList<ZoomProbe.Result>() to "never run",
+            listOf(valid(1)) to "run 1 valid (one more card needed)",
+            listOf(valid(1), valid(2, same = 1)) to "run 2 repeated run 1's card (not counted) · run 1 is valid (one more card needed)",
+            listOf(valid(1), valid(3)) to "2 cards agree: the zoom is the centred crop, frames settle within the dropped ones",
+            listOf(valid(1), ZoomProbe.stopped(4, plan, "the scan screen stopped", facts)) to
+                "run 4 stopped (the scan screen stopped) — nothing filed · run 1 is valid (one more card needed)",
+            listOf(valid(1), bent) to "the zoom is NOT the centred crop this app assumes (run 5: ${bent.notCentredWhy()}) — keep Zoom to fit off",
+            listOf(unfocused) to "run 6 not conclusive — the 1× focus pass did not report FOCUSED (NOT FOCUSED) · no valid run yet",
+        )
+        for ((runs, want) in cases) {
+            val c = ZoomProbe.combine(runs)
+            assertEquals(runs.map { it.run }.toString(), want, c.findings)
+            for (prompt in listOf("Next", "Run again", "lift this card", "use a different one", "send the report", "more light", "z_pipe"))
+                assertFalse("'$prompt' in ${c.findings}", c.findings.contains(prompt))
+        }
+        // The step's own words keep their prompt.
+        assertTrue(ZoomProbe.combine(listOf(valid(1))).words.endsWith("then Run again"))
+        assertTrue(ZoomProbe.combine(listOf(valid(1), valid(3))).words.endsWith("— Next"))
     }
 
     @Test

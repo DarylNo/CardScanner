@@ -169,6 +169,8 @@ class ZoomFitTest {
         assertEquals("the Area's centre is 20 % right of the frame centre — centred, the same Area would zoom 1.90× " +
             "(this Area: 1.00×, its fit allows only 1.06×)", o.describe())
         assertEquals("centred, it would zoom 1.90× (this Area: 1.00×)", o.short())
+        // With Zoom to fit off nothing zooms either way: the words say the condition (review of a43cb5b).
+        assertEquals("centred, Zoom to fit would zoom 1.90× (here 1.00×)", o.short(on = false))
         // Both axes, the other way round; a zoom that is not below 1.10× says so plainly.
         val o2 = ZoomFit.offCentre(RoiFrac(0.17, 0.1, 0.57, 0.6), 2.6, 10.0)!!   // centre 0.37, 0.35 · fit 1/(2·0.4) → 1.15
         assertEquals(-0.13, o2.dx, 1e-12); assertEquals(-0.15, o2.dy, 1e-12)

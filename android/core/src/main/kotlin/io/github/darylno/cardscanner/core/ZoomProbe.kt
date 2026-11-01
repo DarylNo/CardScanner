@@ -449,6 +449,17 @@ object ZoomProbe {
                 "Lift this card, put a DIFFERENT card down, let it scan, then Run again"
         }
 
+        /**
+         * What the run FOUND, with no next step in it (no "Run again"): what Diagnostics and the computer show
+         * after the session (AppSettings.zoomProbeLast), where there is no Run again button (review of a43cb5b).
+         */
+        fun findings(): String = when {
+            stoppedAt != null -> "run $run stopped ($stoppedAt) — nothing filed"
+            !valid -> "run $run not conclusive — ${fact(reason ?: "?")}"
+            centred == false -> "the zoom is NOT the centred crop this app assumes (run $run: ${notCentredWhy()}) — keep Zoom to fit off"
+            else -> "run $run valid — the zoom is the centred crop, ${settleWords()}"
+        }
+
         /** The `probe` RESULT line. */
         fun logLine(): String = buildString {
             append("probe run $run RESULT: ")
@@ -528,7 +539,7 @@ object ZoomProbe {
             Result(run, valid, reason, centred, fit, drift, main.size, validRungs, settleRungs, settleMax, reports, zPipe,
                 lensDrift, refocus, facts.stream, plan.top, sameCardAs, start?.longPx, driftZ = driftZ, camera = facts.cameraId)
         if (focus == null || !focus.ok)
-            return result(false, "the 1× focus pass did not report FOCUSED (${focus?.state ?: "none"}) — more light, then Run again", null, null, null, 0, null)
+            return result(false, "the 1× focus pass did not report FOCUSED (${focus?.state ?: "none"})$ADVICE more light, then Run again", null, null, null, 0, null)
         if (start == null) return result(false, "no card found at 1×", null, null, null, 0, null)
         val locked = Locked(start.used.mapNotNull { it.lensDpt }.let(::median), start.used.firstOrNull()?.exposureNs,
             start.used.firstOrNull()?.iso, start.luma, start.cx!!, start.cy!!)
@@ -544,15 +555,15 @@ object ZoomProbe {
             val dc = m.maxOf { max(abs(it.cx!! - m[0].cx!!), abs(it.cy!! - m[0].cy!!)) }
             return if (dh > REPEAT_H_TOL || dc > CENTRE_TOL) max(dh, dc) else null
         }
-        agree(ones)?.let { return result(false, "the card moved (1× again is %.0f %% off the start): leave the tray untouched and Run again"
+        agree(ones)?.let { return result(false, "the card moved (1× again is %.0f %% off the start)$ADVICE leave the tray untouched and Run again"
             .format(Locale.ROOT, max(1.0, it * 100)), null, null, null, validRungs, lensDrift) }
         // Only the WORDS of the 80 % rule below: more than 20 % of rungs lost to the light or the lens
         // leaves under 80 % valid anyway. A slip on a 1× repeat costs that rung, like any other
         // (review of 08a77d1: it used to sink the run — a rule not in the pre-registered list).
         val lightOrFocus = reasons.count { r -> r.any { it.startsWith("the light") || it.startsWith("the lens") || it.startsWith("the exposure") || it.startsWith("the ISO") } }
         if (lightOrFocus > main.size * (1 - MIN_VALID_SHARE))
-            return result(false, "the light or focus changed during the run — keep shadows and hands off, then Run again", null, null, null, validRungs, lensDrift)
-        agree(tops)?.let { return result(false, "the card moved between the two %.2f× rungs — leave the tray untouched and Run again"
+            return result(false, "the light or focus changed during the run$ADVICE keep shadows and hands off, then Run again", null, null, null, validRungs, lensDrift)
+        agree(tops)?.let { return result(false, "the card moved between the two %.2f× rungs$ADVICE leave the tray untouched and Run again"
             .format(Locale.ROOT, plan.top), null, null, null, validRungs, lensDrift) }
         if (validRungs < MIN_VALID_SHARE * main.size)
             return result(false, "only $validRungs of ${main.size} rungs measured cleanly (${reasons.flatten().groupingBy { it.substringBefore(" (") }.eachCount().entries
@@ -574,39 +585,66 @@ object ZoomProbe {
 
     // ── across runs ──
 
-    /** The probe's half of "Zoom to fit ON by default", and what the runs say together. */
+    /**
+     * One rule of the probe half: [ok] true = passed, false = a valid run FAILED it, null = not judged (no
+     * valid run on this camera and stream yet) — shown "–", never "✗" (review of a43cb5b: "✗ centred" with
+     * nothing measured read as "not the centred crop"), and not a pass. [short] = its name on the done card.
+     */
+    class Rule(val ok: Boolean?, val words: String, val short: String) {
+        val mark: String get() = when (ok) { true -> "✓"; false -> "✗"; null -> "–" }
+    }
+
+    /**
+     * The knee in this build: a NOTE, never a rule ([DETAIL_VALIDATED] is false — the pre-registered fallback).
+     * The probe half is its geometry, centring and settle facts; the zoom A/B's identification decides the rest.
+     */
+    val KNEE_NOTE: String = "knee: not measured in this build (MAX_ZOOM stays %.2f×)".format(Locale.ROOT, ZoomFit.MAX_ZOOM)
+
+    /**
+     * The probe's half of "Zoom to fit ON by default", and what the runs say together: [words] for the probe
+     * step's card (with what to do next), [findings] for after the session (Diagnostics, the computer: no next
+     * step — there is no Run again there).
+     */
     class Combined(val validCards: Int, val centred: Boolean?, val settleOk: Boolean?, val reportsZoomRatio: Boolean?, val zPipe: Double?,
-                   val words: String) {
+                   val words: String, val findings: String = words) {
         /** Two valid runs on different cards. */
         val enough: Boolean get() = validCards >= 2
+
         /**
-         * The probe half's rules, each (passed, words): two valid runs on different cards, centred,
-         * the settle rule, the knee — never passed in this build ([DETAIL_VALIDATED] is false), so
-         * Zoom to fit is never ON by default on the probe's say. The session's verdict reads them.
+         * The probe half's rules: two valid runs on different cards, centred, the settle rule. The knee is
+         * not among them in this build ([KNEE_NOTE]; review of a43cb5b: a knee hard-coded as a failing rule made
+         * the session's verdict NO whatever the rig did, and told the owner the probe "fails"). [passes] when
+         * every rule passed; a rule not judged does not pass.
          */
-        fun checkList(): List<Pair<Boolean, String>> = listOf(
-            enough to "$validCards valid run(s) on different cards (needs 2)",
-            (centred == true) to (if (centred == false) "NOT centred" else "centred"),
-            (settleOk == true) to "settle",
-            false to "knee: not measured (no validated detail metric — MAX_ZOOM is not decided by the probe)",
+        fun rules(): List<Rule> = listOf(
+            Rule(enough, "$validCards valid run(s) on different cards (needs 2)", if (enough) "$validCards cards" else "$validCards of 2 cards"),
+            when (centred) {
+                null -> Rule(null, "centred: not judged (no valid run)", "centred")
+                true -> Rule(true, "centred", "centred")
+                false -> Rule(false, "NOT centred", "NOT centred")
+            },
+            Rule(settleOk, if (settleOk == null) "settle: not judged (no valid run)" else "settle", "settle"),
         )
 
-        /** "✓ 2 valid runs on different cards ✓ centred ✓ settle ✗ knee: not measured …" */
-        fun checks(): String = checkList().joinToString(" ") { (ok, words) -> (if (ok) "✓ " else "✗ ") + words }
+        val passes: Boolean get() = rules().all { it.ok == true }
+
+        /** "✓ 2 valid run(s) on different cards (needs 2) ✓ centred ✓ settle · knee: not measured in this build (…)" — the log's. */
+        fun checks(): String = rules().joinToString(" ") { "${it.mark} ${it.words}" } + " · " + KNEE_NOTE
 
         /**
-         * [checkList]'s rules by short names, in its order — "✓ 2 cards ✓ centred ✓ settle ✗ knee not
-         * measured" — for the session's done card, which has no room for their words (review of
-         * a60e51d: they pushed it past 45 % of the N200's screen); [checks] is the log's.
+         * The rules by short names — "✓ 2 cards ✓ centred ✓ settle · knee not measured" — for the session's
+         * done card, which has no room for their words (review of a60e51d: they pushed it past 45 % of the
+         * N200's screen). A rule nothing judged is left out ("✗ 0 of 2 cards · knee not measured": no valid
+         * run, so centring and settle were never measured — never shown ✗); the log's [checks] names it.
          */
-        fun shortChecks(): String = checkList().zip(listOf(
-            if (enough) "$validCards cards" else "$validCards of 2 cards",
-            if (centred == false) "NOT centred" else "centred",
-            "settle",
-            "knee not measured",
-        )).joinToString(" ") { (c, name) -> (if (c.first) "✓ " else "✗ ") + name }
+        fun shortChecks(): String =
+            rules().filter { it.ok != null }.joinToString(" ") { "${it.mark} ${it.short}" } + " · knee not measured"
 
-        fun logLine(): String = "probe VERDICT: $words · probe half of default-on: ${checks()}"
+        /** The `probe` VERDICT line: the words, z_pipe in plain words (never a zoom recommendation), the probe half. */
+        fun logLine(): String = "probe VERDICT: $words" +
+            (zPipe?.let { " · z_pipe %.2f× (880 ÷ the 1× card: past it the identifier's 630×880 card image gains no pixels — not a zoom recommendation)"
+                .format(Locale.ROOT, it) } ?: "") +
+            " · probe half of default-on: ${checks()}"
     }
 
     /**
@@ -633,27 +671,50 @@ object ZoomProbe {
         val reports = valid.mapNotNull { it.reportsZoomRatio }.let { if (it.isEmpty()) null else it.all { r -> r } }
         val zPipe = valid.mapNotNull { it.zPipe }.minOrNull()
         val last = runs.lastOrNull()
-        // Where the session stands, for after a run that did not count.
+        // Where the session stands, for after a run that did not count — with the next step (the probe's card) and without it.
         val tally = when (cards.size) {
             0 -> "no valid run yet"
             1 -> "run ${cards[0].run} is valid: one more valid run on a DIFFERENT card decides"
             else -> "${cards.size} cards already agree — Next"
         }
+        val tallyFound = when (cards.size) {
+            0 -> "no valid run yet"
+            1 -> "run ${cards[0].run} is valid (one more card needed)"
+            else -> "${cards.size} cards agree"
+        }
+        val notCentred = valid.firstOrNull { it.centred == false }
+        val agree = "%d cards agree: the zoom is the centred crop%s".format(Locale.ROOT, cards.size,
+            if (settle == true) ", frames settle within the dropped ones" else ", but frames are still at the old zoom after the drops (SETTLE_DROP_FRAMES must rise first)")
+        // z_pipe is NOT in the owner's words (review of a43cb5b: the only ratio on the line, it read as the zoom
+        // the probe recommends) — the RESULT and VERDICT log lines and the JSON carry it.
         val words = when {
             last == null -> "never run"
-            valid.any { it.centred == false } -> valid.first { it.centred == false }.let {
-                "the zoom is NOT the centred crop this app assumes (run ${it.run}: ${it.notCentredWhy()}) — keep Zoom to fit off and send the report"
-            }
+            notCentred != null ->
+                "the zoom is NOT the centred crop this app assumes (run ${notCentred.run}: ${notCentred.notCentredWhy()}) — keep Zoom to fit off and send the report"
             // The run just made failed or was stopped (review of 08a77d1): ITS reason and what to do lead, then the tally.
             !last.valid || last.stoppedAt != null -> last.words() + " · " + tally
             last.sameCardAs != null && last.sameCardAs in validRuns -> "that is the same card as run ${last.sameCardAs} — use a different one"
-            cards.size >= 2 -> "%d cards agree: the zoom is the centred crop%s%s — Next".format(Locale.ROOT, cards.size,
-                if (settle == true) ", frames settle within the dropped ones" else ", but frames are still at the old zoom after the drops (SETTLE_DROP_FRAMES must rise first)",
-                zPipe?.let { " · z_pipe %.2f×".format(Locale.ROOT, it) } ?: "")
+            cards.size >= 2 -> "$agree — Next"
             else -> "run ${cards[0].run} valid — lift this card, put a DIFFERENT card down, let it scan, then Run again"
         }
-        return Combined(cards.size, centred, settle, reports, zPipe, words + apartWords(apart))
+        val findings = when {
+            last == null -> "never run"
+            notCentred != null ->
+                "the zoom is NOT the centred crop this app assumes (run ${notCentred.run}: ${notCentred.notCentredWhy()}) — keep Zoom to fit off"
+            !last.valid || last.stoppedAt != null -> last.findings() + " · " + tallyFound
+            last.sameCardAs != null && last.sameCardAs in validRuns -> "run ${last.run} repeated run ${last.sameCardAs}'s card (not counted) · $tallyFound"
+            cards.size >= 2 -> agree
+            else -> "run ${cards[0].run} valid (one more card needed)"
+        }
+        val apartW = apartWords(apart)
+        return Combined(cards.size, centred, settle, reports, zPipe, words + apartW, findings + apartW)
     }
+
+    /** Between a reason's fact and what to do about it: [fact] keeps the part before it. */
+    private const val ADVICE = " —"
+
+    /** The fact of a run's [reason], without what to do next ("the card moved (…) — leave the tray untouched and Run again" → "the card moved (…)"). */
+    private fun fact(reason: String): String = reason.substringBefore("$ADVICE ")
 
     /** " · run 1 (camera 0 · 1600×1200), runs 2, 3 (camera 2 · 1600×1200) count apart: another camera or stream", or "". */
     private fun apartWords(apart: List<Result>): String {

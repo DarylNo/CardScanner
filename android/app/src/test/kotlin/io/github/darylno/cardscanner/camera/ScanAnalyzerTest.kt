@@ -1081,6 +1081,7 @@ class ScanAnalyzerTest {
                 }
                 override fun probeEnded(why: String) { ended += why; a.cancelProbeFrames(); a.stopSnapshots() }
                 override fun probeRebase(why: String) = a.rebaseAfterProbe()
+                override fun cameraAway(why: String) = a.cameraAway(why)
             })
         }
         /** The camera answers the newest request at [z]. */
@@ -1214,6 +1215,50 @@ class ScanAnalyzerTest {
                     after.any { (it.event as? AutoScanner.Event.NextCard)?.removed == false })
                 assertEquals("$tag: …and the same card is shot again", 2, wd.rec.bursts.size)
             }
+            assertTrue(tag, wd.rec.errors.isEmpty())
+        }
+    }
+
+    /**
+     * Review of a43cb5b, plan correction 9 by the verified door: the end's rebase is owed to the FIRST
+     * sample of the reopening the end started — and the screen can stop (or the camera close / reopen)
+     * before that sample, inside the settle frames. Carried across the round trip, the first sample back
+     * took whatever card lay there into the scanned scene: a card swapped while the owner was away was
+     * never filed. Now any stop / close / reopen drops it (with the switch off nothing else even reaches
+     * the analyzer), and the swapped card IS scanned. The rebase's own job is untouched (the test above).
+     */
+    @Test fun aStopBetweenAVerifiedProbeEndAndItsFirstSampleDropsTheRebase() {
+        for (switchOn in listOf(false, true)) for (away in listOf("stopped", "reopened")) {
+            val tag = "switch ${if (switchOn) "on" else "off"}, camera $away"
+            val wd = Wired()
+            if (switchOn) wd.coord.setEnabled(true)
+            wd.coord.setArea(if (switchOn) RoiFrac(0.25, 0.25, 0.75, 0.75) else probeRoi)
+            wd.coord.cameraBound(2.6, 8.0)
+            if (switchOn) wd.answer(1.9)
+            val restore = wd.coord.target().z
+            feedTo(wd.a, tray, 12); feedTo(wd.a, card, 12); feedTo(wd.a, card, 4)
+            assertEquals(tag, 1, wd.rec.bursts.size)
+            assertTrue(tag, wd.coord.beginProbe("run 1"))
+            assertNull(tag, wd.canProbe())
+            for (z in listOf(1.0, 2.2, restore)) { wd.rung(z); feedTo(wd.a, card, 8) }
+            assertTrue(tag, wd.coord.endProbe("zoom probe over", rebase = true))
+            // No sample yet (the settle frames are still to drop): the camera goes away.
+            if (away == "stopped") {
+                wd.coord.cameraStopped("the scan screen stopped")
+                wd.coord.cameraStarted("the scan screen started")
+            } else {
+                wd.coord.cameraOpening("camera OPENING")
+                wd.coord.cameraStarted("camera OPEN")
+            }
+            if (switchOn && wd.requests.size > 0 && wd.coord.state().settling) wd.answer(1.9)
+            // Away: the owner swapped the card.
+            val before = wd.rec.updates.size
+            feedTo(wd.a, printed, 30)
+            val after = wd.rec.updates.drop(before)
+            assertTrue("$tag: no re-learn", after.none { it.event is AutoScanner.Event.Learning })
+            assertEquals("$tag: the swapped card IS scanned — ${after.map { describe(it.event) }}", 2, wd.rec.bursts.size)
+            assertTrue("$tag: ${wd.log.all().map { it.msg }}",
+                wd.log.all().any { it.msg.startsWith("the zoom probe's rebase is dropped before any sample took it") })
             assertTrue(tag, wd.rec.errors.isEmpty())
         }
     }

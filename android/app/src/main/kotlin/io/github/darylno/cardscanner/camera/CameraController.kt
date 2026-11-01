@@ -397,6 +397,7 @@ class CameraController(
             probe.probeAt(gen, asked, camera, readBack, error)
         override fun probeEnded(why: String) = probe.probeEnded(why)
         override fun probeRebase(why: String) = probe.probeRebase(why)
+        override fun cameraAway(why: String) = analyzer.cameraAway(why)
     }, log = { DebugLog.global.i("zoom", it) })
 
     /** The screen's lifecycle: CameraX drops the zoom when the camera detaches (ON_STOP) and the zoom is re-applied at ON_START. */
@@ -940,7 +941,9 @@ class CameraController(
     /** The probe's camera side ([ZoomProbeGlue]) over this camera. */
     private val probe: ZoomProbeGlue = ZoomProbeGlue(analyzer, object : ZoomProbeGlue.Cam {
         override fun post(block: () -> Unit) { main.post(block) }
-        override fun postDelayed(ms: Long, block: () -> Unit) { main.postDelayed({ if (!released) block() }, ms) }
+        // Tagged with the run's token (API 28+): the run's end removes its timers from the main looper at once.
+        override fun postDelayed(ms: Long, token: Any, block: () -> Unit) { main.postDelayed({ if (!released) block() }, token, ms) }
+        override fun cancelDelayed(token: Any) = main.removeCallbacksAndMessages(token)
         override fun now(): Long = SystemClock.elapsedRealtime()
         override fun ready(): Boolean = !released && camera != null && analysis != null
         override fun applyAeLock() = applyAeAwbLock()

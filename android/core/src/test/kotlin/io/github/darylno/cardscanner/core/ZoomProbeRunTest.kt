@@ -103,12 +103,20 @@ class ZoomProbeRunTest {
             val ms = if (focusAt.size == 1) focusMs else refocusMs
             later(ms) { focusAnsweredAt += calls.size; done(ZoomProbe.Focus(focusOk, 4.05, 4.21, ms, if (focusOk) "FOCUSED" else "NOT focused")) }
         }
+        /** Each Grab carries a 1 MB token standing in for its NV21 copies (as the glue's do): who still holds it after the run? */
+        var bigTokens = false
+        inner class Tok(val ref: java.lang.ref.WeakReference<ByteArray>) { var role: Role? = null }
+        val tokens = mutableListOf<Tok>()
         override fun frames(done: (ZoomProbeRun.Grab?) -> Unit) {
             calls += "frames"
-            if (!framesNever) later(200) { done(ZoomProbeRun.Grab(6, 2, 1)) }
+            if (!framesNever) later(200) {
+                val tok = if (bigTokens) ByteArray(1 shl 20).also { tokens += Tok(java.lang.ref.WeakReference(it)) } else null
+                done(ZoomProbeRun.Grab(6, 2, 1, tok))
+            }
         }
         override fun measure(role: Role, grab: ZoomProbeRun.Grab, rect: IntArray?, done: (ZoomProbeRun.Measured?) -> Unit) {
             calls += "measure $role"
+            grab.token?.let { t -> tokens.firstOrNull { it.ref.get() === t }?.role = role }
             measureOutstanding++; maxMeasureOutstanding = max(maxMeasureOutstanding, measureOutstanding)
             val z = cameraZ
             val restore = role == Role.RESTORE
@@ -574,6 +582,29 @@ class ZoomProbeRunTest {
         assertTrue(steps.toString(), steps.size >= 15)
         assertEquals("the rung number never steps back: $steps", steps.sorted(), steps)
         assertTrue(f.progresses.joinToString("\n") { it.count }, f.progresses.any { Regex("rung \\d+/15 · [0-9.]+× · card \\d+ px at [0-9.]+×").matches(it.count) })
+    }
+
+    /**
+     * Review of a43cb5b: the verified restore's MEASURE_GUARD_MS timer (10 s) kept the restore's Grab — and so
+     * its frame copies, ~17–19 MB on the N200 — for 10 s after the run ended, whether or not the worker had
+     * answered long before: its handler read the Grab's fields. A port that does not cancel its timers (this
+     * fake, like any) still pending, nothing the runner left behind may hold a Grab's frames once the run is over.
+     */
+    @Test
+    fun nothingTheRunLeavesPendingHoldsAGrabsFrames() {
+        val f = fake { bigTokens = true }
+        f.run.start()
+        f.until { f.outcomes.isNotEmpty() }
+        assertEquals(Kind.DONE, f.outcomes.single().kind)
+        assertTrue("the restore's frames were measured", f.tokens.any { it.role == Role.RESTORE })
+        f.advance(1_000)                                              // the restore's 10 s guard (and the budget) still pending
+        var alive: List<Role?> = emptyList()
+        for (i in 0 until 20) {
+            System.gc(); Thread.sleep(20)
+            alive = f.tokens.filter { it.ref.get() != null }.map { it.role }
+            if (alive.isEmpty()) break
+        }
+        assertEquals("frame tokens still reachable 1 s after the run (their roles)", emptyList<Role?>(), alive)
     }
 
     @Test

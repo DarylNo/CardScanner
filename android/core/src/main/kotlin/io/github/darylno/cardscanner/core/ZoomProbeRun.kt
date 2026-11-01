@@ -471,10 +471,15 @@ class ZoomProbeRun(
                     val e = epoch
                     val t = ++token
                     var answered = false
+                    // Plain copies: [handle] — and so the guard below, which keeps it for MEASURE_GUARD_MS whether
+                    // or not the worker answered — must never hold the Grab, whose token is the restore's frame
+                    // copies (~17–19 MB on the N200 for 10 s after the run; review of a43cb5b).
+                    val skipped = g.skipped
+                    val skippedAtNew = g.skippedAtNew
                     val handle: (Measured?) -> Unit = { m ->
                         if (e == epoch && t == token && !answered && state == State.RESTORING) {
                             answered = true
-                            val r = m?.let { ZoomProbe.Rung(-1, z, a.camera, a.ms, null, it.frames, g.skipped, g.skippedAtNew, it.w, it.h, it.ms) }
+                            val r = m?.let { ZoomProbe.Rung(-1, z, a.camera, a.ms, null, it.frames, skipped, skippedAtNew, it.w, it.h, it.ms) }
                             // The 1× reference: the ladder's start, else the LOCATE frames (the AF pass ran, the ladder did not).
                             val ref = rungs.firstOrNull()?.takeIf { it.longPx != null } ?: locateRung
                             val refThumb = if (ref === locateRung) locateThumb else startThumb
