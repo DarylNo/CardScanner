@@ -91,7 +91,7 @@ internal class ZoomProbeGlue(private val analyzer: ScanAnalyzer, private val cam
     fun start(n: Int, earlier: List<ZoomProbeRun.Earlier>, l: CameraController.ProbeListener, seed: Long): Boolean {
         if (!cam.ready() || run != null) return false
         afRan = false
-        val side = Side(l)
+        val side = Side(l, n)
         val r = ZoomProbeRun(side, n, seed, earlier)
         side.runner = r
         run = r
@@ -128,9 +128,25 @@ internal class ZoomProbeGlue(private val analyzer: ScanAnalyzer, private val cam
 
     fun probeRebase(@Suppress("UNUSED_PARAMETER") why: String) = analyzer.rebaseAfterProbe()
 
-    private inner class Side(private val l: CameraController.ProbeListener) : ZoomProbeRun.Port {
+    private inner class Side(private val l: CameraController.ProbeListener, private val n: Int) : ZoomProbeRun.Port {
         /** The run this side serves (set right after it is built). */
         lateinit var runner: ZoomProbeRun
+        /**
+         * This run's NV21 copies handed to [measure] and not yet measured, and the most at once (count, bytes):
+         * the probe's frame memory, logged when the run ends (review of c758bc7: the worker lags the camera by
+         * up to [ZoomProbeRun.MAX_QUEUED] rungs, so a slow phone holds two rungs' copies, not one).
+         */
+        private var held = 0
+        private var heldBytes = 0L
+        private var peak = 0
+        private var peakBytes = 0L
+
+        private fun hold(frames: Int, bytes: Long) {
+            held += frames; heldBytes += bytes
+            if (heldBytes > peakBytes) { peak = held; peakBytes = heldBytes }
+        }
+
+        private fun release(frames: Int, bytes: Long) { held -= frames; heldBytes -= bytes }
 
         override fun begin(why: String): String? {
             if (!cam.ready()) return "The camera is not ready — try again in a second"
@@ -191,6 +207,8 @@ internal class ZoomProbeGlue(private val analyzer: ScanAnalyzer, private val cam
         override fun measure(role: ZoomProbeRun.Role, grab: ZoomProbeRun.Grab, rect: IntArray?, done: (ZoomProbeRun.Measured?) -> Unit) {
             val pf = grab.token as? Frames
             if (pf == null) { cam.post { done(null) }; return }
+            val bytes = pf.frames.sumOf { it.data.size.toLong() }
+            hold(pf.frames.size, bytes)
             val area = ZoomFit.toView(cam.baseArea(), zoom.state().ratio)    // "the Area" at the camera's zoom (LOCATE: 1×, the base Area)
             val act = cam.activeArray()
             val thumb = role == ZoomProbeRun.Role.LOCATE || role == ZoomProbeRun.Role.START || role == ZoomProbeRun.Role.RESTORE
@@ -204,10 +222,10 @@ internal class ZoomProbeGlue(private val analyzer: ScanAnalyzer, private val cam
                         val m = runCatching { ProbeMeasure.measure(pf.frames, metas, rect, area, act?.getOrNull(0), act?.getOrNull(1), thumb) }
                             .onFailure { e -> runCatching { log.w("probe", "measuring the ${role.name.lowercase(Locale.ROOT)} frames failed: $e") } }
                             .getOrNull()
-                        cam.post { done(m) }
+                        cam.post { release(pf.frames.size, bytes); done(m) }
                     }
                 }.isSuccess
-                if (!queued) done(null)
+                if (!queued) { release(pf.frames.size, bytes); done(null) }
             }
         }
 
@@ -238,6 +256,8 @@ internal class ZoomProbeGlue(private val analyzer: ScanAnalyzer, private val cam
             // with the scanned card still on the tray could read as a swap (plan step 10.6).
             if (afRan) cam.armCardFocus("first card after the zoom probe")
             afRan = false
+            if (peak > 0) log("probe run $n: frame copies — at most $peak waiting for the worker at once (%.1f MB of NV21; it lags the camera by up to %d rungs)"
+                .format(Locale.ROOT, peakBytes / 1e6, ZoomProbeRun.MAX_QUEUED))
             l.onFinished(o)
         }
 
@@ -245,7 +265,14 @@ internal class ZoomProbeGlue(private val analyzer: ScanAnalyzer, private val cam
     }
 
     companion object {
-        /** The probe's frames per rung, after ScanAnalyzer.SETTLE_DROP_FRAMES dropped ones (High res: fewer — 4.7 MB each). PROVISIONAL. */
+        /**
+         * The probe's frames per rung, after ScanAnalyzer.SETTLE_DROP_FRAMES dropped ones (High res: fewer — 4.7 MB each).
+         * PROVISIONAL. Each is its own NV21 copy, held until the worker has measured it — and the camera moves on while
+         * the worker measures (up to [ZoomProbeRun.MAX_QUEUED] rungs queued), so a worker slower than the camera (the
+         * N200 estimate: ~1 s a rung) holds TWO rungs' copies at once: 12 × 2.88 MB ≈ 35 MB at 1600×1200, 8 × 4.72 MB
+         * ≈ 38 MB at High res (the plan's "6 copies, 17–19 MB" counted one; review of c758bc7). Java heap, released per
+         * rung; the run's peak is logged ("frame copies — at most N waiting for the worker at once").
+         */
         const val FRAMES = 6
         const val FRAMES_HIGH = 4
         /** A rung's CaptureResults are read this long after its last frame came (a result can lag its image). PROVISIONAL. */

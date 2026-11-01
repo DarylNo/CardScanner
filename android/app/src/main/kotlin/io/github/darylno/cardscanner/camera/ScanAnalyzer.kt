@@ -1129,13 +1129,21 @@ class ScanAnalyzer(
      * (commands and frames share it, so nothing moves meanwhile): [answer] null = yes, else the
      * refusal in the owner's words. Tray must have scanned the card (AWAIT_NEXT — a capture held
      * for focus was dropped by the closure, so it reads as still watching and is asked again on
-     * reopening); no shutter or held capture pending. Tap to scan: any card in the Area will do.
+     * reopening); no shutter or held capture pending, and no rebase owed by a first-card hold that
+     * timed out — its focus pass still out ([heldTimedOut]) or answered and not yet taken
+     * ([rebaseNext]). Inside the closed gate no sample would take that rebase (and the probe's own
+     * AF pass supersedes the card pass, so it answers right there), and a stop or an unverified end
+     * maps the identical view, which keeps it: the first sample afterwards would re-take whatever
+     * card lay there — a card swapped meanwhile never scanned (review of c758bc7). Refused, the
+     * late answer re-takes the STILL card on the next tick; the owner runs the probe a second
+     * later. Once the probe passes this, nothing inside the closed gate can owe one again: no hold
+     * ends there. Tap to scan: any card in the Area will do.
      */
     fun canProbe(answer: (String?) -> Unit) = post {
         val why = when {
             !zoomGateClosed -> PROBE_GATE_OPEN
             mode != ScanMode.MOUNT -> PROBE_NO_MOUNT
-            manualPending || deferring -> PROBE_SCAN_PENDING
+            manualPending || deferring || heldTimedOut || rebaseNext -> PROBE_SCAN_PENDING
             scanner.autoEnabled && scanner.mode != AutoScanner.Mode.AWAIT_NEXT -> PROBE_NOT_SCANNED
             else -> null
         }

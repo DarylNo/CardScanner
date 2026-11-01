@@ -1254,6 +1254,76 @@ class ScanAnalyzerTest {
     }
 
     /**
+     * Review of c758bc7, plan correction 9 by another door: a first-card hold that TIMED OUT
+     * (shot from the last frames, the lens maybe still moving) owes the scanner a rebase — its
+     * focus pass answers late (the hold waits 1.5 s, CameraX 5 s) and [ScanAnalyzer.focusDone]
+     * re-takes the scanned scene from the next sample. Inside the probe's closed gate no sample
+     * takes it, and the probe's own AF lock on the card supersedes that pass, so it answers right
+     * there; the probe's stop or unverified end then maps the identical view (no change drops the
+     * flag) and the first sample afterwards took WHATEVER card lay there into the scanned scene —
+     * a card swapped while the screen was away, or mid-probe, was never scanned. The probe is
+     * refused while that rebase is owed (the pass still out, or answered and not yet taken): the
+     * late answer re-takes the STILL card, and the owner's Run probe a second later goes ahead.
+     * Both endings, both points the answer can be at; the still card is never scanned twice.
+     */
+    @Test fun aLateFirstCardFocusAnswerNeverRebasesThroughAStoppedOrUnverifiedProbe() {
+        for (ending in listOf("stopped", "unverified")) for (answeredFirst in listOf(false, true)) {
+            val tag = "$ending, the card pass ${if (answeredFirst) "answered just before the probe's gate closed" else "still out"}"
+            val wd = Wired()
+            var due = true
+            wd.a.focusFirst = { due }
+            wd.coord.setArea(probeRoi); wd.coord.cameraBound(2.6, 8.0)
+            feedTo(wd.a, tray, 12); feedTo(wd.a, card, 12)
+            assertEquals(tag, 1, wd.rec.focusRequests)
+            due = false
+            feedTo(wd.a, card, (ScanAnalyzer.FOCUS_WAIT_NS / 100_000_000L).toInt() + 1)   // the hold times out: shot from the last frames
+            assertEquals(tag, 1, wd.rec.bursts.size)
+            feedTo(wd.a, card, 4)
+            assertTrue(tag, wd.rec.updates.last().event is AutoScanner.Event.AwaitingNext)
+            var owed = true
+            fun theCardPassAnswers() { if (owed) { owed = false; wd.a.focusDone() } }
+            if (answeredFirst) theCardPassAnswers()                   // …with no sample between it and the probe's gate
+            // The owner taps Run probe; the runner ends a refused one at once, and the owner taps again a second later.
+            var refusals = 0
+            var ran = false
+            for (attempt in 1..2) {
+                assertTrue(tag, wd.coord.beginProbe("run 1"))
+                val no = wd.canProbe()
+                if (no != null) {
+                    assertEquals(tag, ScanAnalyzer.PROBE_SCAN_PENDING, no)
+                    refusals++
+                    assertTrue(tag, wd.coord.endProbe("zoom probe refused"))
+                    feedTo(wd.a, card, 3); theCardPassAnswers(); feedTo(wd.a, card, 7)
+                    continue
+                }
+                ran = true
+                wd.rung(1.0); feedTo(wd.a, card, 8)
+                theCardPassAnswers()           // the probe's AF lock on the card supersedes the card pass: it answers INSIDE the gate
+                wd.rung(1.6); feedTo(wd.a, cardZoomed, 4)
+                if (ending == "stopped") {
+                    wd.coord.cameraStopped("the scan screen stopped")
+                    assertFalse(tag, wd.coord.probing)
+                    wd.coord.cameraStarted("the scan screen started")      // the card was swapped while the screen was away
+                } else {
+                    feedTo(wd.a, printed, 8)                                // swapped mid-probe: the restore sees another card
+                    wd.rung(1.0); feedTo(wd.a, printed, 6)
+                    assertTrue(tag, wd.coord.endProbe("zoom probe over", rebase = false))
+                }
+                break
+            }
+            assertTrue("$tag: the probe ran", ran)
+            assertEquals("$tag: the still card is not scanned again", 1, wd.rec.bursts.size)
+            val before = wd.rec.updates.size
+            feedTo(wd.a, printed, 30)
+            val after = wd.rec.updates.drop(before)
+            assertTrue("$tag: no re-learn", after.none { it.event is AutoScanner.Event.Learning })
+            assertEquals("$tag: the swapped card IS scanned — ${after.map { describe(it.event) }}", 2, wd.rec.bursts.size)
+            assertEquals("$tag: refused once, while the rebase was owed", 1, refusals)
+            assertTrue(tag, wd.rec.errors.isEmpty())
+        }
+    }
+
+    /**
      * A probe refused at its CHECK (read after the gate closed) ends on the identical mapping:
      * no re-learn, and whatever was on its way is asked again — Tray still watching a card
      * (it is then shot once), a first-card capture held for focus (the closure dropped it; the

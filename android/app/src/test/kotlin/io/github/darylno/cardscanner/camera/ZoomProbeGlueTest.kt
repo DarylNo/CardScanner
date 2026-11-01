@@ -107,7 +107,7 @@ class ZoomProbeGlueTest {
     }
 
     /** The synthetic camera, the main thread, the analysis thread and the worker on one clock (ms). */
-    private inner class Rig(val area: RoiFrac = RoiFrac(0.2, 0.15, 0.8, 0.85), val allowRebase: Boolean = true) {
+    private inner class Rig(val area: RoiFrac = RoiFrac(0.2, 0.15, 0.8, 0.85), val allowRebase: Boolean = true, val workerMs: Long = 120) {
         var now = 0L
         private var seq = 0
         private val tasks = PriorityQueue<Triple<Long, Int, () -> Unit>>(compareBy({ it.first }, { it.second }))
@@ -135,6 +135,8 @@ class ZoomProbeGlueTest {
         var snapOnMove = false
         /** The probe's AF pass puts the card in this state (the lens moved; null = it looks the same). */
         var afterFocus: Mat? = cardAfter
+        /** The zoom answers the camera has given (each [ZoomCoordinator.onApplied]). */
+        var answers = 0
 
         fun later(ms: Long, block: () -> Unit) { tasks += Triple(now + ms, seq++, block) }
 
@@ -161,8 +163,12 @@ class ZoomProbeGlueTest {
             override fun highRes(): Boolean = false
             override fun facts(restoreZ: Double) = ZoomProbe.Facts("0", W, H, false, 4160, 3120, 2.6, 10.0, restoreZ)
             override fun armCardFocus(why: String) { armed += why }
-            // The worker: its own thread — here each job takes 120 ms of the clock, in order.
-            override fun worker(): Executor = Executor { job -> later(120) { job.run() } }
+            // The worker: its own thread — here each job takes [workerMs] of the clock (120 ms), in order.
+            private var workerFree = 0L
+            override fun worker(): Executor = Executor { job ->
+                workerFree = max(workerFree, now) + workerMs
+                later(workerFree - now) { job.run() }
+            }
         }, log = log)
 
         init {
@@ -172,7 +178,7 @@ class ZoomProbeGlueTest {
                 override fun request(gen: Int, ratio: Double) {
                     later(70) { cameraZ = ratio }
                     if (snapOnMove) later(80) { askSnapshot() }
-                    later(150) { coord.onApplied(gen, ratio) }
+                    later(150) { answers++; coord.onApplied(gen, ratio) }
                 }
                 override fun closeGate(why: String) = analyzer.closeZoomGate(why)
                 override fun map(ratio: Double, view: RoiFrac?, settle: Boolean, why: String) {
@@ -304,6 +310,31 @@ class ZoomProbeGlueTest {
         assertTrue(r.analyzer.stats(), r.analyzer.stats().contains("probe frames"))
     }
 
+    /**
+     * Review of c758bc7 (the probe's frame memory): a worker slower than the camera — the N200 estimate, ~1 s a rung —
+     * holds TWO rungs' NV21 copies at once (the camera moves on while it measures, ZoomProbeRun.MAX_QUEUED), never
+     * more; the run still finishes valid, and its peak is logged, so a rig report shows the real figure. A worker
+     * faster than the camera holds one rung's.
+     */
+    @Test fun aSlowWorkerHoldsAtMostTwoRungsOfFrameCopiesAndTheRunSaysSo() {
+        val frameMb = io.github.darylno.cardscanner.core.Nv21Frame.byteCount(W, H) / 1e6
+        for ((workerMs, rungs) in listOf(1_000L to 2, 120L to 1)) {
+            val r = Rig(workerMs = workerMs)
+            r.scanTheCard()
+            assertTrue(r.glue.start(1, emptyList(), r.listener, seed = 7))
+            r.until { r.outcomes.isNotEmpty() }
+            val o = r.outcomes.single()
+            assertEquals("worker $workerMs ms: ${r.probeLines().joinToString("\n")}", Kind.DONE, o.kind)
+            assertTrue(o.result!!.logLine(), o.result!!.valid)
+            val n = rungs * ZoomProbeGlue.FRAMES
+            assertEquals("worker $workerMs ms", listOf("probe run 1: frame copies — at most $n waiting for the worker at once " +
+                "(%.1f MB of NV21; it lags the camera by up to 2 rungs)".format(java.util.Locale.ROOT, n * frameMb)),
+                r.probeLines().filter { it.contains("frame copies") })
+            assertTrue("the log stays short: ${r.probeLines().size}", r.probeLines().size <= 30)
+            assertEquals("nothing filed", 1, r.sink.bursts.size)
+        }
+    }
+
     /** THE CONTROL: the same run with the coordinator's rebase withheld — the still card, looking different, is shot again. */
     @Test fun withoutTheRebaseTheStillCardIsShotAgain() {
         val r = Rig(allowRebase = false)
@@ -316,13 +347,24 @@ class ZoomProbeGlueTest {
         assertEquals("…and without it the drift reads as a swap", 2, r.sink.bursts.size)
     }
 
-    /** A screen stop mid-ladder: stopped at once — AE back, no restore, no rebase; a card swapped meanwhile IS scanned. */
+    /**
+     * A screen stop mid-ladder: stopped at once — AE back, no restore, no rebase; a card swapped meanwhile IS scanned.
+     * Stopped right after a rung's answer (the top, 1.80×: the browser's picture follows that rung), the stop stops the
+     * picture too — the closing camera's last frames (CameraX dropped the zoom as it detached) and the reopened one's
+     * before the gate opens are never labelled with the stale rung: the coordinator's gate closure is idempotent, so
+     * only the glue's abort clears the slot (plan correction 10; review of c758bc7).
+     */
     @Test fun aScreenStopMidLadderNeverRebasesAndASwappedCardScans() {
         val r = Rig()
         r.scanTheCard()
         assertTrue(r.glue.start(1, emptyList(), r.listener, seed = 7))
-        r.until { r.progresses.any { it.status.startsWith("Zoom probe 4/") } }
+        r.until { r.progresses.any { it.status.startsWith("Zoom probe 2/") } }
+        assertTrue("the second rung is the top: ${r.progresses.last().status}", r.progresses.last().status.startsWith("Zoom probe 2/12 · 1.80×"))
+        val answered = r.answers
+        r.until { r.answers > answered }                   // the camera answered the top: the picture re-opened at 1.80×
         r.coord.cameraStopped("the scan screen stopped")
+        r.cameraZ = 1.0
+        r.askSnapshot(); r.advance(300)                    // the closing camera's last frames, at 1×; the browser asks meanwhile
         r.streaming = false
         r.advance(1_000)
         val o = r.outcomes.single()
@@ -334,9 +376,13 @@ class ZoomProbeGlueTest {
         // Away: the card is swapped. Back: today's round trip — and the new card scans.
         r.scene = card2; r.cameraZ = 1.0
         r.coord.cameraStarted("the scan screen started")
+        r.askSnapshot()
         r.streaming = true
         r.advance(3_000)
         assertEquals("the swapped card IS scanned", 2, r.sink.bursts.size)
+        assertTrue("a picture was taken once the camera was back: ${r.snaps}", r.snaps.isNotEmpty())
+        assertTrue("every picture labelled with its frame's own zoom: ${r.snaps}",
+            r.snaps.all { (label, real) -> kotlin.math.abs(label - real) < 1e-4 })
         assertTrue(r.sink.errors.isEmpty())
     }
 
