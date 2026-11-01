@@ -38,6 +38,13 @@ class Captured(
     val lens: String? = null,
     /** The camera zoom the burst was taken at (1.0 = none) — the capture line's "@ z×". */
     val zoom: Double = 1.0,
+    /**
+     * The zoom A/B's figure: the collector strip's detail on the 630×880 identification
+     * raster (CaptureResult.detail), or null — measured only during its arm steps.
+     */
+    val stripDetail: Double? = null,
+    /** The chosen frame's ISO (the camera's own report), or null when none was kept. */
+    val iso: Int? = null,
 ) {
     /** The quad as frame FRACTIONS (the overlay's space), or null without one. */
     fun quadFractions(): FloatArray? {
@@ -55,6 +62,12 @@ class Captured(
         val right = Math.hypot((q[4] - q[2]).toDouble(), (q[5] - q[3]).toDouble())
         return Math.round((left + right) / 2).toInt()
     }
+
+    /**
+     * The card's LONG side in frame pixels — the larger of [cardHeightPx] and [cardWidthPx],
+     * so a card lying sideways counts the same — 0 without a quad (the zoom A/B's card size).
+     */
+    fun cardLongPx(): Int = maxOf(cardHeightPx(), cardWidthPx())
 
     /** The card's width in frame pixels (the mean of its two horizontal sides), 0 without a quad. */
     fun cardWidthPx(): Int {
@@ -136,6 +149,8 @@ interface CameraPort {
     fun setHighRes(high: Boolean)
     /** The Camera setting (a Camera2 id, null = Automatic); rebinds — and re-learns the tray — when it changes. */
     fun setCamera(id: String?) {}
+    /** The zoom A/B's arm steps: each capture also measures its identification raster's detail (CapturePipeline.measureDetail). */
+    fun setMeasureDetail(on: Boolean) {}
     fun diagnostics(): String
     /** The current upright frame as JPEG, or null (see CameraController.snapshotJpeg). Off the UI thread. */
     fun snapshotJpeg(): ByteArray? = null

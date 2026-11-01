@@ -169,6 +169,31 @@ class CapturePipelineTest {
         }
     }
 
+    /**
+     * The zoom A/B's detail (MeasureSession arm steps only): with the flag on, a flattened
+     * card also carries the identification raster's detail (ZoomDetail.identRaster: the
+     * 630×880 warp's collector strip and card); everything uploaded is byte for byte what
+     * a flag-off run makes and the timings keep their six keys. Off (the default) it is
+     * null and nothing extra runs; no quad → no detail.
+     */
+    @Test fun theMeasureDetailFlagAddsTheRastersDetailAndChangesNothingUploaded() {
+        val bgr = scene("dark_tray_white_border")
+        val off = pipeline.process(frames(bgr), null)
+        assertFalse(pipeline.measureDetail)
+        assertNull("off by default", off.detail)
+        val measuring = CapturePipeline().apply { measureDetail = true }
+        val on = measuring.process(frames(bgr), null)
+        val d = on.detail
+        assertNotNull("a flattened card is measured", d)
+        assertTrue("strip ${d!!.strip} / card ${d.card}", d.strip > 0 && d.card > 0)
+        org.junit.Assert.assertArrayEquals("the primary is byte for byte the flag-off one", off.primary, on.primary)
+        assertEquals(off.fallbacks.size, on.fallbacks.size)
+        for (i in off.fallbacks.indices) org.junit.Assert.assertArrayEquals(off.fallbacks[i], on.fallbacks[i])
+        org.junit.Assert.assertArrayEquals(off.quad, on.quad, 0f)
+        assertEquals(listOf("sharpness", "convert", "quad", "flatten", "encode", "total"), on.timingsMs.keys.toList())
+        assertNull("no quad, no detail", measuring.process(frames(scene("empty_tray")), null).detail)
+    }
+
     @Test fun submitRunsOnTheCaptureThread() {
         val q = java.util.concurrent.ArrayBlockingQueue<Pair<String, Result<CaptureResult>>>(1)
         assertTrue(pipeline.submit(frames(scene("empty_tray")), null) { q.put(Thread.currentThread().name to it) })

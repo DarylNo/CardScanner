@@ -26,6 +26,7 @@ class CameraAdapter(private val context: Context, private val settings: AppSetti
     private var roi: RoiFrac? = null
     private var zoomFit = false
     private var drawing = false
+    private var measureDetail = false
     private var preview: PreviewView? = null
 
     override fun bind(owner: LifecycleOwner, preview: PreviewView, listener: CameraPort.Listener) {
@@ -58,6 +59,7 @@ class CameraAdapter(private val context: Context, private val settings: AppSetti
                         r.primary, r.fallbacks, r.flattened, r.summary(), if (outcome.mode == ScanMode.MOUNT) outcome.scene else null,
                         quad = r.quad, frameW = r.frameWidth, frameH = r.frameHeight,
                         burstId = outcome.id, lens = outcome.lens, zoom = outcome.zoom,
+                        stripDetail = r.detail?.strip, iso = outcome.iso,
                     ),
                     outcome.trigger == CaptureTrigger.MANUAL,
                 )
@@ -93,6 +95,7 @@ class CameraAdapter(private val context: Context, private val settings: AppSetti
         c.setTorch(settings.torch)
         c.setAeAwbLock(settings.aeLock)
         c.setCamera(settings.cameraId)
+        c.setMeasureDetail(measureDetail)
         c.start(preview, if (settings.highRes) CameraController.Resolution.HIGH else CameraController.Resolution.STANDARD)
     }
 
@@ -157,6 +160,11 @@ class CameraAdapter(private val context: Context, private val settings: AppSetti
     }
 
     override fun setCamera(id: String?) { controller?.setCamera(id) }
+
+    override fun setMeasureDetail(on: Boolean) {
+        measureDetail = on
+        controller?.setMeasureDetail(on)
+    }
 
     override fun diagnostics(): String = controller?.diagnostics() ?: "camera not bound"
     override fun snapshotJpeg(): ByteArray? = controller?.snapshotJpeg()

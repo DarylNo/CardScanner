@@ -125,10 +125,28 @@ class AppSettings(context: Context) {
     var measureAnswer: Boolean?
         get() = if (prefs.contains(K_MEASURE_ANSWER)) prefs.getBoolean(K_MEASURE_ANSWER, false) else null
         set(v) { if (v == null) prefs.edit().remove(K_MEASURE_ANSWER).apply() else prefs.edit().putBoolean(K_MEASURE_ANSWER, v).apply() }
-    /** The owner's own "aeLock,vibration,checkMs" to restore when the session ends. */
+    /**
+     * The owner's own "aeLock,vibration,checkMs[,zoomFit]" to restore when the session
+     * ends (1.1.17 added zoomFit; a session started on 1.1.16 saved the first three).
+     */
     var measureOriginal: String?
         get() = prefs.getString(K_MEASURE_ORIG, null)
         set(v) { if (v == null) prefs.edit().remove(K_MEASURE_ORIG).apply() else prefs.edit().putString(K_MEASURE_ORIG, v).apply() }
+    /** Which steps the session runs (MeasureSession.Plan's key); null = the full session. */
+    var measurePlan: String?
+        get() = prefs.getString(K_MEASURE_PLAN, null)
+        set(v) { if (v == null) prefs.edit().remove(K_MEASURE_PLAN).apply() else prefs.edit().putString(K_MEASURE_PLAN, v).apply() }
+    /**
+     * The current step's id: the step is resumed by it, not by [measureStep] alone (1.1.17
+     * put four steps before "ae-lock" — a bare index lands on another step).
+     */
+    var measureStepId: String?
+        get() = prefs.getString(K_MEASURE_STEP_ID, null)
+        set(v) { if (v == null) prefs.edit().remove(K_MEASURE_STEP_ID).apply() else prefs.edit().putString(K_MEASURE_STEP_ID, v).apply() }
+    /** The zoom A/B's records (compact JSON, MeasureSession caps it at 120), null = none. */
+    var measureAb: String?
+        get() = prefs.getString(K_MEASURE_AB, null)
+        set(v) { if (v == null) prefs.edit().remove(K_MEASURE_AB).apply() else prefs.edit().putString(K_MEASURE_AB, v).apply() }
 
     var debugOverlay: Boolean
         get() = prefs.getBoolean(K_DEBUG, false)
@@ -165,6 +183,9 @@ class AppSettings(context: Context) {
         const val K_MEASURE_STARTED = "measure_started"
         const val K_MEASURE_ANSWER = "measure_answer"
         const val K_MEASURE_ORIG = "measure_orig"
+        const val K_MEASURE_PLAN = "measure_plan"
+        const val K_MEASURE_STEP_ID = "measure_step_id"
+        const val K_MEASURE_AB = "measure_ab"
         const val K_TIMINGS = "recent_timings"
     }
 }

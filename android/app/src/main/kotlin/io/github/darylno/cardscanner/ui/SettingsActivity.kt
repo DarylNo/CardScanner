@@ -291,6 +291,12 @@ class SettingsActivity : AppCompatActivity() {
             startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP))
             finish()
         }, lp(10))
+        // Just the zoom A/B (1.1.17): A1, the probe step, B, A2. Not offered while a session is on — Resume covers it.
+        if (!app.measure.active) diagCard.addView(chrome.secondaryButton(getString(R.string.measure_run_zoom)) {
+            app.measure.start(MeasureSession.Plan.ZOOM)
+            startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP))
+            finish()
+        }, lp(10))
         col.addView(diagCard, lp())
     }
 

@@ -281,6 +281,7 @@ class MainActivity : AppCompatActivity() {
             camera?.setHighRes(settings.highRes)
             camera?.setCamera(settings.cameraId)
             camera?.setZoomFit(settings.zoomFit)
+            camera?.setMeasureDetail(measureArmOn())          // a session started (or stopped) from Settings
             refreshCameraPill()
             // Belt-and-braces: another screen may have unbound the shared CameraProvider
             // while we were stopped; re-bind so the preview/scanning isn't dead.
@@ -924,8 +925,10 @@ class MainActivity : AppCompatActivity() {
         appliedRoi = settings.roi
         cam.setAuto(settings.auto)
         appliedAuto = settings.auto
+        cam.setMeasureDetail(measureArmOn())
         cam.bind(this, preview, cameraListener)
         syncPause()
+        refreshMeasure()                 // the zoom A/B's notes read the camera's zoom: there is one now
     }
 
     // ── the update lock ─────────────────────────────────────────────────────
@@ -1067,6 +1070,7 @@ class MainActivity : AppCompatActivity() {
                     if (!drawing) overlay.setRoi(viewRoi)
                 }
                 updateAreaBtn()
+                refreshMeasure()         // the zoom A/B's B line says the zoom it runs at
             }
         }
 
@@ -1142,10 +1146,10 @@ class MainActivity : AppCompatActivity() {
         measureTitle.text = getString(R.string.measure_step, m.index + 1, m.steps.size, st.title)
         measureText.text = st.instruction
         val count = if (st.target > 0) getString(R.string.measure_captures_of, m.captures, st.target) else getString(R.string.measure_captures, m.captures)
-        measureCount.text = if (st.minutes > 0) {
+        measureCount.text = (if (st.minutes > 0) {
             val secs = ((System.currentTimeMillis() - m.stepStartedAt) / 1000L).coerceAtLeast(0)
             count + " · " + getString(R.string.measure_elapsed, secs / 60, secs % 60, st.minutes)
-        } else count
+        } else count) + m.countExtra(settings.auto, camera?.zoomState())   // the zoom A/B: tally, notes, summary (text only)
         val q = st.question
         measureQuestion.visibility = if (q != null) View.VISIBLE else View.GONE
         measureQuestion.text = q?.let { it + (m.answer?.let { a -> if (a) "  ✓ yes" else "  ✗ no" } ?: "") } ?: ""
@@ -1169,16 +1173,33 @@ class MainActivity : AppCompatActivity() {
         setStatus(getString(R.string.measure_stopped), Tone.OK)
     }
 
-    /** A step changed its settings (AE lock, vibration, check time): apply what the camera reads live. */
+    /** The zoom A/B's arm steps measure each capture's identification-raster detail (CapturePipeline.measureDetail). */
+    private fun measureArmOn(): Boolean = app.measure.active && app.measure.step.arm != null
+
+    /**
+     * A step changed its settings (AE lock, vibration, check time, Zoom to fit) — or the
+     * session ended and put the owner's back: apply what the camera reads live. Before
+     * 1.1.17 only AE lock was pushed, so the zoom A/B's B step would have run at 1×.
+     */
     private fun afterMeasureStep() {
         camera?.setAeLock(settings.aeLock)
+        camera?.setZoomFit(settings.zoomFit)
+        camera?.setMeasureDetail(measureArmOn())
+        val m = app.measure
+        // The switch logs nothing when it did not change: record what this step zooms anyway
+        // (target, Area fit, lossless, lens max, MAX_ZOOM).
+        if (m.active && m.step.zoomFit != null) dlog.i("test", "step ${m.index + 1}/${m.steps.size} ${m.step.id} zoom: " +
+            (camera?.zoomState()?.describe() ?: "no camera"))
         refreshMeasure()
         measureCard.removeCallbacks(measureTick); if (app.measure.active) measureCard.postDelayed(measureTick, 1000)
     }
 
     private fun handleCaptured(capture: Captured, manual: Boolean) {
         settings.addTiming(capture.timings)
-        if (app.measure.active) { app.measure.captured(); refreshMeasure() }
+        if (app.measure.active) {
+            app.measure.captured(capture.burstId, manual, capture.zoom, capture.cardLongPx(), capture.stripDetail, capture.iso)
+            refreshMeasure()
+        }
         val replace = if (manual) pendingReplace else null
         pendingReplace = null
         // Tapped with Auto off: this scan opens once it's identified (was Handheld's price check).
@@ -1205,7 +1226,10 @@ class MainActivity : AppCompatActivity() {
             capture.scene?.let { sceneByJob[jobId] = it }
             // Posted before any outcome can be (same reason); skipped if a Trigger/NextCard/
             // mode change superseded this capture while it was being written.
-            runOnUiThread { if (gen == captureGen) lastCaptureJobId = jobId }
+            runOnUiThread {
+                if (gen == captureGen) lastCaptureJobId = jobId
+                app.measure.queued(jobId, capture.burstId)       // the zoom A/B matches the outcome by it
+            }
         }
         try {
             io.execute(work)
@@ -1242,6 +1266,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun handleOutcome(jobId: String, manual: Boolean, openScan: Boolean, replaceScanId: Long?, outcome: Outcome) {
         val scene = sceneByJob.remove(jobId)
+        if (app.measure.active) { app.measure.identified(jobId, outcome); refreshMeasure() }   // the zoom A/B's tally
         // Only the most recent capture's job may offer Retry (see lastCaptureJobId).
         val current = jobId == lastCaptureJobId
         // openScan = a shutter tap with Auto off: the scan opens once identified.

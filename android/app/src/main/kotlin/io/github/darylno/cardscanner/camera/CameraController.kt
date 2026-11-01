@@ -89,7 +89,8 @@ private const val CARD_FOCUS_TRIES = 3
 /**
  * A finished capture: [result] on success, else [error]. [scene] is for [CameraController.onNoCard].
  * [lens] = the camera's own report for the frame the pipeline chose (AF state, lens
- * position, exposure, ISO — "is it focusing?"), or null when none was kept.
+ * position, exposure, ISO — "is it focusing?"), or null when none was kept; [iso] =
+ * that frame's ISO alone (the zoom A/B compares it), or null.
  */
 class CaptureOutcome(
     val id: Long,
@@ -101,6 +102,7 @@ class CaptureOutcome(
     val lens: String? = null,
     /** The camera zoom the burst was taken at (the capture line's "@ z×"). */
     val zoom: Double = 1.0,
+    val iso: Int? = null,
 )
 
 /**
@@ -202,6 +204,7 @@ class CameraController(
             val metas = request.frames.map { frameMeta.at(it.timestampNs) }
             val ok = pipeline.submit(request.frames, request.cropRoi) { r ->
                 val lens = r.getOrNull()?.let { res -> runCatching { lensAtCapture(request, metas, res.sharpestIndex) }.getOrNull() }
+                val iso = r.getOrNull()?.let { res -> runCatching { isoAtCapture(request, metas, res.sharpestIndex) }.getOrNull() }
                 r.getOrNull()?.let { res ->
                     // Only captures where a card was found count: an empty-tray
                     // (phantom) capture is always "soft", and letting it re-arm the
@@ -215,7 +218,7 @@ class CameraController(
                 }
                 val outcome = CaptureOutcome(
                     request.id, request.trigger, request.mode, request.scene, r.getOrNull(), r.exceptionOrNull(), lens,
-                    request.zoom,
+                    request.zoom, iso,
                 )
                 main.post { listener.onCapture(outcome) }
             }
@@ -337,6 +340,12 @@ class CameraController(
         if (own != null) return own.describe(focusCalibrated)
         val newest = frameMeta.latest() ?: return null
         return newest.describe(focusCalibrated) + " (the newest frame's report — the chosen frame's was not kept)"
+    }
+
+    /** The chosen frame's own ISO (as [lensAtCapture] finds its report; never another frame's), or null. Capture thread. */
+    private fun isoAtCapture(request: CaptureBurst, metas: List<FrameMetaRing.Meta?>, chosen: Int): Int? {
+        val frame = request.frames.getOrNull(chosen) ?: return null
+        return (metas.getOrNull(chosen) ?: frameMeta.at(frame.timestampNs))?.iso
     }
 
     // ---------------- zoom to fit the Area (core ZoomCoordinator; this is its CameraX glue) ----------------
@@ -720,6 +729,9 @@ class CameraController(
         aeAwbLock = on
         applyAeAwbLock()
     }
+
+    /** The zoom A/B's arm steps: each capture also measures its identification raster's detail (CapturePipeline). */
+    fun setMeasureDetail(on: Boolean) { pipeline.measureDetail = on }
 
     /** Tap on the preview ([x],[y] in PreviewView pixels). Mount: lock there; Handheld: AF there, auto-cancel. */
     fun tapToFocus(x: Float, y: Float) {

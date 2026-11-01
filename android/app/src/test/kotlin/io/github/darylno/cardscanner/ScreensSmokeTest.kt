@@ -195,6 +195,171 @@ class ScreensSmokeTest {
         assertFalse("the card is gone", findText(a.window.decorView, app.measure.steps[1].instruction)!!.isShown)
     }
 
+    /**
+     * The zoom A/B's B step turns "Zoom to fit the Area" ON on the live camera (before
+     * 1.1.17 Next pushed only AE lock, so B ran at 1×), and Stop gives the owner's own
+     * switch back — both as the paired computer's GET /api/device reads them. An Area of
+     * 0.25..0.75 fits 1.90× (the Area fit), as in deviceApi_patchAnswersWithTheZoomAfterTheChange.
+     */
+    @Test
+    @Config(qualifiers = "w411dp-h914dp-xxhdpi")
+    fun mainActivity_zoomBStep_appliesTheZoomLive() {
+        app.settings.roi = io.github.darylno.cardscanner.core.RoiFrac(0.25, 0.25, 0.75, 0.75)
+        app.settings.auto = true
+        app.settings.zoomFit = false
+        grantCamera(true)
+        app.measure.start()                                      // the full session: Next through to B
+        val a = launch(MainActivity::class.java)
+        val root = a.window.decorView
+        repeat(app.measure.steps.size) {
+            if (app.measure.active && app.measure.step.id != "zoom-b" && !app.measure.isLast) {
+                findText(root, a.getString(R.string.measure_next))!!.performClick()
+                ShadowLooper.idleMainLooper()
+            }
+        }
+        assertEquals("zoom-b", app.measure.step.id)
+        val api = io.github.darylno.cardscanner.core.server.DeviceApi(app.phoneServer.device)
+        fun device(): Map<*, *> {
+            val r = api.handle(io.github.darylno.cardscanner.core.server.ApiRequest("GET", "/api/device"))!!
+            assertEquals(200, r.status)
+            return io.github.darylno.cardscanner.core.MiniJson.parse(String(r.body)) as Map<*, *>
+        }
+        val on = device()
+        assertEquals(true, on["zoom_fit"])
+        val zoom = on["zoom"] as Map<*, *>
+        assertEquals("B zooms the camera: $on", 1.9, (zoom["target"] as Number).toDouble(), 0.0)
+        assertEquals("the Area fit", zoom["limit"])
+        assertTrue("the test marker records the zoom B runs at",
+            io.github.darylno.cardscanner.core.DebugLog.global.all().any {
+                it.tag == "test" && it.msg.contains(" zoom-b zoom: zoom to fit the Area: on · target 1.90× (limited by the Area fit)")
+            })
+        findText(root, a.getString(R.string.measure_stop))!!.performClick()
+        ShadowLooper.idleMainLooper()
+        assertFalse(app.measure.active)
+        assertFalse("the owner's own switch (off) is back", app.settings.zoomFit)
+        val off = device()
+        assertEquals(false, off["zoom_fit"])
+        assertEquals(1.0, ((off["zoom"] as Map<*, *>)["target"] as Number).toDouble(), 0.0)
+    }
+
+    /**
+     * The zoom steps' prompt card at the N200's size, with their longest words: A1's
+     * instruction with every note (Tap to scan, an Area that can't zoom where it is, the
+     * off-centre hint), B's question and its "B is at 1.00×" note, and the done step's
+     * A/B summary and verdict. Back, Stop, Next and Yes/No each have a size and sit on
+     * screen, the card stays ≤ 45 % of the screen height (the preview must still show the
+     * tray), and the bottom row is still on screen. NATIVE graphics: real text widths.
+     */
+    @Test
+    @Config(qualifiers = "w411dp-h914dp-xxhdpi")
+    @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
+    fun mainActivity_zoomSteps_cardFitsWithTheLongestText() {
+        app.settings.roi = io.github.darylno.cardscanner.core.RoiFrac(0.45, 0.25, 0.95, 0.75)
+        app.settings.auto = false
+        app.settings.zoomFit = false
+        val cam = ZoomStateCamera()
+        app.cameraFactory = { _, _ -> cam }
+        grantCamera(true)
+        app.measure.start(io.github.darylno.cardscanner.ui.MeasureSession.Plan.ZOOM)
+        val a = launch(MainActivity::class.java)
+        val root = a.window.decorView
+        val m = app.measure
+        fun layout() {
+            root.measure(View.MeasureSpec.makeMeasureSpec(root.width, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(root.height, View.MeasureSpec.EXACTLY))
+            root.layout(0, 0, root.width, root.height)
+        }
+        fun onScreen(name: String, v: View) {
+            val l = IntArray(2); v.getLocationInWindow(l)
+            assertTrue("${m.step.id}: $name has a size (${v.width}×${v.height})", v.width > 0 && v.height > 0)
+            assertTrue("${m.step.id}: $name is inside the screen (x ${l[0]}..${l[0] + v.width} of ${root.width}, y ${l[1]}..${l[1] + v.height} of ${root.height})",
+                l[0] >= 0 && l[0] + v.width <= root.width && l[1] >= 0 && l[1] + v.height <= root.height)
+        }
+        fun checkCard(vararg texts: String) {
+            ShadowLooper.idleMainLooper(); layout()
+            for (t in texts) assertNotNull("${m.step.id} shows: $t", generateSequence(listOf(root)) { vs -> vs.flatMap { v -> (v as? ViewGroup)?.let { g -> (0 until g.childCount).map(g::getChildAt) } ?: emptyList() }.ifEmpty { null } }
+                .flatten().filterIsInstance<TextView>().firstOrNull { it.isShown && it.text.toString().contains(t) })
+            val title = findText(root, a.getString(R.string.measure_step, m.index + 1, m.steps.size, m.step.title))!!
+            var card: View = title
+            while ((card.parent as View).tag != TAG_TOP_BAR) card = card.parent as View
+            assertTrue("${m.step.id}: the card is ≤ 45 % of the screen (${card.height} of ${root.height} px)", card.height <= root.height * 0.45)
+            onScreen("the card", card)
+            if (m.index > 0) onScreen("Back", findText(root, a.getString(R.string.measure_back))!!)
+            onScreen("Stop", findText(root, a.getString(R.string.measure_stop))!!)
+            onScreen("Next", findText(root, a.getString(if (m.isLast) R.string.measure_finish else R.string.measure_next))!!)
+            if (m.step.question != null) {
+                onScreen("Yes", findText(root, a.getString(R.string.measure_yes))!!)
+                onScreen("No", findText(root, a.getString(R.string.measure_no))!!)
+            }
+            val bottom = root.findViewWithTag<View>(TAG_BOTTOM_BAR)
+            onScreen("Scans", findText(bottom, a.getString(R.string.scans))!!)
+            onScreen("the shutter", findDesc(bottom, a.getString(R.string.scan_card))!!)
+        }
+        fun next() { findText(root, a.getString(R.string.measure_next))!!.performClick(); ShadowLooper.idleMainLooper() }
+        /** One arm's cards: the scan screen's capture → queued → identified path, as the session hears it. */
+        fun arm(first: Long, z: Double, h: Int, ranks: List<Int>) {
+            for ((i, r) in ranks.withIndex()) {
+                m.captured(first + i, manual = false, zoom = z, cardLongPx = h, stripDetail = 200.0 + i, iso = 400)
+                m.queued("j${first + i}", first + i)
+                m.identified("j${first + i}", rank = r, name = "Card number ${i + 1} with a long name", ocr = r == 3, autoPicked = r >= 2, printings = 7)
+            }
+        }
+        assertEquals("zoom-a1", m.step.id)
+        checkCard(m.step.instruction, "Tap to scan is on — switch to Tray", "can't zoom where it is", "off-centre Area: centred, it would zoom 1.90×")
+        arm(1, 1.0, 612, listOf(3, 1, 1, 0, 1, 2, 0, 3, 1, 1))
+        next()
+        assertEquals("zoom-probe", m.step.id)
+        checkCard(m.step.instruction)
+        next()
+        assertEquals("zoom-b", m.step.id)
+        checkCard(m.step.instruction, m.step.question!!, "B is at 1.00× — the Area allows only 1.06×")
+        // The worst B the summary can carry: worse on some, extra captures, more no-cards, off the post-fit.
+        arm(11, 1.9, 1400, listOf(1, 1, 1, 0, 0, 0, 0, 3, 1, 1, 0, 0))
+        next()
+        assertEquals("zoom-a2", m.step.id)
+        checkCard(m.step.instruction, "Tap to scan is on — switch to Tray")
+        arm(31, 1.0, 612, listOf(3, 1, 1, 0, 1, 2, 0, 3, 3, 1))
+        next()
+        assertEquals("zoom-done", m.step.id)
+        checkCard(m.step.instruction, "Zoom to fit ON by default: NO")
+    }
+
+    /**
+     * Settings → Diagnostics → "Run the zoom steps (about 10 min)": sized and on screen at
+     * the N200's size (scrolled to), it starts the zoom plan — A1, the probe step, B, A2,
+     * done — and opens the scan screen; while a session is on it is not offered (Resume is).
+     */
+    @Test
+    @Config(qualifiers = "w411dp-h914dp-xxhdpi")
+    fun settings_runZoomSteps_isOnScreenAndStartsThePlan() {
+        val a = launch(SettingsActivity::class.java)
+        val root = a.window.decorView
+        val label = a.getString(R.string.measure_run_zoom)
+        assertEquals("Run the zoom steps (about 10 min)", label)
+        val btn = findText(root, label)
+        assertNotNull("the button", btn)
+        val scroll = generateSequence(btn!!.parent) { it.parent }.filterIsInstance<android.widget.ScrollView>().first()
+        val loc = IntArray(2); btn.getLocationInWindow(loc)
+        val sloc = IntArray(2); scroll.getLocationInWindow(sloc)
+        scroll.scrollTo(0, loc[1] - sloc[1] - 100)
+        ShadowLooper.idleMainLooper()
+        val l = IntArray(2); btn.getLocationInWindow(l)
+        assertTrue("it has a size (${btn.width}×${btn.height})", btn.width > 0 && btn.height > 0)
+        assertTrue("it is inside the screen (y ${l[1]}..${l[1] + btn.height} of ${root.height}, x ${l[0]}..${l[0] + btn.width} of ${root.width})",
+            l[1] >= 0 && l[1] + btn.height <= root.height && l[0] >= 0 && l[0] + btn.width <= root.width)
+        while (nextStarted() != null) { }
+        btn.performClick()
+        assertTrue(app.measure.active)
+        assertEquals(listOf("zoom-a1", "zoom-probe", "zoom-b", "zoom-a2", "zoom-done"), app.measure.steps.map { it.id })
+        assertEquals("zoom-a1", app.measure.step.id)
+        val started = nextStarted()
+        assertEquals(MainActivity::class.java.name, started?.component?.className)
+        assertTrue("onto the scan screen already below", started!!.flags and Intent.FLAG_ACTIVITY_CLEAR_TOP != 0)
+        val again = launch(SettingsActivity::class.java)
+        assertEquals("not offered while a session is on", null, findText(again.window.decorView, label))
+        assertNotNull(findText(again.window.decorView, again.getString(R.string.measure_resume)))
+    }
+
     /** The update lock: a newer release is out → "Update required" covers the scan screen. */
     @Test
     fun mainActivity_newerReleaseOut_stopsScanning() {

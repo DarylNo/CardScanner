@@ -7,6 +7,7 @@ import io.github.darylno.cardscanner.core.Nv21Frame
 import io.github.darylno.cardscanner.core.RoiFrac
 import io.github.darylno.cardscanner.core.RoiPx
 import io.github.darylno.cardscanner.core.Sharpness
+import io.github.darylno.cardscanner.core.ZoomDetail
 import org.opencv.core.Mat
 import org.opencv.core.MatOfByte
 import org.opencv.core.MatOfInt
@@ -37,6 +38,10 @@ import kotlin.math.roundToInt
  * Any OpenCV failure in the quad/flatten step degrades to the raw crop — a
  * capture is never lost to the optional step.
  *
+ * During the zoom A/B's arm steps ([measureDetail]) a capture with a quad also
+ * carries [CaptureResult.detail] — measured after the timings stop, so neither
+ * what is uploaded nor the six timing keys change; off, nothing extra runs.
+ *
  * [process] is synchronous and pure (unit-tested on the JVM); [submit] runs it
  * on this pipeline's own single thread so neither the analysis thread nor the
  * UI ever waits on OpenCV or JPEG encoding.
@@ -48,6 +53,13 @@ class CapturePipeline(
 ) {
     @Volatile var lastSummary: String? = null
         private set
+
+    /**
+     * The zoom A/B's arm steps (MeasureSession): also measure the identification
+     * raster's detail ([ZoomDetail.identRaster]) of each capture with a quad. Off =
+     * normal scanning, which costs nothing extra.
+     */
+    @Volatile var measureDetail = false
 
     /** Run [process] on the capture thread; [done] is called on that thread. */
     fun submit(frames: List<Nv21Frame>, cropRoi: RoiFrac?, done: (Result<CaptureResult>) -> Unit): Boolean =
@@ -139,10 +151,15 @@ class CapturePipeline(
             }
             t = System.nanoTime(); timings["encode"] = ms(te, t)
             timings["total"] = ms(t0, t)
+            // The zoom A/B's figure: after "total" (untimed — the timings keep their six keys),
+            // and a failure only means no figure.
+            val q = quad
+            val detail = if (measureDetail && q != null) runCatching { ZoomDetail.identRaster(full, q) }.getOrNull() else null
             return CaptureResult(
                 primary = primary, fallbacks = fallbacks, flattened = flattened,
                 margin = if (flattened) margin else null, timingsMs = timings, quad = quad,
                 crop = crop, frameWidth = fw, frameHeight = fh, sharpness = sharp, sharpestIndex = best,
+                detail = detail,
             )
         } finally {
             for (m in bgrs) m?.release()

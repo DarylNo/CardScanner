@@ -97,6 +97,7 @@
     <string name="settings_share_report">Share debug report</string>
     <string name="measure_run">Run the measurement session</string>
     <string name="measure_resume">Resume the measurement session</string>
+    <string name="measure_run_zoom">Run the zoom steps (about 10 min)</string>
     <string name="measure_step">Step %1$d of %2$d · %3$s</string>
     <string name="measure_captures">Captures during this step: %1$d</string>
     <string name="measure_captures_of">Captures during this step: %1$d of %2$d</string>
