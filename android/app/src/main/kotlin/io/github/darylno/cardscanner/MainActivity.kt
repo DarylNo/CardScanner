@@ -269,6 +269,12 @@ class MainActivity : AppCompatActivity() {
                 setStatus(getString(R.string.camera_needed), Tone.ERR)
             }
         } else {
+            // The computer may have changed the mode or the Area while we were stopped (it
+            // reached AppSettings only): catch up — and on a plain return touch neither.
+            if (settings.roi != appliedRoi || settings.auto != appliedAuto) {
+                if (drawing) cancelArea()
+                applyStoredModeAndArea()
+            }
             // Settings may have changed torch / AE / focus lock while we were away.
             camera?.setTorch(settings.torch)
             camera?.setAeLock(settings.aeLock)
@@ -320,16 +326,10 @@ class MainActivity : AppCompatActivity() {
 
         private fun applyRemote() {
             if (isFinishing || isDestroyed) return
-            if (drawing) cancelArea()
-            if (settings.roi != appliedRoi) {   // a new Area re-learns the tray — only when it changed
-                appliedRoi = settings.roi
-                camera?.setRoi(settings.roi)
-            }
-            // The mode reaches the camera only when it CHANGED (1.1.17): handing it Tray again
-            // re-arms a card that already scanned (AutoScanner.setAuto(true) → WATCHING), so
-            // any PATCH — a torch, a check time, the 📱 Scanner panel's zoom box — filed the
-            // card still sitting there a second time, two steady ticks later.
-            applyMode(pushAuto = settings.auto != appliedAuto)
+            // A drawing this cancels takes its drag prompt with it: the mode's line again.
+            val cancelled = drawing
+            if (cancelled) cancelArea()
+            applyStoredModeAndArea(restate = cancelled)
             camera?.setTorch(settings.torch)
             camera?.setAeLock(settings.aeLock)
             camera?.setHighRes(settings.highRes)
@@ -343,8 +343,31 @@ class MainActivity : AppCompatActivity() {
         override fun zoomState() = camera?.zoomState()
     }
     private var appliedRoi: io.github.darylno.cardscanner.core.RoiFrac? = null
-    /** The mode the camera was last handed (setAuto), null = none yet — [applyRemote] re-hands it only when it changed. */
+    /** The mode the camera was last handed (setAuto), null = none yet — re-handed only when it changed ([applyStoredModeAndArea]). */
     private var appliedAuto: Boolean? = null
+
+    /**
+     * Hand the camera the stored Area and mode where they moved since it last got them
+     * ([appliedRoi], [appliedAuto]): a change made on the computer. While this screen is
+     * started the bridge applies it at once ([remoteScreen]); while it is stopped — Tap to
+     * scan stops it after every scan (the scan opens), Scans and Settings do too — the
+     * bridge has no screen and only AppSettings changes, so [onResume] catches up here
+     * (review of 1.1.17: the camera kept the old mode under the old chip, and tapping the
+     * new mode's chip did nothing). Only what CHANGED reaches the camera (1.1.17): handing
+     * it Tray again re-arms a card that already scanned (AutoScanner.setAuto(true) →
+     * WATCHING), so any PATCH — a torch, a check time, the 📱 Scanner panel's zoom box —
+     * filed the card still sitting there a second time, two steady ticks later; a new Area
+     * re-learns the tray.
+     */
+    private fun applyStoredModeAndArea(restate: Boolean = false) {
+        val areaChanged = settings.roi != appliedRoi
+        val modeChanged = settings.auto != appliedAuto
+        if (areaChanged) {   // a new Area re-learns the tray — only when it changed
+            appliedRoi = settings.roi
+            camera?.setRoi(settings.roi)
+        }
+        applyMode(pushAuto = modeChanged, restate = restate || modeChanged || areaChanged)
+    }
 
     /** Battery % and charging state from the sticky ACTION_BATTERY_CHANGED broadcast (no receiver kept). */
     private fun readBattery(now: Long) {
@@ -643,12 +666,16 @@ class MainActivity : AppCompatActivity() {
 
     // ── modes / controls ────────────────────────────────────────────────────
     /**
-     * Show the mode (the Tray|Tap chip, the Area, the overlay, the status line) and, with
-     * [pushAuto], hand it to the camera. Handing Tray over again is not harmless: it puts
-     * the scanner back to WATCHING, so a card that already scanned is shot again — the
-     * browser's PATCH passes false unless the mode changed ([appliedAuto]).
+     * Show the mode (the Tray|Tap chip, the Area, the overlay) and, with [pushAuto], hand
+     * it to the camera. Handing Tray over again is not harmless: it puts the scanner back
+     * to WATCHING, so a card that already scanned is shot again — the browser's PATCH
+     * passes false unless the mode changed ([appliedAuto]). The status line is the mode's
+     * own only with [restate] (or a default Area just drawn): a PATCH that keeps the mode
+     * and the Area leaves what the scanner or the identifier last said (review of 1.1.17 —
+     * "Tray: waiting for a steady view…" stayed up over "✓ <name> — … Next card…", since
+     * the scanner, rightly left in AWAIT_NEXT, says nothing new until that card leaves).
      */
-    private fun applyMode(pushAuto: Boolean = true) {
+    private fun applyMode(pushAuto: Boolean = true, restate: Boolean = pushAuto) {
         styleAuto()
         val drew = ensureArea()
         showArea()
@@ -658,7 +685,7 @@ class MainActivity : AppCompatActivity() {
             camera?.setAuto(settings.auto)
             appliedAuto = settings.auto
         }
-        setStatus(
+        if (restate || drew) setStatus(
             when {
                 drew -> StatusText.AREA_DEFAULT
                 settings.auto -> StatusText.WAITING
@@ -1184,6 +1211,9 @@ class MainActivity : AppCompatActivity() {
 
     /** Tests drive the camera's callbacks (Robolectric has no camera to bind). */
     internal val cameraListenerForTest: CameraPort.Listener get() = cameraListener
+
+    /** Tests read what the status line says now. */
+    internal val statusForTest: String get() = statusView.text.toString()
 
     private fun handleOutcome(jobId: String, manual: Boolean, openScan: Boolean, replaceScanId: Long?, outcome: Outcome) {
         val scene = sceneByJob.remove(jobId)

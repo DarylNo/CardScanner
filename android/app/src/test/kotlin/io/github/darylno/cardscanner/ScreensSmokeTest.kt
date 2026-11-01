@@ -623,6 +623,130 @@ class ScreensSmokeTest {
         assertEquals("back to Tray from the computer: exactly once: ${cam.calls}", listOf("setAuto(true)"), cam.autos)
     }
 
+    /**
+     * Review of the fix above: the status line must keep saying what the scanner last said.
+     * A PATCH that keeps the mode still rewrote it to "Tray: waiting for a steady view…" —
+     * and the scanner, now rightly left in AWAIT_NEXT with the scanned card still there,
+     * says nothing new until that card leaves, so the false line stayed up, over
+     * "✓ <name> — filed for desktop pick. Next card…" or "✗ No match — Retry…" (Retry
+     * still on screen). Only a mode change or an Area change (the scanner starts afresh)
+     * rewrites it.
+     */
+    @Test
+    fun deviceApi_aPatchThatKeepsTheModeKeepsTheStatusLine() {
+        app.settings.roi = io.github.darylno.cardscanner.core.RoiFrac(0.25, 0.25, 0.75, 0.75)
+        app.settings.auto = true
+        app.settings.zoomFit = false
+        val cam = RecordingCamera()
+        app.cameraFactory = { _, _ -> cam }
+        grantCamera(true)
+        val a = launch(MainActivity::class.java)
+        val l = a.cameraListenerForTest
+        val box = io.github.darylno.cardscanner.core.Box(40, 30, 60, 84, 0.2)
+        l.onDetection(io.github.darylno.cardscanner.core.AutoScanner.Event.Trigger(box,
+            io.github.darylno.cardscanner.core.Gray(176, 132, IntArray(176 * 132))), 176, 132, null)
+        ShadowLooper.idleMainLooper()
+        val scanned = io.github.darylno.cardscanner.ui.StatusText.CAPTURING
+        assertEquals(scanned, a.statusForTest)
+        l.onDetection(io.github.darylno.cardscanner.core.AutoScanner.Event.AwaitingNext(box), 176, 132, null)
+        ShadowLooper.idleMainLooper()
+        for (body in listOf("""{"torch":true}""", """{"check_ms":500}""", """{"zoom_fit":true}""")) {
+            patchFromTheServerThread(body)
+            assertEquals("a PATCH that keeps Tray ($body) leaves the scanner's line", scanned, a.statusForTest)
+        }
+        l.onDetection(io.github.darylno.cardscanner.core.AutoScanner.Event.AwaitingNext(box), 176, 132, null)
+        ShadowLooper.idleMainLooper()
+        assertEquals(scanned, a.statusForTest)
+
+        // A mode change says the new mode's line…
+        patchFromTheServerThread("""{"mode":"tap"}""")
+        assertEquals(io.github.darylno.cardscanner.ui.StatusText.AUTO_OFF, a.statusForTest)
+        // …and in Tap to scan, too, a PATCH that keeps the mode leaves the last line.
+        l.onCaptureFailed(7, "no frames in the ring")
+        ShadowLooper.idleMainLooper()
+        val failed = a.getString(R.string.capture_failed, "no frames in the ring")
+        assertEquals(failed, a.statusForTest)
+        patchFromTheServerThread("""{"torch":false}""")
+        assertEquals("a PATCH that keeps Tap to scan leaves the last line", failed, a.statusForTest)
+        // A drawing the PATCH cancels does not leave its drag prompt up.
+        findText(a.window.decorView, a.getString(R.string.area_set))!!.performClick()
+        ShadowLooper.idleMainLooper()
+        assertEquals(io.github.darylno.cardscanner.ui.StatusText.AREA_DRAG, a.statusForTest)
+        patchFromTheServerThread("""{"torch":true}""")
+        assertEquals("the PATCH cancelled the drawing: not its prompt", io.github.darylno.cardscanner.ui.StatusText.AUTO_OFF, a.statusForTest)
+        assertNotNull("…and the Area button is no longer Cancel", findText(a.window.decorView, a.getString(R.string.area_set)))
+        // A new Area from the computer starts the scanner afresh: its mode's line again.
+        patchFromTheServerThread("""{"roi":{"x0":0.1,"y0":0.2,"x1":0.6,"y1":0.9}}""")
+        assertEquals(io.github.darylno.cardscanner.ui.StatusText.AUTO_OFF, a.statusForTest)
+        patchFromTheServerThread("""{"mode":"tray"}""")
+        assertEquals(io.github.darylno.cardscanner.ui.StatusText.WAITING, a.statusForTest)
+    }
+
+    /**
+     * Review of the fix above: a PATCH while the scan screen is STOPPED — Tap to scan
+     * stops it after every scan (the scan opens), Scans and Settings do too — reaches
+     * only AppSettings (the bridge has no screen then), and coming back re-applied the
+     * torch, AE, high res, camera and zoom but never the mode or the Area: the camera
+     * kept scanning in the old mode under the old chip while the computer showed the new
+     * one, and tapping the new mode's chip did nothing (setAutoMode: already that mode).
+     * The return catches up — once, and only what changed.
+     */
+    @Test
+    fun deviceApi_aModeChangedWhileTheScanScreenWasAwayReachesTheCameraOnReturn() {
+        app.settings.roi = io.github.darylno.cardscanner.core.RoiFrac(0.25, 0.25, 0.75, 0.75)
+        app.settings.auto = true
+        app.settings.zoomFit = false
+        val cam = RecordingCamera()
+        app.cameraFactory = { _, _ -> cam }
+        grantCamera(true)
+        val c = Robolectric.buildActivity(MainActivity::class.java)
+        controllers += c
+        c.setup()
+        ShadowLooper.idleMainLooper()
+        val a = c.get()
+        assertEquals(listOf("setAuto(true)"), cam.autos)
+        fun rois() = cam.calls.filter { it.startsWith("setRoi(") }
+        fun chipOn(label: Int) = findText(a.window.decorView, a.getString(label))!!.currentTextColor ==
+            io.github.darylno.cardscanner.ui.ScanChrome.Palette.TEXT_ON_ACTIVE
+        fun away(vararg patches: String) {
+            c.pause().stop()
+            ShadowLooper.idleMainLooper()
+            assertEquals("a stopped scan screen is not the bridge's", null, app.phoneServer.device.screen)
+            cam.calls.clear()
+            for (p in patches) patchFromTheServerThread(p)
+            assertEquals("nothing reaches a stopped screen's camera: ${cam.calls}", emptyList<String>(), cam.calls)
+            c.restart().start().resume()
+            ShadowLooper.idleMainLooper()
+        }
+        away("""{"mode":"tap"}""")
+        assertEquals("the mode changed while away reaches the camera on return, once: ${cam.calls}",
+            listOf("setAuto(false)"), cam.autos)
+        assertEquals("…the Area did not change: ${cam.calls}", emptyList<String>(), rois())
+        assertTrue("…and the chip says Tap to scan", chipOn(R.string.mode_tap))
+        assertFalse(chipOn(R.string.mode_tray))
+        assertEquals(io.github.darylno.cardscanner.ui.StatusText.AUTO_OFF, a.statusForTest)
+
+        away()
+        assertEquals("a plain round trip hands the camera nothing new: ${cam.calls}", emptyList<String>(), cam.autos + rois())
+        away("""{"torch":true}""")
+        assertEquals("…nor does a PATCH that keeps the mode and the Area: ${cam.calls}", emptyList<String>(), cam.autos + rois())
+        assertTrue(cam.calls.contains("setTorch(true)"))
+
+        away("""{"roi":{"x0":0.1,"y0":0.2,"x1":0.6,"y1":0.9}}""")
+        assertEquals("an Area changed while away reaches the camera on return, once: ${cam.calls}",
+            listOf("setRoi(0.1,0.2,0.6,0.9)"), rois())
+        assertEquals(emptyList<String>(), cam.autos)
+
+        away("""{"mode":"tray"}""")
+        assertEquals("back to Tray while away: once: ${cam.calls}", listOf("setAuto(true)"), cam.autos)
+        assertTrue(chipOn(R.string.mode_tray))
+        // …and the phone's own chip answers again.
+        cam.calls.clear()
+        findText(a.window.decorView, a.getString(R.string.mode_tap))!!.performClick()
+        ShadowLooper.idleMainLooper()
+        assertEquals(listOf("setAuto(false)"), cam.autos)
+    }
+
     /** Settings → Delete all scans: the count is shown, the dialog says it, and OK deletes every scan and photo. */
     @Test
     fun settings_deleteAllScans_asksThenDeletesEverything() {
