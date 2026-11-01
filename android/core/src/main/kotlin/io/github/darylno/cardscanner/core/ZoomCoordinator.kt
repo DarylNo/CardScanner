@@ -42,8 +42,9 @@ import kotlin.math.abs
  *   camera's ratio, not settling, while the drawing waits for nothing.
  * - The off-centre hint (1.1.17, [ZoomFit.offCentre]) is read-only: [state]
  *   carries what the Area would zoom and what the same Area would zoom centred,
- *   whatever the switch says, and the log says it once per change of its words.
- *   It never reaches the [Port].
+ *   whatever the switch says, and the log says it once per change of its words
+ *   (and why, when it goes) — from the first [cameraBound] on, when the lens's
+ *   caps are known. It never reaches the [Port].
  */
 class ZoomCoordinator(private val port: Port, private val log: (String) -> Unit = {}) {
 
@@ -151,9 +152,10 @@ class ZoomCoordinator(private val port: Port, private val log: (String) -> Unit 
      * purpose (the analyzer is left alone), not waiting for the camera.
      */
     fun state(): State {
-        // The hint is computed whatever the switch says (target() is "off" then, with no fit).
+        // The hint is computed whatever the switch says (target() is "off" then, with no fit),
+        // once a lens is bound: before it, its caps are unknown and the ratios would be wrong.
         val area = ZoomFit.choose(base, lossless, lensMax)
-        val oc = ZoomFit.offCentre(base, lossless, lensMax)
+        val oc = if (lensKnown) ZoomFit.offCentre(base, lossless, lensMax) else null
         return if (drawing && pending == null) State(enabled, camera, target(), false, true, problem, area, oc)
         else State(enabled, mapped, target(), pending != null || gateClosed, drawing, problem, area, oc)
     }
@@ -194,6 +196,7 @@ class ZoomCoordinator(private val port: Port, private val log: (String) -> Unit 
         pending = null
         lastTimedOut = null
         active = true
+        lensKnown = true
         requested = 1.0; camera = 1.0
         if (enabled) log("camera bound: lossless ${lossless?.let { "%.2f×".format(it) } ?: "unknown"}, lens max " +
             "${lensMax?.let { "%.2f×".format(it) } ?: "unknown"} → ${target().describe()}")
@@ -315,12 +318,35 @@ class ZoomCoordinator(private val port: Port, private val log: (String) -> Unit 
     /** The off-centre hint's words last logged (null = none): it is logged once per change, never per setArea. */
     private var offCentreWords: String? = null
 
+    /**
+     * A camera has been bound at least once, so [lossless] / [lensMax] are this lens's. The scan
+     * screen hands a new coordinator its Area BEFORE the bind (CameraAdapter.bind: setRoi, then
+     * start → bind → [cameraBound]); the hint logged from no caps said 1.90× and the bind's line
+     * contradicted it, or "cleared" it (review of 39ef7cf). The hint waits for the lens.
+     */
+    @Volatile private var lensKnown = false
+
     /** Log the off-centre hint when its words change (also with the switch off). Logging only — never the [Port]. */
     private fun noteOffCentre() {
+        if (!lensKnown) return
         val w = ZoomFit.offCentre(base, lossless, lensMax)?.describe()
         if (w == offCentreWords) return
         offCentreWords = w
-        log(if (w != null) "off-centre Area: $w" else "off-centre Area: centred enough now")
+        log("off-centre Area: " + (w ?: noHintWhy()))
+    }
+
+    /**
+     * Why there is no hint now, for the line that says it went: no Area, another cap binds
+     * (centring can only raise the Area fit, never the sensor, the lens or MAX_ZOOM), or the
+     * Area fit binds and centring would gain under [ZoomFit.OFF_CENTRE_GAIN].
+     */
+    private fun noHintWhy(): String {
+        val now = ZoomFit.choose(base, lossless, lensMax)
+        return when {
+            base == null -> "none now — ${ZoomFit.Limit.NO_AREA.words}"
+            now.limit != ZoomFit.Limit.FIT -> "none now — ${now.limit.words} binds, not the Area fit: centring would zoom no more"
+            else -> "centred enough now"
+        }
     }
 
     // ── the machine ──

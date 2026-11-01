@@ -99,6 +99,55 @@ class ZoomCoordinatorTest {
         assertTrue(port.requests.isEmpty() && port.closes.isEmpty())
     }
 
+    /**
+     * Review of 39ef7cf: the scan screen hands a NEW coordinator its Area before the
+     * camera binds (CameraAdapter.bind: setZoomFit, setDrawing, setRoi, then start →
+     * bind → cameraBound), so the hint was logged from a lens with no caps known —
+     * "would zoom 1.90×" — and the line after the bind contradicted it (1.30×), or
+     * "cleared" it with a false "centred enough now" when the sensor binds. The hint
+     * waits for the lens: nothing before the first bind (log or state), then one line
+     * with the bound caps.
+     */
+    @Test fun theHintWaitsForTheLensBeforeItSpeaks() {
+        val edge = RoiFrac(0.45, 0.25, 0.95, 0.75)
+        z.setEnabled(false); z.setDrawing(false); z.setArea(edge)          // CameraAdapter.bind's order
+        assertTrue("$log", log.none { it.startsWith("off-centre Area") })
+        assertEquals("no hint from a lens not bound yet", null, z.state().offCentre)
+        z.cameraBound(1.3, 8.0)                                         // the sensor caps the centred Area at 1.30×
+        val lines = log.filter { it.startsWith("off-centre Area") }
+        assertEquals("$log", 1, lines.size)
+        assertTrue(lines.single(), lines.single().contains("would zoom 1.30× (this Area: 1.00×"))
+        assertEquals(1.3, z.state().offCentre!!.centred.z, 0.0)
+        // A lens whose sensor binds the Area itself (lossless 1.05 < its fit's 1.06): no hint, and no line at all.
+        val log2 = mutableListOf<String>()
+        val z2 = ZoomCoordinator(FakePort()) { log2 += it }
+        z2.setEnabled(false); z2.setDrawing(false); z2.setArea(edge)
+        z2.cameraBound(1.05, 8.0)
+        assertTrue("$log2", log2.none { it.startsWith("off-centre Area") })
+        assertEquals(null, z2.state().offCentre)
+        assertTrue(port.requests.isEmpty() && port.closes.isEmpty())
+    }
+
+    /** When the hint goes, the line says why — not "centred enough" for an Area that never moved. */
+    @Test fun aHintThatGoesSaysWhy() {
+        val edge = RoiFrac(0.45, 0.25, 0.95, 0.75)
+        fun last() = log.last { it.startsWith("off-centre Area") }
+        z.setArea(edge); z.cameraBound(2.6, 8.0)
+        assertTrue(last(), last().contains("would zoom 1.90×"))
+        z.setArea(null)
+        assertEquals("off-centre Area: none now — no scan Area — the full frame is scanned", last())
+        z.setArea(edge)
+        assertTrue(last(), last().contains("would zoom 1.90×"))
+        z.cameraBound(1.05, 8.0)                                        // another lens: its sensor binds first
+        assertEquals("off-centre Area: none now — lossless (sensor ÷ stream) binds, not the Area fit: centring would zoom no more", last())
+        z.cameraBound(2.6, 8.0)
+        assertTrue(last(), last().contains("would zoom 1.90×"))
+        z.setArea(area)                                                 // moved to the centre
+        assertEquals("off-centre Area: centred enough now", last())
+        assertEquals(6, log.count { it.startsWith("off-centre Area") })
+        assertTrue(port.requests.isEmpty() && port.closes.isEmpty())
+    }
+
     @Test fun aZoomClosesTheGateThenMapsWithTheReadBackRatio() {
         z.setEnabled(true)
         z.setArea(area)
