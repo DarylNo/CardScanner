@@ -19,11 +19,13 @@ class DeviceApiTest {
     private var baseShots = 0
     private var cameraShots = 0
     private var cameraPic: DeviceApi.Picture? = DeviceApi.Picture(byteArrayOf(7, 8, 9), 1.9, 1200, 1600)
+    /** Runs inside the camera view's wait (the 2 s on the phone): what changes while it waits. */
+    private var duringCameraShot: () -> Unit = {}
     private val api = DeviceApi(object : DeviceApi.DeviceControl {
         override fun read() = st
         override fun write(s: DeviceApi.DeviceState) { st = s; writes++ }
         override fun snapshot(): ByteArray? { baseShots++; return if (live) byteArrayOf(1, 2) else null }
-        override fun cameraSnapshot(): DeviceApi.Picture? { cameraShots++; return if (live) cameraPic else null }
+        override fun cameraSnapshot(): DeviceApi.Picture? { cameraShots++; duringCameraShot(); return if (live) cameraPic else null }
         override fun cameraLive() = live
         override fun cameras() = cams
         override fun zoom() = zoom
@@ -207,11 +209,13 @@ class DeviceApiTest {
         assertEquals(3, baseShots); assertEquals(1, cameraShots)
         cameraPic = DeviceApi.Picture(byteArrayOf(5), 1.0 + 1.0 / 3, 1600, 1200)
         assertEquals("1.333", get(mapOf("view" to "camera")).headers["X-Zoom-Ratio"])
-        // The screen is open but no frame came within 2 s (the zoom settling): said so.
+        // The screen is open but no frame came within 2 s, and the phone reports no zoom settling
+        // (here: no zoom at all — a scan screen whose camera never started): neutral words, never
+        // the zoom (aCameraViewWithNoPictureNamesTheZoomOnlyWhileItSettles).
         cameraPic = null
-        val settling = get(mapOf("view" to "camera"))
-        assertEquals(503, settling.status)
-        assertEquals("no picture within 2 s — the camera's zoom is changing; try again", error(settling))
+        val none = get(mapOf("view" to "camera"))
+        assertEquals(503, none.status)
+        assertEquals("no picture within 2 s — check the scan screen on the phone and try again", error(none))
         // No scan screen: today's words.
         live = false
         val closed = get(mapOf("view" to "camera"))
@@ -237,6 +241,61 @@ class DeviceApiTest {
             assertEquals("view must be \"base\" or \"camera\"", error(r))
         }
         assertEquals(b0, baseShots); assertEquals(c0, cameraShots)
+    }
+
+    /**
+     * Review of d0b65bf: the camera view's 503 said "the camera's zoom is changing" whenever the
+     * scan screen was open — with Zoom to fit OFF (no gate, no settle), and at once from a scan
+     * screen whose camera never started (camera permission denied: `zoom` null). The zoom is
+     * named only when the phone says it is settling, read before AND after the wait (the gate
+     * opens the moment the settle is over, so a picture missed for it may come back to a camera
+     * no longer settling); anything else gets neutral words.
+     */
+    @Test fun aCameraViewWithNoPictureNamesTheZoomOnlyWhileItSettles() {
+        val zooming = "no picture within 2 s — the camera's zoom is changing; try again"
+        val neutral = "no picture within 2 s — check the scan screen on the phone and try again"
+        fun cameraError(): String {
+            val r = api.handle(ApiRequest("GET", "/api/device/snapshot.jpg", query = mapOf("view" to "camera")))!!
+            assertEquals(503, r.status)
+            return json(r)["error"] as String
+        }
+        var asked = -1
+        val coord = ZoomCoordinator(object : ZoomCoordinator.Port {
+            override fun request(gen: Int, ratio: Double) { asked = gen }
+            override fun closeGate(why: String) {}
+            override fun map(ratio: Double, view: RoiFrac?, settle: Boolean, why: String) {}
+            override fun drawingReady(ratio: Double) {}
+            override fun later(ms: Long, block: () -> Unit) {}
+            override fun readBack(): Double? = null
+        })
+        cameraPic = null
+        // The scan screen is open but has no camera (no zoom reported): not the zoom.
+        zoom = null
+        assertEquals(neutral, cameraError())
+        // Zoom to fit OFF (the default): a camera with nothing settling.
+        coord.setArea(RoiFrac(0.25, 0.25, 0.75, 0.75)); coord.cameraBound(2.6, 10.0)
+        zoom = coord.state()
+        assertEquals(false, zoom!!.settling)
+        assertEquals(neutral, cameraError())
+        // Switched on: the zoom is asked for and not answered yet — settling, so it is the reason.
+        coord.setEnabled(true)
+        zoom = coord.state()
+        assertEquals(true, zoom!!.settling)
+        assertEquals(zooming, cameraError())
+        // Settling when the wait began, settled by the time it ended: still the reason.
+        duringCameraShot = { coord.onApplied(asked, 1.9); zoom = coord.state() }
+        assertEquals(zooming, cameraError())
+        assertEquals(false, zoom!!.settling)
+        // Settled before the request: neutral again.
+        duringCameraShot = {}
+        assertEquals(neutral, cameraError())
+        // Not settled when the wait began, settling by its end (a change landed meanwhile): the reason.
+        duringCameraShot = { coord.setArea(RoiFrac(0.3, 0.3, 0.7, 0.7)); zoom = coord.state() }
+        assertEquals(zooming, cameraError())
+        duringCameraShot = {}
+        // No scan screen at all: today's words, whatever the zoom said last.
+        live = false
+        assertEquals("the camera isn't running — open the scan screen on the phone", cameraError())
     }
 
     @Test fun guestsCannotSeeOrChangeTheSettings() {

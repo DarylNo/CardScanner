@@ -334,7 +334,11 @@ class PhoneServerTest {
         cameraPic = null                                                // open, but no frame within 2 s
         snap(admin, "?view=camera").use { r ->
             assertEquals(503, r.code)
-            assertTrue(r.body!!.string().contains("no picture within 2 s"))
+            // This screen reports no zoom (MainActivity's with no camera started): the zoom is not
+            // named as the reason (review of d0b65bf).
+            val body = r.body!!.string()
+            assertTrue(body, body.contains("no picture within 2 s — check the scan screen on the phone"))
+            assertTrue(body, !body.contains("zoom"))
         }
         bridge.screen = null                                            // scan screen closed
         snap(admin).use { r -> assertEquals(503, r.code) }

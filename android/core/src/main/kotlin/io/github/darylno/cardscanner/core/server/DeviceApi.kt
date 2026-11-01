@@ -49,8 +49,9 @@ import io.github.darylno.cardscanner.core.ZoomFit
  * `X-Frame-Size` ("1200x1600"): the Area sits at ½ + (b − ½)·z of it, never at the
  * polled `zoom.ratio` (a frame and a poll can straddle a zoom change). No query,
  * `?t=` only and `view=base` stay the base picture above, byte for byte; any other
- * view is 400 before a picture is taken. Admin only like the rest ([ScanServer.adminOnly]
- * reads the path, never the query).
+ * view is 400 before a picture is taken. No picture → 503: the scan screen closed (today's
+ * words), else "no picture within 2 s" — naming the zoom only while `zoom.settling` says so.
+ * Admin only like the rest ([ScanServer.adminOnly] reads the path, never the query).
  */
 class DeviceApi(private val device: DeviceControl) {
 
@@ -63,8 +64,9 @@ class DeviceApi(private val device: DeviceControl) {
         fun snapshot(): ByteArray?
         /**
          * `?view=camera`: the current upright frame as the camera delivers it (zoomed, no
-         * grey ring) with its own zoom, or null — the scan screen isn't open, or no frame
-         * came in time (the zoom settling). The default: a control with no camera view.
+         * grey ring) with its own zoom, or null — the scan screen isn't open, its camera
+         * isn't running, or no frame came in time (e.g. the zoom settling: [zoom] says so).
+         * The default: a control with no camera view.
          */
         fun cameraSnapshot(): Picture? = null
         /** True while the scan screen (the camera) is open. */
@@ -101,7 +103,10 @@ class DeviceApi(private val device: DeviceControl) {
         const val VIEW_BASE = "base"
         const val VIEW_CAMERA = "camera"
         private const val NO_CAMERA = "the camera isn't running — open the scan screen on the phone"
-        private const val NO_PICTURE = "no picture within 2 s — the camera's zoom is changing; try again"
+        /** The camera view had no frame in time while the phone reported its zoom settling (the gate). */
+        private const val NO_PICTURE_ZOOMING = "no picture within 2 s — the camera's zoom is changing; try again"
+        /** …and with nothing settling: Zoom to fit off, a camera still starting, or none (permission). */
+        private const val NO_PICTURE = "no picture within 2 s — check the scan screen on the phone and try again"
     }
 
     fun handle(req: ApiRequest): ApiResponse? = when {
@@ -114,12 +119,23 @@ class DeviceApi(private val device: DeviceControl) {
     private fun snapshot(view: String?): ApiResponse = when (view) {
         null, VIEW_BASE -> device.snapshot()?.let { ApiResponse(200, "image/jpeg", it) }
             ?: ApiResponse.json(503, mapOf("error" to NO_CAMERA))
-        VIEW_CAMERA -> device.cameraSnapshot()?.let { p ->
-            ApiResponse(200, "image/jpeg", p.jpeg, linkedMapOf(
-                "X-Zoom-Ratio" to "%.3f".format(java.util.Locale.ROOT, p.ratio),
-                "X-Frame-Size" to "${p.w}x${p.h}",
-            ))
-        } ?: ApiResponse.json(503, mapOf("error" to if (device.cameraLive()) NO_PICTURE else NO_CAMERA))
+        VIEW_CAMERA -> {
+            // The zoom is named as the reason only when the phone says it is settling — before the
+            // wait or after it (the gate opens the moment the settle is over). Review of d0b65bf:
+            // it was said whenever the screen was open, with Zoom to fit OFF (no gate) and at once
+            // from a scan screen whose camera never started (no camera permission).
+            val settling = device.zoom()?.settling == true
+            device.cameraSnapshot()?.let { p ->
+                ApiResponse(200, "image/jpeg", p.jpeg, linkedMapOf(
+                    "X-Zoom-Ratio" to "%.3f".format(java.util.Locale.ROOT, p.ratio),
+                    "X-Frame-Size" to "${p.w}x${p.h}",
+                ))
+            } ?: ApiResponse.json(503, mapOf("error" to when {
+                !device.cameraLive() -> NO_CAMERA
+                settling || device.zoom()?.settling == true -> NO_PICTURE_ZOOMING
+                else -> NO_PICTURE
+            }))
+        }
         else -> bad("view must be \"$VIEW_BASE\" or \"$VIEW_CAMERA\"")
     }
 
