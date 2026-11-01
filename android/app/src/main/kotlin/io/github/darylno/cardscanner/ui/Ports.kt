@@ -4,6 +4,7 @@ import androidx.camera.view.PreviewView
 import androidx.lifecycle.LifecycleOwner
 import io.github.darylno.cardscanner.core.AutoScanner
 import io.github.darylno.cardscanner.core.RoiFrac
+import io.github.darylno.cardscanner.core.ZoomProbeRun
 import org.json.JSONObject
 
 /*
@@ -156,6 +157,33 @@ interface CameraPort {
     fun snapshotJpeg(): ByteArray? = null
     /** The zoomed frame as the camera delivers it, or null (see CameraController.cameraSnapshot). Off the UI thread. */
     fun cameraSnapshot(): io.github.darylno.cardscanner.core.server.DeviceApi.Picture? = null
+    /**
+     * Run the zoom probe (1.1.17, CameraController.startZoomProbe): [run] = its number in the
+     * session, [earlier] = the earlier VALID runs' 1× card thumbnails (ZoomProbeRun.Outcome.thumbnail),
+     * so the same card again does not count as another. False = no run was made (no camera, or
+     * one already runs) — nothing changed; true = under way, and every outcome — a refusal too —
+     * comes back through [l]. It files nothing.
+     */
+    fun startZoomProbe(run: Int, earlier: List<ZoomProbeRun.Earlier>, l: ProbeListener): Boolean = false
+    /** The owner cancelled the probe (or a control the touch policy turns into a cancel): it ends through its verified restore. */
+    fun cancelZoomProbe(why: String) {}
+    fun zoomProbeRunning(): Boolean = false
+}
+
+/** The zoom probe's words for the scan screen (1.1.17). Every call on the UI thread, in order. */
+interface ProbeListener {
+    /**
+     * Where the run is: [status] for the status pill ("Zoom probe 7/18 · 1.60× — hands off the
+     * tray"), [count] for the measurement card, [z] = the zoom the camera last ANSWERED — draw
+     * the Area there (null before the first answer).
+     */
+    fun onProgress(status: String, count: String, z: Double?)
+    /**
+     * The run ended, exactly once: [outcome] carries how (refused / stopped / cancelled / done),
+     * THIS run's words, its result (ZoomProbe.Result: toJson() to keep it, ZoomProbe.combine over a
+     * session's runs for the words to show) and, when valid, its 1× card thumbnail.
+     */
+    fun onFinished(outcome: ZoomProbeRun.Outcome)
 }
 
 /** Final outcome of one upload job (mirrors net.ScanOutcome). */

@@ -1,5 +1,8 @@
 package io.github.darylno.cardscanner.camera
 
+import io.github.darylno.cardscanner.core.ZoomProbe
+import kotlin.math.abs
+
 /**
  * "Is it focusing?" (owner on 1.1.10: "No zoom? Focus working?") — before
  * 1.1.14 nothing about focus reached the debug log: a lock's result lived
@@ -148,12 +151,42 @@ class FocusStats(private val clock: () -> Long = System::currentTimeMillis) {
  * analysis / capture threads.
  */
 class FrameMetaRing(private val capacity: Int = 64) {
-    class Meta(val timestampNs: Long, val afState: Int?, val focusDpt: Float?, val exposureNs: Long?, val iso: Int?) {
+    /**
+     * One frame's report. [zoomRatio] = its CONTROL_ZOOM_RATIO (API 30+; null = not reported) and
+     * [crop] = its SCALER_CROP_REGION as `[left, top, width, height]` of the active array (plain Ints,
+     * so the JVM tests need no android.graphics.Rect) — the zoom probe (1.1.17) reads each frame's
+     * OWN zoom; the 5-argument form every earlier caller uses has neither.
+     */
+    class Meta(
+        val timestampNs: Long, val afState: Int?, val focusDpt: Float?, val exposureNs: Long?, val iso: Int?,
+        val zoomRatio: Float? = null, val crop: IntArray? = null,
+    ) {
         /** "AF FOCUSED_LOCKED · lens 4.20 dpt (≈ 24 cm) · exposure 16.7 ms · ISO 400". */
         fun describe(calibrated: Boolean): String =
             FocusLog.afAndLens(afState, focusDpt, calibrated) +
                 (exposureNs?.let { " · exposure %.1f ms".format(it / 1e6) } ?: "") +
                 (iso?.let { " · ISO $it" } ?: "")
+
+        /**
+         * The zoom this frame reports, by the live read-back's rule ([ZoomProbe.frameZoom]:
+         * CONTROL_ZOOM_RATIO when it is not 1, else the [activeW]-wide active array ÷ the crop's
+         * width), or null when the frame reported neither.
+         */
+        fun frameZoom(activeW: Int?): Double? = ZoomProbe.frameZoom(zoomRatio?.toDouble(), crop?.getOrNull(2), activeW)
+
+        /**
+         * Whether the HAL's crop region is centred on the [activeW]×[activeH] active array (within
+         * [CROP_CENTRED] of its size per axis; the region is in active-array coordinates), or null
+         * when either is unknown. A logged fact only: on API 30+ CameraX zooms with
+         * CONTROL_ZOOM_RATIO and the crop is the full array, so it proves nothing there.
+         */
+        fun cropCentred(activeW: Int?, activeH: Int?): Boolean? {
+            val c = crop?.takeIf { it.size == 4 } ?: return null
+            if (activeW == null || activeH == null || activeW <= 0 || activeH <= 0) return null
+            val dx = (c[0] + c[2] / 2.0 - activeW / 2.0) / activeW
+            val dy = (c[1] + c[3] / 2.0 - activeH / 2.0) / activeH
+            return abs(dx) <= CROP_CENTRED && abs(dy) <= CROP_CENTRED
+        }
     }
 
     private val ring = ArrayDeque<Meta>()
@@ -169,4 +202,9 @@ class FrameMetaRing(private val capacity: Int = 64) {
     @Synchronized fun latest(): Meta? = ring.lastOrNull()
 
     @Synchronized fun clear() = ring.clear()
+
+    companion object {
+        /** A crop region's centre this close to the active array's (share of its size, per axis) counts as centred — describeReadBack's 1 %. */
+        const val CROP_CENTRED = 0.01
+    }
 }

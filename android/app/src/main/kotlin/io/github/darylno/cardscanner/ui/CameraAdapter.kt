@@ -1,6 +1,8 @@
 package io.github.darylno.cardscanner.ui
 
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
 import androidx.camera.view.PreviewView
 import androidx.lifecycle.LifecycleOwner
 import io.github.darylno.cardscanner.camera.CameraController
@@ -11,6 +13,7 @@ import io.github.darylno.cardscanner.camera.DetectionUpdate
 import io.github.darylno.cardscanner.camera.ScanMode
 import io.github.darylno.cardscanner.core.Gray
 import io.github.darylno.cardscanner.core.RoiFrac
+import io.github.darylno.cardscanner.core.ZoomProbeRun
 
 /**
  * [CameraPort] over the CAMERA agent's [CameraController] (which owns the
@@ -28,6 +31,7 @@ class CameraAdapter(private val context: Context, private val settings: AppSetti
     private var drawing = false
     private var measureDetail = false
     private var preview: PreviewView? = null
+    private val main = Handler(Looper.getMainLooper())
 
     override fun bind(owner: LifecycleOwner, preview: PreviewView, listener: CameraPort.Listener) {
         val c = CameraController(context, owner, object : CameraController.Listener {
@@ -169,4 +173,20 @@ class CameraAdapter(private val context: Context, private val settings: AppSetti
     override fun diagnostics(): String = controller?.diagnostics() ?: "camera not bound"
     override fun snapshotJpeg(): ByteArray? = controller?.snapshotJpeg()
     override fun cameraSnapshot(): io.github.darylno.cardscanner.core.server.DeviceApi.Picture? = controller?.cameraSnapshot()
+
+    /**
+     * The zoom probe. The controller calls back on the main thread from INSIDE the runner;
+     * each call is posted on again, so a listener that reacts (cancels, starts the next run)
+     * never re-enters the runner mid-step. Posts keep their order: progress, then the finish.
+     */
+    override fun startZoomProbe(run: Int, earlier: List<ZoomProbeRun.Earlier>, l: ProbeListener): Boolean {
+        val c = controller ?: return false
+        return c.startZoomProbe(run, earlier, object : CameraController.ProbeListener {
+            override fun onProgress(p: ZoomProbeRun.Progress) { main.post { l.onProgress(p.status, p.count, p.z) } }
+            override fun onFinished(o: ZoomProbeRun.Outcome) { main.post { l.onFinished(o) } }
+        })
+    }
+
+    override fun cancelZoomProbe(why: String) { controller?.cancelZoomProbe(why) }
+    override fun zoomProbeRunning(): Boolean = controller?.zoomProbeRunning() == true
 }
