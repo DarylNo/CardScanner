@@ -26,14 +26,15 @@ android/core/        pure Kotlin (JVM-testable): AutoScanner/Detection (the
                      OutlineTracker (the live outline / card-shape gate),
                      TextureChange (shadow mode), CameraChoice (the Camera
                      setting), FocusPoint (where AF meters), ZoomFit +
-                     ZoomCoordinator + ZoomSnapshot ("Zoom to fit the Area"),
+                     ZoomCoordinator + ZoomSnapshot ("Zoom to fit the Area")
+                     + ZoomProbe/ZoomProbeRun/ZoomDetail (its probe),
                      PHash/ArtHasher/ArtMatcher (bit-exact
                      fingerprint), IdentifyPipeline, PrintingRanker,
                      OcrMatch, Popularity, and core/server/ — ScanStore,
                      PhoneApi (the /api surface), PriceSweep/PriceWorker,
                      Export, DeviceApi, ScanServer (routing + admin-only rules)
 android/app/         Android: camera/ (CameraX, FrameRing, ScanAnalyzer,
-                     CameraCatalog),
+                     CameraCatalog, ZoomProbeGlue + ProbeMeasure),
                      capture/, ident/ (ArtPackStore, PhoneIdentifier, ML Kit
                      OCR), net/UploadQueue, phoneserver/ (PhoneServer,
                      PhoneBackend, LocalScanUploader, SqliteScanStore, PhoneF2f),
@@ -597,7 +598,7 @@ lens on testers' phones), minSdk 29, arm64-v8a.
   `FocusRequest.roi`), the watch window. The Tap default Area is base like any
   stored Area. **The ratio** (`ZoomFit.choose`): z = floor-to-0.05 of min(0.95 ·
   fit(A), lossless, the lens's maxZoomRatio, `MAX_ZOOM` 2.0 — provisional until
-  the rig's lossless knee), fit(A) = 1 / (2 · max|edge − ½|) (so the Area never
+  the rig's zoom A/B, below), fit(A) = 1 / (2 · max|edge − ½|) (so the Area never
   leaves the view), lossless = the sensor active array ÷ the analysis stream
   (per side, the smaller), and z = 1 below 1.10×, with the switch off, while an
   Area is drawn, or with no Area. The default Tap Area gives 1.20×.
@@ -672,8 +673,103 @@ lens on testers' phones), minSdk 29, arm64-v8a.
   Settings switch and the "Area ✓ · 1.55×" chip), NOT on the phone: whether the
   N200 reports CONTROL_ZOOM_RATIO, the lossless knee, the frames at the wrong
   zoom after a settle, and whether the photos get sharper are all rig
-  questions. Not built yet: the zoom probe (a measured ratio ladder), the
-  MeasureSession A/B steps, `snapshot.jpg?view=camera`, an off-centre hint.
+  questions — 1.1.17 builds the tools that answer them (tested in code, not on
+  the phone):
+  **The off-centre hint** (`ZoomFit.offCentre`, read-only, whatever the switch
+  says): CameraX zooms about the frame centre, so an Area off to one side zooms
+  less than the same Area centred (fit 1 / max(w, h)) — often 1× with no word
+  why. Both go through `choose` with the same caps; it speaks only when the Area
+  fit binds now (also below 1.10×) and centring gains ≥ `OFF_CENTRE_GAIN` 0.10×
+  (two steps — PROVISIONAL, a judgement), never before the first bind (no lens
+  caps yet). Whole % and ratios, no cm: Diagnostics' zoom line, the `zoom` log
+  (once per change of the words, and why it goes), the status after an Area
+  save (kept on the Tray lines until the first capture or another Area; switch
+  off: "centred, Zoom to fit would zoom 1.90× (here 1.00×)"), the A1 step,
+  `/api/device` `zoom.would` {z, limit, fit} + `zoom.off_centre` {now, centred,
+  dx, dy, centred_roi, words}, and the desktop (d51): off at 1× "Off — this Area
+  would zoom N× (limit)" + "Off-centre: …" (never the literal "Zoom to fit is
+  off" — `check_device_ui.py`'s stale-answer check watches for it) and a dashed
+  ghost box where the same Area would sit centred.
+  **Camera view** (`snapshot.jpg?view=camera`): the upright analysis frame as
+  the camera delivers it — zoomed, no grey ring, long side ≤ 2048 — with
+  `X-Zoom-Ratio` (THAT frame's zoom) and `X-Frame-Size`; no query / `?t=` /
+  `view=base` stay the base picture byte for byte, any other view is 400, no
+  frame in 2 s is 503 (naming the zoom only while `zoom.settling`). The
+  desktop's "Whole frame | Camera view" toggle shows only when `/api/device`
+  lists `snapshot_views` (an older phone answers base as if zoomed), opens on
+  Whole frame, draws the Area at ½ + (b − ½)·z from the HEADER (never the polled
+  ratio), never draws or clears the Area there, and refreshes every 2 s while
+  the probe runs.
+  **The zoom A/B** (`ui/MeasureSession` + `MeasureAb`): the SAME 10 cards at 1×
+  (A1, the Area drawn tight), zoomed (B), at 1× again (A2) — in the full session
+  between Foil and AE lock, or alone from Settings → Diagnostics → "Run the zoom
+  steps (about 10 min)" (`Plan.ZOOM`: A1, probe, B, A2, done). Every step PINS
+  Zoom to fit (set-up, A1, probe, A2, AE lock off; B on) and the four zoom steps
+  AE lock off, so B never leaks, Back included; each step pushes AE lock, Zoom
+  to fit and the detail flag to the camera (before, only AE lock went — B would
+  have run at 1×) and logs the coordinator's `describe()` under `test`. The
+  owner's original is 4 fields ("aeLock,vibration,checkMs,zoomFit"), all put
+  back at Stop / Finish even if the computer changed them; a 1.1.16 session (3
+  fields) saves the switch as the 4th before its first pinning step. Steps
+  resume by id (`measureStepId`). Each Tray arm capture (shutter ones left out)
+  records zoom, card long side px, strip detail (Laplacian of the OCR strip on
+  the 630×880 identification raster — `CapturePipeline.measureDetail`, on in arm
+  steps only, after "total": primary and timing keys byte-identical), ISO and
+  the outcome rank (3 OCR ✓ · 2 auto-filed · 1 needs a pick · 0 none); cards
+  pair by name, else by place; "stable" = A1 and A2 agree. **Rules, written
+  before the data:** (1) B worse on no stable card; (2) better − worse ≥ 4
+  (sign test p ≤ 0.0625); (3) no extra B captures, no more no-card / no-match
+  than A1 or A2; (4) B ≥ 1.10× with A at 1×, else VOID ("draw a tighter Area");
+  plus the post-fit ±3 %. A tie stays OFF; "zoom has no job at this mount
+  height" when A1 alone OCR-confirms too many for rule 2 to pass; a near miss
+  means another run with 10 other cards, never a lower bar.
+  **The zoom probe** (the probe step between A1 and B: Run probe on the card A1
+  left, ~30 s hands off, then again on a DIFFERENT card; core `ZoomProbe` /
+  `ZoomProbeRun` / `ZoomDetail`, app `camera/ZoomProbeGlue` + `ProbeMeasure`): a
+  ladder 1.0…2.0 by 0.1, then 0.2 to a top = min(3.0, lens max, 0.95 · fit of
+  the card's box +6 %) — past MAX_ZOOM and lossless on purpose; refused below
+  1.50× with the off-centre numbers. AE/AWB locked for the run, ONE AF lock on
+  the card at 1× plus a refocus check at the top, 6 frames a rung (4 at High
+  res) after the settle drops, a 90 s budget. **Never files, no needless
+  re-learn:** the probe is a MODE of `ZoomCoordinator` (one gate owner) —
+  `beginProbe` closes the analyzer's gate for every rung (no tick, ring copy or
+  `fire()`), frames come from a separate tap served only INSIDE the closed gate,
+  `canProbe` (asked after the gate closed) wants Tray in AWAIT_NEXT (any card in
+  Tap to scan), no shutter pending and no late-focus rebase owed, and `endProbe`
+  maps the IDENTICAL (ratio, view). Its RESTORE (the scanner's ratio, AE given
+  back) checks the same card in the same place (size 1.5 %, centre 1 %, 64×88
+  thumbnail NCC ≥ 0.90) → a rebase owed to that reopening's first sample only
+  (`probeRebaseNext`; a later stop / gate / rebind drops it); otherwise none, so
+  a swapped card scans. A lifecycle abort (stop, opening, bind, new Area, the
+  switch, drawing) stops at once — no restore, no rebase: today's round trip.
+  **Touch policy:** while it runs EVERY control on the scan screen (Scans, ⚙,
+  Share, the Back key and the update lock's buttons too) only cancels it,
+  through the verified restore; a scan identified meanwhile does not open; a
+  PATCH or a pause is stored and applied after the end. **What it reports —
+  facts only:** geometry (card size on H = a·z + c within 1 % — the centred crop
+  the app maps with?), centring (base centre ≤ 1 %), settle (frames still at the
+  old zoom after the 2 drops on > 10 % of rungs → SETTLE_DROP_FRAMES must
+  rise), CONTROL_ZOOM_RATIO reported or not, the AF lens across zooms, and
+  z_pipe = 880 ÷ H(1×) (past it the 630×880 warp gains no pixels — never a
+  recommendation). A run is valid with the 1× pass FOCUSED, the repeats agreeing
+  and ≥ 80 % of rungs clean; the probe half wants two valid runs on DIFFERENT
+  cards, counted on the newest run's camera + stream only. **The detail metric
+  FAILED its pre-registered bar** (coherence of each rung vs the top; the true
+  knee within ±0.10×, |bias| ≤ 0.05×, in ≥ 9 of 10 synthetic cameras,
+  sharpening on): 0 of 10 — past the knee coherence keeps rising (+0.7…+1.4× on
+  binned / sharp sensors), below it it rises too slowly (−0.15…−0.5×); grid mean
+  +0.092×; the Laplacian (reported only) within 0.10× in 4 of 10. Not tuned:
+  `ZoomProbe.DETAIL_VALIDATED = false` (pinned by the acceptance test), so no
+  knee and NO MAX_ZOOM from the probe — the A/B's identification decides.
+  **The guided verdict** (`zoom VERDICT:` before "session END", and the done
+  card): the A/B rules + the probe half (2 cards, centred, settle; the knee only
+  a note) → "Zoom to fit ON by default: YES / NO — …" — logged and shown, NEVER
+  applied: MAX_ZOOM 2.0 and the default change only in a follow-up PR, by these
+  rules. Shown: tag `probe` (≤ 30 lines a run), Diagnostics "zoom probe: 31 Oct
+  14:03 · camera 0 · 1600×1200 — <findings>" (`zoomProbeLast`, also with the
+  screen closed), `/api/device` `zoom_probe` + `zoom.probing` / `zoom.probe`
+  (read-only), the desktop "Zoom probe running on the phone — …" / "Last zoom
+  probe (…): …".
 - **The review WebView shows the page's `confirm()`/`alert()`** (`ui/JsDialogs`,
   a `WebChromeClient`): an Android WebView drops JavaScript dialogs unless the
   app shows them, so `confirm()` returned false and phone.html's "Clear all" /
@@ -911,13 +1007,22 @@ lens on testers' phones), minSdk 29, arm64-v8a.
   survives leaving the screen) shows a prompt card in the scan screen's top
   scrim that walks the rig session step by step (set-up + outline check,
   250 ms check time, 20 swaps, 10 lift-and-replace, hand passes, lean-ins,
-  lights, foil, AE lock on, done), counts the captures during each step,
-  applies the settings a step needs (AE lock / vibration / check time) and
-  restores the owner's own at the end, asks Yes/No where a step is a visual
-  check, and writes a `test` marker into the debug log at every transition
-  (`step k/N START/END … n capture(s)`, answers, `session START/END`) so the
-  `shadow` / `outline` / `capture` lines read against what was being done.
-  Finish opens the share sheet with the debug report. Display + logging only.
+  lights, foil, the zoom A/B — A1, probe, B, A2 — AE lock on, done: 14
+  steps), counts the captures during each step, applies the settings a step
+  needs (AE lock / vibration / check time / Zoom to fit) and restores the
+  owner's own at the end, asks Yes/No where a step is a visual check, and
+  writes a `test` marker into the debug log at every transition (`step k/N
+  START/END … n capture(s)`, an arm's `captures #a–#b`, answers, `session
+  START/END`) so the `shadow` / `outline` / `capture` / `zoom` / `probe` lines
+  read against what was being done. Finish logs the A/B summary and the `zoom
+  VERDICT` before `session END`, then opens the share sheet with the debug
+  report. **"Run the zoom steps (about 10 min)"** (1.1.17) runs only the zoom
+  block + done (hidden while a session is on — Resume covers it). Plan, step
+  id, A/B records and probe runs live in `AppSettings` (`measurePlan`,
+  `measureStepId`, `measureAb`, `zoomProbeRuns`), cleared at the end; the A/B,
+  the probe and their rules: Zoom to fit, above. Display, settings and logging
+  only — the probe moves the zoom but files nothing; the cards put down are
+  filed like any scan (the done step says to delete them).
 - **The update lock (owner): a newer release stops scanning.**
   `update/UpdateLock` reads GitHub `releases/latest` at app start and when the
   scan screen opens (≤ every 30 min). Once a release newer than the build is
@@ -954,10 +1059,22 @@ lens on testers' phones), minSdk 29, arm64-v8a.
   check_ms, camera — with the phone's `cameras` listed — and zoom_fit, with the
   live `zoom`) + `/api/device/snapshot.jpg` (the current UPRIGHT analysis frame —
   the space the Area fractions live in; while zoomed, the zoomed frame placed
-  on a grey base-size picture, so it is still base space). `DeviceBridge` writes `AppSettings`
-  and the scan screen applies a change live (a new Area only when it changed —
-  it re-learns the tray). The desktop "📱 Scanner" panel shows only when
-  `/api/device` answers.
+  on a grey base-size picture, so it is still base space; `?view=camera` and the
+  read-only `zoom_probe`: Zoom to fit, above). `DeviceBridge` writes `AppSettings`
+  and the scan screen applies a change live — ONLY what changed (1.1.17): the
+  mode reaches the camera only when it differs from the last one handed
+  (`applyMode(pushAuto)`, `appliedAuto`; before, every PATCH — a torch, a check
+  time, the zoom box — ran `setAuto(true)`, which put a card already scanned in
+  AWAIT_NEXT back to WATCHING and filed it twice two ticks later:
+  `deviceApi_aPatchThatKeepsTheModeNeverReArmsTray`), a new Area only when it
+  changed (it re-learns the tray), the status line only when the mode or Area
+  changed or a drawing was cancelled. A PATCH while the scan screen is STOPPED
+  (no screen on the bridge — Tap to scan stops it after every scan, Scans and
+  Settings do too) reaches AppSettings only and is caught up on return
+  (`onResume` → `applyStoredModeAndArea`, only what moved; a plain return
+  touches neither). During the zoom probe a PATCH is stored at once, cancels
+  the probe and is applied after its end. The desktop "📱 Scanner" panel shows
+  only when `/api/device` answers.
 - **Storage:** no backups, no pruning; at 10,000 scans Settings shows size +
   free space as a warning (owner).
 - **versionName/versionCode come from pyproject.toml** (1.2.3 → 10203).
@@ -1039,23 +1156,29 @@ Open threads:
   move — the dpt before vs after?), the `done #k` lines' three sharpness values
   and AF state (a soft burst, a burst shot mid-sweep in ACTIVE_SCAN), and that
   Diagnostics' camera block now says "live" with a `focus:` line. That data
-  decides the Phase-3 focus work (a periodic Tray re-lock, a better watchdog)
-  and the zoom probe.
-- Owner to try "Zoom to fit the Area" on the rig (1.1.14, OFF by default,
-  Settings → Camera; tested in code, not on the phone). With it on, in a Tray
-  session: does the Area chip read "Area ✓ · N×" and the preview fill the box?
-  The `zoom` lines — "→ N× requested", "camera reports CONTROL_ZOOM_RATIO …"
-  (does the N200 report it, and is the crop centred?), "analyzer paused /
-  resumed — n frame(s) dropped" (settle time), the "post-fit check" residual
-  (within ±3 %?); no phantom scans and no re-learn after 3× Scans and 3×
-  Settings round trips (a re-apply must not re-learn: no "frames now at" line
-  after a round trip); a card left on the tray across switching it on is NOT
-  scanned again; drawing a new Area zooms out first and Cancel zooms back with
-  the tray kept; the desktop panel's picture stays 1:1 with the Area drawn
-  there. Then compare photos at 1× and zoomed (`done … @ N×` with the three
-  sharpness values and card H px): that, plus a zoom probe, decides
-  `MAX_ZOOM` and turning it on by default. "Fit to cards" (suggesting an Area
-  from where cards land) stays proposed, not approved.
+  decides the Phase-3 focus work (a periodic Tray re-lock, a better watchdog).
+- Owner to run the zoom steps on the rig (1.1.17, all tested in code, not on
+  the phone): Settings → Diagnostics → **Run the zoom steps** (about 10 min) —
+  A1 (Tray, the Area drawn tight round where the cards land; 10 cards with 2+
+  printings and a printed set code + collector number, no foils), the probe
+  step (Run probe on the card A1 left, hands off ~30 s, then again on a
+  DIFFERENT card), B (Zoom to fit on — did the card left stay un-scanned?), A2,
+  Done → send the debug report it shares (then delete the 30 test scans). The
+  report's `zoom VERDICT` decides Zoom to fit ON by default and, with the A/B's
+  outcomes and strip detail, whether `MAX_ZOOM` 2.0 stands (the probe measures
+  no knee); the `probe` lines answer the old rig questions — does the N200
+  report CONTROL_ZOOM_RATIO, is the zoom the centred crop (H fit, centre
+  drift), frames still at the old zoom after the drops (SETTLE_DROP_FRAMES),
+  does the AF lens hold across zooms. Also from the session: the post-fit
+  residual, no phantom scans / re-learns after Scans and Settings round trips
+  while zoomed, the desktop's Camera view at B's zoom (focus at the stream's
+  own pixels), the off-centre hint over the real mount. A follow-up PR then
+  sets MAX_ZOOM (everywhere: ZoomFit, `describe`, ZoomFitTest's bound, the
+  desktop's and `settings_zoomfit_desc`'s "up to 2×"), SETTLE_DROP_FRAMES and
+  the default strictly by those rules; z_pipe (880 ÷ the 1× card) says where
+  the 630×880 identification warp stops gaining pixels — raising it is a
+  reference change, the owner's call. "Fit to cards" (suggesting an Area from
+  where cards land) stays proposed, not approved.
 - Ranking time for heavily reprinted names (cache candidate images).
 - Proposed, awaiting the owner: a measured card-detection goal — score the
   current detector from real debug reports (phantom triggers, captures with no
