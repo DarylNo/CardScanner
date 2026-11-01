@@ -36,6 +36,14 @@ server and check the 📱 Scanner panel's "Zoom to fit the Area" controls
   frame; ↻ and the re-take after a PATCH keep the view; it refreshes every
   2 s only while the zoom probe runs (`zoom.probing`); a 503 shows the
   phone's words; back to Whole frame is a base GET and drawing works 1:1;
+- review of d0b65bf: back on Whole frame (the toggle, or the panel reopened
+  WITHOUT a page reload) the camera picture's note, Area box and drag refusal
+  are gone at once — while the base picture is still loading (the stale
+  camera picture is out of sight, a drag draws nothing) and when it never
+  comes (the scan screen closed: a 503); "Clear area" (the Area button, no
+  longer "Full frame" beside "Whole frame") is not offered in Camera view and
+  PATCHes nothing there, and a draft drawn on Whole frame survives a look at
+  Camera view;
 - the banner reads d51 and the page throws nothing.
 
     pip install playwright        # the browser: Chromium, see EXE below
@@ -77,9 +85,12 @@ STATE = {
     "cam_snap_gets": 0,   # snapshot.jpg?view=camera
     "cam_ratio": None,    # the camera picture's X-Zoom-Ratio (None: the phone's zoom.ratio)
     "cam_503": None,      # the camera view answers 503 with these words
+    "base_503": None,     # the base picture answers 503 with these words (the scan screen closed)
+    "base_delay": 0.0,    # seconds before the base picture is answered (a slow phone)
 }
 CAM_W, CAM_H = 600, 800
 NO_PICTURE = "no picture within 2 s — the camera's zoom is changing; try again"
+NO_CAMERA = "the camera isn't running — open the scan screen on the phone"
 
 
 def device(zoom_fit=False, with_zoom=True, with_views=True):
@@ -137,6 +148,8 @@ class H(BaseHTTPRequestHandler):
             view = q.get("view", [None])[-1]
             if view in (None, "base"):
                 STATE["snap_gets"] += 1
+                if STATE["base_delay"]: time.sleep(STATE["base_delay"])
+                if STATE["base_503"]: return self.send(503, {"error": STATE["base_503"]})
                 return self.send(200, snapshot_png(), "image/png")
             if view != "camera":
                 return self.send(400, {"error": 'view must be "base" or "camera"'})
@@ -195,6 +208,13 @@ def open_panel(pg):
     pg.click("#devBtn")
     pg.wait_for_selector("#devModal.open")
     pg.wait_for_function("document.querySelector('#devSnap').naturalWidth > 0")
+
+
+def reopen_panel(pg):
+    # Close and open the panel again WITHOUT reloading the page: the page's own state carries over.
+    pg.click("#devClose")
+    pg.click("#devBtn")
+    pg.wait_for_selector("#devModal.open")
 
 
 with sync_playwright() as pw:
@@ -260,6 +280,7 @@ with sync_playwright() as pw:
 
     def fracs(sel):
         g = pg.locator(sel).bounding_box(); s = pg.locator("#devSnap").bounding_box()
+        if not g or not s or not pg.locator(sel).is_visible(): return (-1.0, -1.0, -1.0, -1.0)   # not shown
         return ((g["x"] - s["x"]) / s["width"], (g["y"] - s["y"]) / s["height"],
                 (g["x"] + g["width"] - s["x"]) / s["width"], (g["y"] + g["height"] - s["y"]) / s["height"])
 
@@ -360,10 +381,22 @@ with sync_playwright() as pw:
     pg.wait_for_selector("#devStage", state="visible", timeout=4000)
     check(not pg.locator("#devNoCam").is_visible() and pg.locator("#devZoomNote").inner_text() == CAM_NOTE, "↻ again: the picture is back")
 
+    print("Camera view: the Area button is not offered there (review of d0b65bf)")
+    check(pg.locator("#devRoiClear").inner_text() == "Clear area",
+          f"the Area button says what it does, not 'Full frame' beside 'Whole frame': {pg.locator('#devRoiClear').inner_text()!r}")
+    check(not pg.locator("#devRoiClear").is_visible(), "no Clear area in Camera view")
+    n1 = len(STATE["patches"])
+    pg.evaluate("document.querySelector('#devRoiClear').click()")   # even if it were reached
+    pg.wait_for_timeout(400)
+    check(len(STATE["patches"]) == n1, f"…and it PATCHes nothing there ({STATE['patches'][n1:]})")
+    check(near(fracs("#devRoi"), (0.025, 0.025, 0.975, 0.975)), "…the Area box untouched")
+
     print("back to Whole frame")
     b5 = STATE["snap_gets"]
     pg.click("#devViewSeg [data-view=base]")
     pg.wait_for_function(f"document.querySelector('#devZoomNote').textContent === {json.dumps(BASE_NOTE)}", timeout=4000)
+    pg.wait_for_selector("#devSnap", state="visible", timeout=4000)
+    pg.wait_for_selector("#devRoi", state="visible", timeout=4000)
     check(STATE["snap_gets"] == b5 + 1, "a base GET")
     check(active_view() == "base", "Whole frame is the active button")
     rf = fracs("#devRoi")
@@ -372,6 +405,25 @@ with sync_playwright() as pw:
         c.width = i.naturalWidth; c.height = i.naturalHeight; const x = c.getContext('2d'); x.drawImage(i, 0, 0);
         return Array.from(x.getImageData(2, 2, 1, 1).data).slice(0, 3); }""")
     check(px == [96, 96, 96], f"the base picture's grey ring (corner {px})")
+    check(pg.locator("#devRoiClear").is_visible(), "Clear area is offered again on Whole frame")
+    pg.evaluate("document.querySelector('#devMsg').textContent = ''")
+
+    print("a draft drawn on Whole frame survives a look at Camera view")
+    n2 = len(STATE["patches"])
+    drag((0.20, 0.30), (0.60, 0.80))
+    check(pg.locator("#devRoiSave").is_visible(), "a draft: Save shows")
+    pg.click("#devViewSeg [data-view=camera]")
+    pg.wait_for_function("document.querySelector('#devZoomNote').textContent.startsWith('Camera view at')", timeout=4000)
+    check(not pg.locator("#devRoiSave").is_visible() and not pg.locator("#devRoiClear").is_visible(),
+          "Camera view: no Save, no Clear area")
+    pg.evaluate("document.querySelector('#devRoiClear').click()")
+    pg.wait_for_timeout(300)
+    pg.click("#devViewSeg [data-view=base]")
+    pg.wait_for_selector("#devRoi", state="visible", timeout=4000)
+    check(len(STATE["patches"]) == n2, f"nothing PATCHed ({STATE['patches'][n2:]})")
+    check(pg.locator("#devRoiSave").is_visible() and near(fracs("#devRoi"), (0.20, 0.30, 0.60, 0.80)),
+          f"back on Whole frame the draft is still there: {tuple(round(v, 4) for v in fracs('#devRoi'))}")
+    pg.evaluate("document.querySelector('#devRoiUndo').click()")
     pg.evaluate("document.querySelector('#devMsg').textContent = ''")
 
     print("draw an Area on the base-space picture while zoomed")
@@ -412,12 +464,78 @@ with sync_playwright() as pw:
     print("the panel opens on Whole frame, whatever it was left on")
     pg.click("#devViewSeg [data-view=camera]")
     pg.wait_for_function("document.querySelector('#devZoomNote').textContent.startsWith('Camera view at')", timeout=4000)
-    pg.click("#devClose")
     b6, c6 = STATE["snap_gets"], STATE["cam_snap_gets"]
-    open_panel(pg)
+    reopen_panel(pg)                                               # no page reload: the page's state carries over
+    pg.wait_for_selector("#devSnap", state="visible", timeout=4000)
     pg.wait_for_timeout(300)
     check(active_view() == "base", f"Whole frame is active on reopening ({active_view()!r})")
     check(STATE["snap_gets"] == b6 + 1 and STATE["cam_snap_gets"] == c6, "…a base GET, no camera one")
+    pg.click("#devClose")
+
+    # Review of d0b65bf: what the picture shows (devPic) followed only a base picture that LOADED,
+    # so back on Whole frame the camera picture's note, its view-space Area box and its drag refusal
+    # stayed while the base picture loaded — and for good when it never came (the screen closed).
+    def zoomed_camera_view():
+        STATE["dev"] = device(zoom_fit=True)
+        STATE["base_503"], STATE["base_delay"] = None, 0.0
+        open_panel(pg)
+        pg.click("#devViewSeg [data-view=camera]")
+        pg.wait_for_function(f"document.querySelector('#devZoomNote').textContent === {json.dumps(CAM_NOTE)}", timeout=4000)
+
+    def note_now():
+        return pg.locator("#devZoomNote").inner_text() if pg.locator("#devZoomNote").is_visible() else ""
+
+    print("reopened after Camera view, the base picture slow (1.5 s)")
+    zoomed_camera_view()
+    STATE["base_delay"] = 1.5
+    n3 = len(STATE["patches"])
+    reopen_panel(pg)
+    pg.wait_for_timeout(300)                                       # the base picture is on its way
+    check(note_now() != CAM_NOTE and not note_now().startswith("Camera view"),
+          f"while it loads: not the camera picture's note ({note_now()!r})")
+    check(not pg.locator("#devSnap").is_visible(), "…the stale camera picture is out of sight")
+    check(not pg.locator("#devRoi").is_visible(), "…no Area box drawn on it")
+    pg.evaluate("document.querySelector('#devMsg').textContent = ''")
+    st = pg.locator("#devStage").bounding_box()
+    if st:
+        pg.mouse.move(st["x"] + st["width"] * 0.3, st["y"] + st["height"] * 0.3); pg.mouse.down()
+        pg.mouse.move(st["x"] + st["width"] * 0.7, st["y"] + st["height"] * 0.7, steps=4); pg.mouse.up()
+    msg = pg.locator("#devMsg").inner_text()
+    check("Switch to Whole frame" not in msg, f"…a drag is not refused as if on Camera view: {msg!r}")
+    check(not pg.locator("#devRoiSave").is_visible(), "…and draws no draft on the stale picture")
+    pg.wait_for_selector("#devRoi", state="visible", timeout=4000)
+    check(note_now() == BASE_NOTE, f"once loaded: the whole frame's note ({note_now()!r})")
+    check(near(fracs("#devRoi"), (0.25, 0.25, 0.75, 0.75)), f"…the Area at its base fractions: {tuple(round(v, 4) for v in fracs('#devRoi'))}")
+    check(len(STATE["patches"]) == n3, "nothing PATCHed")
+    STATE["base_delay"] = 0.0
+    pg.click("#devClose")
+
+    print("reopened after Camera view, the scan screen closed (the base picture 503s)")
+    zoomed_camera_view()
+    pg.click("#devClose")
+    STATE["dev"]["camera_live"] = False; STATE["dev"]["zoom"] = None
+    STATE["base_503"] = NO_CAMERA
+    pg.click("#devBtn"); pg.wait_for_selector("#devModal.open")
+    pg.wait_for_selector("#devNoCam", state="visible", timeout=4000)
+    pg.wait_for_timeout(1500)
+    check(active_view() == "base", f"Whole frame is active ({active_view()!r})")
+    check(note_now() == "", f"no camera-view note — nothing zoomed to speak of ({note_now()!r})")
+    check("Open the scan screen on the phone" in pg.locator("#devNoCam").inner_text(), "…the closed-screen words")
+    check(not pg.locator("#devRoi").is_visible(), "…no Area box")
+    pg.wait_for_timeout(3500)                                      # a poll in between changes nothing
+    check(note_now() == "", f"…still none after a poll ({note_now()!r})")
+    pg.click("#devClose")
+
+    print("Camera view, then the scan screen closes and Whole frame is clicked")
+    zoomed_camera_view()
+    STATE["dev"]["camera_live"] = False; STATE["dev"]["zoom"] = None
+    STATE["base_503"] = NO_CAMERA
+    pg.click("#devViewSeg [data-view=base]")
+    pg.wait_for_selector("#devNoCam", state="visible", timeout=4000)
+    pg.wait_for_timeout(500)
+    check(note_now() == "", f"no camera-view note ({note_now()!r})")
+    check("Open the scan screen on the phone" in pg.locator("#devNoCam").inner_text(), "…the closed-screen words")
+    STATE["base_503"] = None
     pg.click("#devClose")
 
     def ghost_fracs():
@@ -525,7 +643,7 @@ with sync_playwright() as pw:
         pg.wait_for_selector("#devRoiCentred", state="visible")
         watch_line_and_ghost()
 
-    print("the switch off, an off-centre Area: Full frame with a stale answer")
+    print("the switch off, an off-centre Area: Clear area with a stale answer")
     edge_panel()
     pg.evaluate("window.__zl = []")
     t0 = pg.evaluate("performance.now()")
