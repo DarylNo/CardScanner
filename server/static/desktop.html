@@ -269,6 +269,10 @@
   #devRoi { position: absolute; border: 2px solid var(--accent); box-shadow: 0 0 0 9999px #0008;
             pointer-events: none; display: none; }
   #devRoi.draft { border-style: dashed; border-color: var(--warn); }
+  /* The off-centre hint (1.1.17): where the SAME Area would sit centred — where to put the cards. */
+  #devRoiCentred { position: absolute; border: 2px dashed var(--good); pointer-events: none; display: none; }
+  #devRoiCentred span { position: absolute; left: 4px; top: 4px; font-size: 11px; line-height: 1.3; color: #fff;
+                        background: #000b; padding: 1px 6px; border-radius: 4px; white-space: nowrap; }
   #devNoCam { color: var(--muted); font-size: 14px; padding: 40px 12px; text-align: center; line-height: 1.5; }
   #devMsg { font-size: 12px; color: var(--muted); min-height: 1.2em; }
   #devZoom { font-size: 12px; color: var(--muted); line-height: 1.45; margin-top: -4px; }
@@ -334,7 +338,7 @@
       <div id="devArea">
         <div class="h" style="font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em">Scan area — drag on the picture to draw it</div>
         <div id="devZoomNote" style="display:none;font-size:12px;color:var(--muted)">Zoomed in: the picture is still the whole frame — the grey ring is what the zoomed camera doesn't see.</div>
-        <div id="devStage"><img id="devSnap" alt="" draggable="false"><div id="devRoi"></div></div>
+        <div id="devStage"><img id="devSnap" alt="" draggable="false"><div id="devRoi"></div><div id="devRoiCentred"><span></span></div></div>
         <div id="devNoCam" style="display:none">Open the scan screen on the phone to see the camera<br>and draw the scan area here.</div>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
           <button class="btn ghost sm" id="devShot">↻ New picture</button>
@@ -2187,7 +2191,7 @@ function sigOf(scan){
 
 // Version banner — page version · server git hash. Same rationale as the
 // phone: without it, "is this the old page?" is undebuggable.
-const UI_VERSION = "d50";
+const UI_VERSION = "d51";
 
 // Who is asking: the phone server says "guest" for the 6-digit code (admin =
 // the paired computer); the computer's own server always says admin. Guests
@@ -2761,13 +2765,23 @@ function devRender(){
 function devZoomText(d){
   const z = d.zoom, x = v => v == null ? "?" : (+v).toFixed(2) + "×";
   if (!z) return d.zoom_fit ? "Zoom: on — open the scan screen on the phone to see it." : "";
-  if (!d.zoom_fit && z.ratio <= 1 && !z.settling && !z.applying) return "";
+  // The off-centre hint (1.1.17; an older phone app sends neither `would` nor `off_centre`):
+  // CameraX zooms about the frame centre, so the same Area centred may zoom more.
+  const oc = z.off_centre ? `<br>Off-centre: ${esc(z.off_centre.words || "")}` : "";
+  if (!d.zoom_fit && z.ratio <= 1 && !z.settling && !z.applying) {
+    // Off at 1×: what this Area WOULD zoom with the switch on, so the owner sees it before ticking
+    // the box. Never the words "Zoom to fit is off" (the stale-answer check watches for them).
+    const w = z.would, lim = String(w?.limit || "");
+    if (!w || !d.roi || z.drawing) return "";           // a new Area being drawn on the phone: not this one's
+    return `Off — this Area would zoom <b>${x(w.z)}</b>` +
+      (lim ? (lim.includes("(") ? ` — ${esc(lim)}` : ` (${esc(lim)})`) : "") + oc;
+  }
   // A zoom / Area / lens change just sent: the PATCH answer may predate it (an older phone
   // app, or a busy phone) — say so until /api/device is read again (devPatch).
   if (z.applying) return "Zoom: <b>applying the change on the phone…</b>";
   if (z.drawing) return `Zoom <b>${x(z.ratio)}</b> — an Area is being drawn on the phone (zoomed out to the whole frame)`;
   return `Zoom <b>${x(z.ratio)}</b>${z.settling ? " (settling…)" : ""} · target ${x(z.target)} — ${esc(z.limit || "")}` +
-    `<br>Area fit ${x(z.fit)} · lossless ${x(z.lossless)} · lens max ${x(z.max)}`;
+    `<br>Area fit ${x(z.fit)} · lossless ${x(z.lossless)} · lens max ${x(z.max)}` + oc;
 }
 function devDrawRoi(){
   const box = $("#devRoi"), r = devDraft || dev?.roi;
@@ -2775,6 +2789,16 @@ function devDrawRoi(){
   $("#devRoiSave").style.display = devDraft ? "" : "none";
   $("#devRoiUndo").style.display = devDraft ? "" : "none";
   $("#devRoiClear").disabled = !dev?.roi && !devDraft;
+  // The off-centre ghost (1.1.17): the stored Area moved to the frame centre (base fractions, 1:1 like
+  // the Area) — hidden while a new Area is drawn (here or on the phone) and while a change is being applied.
+  const ghost = $("#devRoiCentred"), oc = dev?.zoom?.off_centre;
+  const c = !devDraft && !dev?.zoom?.applying && !dev?.zoom?.drawing && oc?.centred_roi;
+  if (c && $("#devSnap").naturalWidth) {
+    ghost.style.display = "block";
+    ghost.style.left = (c.x0 * 100) + "%"; ghost.style.top = (c.y0 * 100) + "%";
+    ghost.style.width = ((c.x1 - c.x0) * 100) + "%"; ghost.style.height = ((c.y1 - c.y0) * 100) + "%";
+    ghost.querySelector("span").textContent = `centred: ${oc.centred == null ? "?" : (+oc.centred).toFixed(2) + "×"}`;
+  } else ghost.style.display = "none";
   if (!r || !$("#devSnap").naturalWidth) { box.style.display = "none"; return; }
   box.style.display = "block";
   box.style.left = (r.x0 * 100) + "%"; box.style.top = (r.y0 * 100) + "%";

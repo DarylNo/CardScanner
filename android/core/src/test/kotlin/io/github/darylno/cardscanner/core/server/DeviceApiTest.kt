@@ -4,6 +4,7 @@ import io.github.darylno.cardscanner.core.MiniJson
 import io.github.darylno.cardscanner.core.RoiFrac
 import io.github.darylno.cardscanner.core.ZoomCoordinator
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /** The phone's settings from the browser: shapes, validation, admin only. */
@@ -75,12 +76,56 @@ class DeviceApiTest {
         assertEquals(10.0, (z["max"] as Number).toDouble(), 0.0)
         assertEquals(false, z["settling"])
         assertEquals(false, z["drawing"])
+        // A centred Area: nothing to say about centring it (the key is there, null).
+        assertTrue("$z", z.containsKey("off_centre"))
+        assertEquals(null, z["off_centre"])
         // An Area drawn on the phone: zoomed out to 1× for it — said so, not "settling" at 1.9×.
         coord.setDrawing(true); coord.onApplied(asked, 1.0)
         zoom = coord.state()
         val d = json(patch("""{"torch":false}""")) ["zoom"] as Map<*, *>
         assertEquals(true, d["drawing"]); assertEquals(false, d["settling"])
         assertEquals(1.0, (d["ratio"] as Number).toDouble(), 0.0)
+    }
+
+    /**
+     * The off-centre hint (1.1.17), whatever the switch says: `would` = what this Area
+     * zooms with the switch on; `off_centre` = what the SAME Area would zoom centred,
+     * where it would sit (the desktop's dashed ghost box) and the phone's own words.
+     */
+    @Test fun anOffCentreAreaIsReported() {
+        val coord = ZoomCoordinator(object : ZoomCoordinator.Port {
+            override fun request(gen: Int, ratio: Double) {}
+            override fun closeGate(why: String) {}
+            override fun map(ratio: Double, view: RoiFrac?, settle: Boolean, why: String) {}
+            override fun drawingReady(ratio: Double) {}
+            override fun later(ms: Long, block: () -> Unit) {}
+            override fun readBack(): Double? = null
+        })
+        fun zoomNow(): Map<*, *> { zoom = coord.state(); return json(api.handle(ApiRequest("GET", "/api/device"))!!)["zoom"] as Map<*, *> }
+        fun num(v: Any?) = (v as Number).toDouble()
+        coord.setArea(RoiFrac(0.45, 0.25, 0.95, 0.75)); coord.cameraBound(2.6, 10.0)     // the switch is off
+        val z = zoomNow()
+        assertEquals("Zoom to fit is off", z["limit"])
+        assertEquals(1.0, num(z["target"]), 0.0)
+        val would = z["would"] as Map<*, *>
+        assertEquals(1.0, num(would["z"]), 0.0)
+        assertEquals("below 1.10× (the Area fit)", would["limit"])
+        assertEquals(1.11, num(would["fit"]), 0.0)
+        val o = z["off_centre"] as Map<*, *>
+        assertEquals(1.0, num(o["now"]), 0.0)
+        assertEquals(1.9, num(o["centred"]), 0.0)
+        assertEquals(0.2, num(o["dx"]), 0.0)
+        assertEquals(0.0, num(o["dy"]), 0.0)
+        assertEquals(mapOf("x0" to 0.25, "y0" to 0.25, "x1" to 0.75, "y1" to 0.75), o["centred_roi"])
+        val words = o["words"] as String
+        assertTrue(words, words.contains("20 % right") && words.contains("would zoom 1.90×") && words.contains("this Area: 1.00×"))
+        // Centred: no hint, and the Area would zoom 1.90×.
+        coord.setArea(RoiFrac(0.25, 0.25, 0.75, 0.75))
+        val c = zoomNow()
+        assertTrue("$c", c.containsKey("off_centre"))
+        assertEquals(null, c["off_centre"])
+        assertEquals(1.9, num((c["would"] as Map<*, *>)["z"]), 0.0)
+        assertEquals("the Area fit", (c["would"] as Map<*, *>)["limit"])
     }
 
     @Test fun appliesWhatIsGivenInOneWrite() {

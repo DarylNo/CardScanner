@@ -3,6 +3,7 @@ package io.github.darylno.cardscanner.core.server
 import io.github.darylno.cardscanner.core.MiniJson
 import io.github.darylno.cardscanner.core.RoiFrac
 import io.github.darylno.cardscanner.core.ZoomCoordinator
+import io.github.darylno.cardscanner.core.ZoomFit
 
 /**
  * The scanner phone's own settings, from the browser (owner request
@@ -22,11 +23,19 @@ import io.github.darylno.cardscanner.core.ZoomCoordinator
  * null for the full frame.
  *
  * "Zoom to fit the Area" (1.1.14): `zoom_fit` (true / false) is the switch;
- * `zoom` = `{ratio, target, limit, fit, lossless, max, settling, drawing}` while
- * the scan screen has its camera, else null (`drawing`: an Area is being drawn on
- * the phone, the camera zoomed out to 1× for it). `roi` stays BASE (1×) fractions at any zoom,
- * and the snapshot stays a base-space picture (the zoomed view on grey), so a
- * box drawn on it still maps 1:1.
+ * `zoom` = `{ratio, target, limit, fit, lossless, max, settling, drawing, would,
+ * off_centre}` while the scan screen has its camera, else null (`drawing`: an
+ * Area is being drawn on the phone, the camera zoomed out to 1× for it). `roi`
+ * stays BASE (1×) fractions at any zoom, and the snapshot stays a base-space
+ * picture (the zoomed view on grey), so a box drawn on it still maps 1:1.
+ *
+ * The off-centre hint (1.1.17), whatever the switch says: `would` =
+ * `{z, limit, fit}`, what this Area zooms with the switch on; `off_centre` = null,
+ * or `{now, centred, dx, dy, centred_roi, words}` when the Area fit binds and the
+ * SAME Area centred would zoom ≥ 0.10× more — `centred_roi` (base fractions) is
+ * where it would sit, `dx`/`dy` the Area's centre minus the frame's (+ = right /
+ * below), `words` worded on the phone like `limit`. Read-only: PATCH has no key
+ * for either.
  */
 class DeviceApi(private val device: DeviceControl) {
 
@@ -94,18 +103,33 @@ class DeviceApi(private val device: DeviceControl) {
     private fun zoomJson(z: ZoomCoordinator.State): Map<String, Any?> {
         val t = z.target
         fun r2(v: Double?) = v?.takeIf { it.isFinite() }?.let { Math.round(it * 100) / 100.0 }
+        fun r4(v: Double) = Math.round(v * 10_000) / 10_000.0
         return linkedMapOf(
             "ratio" to r2(z.ratio),
             "target" to r2(t.z),
-            "limit" to (if (t.belowMin) "below ${"%.2f".format(java.util.Locale.ROOT, io.github.darylno.cardscanner.core.ZoomFit.MIN_USEFUL)}× (${t.limit.words})" else t.limit.words),
+            "limit" to limitWords(t),
             "fit" to r2(t.fit),
             "lossless" to r2(t.lossless),
             "max" to r2(t.lensMax),
             "settling" to z.settling,
             // An Area being drawn on the phone: the camera is zoomed out to 1× for it (the panel says so).
             "drawing" to z.drawing,
+            // The off-centre hint (1.1.17): what this Area would zoom with the switch on, and centred.
+            "would" to z.area?.let { linkedMapOf("z" to r2(it.z), "limit" to limitWords(it), "fit" to r2(it.fit)) },
+            "off_centre" to z.offCentre?.let { o ->
+                val c = o.centredArea
+                linkedMapOf(
+                    "now" to r2(o.now.z), "centred" to r2(o.centred.z), "dx" to r4(o.dx), "dy" to r4(o.dy),
+                    "centred_roi" to linkedMapOf("x0" to r4(c.x0), "y0" to r4(c.y0), "x1" to r4(c.x1), "y1" to r4(c.y1)),
+                    "words" to o.describe(),
+                )
+            },
         )
     }
+
+    /** "the Area fit" / "below 1.10× (the Area fit)" — what bound a ratio, as the panel shows it. */
+    private fun limitWords(c: ZoomFit.Choice): String =
+        if (c.belowMin) "below ${"%.2f".format(java.util.Locale.ROOT, ZoomFit.MIN_USEFUL)}× (${c.limit.words})" else c.limit.words
 
     private fun patch(req: ApiRequest): ApiResponse {
         val body = req.body?.let {

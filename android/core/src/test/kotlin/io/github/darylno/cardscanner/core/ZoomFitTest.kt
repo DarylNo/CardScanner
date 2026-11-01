@@ -144,6 +144,96 @@ class ZoomFitTest {
         }
     }
 
+    // ── the off-centre hint (1.1.17): CameraX zooms about the frame centre ──
+
+    @Test fun aCentredAreaHasNoOffCentreHint() {
+        assertNull(ZoomFit.offCentre(RoiFrac(0.25, 0.25, 0.75, 0.75), 2.6, 10.0))
+        assertNull("no Area: nothing to centre", ZoomFit.offCentre(null, 2.6, 10.0))
+    }
+
+    @Test fun anAreaHuggingAnEdgeSaysWhatCentringWouldGive() {
+        val edge = RoiFrac(0.45, 0.25, 0.95, 0.75)                // fit 1/(2·0.45) = 1.11 → 0.95·1.11 = 1.056
+        val o = ZoomFit.offCentre(edge, 2.6, 10.0)
+        assertNotNull(o); o!!
+        assertEquals(1.0, o.now.z, 0.0)
+        assertTrue(o.now.belowMin)
+        assertEquals(ZoomFit.Limit.FIT, o.now.limit)
+        assertEquals(0.95 / 0.9, o.now.raw, 1e-12)
+        assertEquals(1.9, o.centred.z, 0.0)
+        assertEquals(ZoomFit.Limit.FIT, o.centred.limit)
+        assertEquals(0.2, o.dx, 1e-12)
+        assertEquals(0.0, o.dy, 1e-12)
+        val c = o.centredArea
+        assertEquals(0.25, c.x0, 1e-12); assertEquals(0.25, c.y0, 1e-12)
+        assertEquals(0.75, c.x1, 1e-12); assertEquals(0.75, c.y1, 1e-12)
+        assertEquals("the Area's centre is 20 % right of the frame centre — centred, the same Area would zoom 1.90× " +
+            "(this Area: 1.00×, its fit allows only 1.06×)", o.describe())
+        assertEquals("centred, it would zoom 1.90× (this Area: 1.00×)", o.short())
+        // Both axes, the other way round; a zoom that is not below 1.10× says so plainly.
+        val o2 = ZoomFit.offCentre(RoiFrac(0.17, 0.1, 0.57, 0.6), 2.6, 10.0)!!   // centre 0.37, 0.35 · fit 1/(2·0.4) → 1.15
+        assertEquals(-0.13, o2.dx, 1e-12); assertEquals(-0.15, o2.dy, 1e-12)
+        assertEquals(1.15, o2.now.z, 0.0); assertFalse(o2.now.belowMin)
+        assertEquals("the Area's centre is 13 % left and 15 % above the frame centre — centred, the same Area would " +
+            "zoom 1.90× (this Area: 1.15×)", o2.describe())
+    }
+
+    @Test fun aLosslessLensOrCapBoundAreaHasNoHint() {
+        val a = RoiFrac(0.35, 0.25, 0.85, 0.75)                    // fit 1/(2·0.35) = 1.43 → 1.36; centred 1.90
+        assertNotNull("the Area fit binds: a hint", ZoomFit.offCentre(a, 2.6, 10.0))
+        // Lossless 1.15 binds now AND centred: centring gains nothing.
+        assertNull(ZoomFit.offCentre(a, 1.15, 10.0))
+        assertNull("the lens max binds", ZoomFit.offCentre(a, 2.6, 1.3))
+        // MAX_ZOOM binds an Area already small enough (fit 2.5 → 2.375 → the cap 2.0).
+        assertNull(ZoomFit.offCentre(RoiFrac(0.30, 0.30, 0.65, 0.65), 9.0, 9.0))
+        // The fit binds now (1.06×, below 1.10×), but the lens holds the centred Area below 1.10× too.
+        assertNull(ZoomFit.offCentre(RoiFrac(0.45, 0.25, 0.95, 0.75), 2.6, 1.08))
+    }
+
+    @Test fun aGainUnderTwoStepsIsNotWorthSaying() {
+        // fit 1/(2·0.255) = 1.96 → 1.86 → 1.85 vs centred 1.90: one step.
+        assertNull(ZoomFit.offCentre(RoiFrac(0.255, 0.25, 0.755, 0.75), 2.6, 10.0))
+        // fit 1/(2·0.26) = 1.92 → 1.83 → 1.80 vs 1.90: two steps (0.10, in floating point 0.0999…) — said.
+        val o = ZoomFit.offCentre(RoiFrac(0.26, 0.25, 0.76, 0.75), 2.6, 10.0)
+        assertNotNull(o)
+        assertEquals(1.8, o!!.now.z, 0.0)
+        assertEquals("the Area's centre is 1 % right of the frame centre — centred, the same Area would zoom 1.90× " +
+            "(this Area: 1.80×)", o.describe())
+        assertEquals(0.10, ZoomFit.OFF_CENTRE_GAIN, 0.0)
+    }
+
+    /** Random Areas: the centred one keeps the size, sits at the centre, fits best — and never zooms less. */
+    @Test fun centredKeepsTheSizeAndFitsBest() {
+        val rnd = Random(20261101)
+        var hints = 0
+        repeat(5000) {
+            val x0 = rnd.nextDouble(0.0, 0.92); val y0 = rnd.nextDouble(0.0, 0.92)
+            val x1 = rnd.nextDouble(x0 + RoiFrac.MIN_SIDE, 1.0 + 1e-9).coerceAtMost(1.0)
+            val y1 = rnd.nextDouble(y0 + RoiFrac.MIN_SIDE, 1.0 + 1e-9).coerceAtMost(1.0)
+            val a = RoiFrac.orNull(x0, y0, x1, y1) ?: return@repeat
+            val c = ZoomFit.centred(a)
+            val w = a.x1 - a.x0; val h = a.y1 - a.y0
+            assertEquals(w, c.x1 - c.x0, 1e-9); assertEquals(h, c.y1 - c.y0, 1e-9)
+            assertEquals(0.5, (c.x0 + c.x1) / 2, 1e-9); assertEquals(0.5, (c.y0 + c.y1) / 2, 1e-9)
+            assertEquals(1.0 / maxOf(w, h), ZoomFit.fit(c), 1e-9)
+            assertTrue("$a: fit(centred) ${ZoomFit.fit(c)} ≥ fit ${ZoomFit.fit(a)}", ZoomFit.fit(c) >= ZoomFit.fit(a) - 1e-9)
+            val lossless = rnd.nextDouble(1.0, 4.0); val lens = rnd.nextDouble(1.0, 10.0)
+            val now = ZoomFit.choose(a, lossless, lens); val cen = ZoomFit.choose(c, lossless, lens)
+            assertTrue("$a: centred ${cen.z} ≥ now ${now.z}", cen.z >= now.z)
+            val o = ZoomFit.offCentre(a, lossless, lens)
+            if (o != null) {
+                hints++
+                assertEquals(ZoomFit.Limit.FIT, o.now.limit)
+                assertTrue(o.centred.z - o.now.z >= ZoomFit.OFF_CENTRE_GAIN - 1e-9)
+                assertEquals(now.z, o.now.z, 0.0); assertEquals(cen.z, o.centred.z, 0.0)
+                assertEquals((a.x0 + a.x1) / 2 - 0.5, o.dx, 1e-12); assertEquals((a.y0 + a.y1) / 2 - 0.5, o.dy, 1e-12)
+            } else {
+                assertTrue("$a: no hint only when the fit does not bind or centring gains < 2 steps",
+                    now.limit != ZoomFit.Limit.FIT || cen.z - now.z < ZoomFit.OFF_CENTRE_GAIN - 1e-9)
+            }
+        }
+        assertTrue("the property test met real hints ($hints)", hints > 500)
+    }
+
     @Test fun thePostFitCheckComparesCardHeightsAcrossZooms() {
         val pf = ZoomFit.PostFit()
         assertNull(pf.note(1.0, 430.0))

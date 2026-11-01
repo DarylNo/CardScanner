@@ -831,7 +831,8 @@ class MainActivity : AppCompatActivity() {
         camera?.setDrawing(false)  // …at the new Area's zoom
         appliedRoi = r
         updateAreaBtn()
-        setStatus(StatusText.AREA_SET)
+        // The off-centre hint (1.1.17): setArea ran just now on this thread, so the state has the new Area.
+        setStatus(StatusText.areaSet(camera?.zoomState()?.offCentre?.short()))
     }
 
     private fun onScanTap() {

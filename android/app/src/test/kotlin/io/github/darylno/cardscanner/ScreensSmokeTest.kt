@@ -589,6 +589,96 @@ class ScreensSmokeTest {
     }
 
     /**
+     * A [RecordingCamera] with the real zoom coordinator behind it, as CameraController
+     * has: the Area given to the camera is the coordinator's, and so is the zoom state
+     * the scan screen reads (a lens with lossless 2.6× and a 10× max, the switch off).
+     */
+    private class ZoomStateCamera(val rec: RecordingCamera = RecordingCamera()) : io.github.darylno.cardscanner.ui.CameraPort by rec {
+        val zoom = io.github.darylno.cardscanner.core.ZoomCoordinator(object : io.github.darylno.cardscanner.core.ZoomCoordinator.Port {
+            override fun request(gen: Int, ratio: Double) {}
+            override fun closeGate(why: String) {}
+            override fun map(ratio: Double, view: io.github.darylno.cardscanner.core.RoiFrac?, settle: Boolean, why: String) {}
+            override fun drawingReady(ratio: Double) {}
+            override fun later(ms: Long, block: () -> Unit) {}
+            override fun readBack(): Double? = null
+        })
+        override fun bind(owner: LifecycleOwner, preview: androidx.camera.view.PreviewView,
+                          listener: io.github.darylno.cardscanner.ui.CameraPort.Listener) {
+            rec.bind(owner, preview, listener); zoom.cameraBound(2.6, 10.0)
+        }
+        override fun setRoi(roi: io.github.darylno.cardscanner.core.RoiFrac?) { rec.setRoi(roi); zoom.setArea(roi) }
+        override fun setZoomFit(on: Boolean) { rec.setZoomFit(on); zoom.setEnabled(on) }
+        override fun zoomState() = zoom.state()
+    }
+
+    /**
+     * The off-centre hint (1.1.17) after an Area is drawn on the phone: an Area hugging
+     * the right edge zooms 1× (its fit allows only 1.06×), the same Area centred 1.90×
+     * — the status line says so. Laid out at the N200's size, the longest status this
+     * adds sits whole inside the status pill (≤ its 2 lines, nothing ellipsized) and
+     * the pill on screen; the bottom row is still there. NATIVE graphics: Robolectric's
+     * legacy text measures every character as 1 px, so the pill just grew to fit it
+     * (92 px for 92 characters) and the check proved nothing.
+     */
+    @Test
+    @Config(qualifiers = "w411dp-h914dp-xxhdpi")
+    @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
+    fun mainActivity_offCentreAreaStatus_fits() {
+        app.settings.roi = io.github.darylno.cardscanner.core.RoiFrac(0.25, 0.25, 0.75, 0.75)
+        app.settings.auto = true
+        app.settings.zoomFit = false
+        val cam = ZoomStateCamera()
+        app.cameraFactory = { _, _ -> cam }
+        grantCamera(true)
+        val a = launch(MainActivity::class.java)
+        val root = a.window.decorView
+        val overlay = findOverlay(root)!!
+        // A centred Area says what it always said.
+        overlay.onAreaDrawn!!.invoke(io.github.darylno.cardscanner.core.RoiFrac(0.3, 0.3, 0.7, 0.7))
+        ShadowLooper.idleMainLooper()
+        assertEquals(io.github.darylno.cardscanner.ui.StatusText.AREA_SET, a.statusForTest)
+        // The drag ended on an Area hugging the right edge.
+        overlay.onAreaDrawn!!.invoke(io.github.darylno.cardscanner.core.RoiFrac(0.45, 0.25, 0.95, 0.75))
+        ShadowLooper.idleMainLooper()
+        assertEquals("setRoi(0.45,0.25,0.95,0.75)", cam.rec.calls.last { it.startsWith("setRoi(") })
+        val expected = "Scan area set — centred, it would zoom 1.90× (this Area: 1.00×). Empty the tray to re-learn…"
+        assertEquals(expected, a.statusForTest)
+        root.measure(View.MeasureSpec.makeMeasureSpec(root.width, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(root.height, View.MeasureSpec.EXACTLY))
+        root.layout(0, 0, root.width, root.height)
+        val pill = findText(root, expected)!!
+        val l = IntArray(2); pill.getLocationInWindow(l)
+        assertTrue("the pill has a size (${pill.width}×${pill.height})", pill.width > 0 && pill.height > 0)
+        assertTrue("the pill is inside the screen (x ${l[0]}..${l[0] + pill.width} of ${root.width}, y ${l[1]}..${l[1] + pill.height} of ${root.height})",
+            l[0] >= 0 && l[0] + pill.width <= root.width && l[1] >= 0 && l[1] + pill.height <= root.height)
+        val lay = pill.layout
+        assertNotNull("laid out", lay)
+        val innerW = pill.width - pill.totalPaddingLeft - pill.totalPaddingRight
+        val innerH = pill.height - pill.totalPaddingTop - pill.totalPaddingBottom
+        assertTrue("within the pill's ${pill.maxLines} lines (${lay.lineCount})", lay.lineCount <= pill.maxLines)
+        for (i in 0 until lay.lineCount) {
+            assertEquals("line $i is not ellipsized", 0, lay.getEllipsisCount(i))
+            assertTrue("line $i fits the pill's width (${lay.getLineWidth(i)} of $innerW px)", lay.getLineWidth(i) <= innerW + 1)
+        }
+        assertTrue("the text fits the pill's height (${lay.height} of $innerH px)", lay.height <= innerH + 1)
+        val wide = pill.paint.measureText(expected)
+        assertTrue("the status is long enough to need its 2 lines here ($wide px vs $innerW): the check measures real text",
+            wide > innerW)
+        // The bottom row is still on screen under the 2-line status.
+        val bottom = root.findViewWithTag<View>(TAG_BOTTOM_BAR)
+        for (v in listOf(findText(bottom, a.getString(R.string.scans))!!, findDesc(bottom, a.getString(R.string.scan_card))!!)) {
+            val p = IntArray(2); v.getLocationInWindow(p)
+            assertTrue("${v.contentDescription ?: (v as? TextView)?.text} on screen", v.height > 0 && p[1] >= 0 && p[1] + v.height <= root.height)
+        }
+    }
+
+    private fun findOverlay(v: View): io.github.darylno.cardscanner.ui.OverlayView? {
+        if (v is io.github.darylno.cardscanner.ui.OverlayView) return v
+        if (v is ViewGroup) for (i in 0 until v.childCount) findOverlay(v.getChildAt(i))?.let { return it }
+        return null
+    }
+
+    /**
      * Found while checking the zoom probe (1.1.17): EVERY desktop PATCH re-armed Tray on
      * a card that had already scanned. The scan screen re-applied the mode on any change
      * — a torch, a check time, the 📱 Scanner panel's zoom box — and setAuto(true) puts

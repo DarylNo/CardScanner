@@ -14,7 +14,14 @@ server and check the 📱 Scanner panel's "Zoom to fit the Area" controls
 - after a zoom / Area PATCH the panel takes a new snapshot once it settles;
 - an Area drawn on the (base-space) snapshot while zoomed is PATCHed as the
   picture's own fractions — base fractions, 1:1, never divided by the zoom;
-- the banner reads d50 and the page throws nothing.
+- the off-centre hint (1.1.17): with the switch off at 1× the line says what
+  this Area WOULD zoom ("Off — this Area would zoom …") and, when the phone
+  sends `off_centre`, "Off-centre: <its words>"; a dashed ghost box sits where
+  the same Area would be centred (the centred fractions, ±1 %), hidden while a
+  new Area is drawn (here or on the phone); `would` null or absent (an older
+  phone app) → the line stays hidden as before; ticking the box never shows
+  "Zoom to fit is off";
+- the banner reads d51 and the page throws nothing.
 
     pip install playwright        # the browser: Chromium, see EXE below
     python scripts/check_device_ui.py
@@ -29,10 +36,23 @@ from PIL import Image, ImageDraw
 from playwright.sync_api import sync_playwright
 
 STATIC = Path(__file__).resolve().parents[1] / "server" / "static"
-VERSION = "d50"
+VERSION = "d51"
 
 ZOOMED = {"ratio": 1.9, "target": 1.9, "limit": "the Area fit", "fit": 2.0, "lossless": 2.6, "max": 10.0, "settling": False}
 UNZOOMED = {"ratio": 1.0, "target": 1.0, "limit": "Zoom to fit is off", "fit": 2.0, "lossless": 2.6, "max": 10.0, "settling": False}
+
+# The off-centre hint (1.1.17), as the phone words it (DeviceApiTest.anOffCentreAreaIsReported):
+# an Area hugging the right edge zooms 1× (its fit allows only 1.06×); centred, the same Area 1.90×.
+EDGE_ROI = {"x0": 0.45, "y0": 0.25, "x1": 0.95, "y1": 0.75}
+EDGE_WORDS = ("the Area's centre is 20 % right of the frame centre — centred, the same Area would zoom 1.90× "
+              "(this Area: 1.00×, its fit allows only 1.06×)")
+EDGE_HINT = {
+    "would": {"z": 1.0, "limit": "below 1.10× (the Area fit)", "fit": 1.11},
+    "off_centre": {"now": 1.0, "centred": 1.9, "dx": 0.2, "dy": 0.0,
+                   "centred_roi": {"x0": 0.25, "y0": 0.25, "x1": 0.75, "y1": 0.75}, "words": EDGE_WORDS},
+}
+EDGE_OFF = dict(UNZOOMED, fit=1.11, **EDGE_HINT)
+EDGE_ON = dict(UNZOOMED, limit="below 1.10× (the Area fit)", fit=1.11, **EDGE_HINT)
 
 STATE = {
     "dev": None,          # set per scenario
@@ -99,7 +119,10 @@ class H(BaseHTTPRequestHandler):
                 if not isinstance(v, bool): return self.send(400, {"error": "zoom_fit must be true or false"})
                 d["zoom_fit"] = v
                 # What /api/device reads once the phone has applied it: the zoom settling.
-                d["zoom"] = dict(ZOOMED if v else UNZOOMED, settling=True)
+                if STATE.get("edge"):
+                    d["zoom"] = dict(EDGE_ON if v else EDGE_OFF, settling=True)
+                else:
+                    d["zoom"] = dict(ZOOMED if v else UNZOOMED, settling=True)
             elif k == "roi":
                 d["roi"] = v
             else:
@@ -216,6 +239,82 @@ with sync_playwright() as pw:
     line = pg.locator("#devZoom").inner_text()
     check("1.00×" in line and "settling" not in line, f"the line says the phone is drawing, at 1×: {line!r}")
     check(not pg.locator("#devZoomNote").is_visible(), "no zoomed-picture note while drawing (the camera is at 1×)")
+    check(not pg.locator("#devRoiCentred").is_visible(), "no off-centre ghost without the phone's off_centre")
+    pg.click("#devClose")
+
+    def ghost_fracs():
+        g = pg.locator("#devRoiCentred").bounding_box(); s = pg.locator("#devSnap").bounding_box()
+        return ((g["x"] - s["x"]) / s["width"], (g["y"] - s["y"]) / s["height"],
+                (g["x"] + g["width"] - s["x"]) / s["width"], (g["y"] + g["height"] - s["y"]) / s["height"])
+
+    print("the off-centre hint: zoom off, `would` null or absent")
+    STATE["dev"] = device(zoom_fit=False)
+    STATE["dev"]["roi"] = dict(EDGE_ROI)
+    STATE["dev"]["zoom"] = dict(EDGE_OFF, would=None, off_centre=None)
+    open_panel(pg)
+    check(not pg.locator("#devZoom").is_visible(), "`would` null: the line stays hidden at 1× as before")
+    check(not pg.locator("#devRoiCentred").is_visible(), "…and no ghost")
+    pg.click("#devClose")
+
+    print("the off-centre hint: zoom off, a centred Area (would, no off_centre)")
+    STATE["dev"] = device(zoom_fit=False)
+    STATE["dev"]["zoom"] = dict(UNZOOMED, would={"z": 1.9, "limit": "the Area fit", "fit": 2.0}, off_centre=None)
+    open_panel(pg)
+    line = pg.locator("#devZoom").inner_text() if pg.locator("#devZoom").is_visible() else ""
+    check(line == "Off — this Area would zoom 1.90× (the Area fit)", f"the line says what this Area would zoom: {line!r}")
+    check("Off-centre" not in line and not pg.locator("#devRoiCentred").is_visible(), "no off-centre line or ghost for a centred Area")
+    pg.click("#devClose")
+
+    print("the off-centre hint: zoom off, an Area hugging the right edge")
+    STATE["dev"] = device(zoom_fit=False)
+    STATE["dev"]["roi"] = dict(EDGE_ROI)
+    STATE["dev"]["zoom"] = dict(EDGE_OFF)
+    STATE["edge"] = True
+    open_panel(pg)
+    pg.wait_for_selector("#devRoiCentred", state="visible")
+    line = pg.locator("#devZoom").inner_text() if pg.locator("#devZoom").is_visible() else ""
+    check("Off — this Area would zoom 1.00× — below 1.10× (the Area fit)" in line, f"the would line: {line!r}")
+    check(f"Off-centre: {EDGE_WORDS}" in line, f"…and the phone's off-centre words: {line!r}")
+    check("Zoom to fit is off" not in line, "never the stale-text literal")
+    gf = ghost_fracs()
+    check(all(abs(a - b) <= 0.01 for a, b in zip(gf, (0.25, 0.25, 0.75, 0.75))),
+          f"the ghost box sits where the same Area would be centred: {tuple(round(v, 4) for v in gf)}")
+    check("centred: 1.90×" in pg.locator("#devRoiCentred").inner_text(), "…labelled with what it would zoom")
+    rb = pg.locator("#devRoi").bounding_box(); sb = pg.locator("#devSnap").bounding_box()
+    check(abs((rb["x"] - sb["x"]) / sb["width"] - 0.45) <= 0.01, "the Area itself stays where it is drawn")
+
+    print("an Area drawn on the phone with the switch off: neither the line nor the ghost")
+    STATE["dev"]["zoom"]["drawing"] = True
+    pg.wait_for_function("document.querySelector('#devZoom').style.display === 'none'", timeout=8000)
+    check(not pg.locator("#devRoiCentred").is_visible(), "no ghost while the phone draws a new Area")
+    STATE["dev"]["zoom"]["drawing"] = False
+    pg.wait_for_selector("#devRoiCentred", state="visible", timeout=8000)
+    check("Off-centre: " in pg.locator("#devZoom").inner_text(), "…both back once it is drawn")
+
+    print("draw a new Area: the ghost goes while drafting")
+    box = pg.locator("#devSnap").bounding_box()
+    pg.mouse.move(box["x"] + box["width"] * 0.2, box["y"] + box["height"] * 0.2)
+    pg.mouse.down()
+    pg.mouse.move(box["x"] + box["width"] * 0.6, box["y"] + box["height"] * 0.6, steps=4)
+    check(not pg.locator("#devRoiCentred").is_visible(), "no ghost while a new Area is drawn here")
+    pg.mouse.up()
+    pg.click("#devRoiUndo")
+    check(pg.locator("#devRoiCentred").is_visible(), "Cancel: the ghost is back")
+
+    print("tick the box with an off-centre Area")
+    pg.evaluate("""() => { window.__zl = []; const el = document.querySelector('#devZoom');
+        new MutationObserver(() => window.__zl.push(el.style.display === 'none' ? '' : el.textContent))
+          .observe(el, {childList: true, subtree: true, characterData: true, attributes: true}); }""")
+    pg.locator('#devZoomRow input[data-k="zoom_fit"]').check()
+    pg.wait_for_function("document.querySelector('#devZoom').textContent.includes('Area fit 1.11×')", timeout=3000)
+    shown = pg.evaluate("window.__zl")
+    check(any("applying" in t for t in shown), f"the stale answer showed as applying: {shown}")
+    check(not any("Zoom to fit is off" in t for t in shown), f"never 'Zoom to fit is off' after ticking it: {shown}")
+    line = pg.locator("#devZoom").inner_text()
+    check("Off-centre: " + EDGE_WORDS in line and "below 1.10× (the Area fit)" in line,
+          f"switched on, the Area still zooms 1× and the hint stays: {line!r}")
+    check(pg.locator("#devRoiCentred").is_visible(), "the ghost is back once the phone answered")
+    STATE["edge"] = False
 
     check(not errs, f"no page errors: {errs}")
     b.close()

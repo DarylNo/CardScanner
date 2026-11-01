@@ -60,6 +60,45 @@ class ZoomCoordinatorTest {
         assertEquals(1.0, z.mapped, 0.0)
     }
 
+    /**
+     * The off-centre hint (1.1.17) is read-only: an Area hugging the right edge, the
+     * switch OFF, the same inputs as the test above — still no zoom call, no gate,
+     * every map at 1× with settle = false — while the state, Diagnostics' line and the
+     * zoom log say what centring the same Area would give. Logged once per change of
+     * its words, never once per setArea.
+     */
+    @Test fun theHintIsReadOnlyWithTheSwitchOff() {
+        val edge = RoiFrac(0.45, 0.25, 0.95, 0.75)               // fit 1.11 → 1.06: below 1.10× → 1×; centred 1.90×
+        z.setArea(edge)
+        z.cameraBound(2.6, 8.0)
+        z.cameraStopped("screen stopped")
+        z.setArea(edge)                                           // the same Area again: no second line
+        z.cameraStarted("camera re-open")
+        z.setDrawing(true); z.setDrawing(false)
+        assertTrue("no zoom call", port.requests.isEmpty())
+        assertTrue("no gate", port.closes.isEmpty())
+        assertTrue(port.maps.all { it.ratio == 1.0 && !it.settle })
+        assertEquals(listOf(edge, edge, edge), port.maps.map { it.view })
+        assertEquals(1, port.drawingReady)
+        val s = z.state()
+        assertNotNull("the hint is there with the switch off", s.offCentre)
+        assertEquals(1.0, s.offCentre!!.now.z, 0.0); assertEquals(1.9, s.offCentre!!.centred.z, 0.0)
+        assertEquals("what this Area would zoom with the switch on", 1.0, s.area!!.z, 0.0)
+        assertTrue(s.area!!.belowMin)
+        assertEquals(ZoomFit.Limit.OFF, s.target.limit)
+        val d = s.describe()
+        assertTrue(d, d.startsWith("zoom to fit the Area: off · target 1.00× (Zoom to fit is off)"))
+        assertTrue(d, d.endsWith(" · off-centre: the Area's centre is 20 % right of the frame centre — centred, the same Area " +
+            "would zoom 1.90× (this Area: 1.00×, its fit allows only 1.06×)"))
+        assertEquals("one line for one hint: $log", 1, log.count { it.startsWith("off-centre Area: ") })
+        // Centred: the hint clears, said once; nothing touched the camera for it.
+        z.setArea(area)
+        z.setArea(area)
+        assertEquals("$log", listOf("off-centre Area: centred enough now"), log.filter { it.startsWith("off-centre Area: ") }.drop(1))
+        assertFalse(z.state().describe().contains("off-centre"))
+        assertTrue(port.requests.isEmpty() && port.closes.isEmpty())
+    }
+
     @Test fun aZoomClosesTheGateThenMapsWithTheReadBackRatio() {
         z.setEnabled(true)
         z.setArea(area)

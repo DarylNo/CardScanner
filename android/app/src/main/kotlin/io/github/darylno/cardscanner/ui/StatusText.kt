@@ -29,6 +29,14 @@ object StatusText {
     const val AREA_SET = "Scan area set. Empty the tray to re-learn…"
     const val RELEARN = "Re-learning the empty tray — keep it clear…"
 
+    /**
+     * After an Area is saved on the phone: [offCentre] = the off-centre hint's short
+     * words (ZoomFit.OffCentre.short, 1.1.17) — "Scan area set — centred, it would zoom
+     * 1.90× (this Area: 1.00×). Empty the tray to re-learn…" — or null: [AREA_SET].
+     */
+    fun areaSet(offCentre: String?): String =
+        if (offCentre == null) AREA_SET else "Scan area set — $offCentre. Empty the tray to re-learn…"
+
     private val POP_CALLOUT = mapOf("staple" to "★ staple", "strong" to "very popular", "solid" to "popular")
 
     /** phone.html popOf(): the SELECTION's popularity first, else candidates[0]'s. */

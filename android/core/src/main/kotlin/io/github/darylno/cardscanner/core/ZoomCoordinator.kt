@@ -40,6 +40,10 @@ import kotlin.math.abs
  *   a new Area re-learns once, at its own zoom. Only the browser's picture of
  *   the tray is served meanwhile, at the camera's ratio; [state] reports the
  *   camera's ratio, not settling, while the drawing waits for nothing.
+ * - The off-centre hint (1.1.17, [ZoomFit.offCentre]) is read-only: [state]
+ *   carries what the Area would zoom and what the same Area would zoom centred,
+ *   whatever the switch says, and the log says it once per change of its words.
+ *   It never reaches the [Port].
  */
 class ZoomCoordinator(private val port: Port, private val log: (String) -> Unit = {}) {
 
@@ -80,6 +84,10 @@ class ZoomCoordinator(private val port: Port, private val log: (String) -> Unit 
         val drawing: Boolean,
         /** The last thing that went wrong applying a zoom, or null. */
         val problem: String?,
+        /** What this Area would zoom with the switch ON ([ZoomFit.choose]) — also while it is off (the target is then 1×). */
+        val area: ZoomFit.Choice? = null,
+        /** The off-centre hint ([ZoomFit.offCentre]): what the same Area would zoom centred, or null. */
+        val offCentre: ZoomFit.OffCentre? = null,
     ) {
         /** "zoom: target 1.85× (limited by the Area fit) · applied 1.85× · lossless 2.60× · lens max 10.00× · MAX_ZOOM 2.00×" */
         fun describe(): String = buildString {
@@ -93,6 +101,7 @@ class ZoomCoordinator(private val port: Port, private val log: (String) -> Unit 
             if (settling) append(" · SETTLING")
             if (drawing) append(" · drawing an Area")
             problem?.let { append(" · last problem: ").append(it) }
+            offCentre?.let { append(" · off-centre: ").append(it.describe()) }
         }
     }
 
@@ -141,9 +150,13 @@ class ZoomCoordinator(private val port: Port, private val log: (String) -> Unit 
      * what pictures are taken at and nothing is settling — the gate is closed on
      * purpose (the analyzer is left alone), not waiting for the camera.
      */
-    fun state(): State =
-        if (drawing && pending == null) State(enabled, camera, target(), false, true, problem)
-        else State(enabled, mapped, target(), pending != null || gateClosed, drawing, problem)
+    fun state(): State {
+        // The hint is computed whatever the switch says (target() is "off" then, with no fit).
+        val area = ZoomFit.choose(base, lossless, lensMax)
+        val oc = ZoomFit.offCentre(base, lossless, lensMax)
+        return if (drawing && pending == null) State(enabled, camera, target(), false, true, problem, area, oc)
+        else State(enabled, mapped, target(), pending != null || gateClosed, drawing, problem, area, oc)
+    }
 
     // ── inputs ──
 
@@ -153,12 +166,14 @@ class ZoomCoordinator(private val port: Port, private val log: (String) -> Unit 
         enabled = on
         log("Zoom to fit the Area switched ${if (on) "ON" else "off"} → ${target().describe()}")
         reconcile("the switch turned ${if (on) "on" else "off"}")
+        noteOffCentre()
     }
 
     /** The stored (BASE) Area; null = the full frame. Always re-maps (a new Area re-learns, as before zoom). */
     fun setArea(a: RoiFrac?) {
         base = a
         reconcile("new Area", forceMap = true)
+        noteOffCentre()
     }
 
     /** Drawing an Area on the phone: zoom out to 1× (true), back to the Area's zoom (false). */
@@ -183,6 +198,7 @@ class ZoomCoordinator(private val port: Port, private val log: (String) -> Unit 
         if (enabled) log("camera bound: lossless ${lossless?.let { "%.2f×".format(it) } ?: "unknown"}, lens max " +
             "${lensMax?.let { "%.2f×".format(it) } ?: "unknown"} → ${target().describe()}")
         reconcile("camera bind", forceMap = true)
+        noteOffCentre()
     }
 
     /**
@@ -294,6 +310,17 @@ class ZoomCoordinator(private val port: Port, private val log: (String) -> Unit 
         camera = now
         closeGate("the camera refused %.2f× after the timeout".format(p.ratio))
         settle(p.why, chase = false)
+    }
+
+    /** The off-centre hint's words last logged (null = none): it is logged once per change, never per setArea. */
+    private var offCentreWords: String? = null
+
+    /** Log the off-centre hint when its words change (also with the switch off). Logging only — never the [Port]. */
+    private fun noteOffCentre() {
+        val w = ZoomFit.offCentre(base, lossless, lensMax)?.describe()
+        if (w == offCentreWords) return
+        offCentreWords = w
+        log(if (w != null) "off-centre Area: $w" else "off-centre Area: centred enough now")
     }
 
     // ── the machine ──
