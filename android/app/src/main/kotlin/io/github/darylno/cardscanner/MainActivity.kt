@@ -705,7 +705,11 @@ class MainActivity : AppCompatActivity() {
     // ── status ──────────────────────────────────────────────────────────────
     private enum class Tone { NORMAL, OK, ERR }
 
+    /** The status line's tone now (its colour) — what the update lock puts back with the line ([coverWithLockLine]). */
+    private var statusTone = Tone.NORMAL
+
     private fun setStatus(msg: String, tone: Tone = Tone.NORMAL) {
+        statusTone = tone
         statusView.text = msg
         statusView.setTextColor(
             when (tone) {
@@ -762,7 +766,7 @@ class MainActivity : AppCompatActivity() {
                 else -> StatusText.AUTO_OFF
             }
         )
-        if (app.updates.locked) setStatus(getString(R.string.update_required_status), Tone.ERR)
+        if (app.updates.locked) coverWithLockLine()
     }
 
     /**
@@ -1017,18 +1021,69 @@ class MainActivity : AppCompatActivity() {
         val latest = app.updates.latest
         if (locked && latest != null) {
             lockText.text = getString(R.string.update_required_msg, latest.version, BuildConfig.VERSION_NAME)
-            hideRetry()
-            setStatus(getString(R.string.update_required_status), Tone.ERR)
+            coverWithLockLine()
         }
         val was = lockView.visibility == View.VISIBLE
         if (was != locked) dlog.w("update", if (locked) "a newer release (${latest?.version}) is out — scanning stopped" else "update lock lifted")
         lockView.visibility = if (locked) View.VISIBLE else View.GONE
         syncPause()
-        // Only a rolled-back release unlocks a running build. The lock only paused detection:
-        // hand the camera the mode only if it changed meanwhile (as a PATCH does — handing Tray
-        // over again puts a card that already scanned back to WATCHING, filed twice), and
-        // restate the mode's line over "Update required".
-        if (was && !locked) applyMode(pushAuto = settings.auto != appliedAuto, restate = true)
+        if (was && !locked) liftLock()
+    }
+
+    /** A status line the update lock's own line went up over, and the mode it was said in. */
+    private class CoveredLine(val text: String, val tone: Tone, val auto: Boolean)
+
+    /**
+     * The line "Update required" covers — the last one it went up over: when the lock came up,
+     * or a newer one written under it since (an identification answering: the queue never
+     * stops) that a later lock check or PATCH covered again. Put back when the lock lifts
+     * ([liftLock]); null = nothing to put back (the lift says the mode's line). Locked since
+     * launch, it is the mode's line onCreate said (applyMode covers it, still unbound).
+     */
+    private var lockCovered: CoveredLine? = null
+
+    /** The Retry the lock hid (scan id, [captureGen] then): given back at the lift while that card is still the current one. */
+    private var lockHidRetry: Pair<Long, Int>? = null
+
+    /**
+     * Put the lock's own line up, remembering the line it covers ([lockCovered]) and the Retry
+     * it hides (the lock refuses Retry; a "Retry with a fresh capture?" line without its button
+     * would invite a tap on nothing).
+     */
+    private fun coverWithLockLine() {
+        val lockLine = getString(R.string.update_required_status)
+        val now = statusView.text.toString()
+        if (now != lockLine) lockCovered = CoveredLine(now, statusTone, settings.auto)
+        retryScanId?.let { lockHidRetry = it to captureGen }
+        hideRetry()
+        setStatus(lockLine, Tone.ERR)
+    }
+
+    /**
+     * Only a rolled-back release unlocks a running build. The lock only PAUSED detection — the
+     * scanner kept its state, e.g. AWAIT_NEXT on a card it already filed — so: hand the camera
+     * the mode only if it changed meanwhile (as a PATCH does — handing Tray over again puts a
+     * card that already scanned back to WATCHING, filed twice), and put back what the lock
+     * covered rather than restate the mode's line (review of e418d1c: "Tray: waiting for a
+     * steady view…" over a scanner still waiting for its card to leave — AwaitingNext ticks never
+     * rewrite the line — invited the owner to re-seat it, filed again). A line written under the
+     * lock since is newer: it stays. The mode's own line only when the mode changed, or when
+     * the lock covered nothing else.
+     */
+    private fun liftLock() {
+        val covered = lockCovered
+        val hidRetry = lockHidRetry
+        lockCovered = null
+        lockHidRetry = null
+        val lockLine = getString(R.string.update_required_status)
+        val pushAuto = settings.auto != appliedAuto
+        val showing = statusView.text.toString() == lockLine
+        val putBack = covered?.takeIf { showing && !pushAuto && it.auto == settings.auto }
+        applyMode(pushAuto = pushAuto, restate = pushAuto || (showing && putBack == null))
+        // (applyMode may have drawn Tap to scan's default Area: its line is newer.)
+        if (putBack != null && statusView.text.toString() == lockLine) setStatus(putBack.text, putBack.tone)
+        // No Trigger, NextCard, shutter or Retry since (each supersedes the card): its Retry is still good.
+        if (hidRetry != null && hidRetry.second == captureGen && retryScanId == null) offerRetry(hidRetry.first)
     }
 
     private fun downloadUpdate() {
@@ -1453,6 +1508,9 @@ class MainActivity : AppCompatActivity() {
 
     /** Tests read what the status line says now. */
     internal val statusForTest: String get() = statusView.text.toString()
+
+    /** Tests wait for a capture's job to become the current card (the queue answers on [io]). */
+    internal val lastCaptureJobIdForTest: String? get() = lastCaptureJobId
 
     /** Tests deliver UpdateLock's "the lock state changed" (Robolectric never asks GitHub). */
     internal fun updateLockChangedForTest() = lockListener()

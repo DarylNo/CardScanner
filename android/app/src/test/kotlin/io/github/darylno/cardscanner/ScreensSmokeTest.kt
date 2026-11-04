@@ -1542,6 +1542,196 @@ class ScreensSmokeTest {
         }
     }
 
+    /** UpdateLock's stored answer: a release newer than this build is out (the lock comes up). */
+    private fun storeNewerRelease() {
+        app.getSharedPreferences("update_lock", android.content.Context.MODE_PRIVATE).edit()
+            .putString("version", "v99.0.0")
+            .putString("apk_url", "https://github.com/DarylNo/CardScanner/releases/download/v99.0.0/mtg-card-scanner-android.apk")
+            .putLong("checked_at", System.currentTimeMillis()).commit()
+    }
+
+    /** A rolled-back release: the latest seen is older than this build again (the lock lifts). */
+    private fun storeOlderRelease() {
+        app.getSharedPreferences("update_lock", android.content.Context.MODE_PRIVATE).edit()
+            .putString("version", "v0.0.1").commit()
+    }
+
+    /** The status pill as it is now (the TextView showing the status line). */
+    private fun statusPill(a: MainActivity): TextView = findText(a.window.decorView, a.statusForTest)!!
+
+    /**
+     * Review of e418d1c: lifting the lock no longer re-armed Tray, but it still wrote the mode's
+     * line — "Tray: waiting for a steady view…" — over a scanner still in AWAIT_NEXT on the card
+     * it had filed (the lock only paused detection; AutoScanner keeps its state), and AwaitingNext
+     * ticks never rewrite the line, so it stayed up telling the owner the tray was empty: re-seat
+     * the card and it is filed again. The same contradiction 1.1.17 fixed for the PATCH path
+     * ([deviceApi_aPatchThatKeepsTheModeKeepsTheStatusLine]). The lift puts back the line the lock
+     * covered, in its own colour.
+     */
+    @Test
+    @Config(qualifiers = "w411dp-h914dp-xxhdpi")
+    fun updateLock_liftingItPutsBackTheScannersLine() {
+        app.settings.roi = io.github.darylno.cardscanner.core.RoiFrac(0.25, 0.25, 0.75, 0.75)
+        app.settings.auto = true
+        app.settings.zoomFit = false
+        try {
+            val cam = RecordingCamera()
+            app.cameraFactory = { _, _ -> cam }
+            grantCamera(true)
+            val a = launch(MainActivity::class.java)
+            assertFalse("unlocked at start", app.updates.locked)
+            val l = a.cameraListenerForTest
+            val box = io.github.darylno.cardscanner.core.Box(40, 30, 60, 84, 0.2)
+            l.onDetection(io.github.darylno.cardscanner.core.AutoScanner.Event.Trigger(box,
+                io.github.darylno.cardscanner.core.Gray(176, 132, IntArray(176 * 132))), 176, 132, null)
+            l.onDetection(io.github.darylno.cardscanner.core.AutoScanner.Event.AwaitingNext(box), 176, 132, null)
+            ShadowLooper.idleMainLooper()
+            val scanned = io.github.darylno.cardscanner.ui.StatusText.CAPTURING
+            assertEquals(scanned, a.statusForTest)
+            // A newer release is seen: the lock comes up over the scanner's line.
+            storeNewerRelease()
+            assertTrue(app.updates.locked)
+            a.updateLockChangedForTest(); ShadowLooper.idleMainLooper()
+            assertEquals(a.getString(R.string.update_required_status), a.statusForTest)
+            assertEquals("scanning paused under the lock: ${cam.calls}", "pause(true)", cam.calls.lastOrNull { it.startsWith("pause(") })
+            // Rolled back: the lock lifts.
+            storeOlderRelease()
+            assertFalse(app.updates.locked)
+            cam.calls.clear()
+            a.updateLockChangedForTest(); ShadowLooper.idleMainLooper()
+            assertEquals("lifting the lock never re-arms Tray: ${cam.calls}", emptyList<String>(), cam.autos)
+            assertEquals("…it resumes scanning: ${cam.calls}", "pause(false)", cam.calls.lastOrNull { it.startsWith("pause(") })
+            assertEquals("…and the line the lock covered is back: the scanner still waits for that card to leave",
+                scanned, a.statusForTest)
+            assertEquals("…in its own colour", io.github.darylno.cardscanner.ui.ScanChrome.Palette.TEXT, statusPill(a).currentTextColor)
+            // The scanner, still in AWAIT_NEXT, says nothing new: the line stays true.
+            l.onDetection(io.github.darylno.cardscanner.core.AutoScanner.Event.AwaitingNext(box), 176, 132, null)
+            ShadowLooper.idleMainLooper()
+            assertEquals(scanned, a.statusForTest)
+        } finally {
+            app.getSharedPreferences("update_lock", android.content.Context.MODE_PRIVATE).edit().clear().commit()
+        }
+    }
+
+    /**
+     * The same lift over "✗ No match — Retry with a fresh capture?": the lock hides Retry (it
+     * refuses it), so putting the line back without its Retry would invite a tap on nothing.
+     * Line, colour and Retry come back together — the card it was for is still the current one
+     * (nothing was captured while the lock paused detection).
+     */
+    @Test
+    @Config(qualifiers = "w411dp-h914dp-xxhdpi")
+    fun updateLock_liftingItPutsBackANoMatchWithItsRetry() {
+        app.settings.roi = io.github.darylno.cardscanner.core.RoiFrac(0.25, 0.25, 0.75, 0.75)
+        app.settings.auto = true
+        app.settings.zoomFit = false
+        val jobs = java.util.concurrent.LinkedBlockingQueue<String>()
+        // The scan screen's upload queue, answering at once with the job's id (App's own would persist
+        // the capture and its worker answer it later — this test hands the outcome over itself).
+        val uploads = object : io.github.darylno.cardscanner.ui.UploadPort {
+            override fun enqueue(capture: io.github.darylno.cardscanner.ui.Captured, manual: Boolean, openScan: Boolean,
+                                 replaceScanId: Long?): String = "job-${jobs.size + 1}".also { jobs.add(it) }
+            override fun retryNow() {}
+            override fun addListener(l: io.github.darylno.cardscanner.ui.UploadPort.Listener) {}
+            override fun removeListener(l: io.github.darylno.cardscanner.ui.UploadPort.Listener) {}
+            override val pending: Int get() = 0
+        }
+        App::class.java.getDeclaredField("uploads").apply { isAccessible = true }.set(app, uploads)
+        try {
+            val cam = RecordingCamera()
+            app.cameraFactory = { _, _ -> cam }
+            grantCamera(true)
+            val a = launch(MainActivity::class.java)
+            val root = a.window.decorView
+            fun retryShown() = findText(root, a.getString(R.string.retry))?.isShown == true
+            // A Tray capture, queued as job-1 (the current card), comes back with no match: Retry is offered.
+            a.cameraListenerForTest.onCaptured(io.github.darylno.cardscanner.ui.Captured(ByteArray(0), emptyList(), false, "t", null,
+                burstId = 1), false)
+            val deadline = System.currentTimeMillis() + 5000
+            while (a.lastCaptureJobIdForTest != "job-1" && System.currentTimeMillis() < deadline) {
+                ShadowLooper.idleMainLooper(); Thread.sleep(2)
+            }
+            assertEquals("the capture is the current card", "job-1", a.lastCaptureJobIdForTest)
+            val scan = org.json.JSONObject().put("error", "No match.")
+            a.uploadListenerForTest.onOutcome("job-1", false, false, null, io.github.darylno.cardscanner.ui.Outcome.NoMatch(scan, 61, false))
+            ShadowLooper.idleMainLooper()
+            val noMatch = io.github.darylno.cardscanner.ui.StatusText.noMatch(scan)
+            assertEquals(noMatch, a.statusForTest)
+            assertTrue("Retry offered", retryShown())
+            storeNewerRelease()
+            a.updateLockChangedForTest(); ShadowLooper.idleMainLooper()
+            assertEquals(a.getString(R.string.update_required_status), a.statusForTest)
+            assertFalse("the lock hides Retry (it refuses it)", retryShown())
+            storeOlderRelease()
+            cam.calls.clear()
+            a.updateLockChangedForTest(); ShadowLooper.idleMainLooper()
+            assertEquals("lifting the lock never re-arms Tray: ${cam.calls}", emptyList<String>(), cam.autos)
+            assertTrue("the lift gives back the Retry the lock hid", retryShown())
+            assertEquals("…with its line", noMatch, a.statusForTest)
+            assertEquals("…in its own colour", io.github.darylno.cardscanner.ui.ScanChrome.Palette.ERR, statusPill(a).currentTextColor)
+        } finally {
+            app.getSharedPreferences("update_lock", android.content.Context.MODE_PRIVATE).edit().clear().commit()
+        }
+    }
+
+    /**
+     * A line written while the lock was up is newer than the one it covered — an identification
+     * answering (the upload queue never stops): the lift keeps it, also when UpdateLock answered
+     * again meanwhile and put its own line back over it (each check does; so does every return to
+     * the scan screen). A mode changed while locked (from the computer) is the new mode's line.
+     */
+    @Test
+    @Config(qualifiers = "w411dp-h914dp-xxhdpi")
+    fun updateLock_aLineWrittenUnderTheLockIsKeptWhenItLifts() {
+        app.settings.roi = io.github.darylno.cardscanner.core.RoiFrac(0.25, 0.25, 0.75, 0.75)
+        app.settings.auto = true
+        app.settings.zoomFit = false
+        try {
+            val cam = RecordingCamera()
+            app.cameraFactory = { _, _ -> cam }
+            grantCamera(true)
+            val a = launch(MainActivity::class.java)
+            val l = a.cameraListenerForTest
+            val box = io.github.darylno.cardscanner.core.Box(40, 30, 60, 84, 0.2)
+            l.onDetection(io.github.darylno.cardscanner.core.AutoScanner.Event.Trigger(box,
+                io.github.darylno.cardscanner.core.Gray(176, 132, IntArray(176 * 132))), 176, 132, null)
+            l.onDetection(io.github.darylno.cardscanner.core.AutoScanner.Event.AwaitingNext(box), 176, 132, null)
+            ShadowLooper.idleMainLooper()
+            val lockLine = a.getString(R.string.update_required_status)
+            storeNewerRelease()
+            a.updateLockChangedForTest(); ShadowLooper.idleMainLooper()
+            assertEquals(lockLine, a.statusForTest)
+            // An older job answers under the lock: its line replaces "Update required".
+            a.uploadListenerForTest.onOutcome("job-9", false, false, null, io.github.darylno.cardscanner.ui.Outcome.NoCard(null, false))
+            ShadowLooper.idleMainLooper()
+            val noCard = io.github.darylno.cardscanner.ui.StatusText.NO_CARD
+            assertEquals(noCard, a.statusForTest)
+            // UpdateLock answers again, still locked: its own line goes back up over it.
+            a.updateLockChangedForTest(); ShadowLooper.idleMainLooper()
+            assertEquals(lockLine, a.statusForTest)
+            storeOlderRelease()
+            a.updateLockChangedForTest(); ShadowLooper.idleMainLooper()
+            assertEquals("the newer line, not the one the lock first covered, nor the mode's", noCard, a.statusForTest)
+            assertEquals("…in its own colour", io.github.darylno.cardscanner.ui.ScanChrome.Palette.ERR, statusPill(a).currentTextColor)
+
+            // Locked again; the computer switches to Tap to scan meanwhile: the lift says the new mode's line.
+            storeNewerRelease()
+            a.updateLockChangedForTest(); ShadowLooper.idleMainLooper()
+            assertEquals(lockLine, a.statusForTest)
+            cam.calls.clear()
+            assertEquals("tap", patchFromTheServerThread("""{"mode":"tap"}""")["mode"])
+            assertEquals("the mode change reached the camera, once: ${cam.calls}", listOf("setAuto(false)"), cam.autos)
+            assertEquals("…under the lock's line", lockLine, a.statusForTest)
+            storeOlderRelease()
+            cam.calls.clear()
+            a.updateLockChangedForTest(); ShadowLooper.idleMainLooper()
+            assertEquals("…and not again at the lift: ${cam.calls}", emptyList<String>(), cam.autos)
+            assertEquals(io.github.darylno.cardscanner.ui.StatusText.AUTO_OFF, a.statusForTest)
+        } finally {
+            app.getSharedPreferences("update_lock", android.content.Context.MODE_PRIVATE).edit().clear().commit()
+        }
+    }
+
     /**
      * Review of the fix above: the status line must keep saying what the scanner last said.
      * A PATCH that keeps the mode still rewrote it to "Tray: waiting for a steady view…" —
