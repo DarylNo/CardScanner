@@ -38,8 +38,55 @@ CREATE TABLE IF NOT EXISTS scans (
 """
 
 
+# The one-time re-price (PRAGMA user_version 0 → 1, release 1.1.17). The F2F
+# matcher changed for exactly these sets in that release (facetoface.py's
+# _SKU_SET_RULES and the narrowed set-name fallback): The List (plst — Scryfall
+# folded mb1/fmb1 into it), the Unfinity List (ulst), Mystery Booster 2 (mb2)
+# and the Mystery Booster playtest cards (cmb1, cmb2). Before it a List print
+# was never found (an empty "searched" marker for good) or filed ANOTHER card's
+# price through the name-blind fallback (Mortuary [STH-66] → Buried Alive's
+# $4.99), and the sweep never re-asks an answer it recorded. So those answers
+# are dropped once and the sweep prices them again; every other set's answer
+# came from the same matching before and after, and is kept.
+REPRICE_SETS = frozenset({"plst", "ulst", "mb2", "cmb1", "cmb2"})
+
+
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def _reprice_sets(conn: sqlite3.Connection, sets: frozenset) -> tuple[int, int]:
+    """Drop the F2F answers recorded for printings of *sets*, in place: a
+    selection's ``f2f`` column → NULL, a candidate's ``f2f_conditions`` key →
+    removed (the sweep reads a missing key exactly like None — both are owed).
+    Writes only those two columns, only on rows that change: updated_at,
+    status, the selection and everything else stay as they were. A row whose
+    JSON does not decode is left alone. Returns (selections, candidates)
+    reset. The caller holds the transaction."""
+    n_sel = n_cand = 0
+    rows = conn.execute("SELECT id, selection, f2f, candidates FROM scans").fetchall()
+    for sid, sel_raw, f2f_raw, cands_raw in rows:
+        try:
+            sel = json.loads(sel_raw) if sel_raw not in (None, "") else None
+            cands = json.loads(cands_raw) if cands_raw not in (None, "") else None
+        except ValueError:
+            continue
+        if (f2f_raw is not None and isinstance(sel, dict)
+                and str(sel.get("set") or "").lower() in sets):
+            conn.execute("UPDATE scans SET f2f = NULL WHERE id = ?", (sid,))
+            n_sel += 1
+        if isinstance(cands, list):
+            dropped = 0
+            for c in cands:
+                if (isinstance(c, dict) and "f2f_conditions" in c
+                        and str(c.get("set") or "").lower() in sets):
+                    del c["f2f_conditions"]
+                    dropped += 1
+            if dropped:
+                conn.execute("UPDATE scans SET candidates = ? WHERE id = ?",
+                             (json.dumps(cands), sid))
+                n_cand += dropped
+    return n_sel, n_cand
 
 
 class ScanStore:
@@ -59,6 +106,35 @@ class ScanStore:
                 self._conn.execute(
                     "ALTER TABLE scans ADD COLUMN flagged INTEGER NOT NULL DEFAULT 0")
             self._conn.commit()
+            self._migrate()
+
+    def _migrate(self) -> None:
+        """Data migrations by ``PRAGMA user_version``, each in ONE transaction
+        with its stamp, so each runs exactly once (a fresh file runs them on an
+        empty table and is stamped too). A failure rolls back and leaves the
+        version as it was — retried on the next open; the store still opens."""
+        def version() -> int:
+            return self._conn.execute("PRAGMA user_version").fetchone()[0]
+
+        if version() >= 1:
+            return
+        try:
+            # IMMEDIATE + re-read: a second process opening the same file
+            # waits, then sees the stamp and does nothing.
+            self._conn.execute("BEGIN IMMEDIATE")
+            n_sel = n_cand = 0
+            if version() < 1:
+                n_sel, n_cand = _reprice_sets(self._conn, REPRICE_SETS)
+                self._conn.execute("PRAGMA user_version = 1")
+            self._conn.commit()
+        except sqlite3.Error as exc:
+            if self._conn.in_transaction:
+                self._conn.rollback()
+            print(f"  [store] List re-price failed, retried on the next open: {exc}")
+            return
+        if n_sel or n_cand:
+            print(f"  [store] List re-price: {n_sel} selection(s) and "
+                  f"{n_cand} candidate print(s) owed a price again")
 
     # ── serialization helpers ──────────────────────────────────────────────────
 
