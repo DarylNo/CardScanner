@@ -15,7 +15,7 @@ import java.io.File
  * column for column (server/store.py), so a row reads back exactly as the
  * Python store's `dict(row)`. JSON fields are TEXT, decoded on every read.
  * The golden API replay runs against this class too (PhoneServerTest); the
- * one-time List re-price on open ([REPRICE_SETS]) is SqliteScanStoreTest.
+ * one-time re-price on open ([repriceAll]) is SqliteScanStoreTest.
  */
 class SqliteScanStore(file: File, private val clock: () -> String = ::isoNow) : ScanStore {
     private val db: SQLiteDatabase
@@ -43,23 +43,24 @@ class SqliteScanStore(file: File, private val clock: () -> String = ::isoNow) : 
     private fun migrate() {
         if (db.version >= 1) return
         try {
-            var reset = 0 to 0
+            var reset = Triple(0, 0, 0)
             db.beginTransaction()                    // EXCLUSIVE; re-read the stamp inside it
             try {
                 if (db.version < 1) {
-                    reset = repriceSets(db, REPRICE_SETS)
+                    reset = repriceAll(db)
                     db.version = 1
                 }
                 db.setTransactionSuccessful()
             } finally {
                 db.endTransaction()
             }
-            if (reset.first > 0 || reset.second > 0) {
-                DebugLog.global.i("store", "List re-price: ${reset.first} selection(s) and " +
-                    "${reset.second} candidate print(s) owed a price again")
+            val (nSel, nTop, nCand) = reset
+            if (nSel > 0 || nTop > 0 || nCand > 0) {
+                DebugLog.global.i("store", "re-price: $nSel selection(s) and $nCand candidate print(s) " +
+                    "dropped their F2F answer, $nTop unpicked scan(s) their top-match price")
             }
         } catch (e: Exception) {
-            DebugLog.global.w("store", "List re-price failed, retried on the next open: $e")
+            DebugLog.global.w("store", "re-price failed, retried on the next open: $e")
         }
     }
 
@@ -136,30 +137,35 @@ class SqliteScanStore(file: File, private val clock: () -> String = ::isoNow) : 
 
     companion object {
         /**
-         * The one-time re-price (PRAGMA user_version 0 → 1, release 1.1.17) — store.py's
-         * `REPRICE_SETS`. The F2F matcher changed for exactly these sets in that release
-         * (F2fPricer's SKU set rules and the narrowed set-name fallback): The List (plst —
-         * Scryfall folded mb1/fmb1 into it), the Unfinity List (ulst), Mystery Booster 2
-         * (mb2) and the Mystery Booster playtest cards (cmb1, cmb2). Before it a List print
-         * was never found (an empty "searched" marker for good) or filed ANOTHER card's
-         * price through the name-blind fallback (Mortuary [STH-66] → Buried Alive's $4.99),
-         * and the sweep never re-asks an answer it recorded. So those answers are dropped
-         * once and the sweep prices them again; every other set's answer came from the same
-         * matching before and after, and is kept.
+         * store.py's `_reprice_all` — the one-time re-price (PRAGMA user_version 0 → 1,
+         * release 1.1.17): EVERY F2F answer recorded before it is dropped once, and
+         * PriceWorker prices again from the phone's own connection at its usual pacing — a
+         * one-time catch-up; new scans still jump the queue (PriceSweep.priceCheck). The
+         * owner chose all, not just The List's sets: the 1.1.17 matcher change (F2fPricer,
+         * facetoface.py) reaches every set. The old set-name fallback was collector- and
+         * name-blind in EVERY set — an unstocked card filed another card of the same set's
+         * price (Mortuary [STH-66] → Buried Alive's $4.99) — and a title with variant
+         * brackets ("Lightning Bolt [401] [Rulebook Showcase] [Commander Legends: Battle for
+         * Baldur's Gate] [Non-Foil]", about a third of F2F's titles) never matched its own
+         * collector, so a showcase / borderless / Secret Lair printing often holds the
+         * regular printing's price. The List's prints were never found under their own SKUs
+         * at all (plst = MB1 / FMB1 / PLIST / PLST, ulst = UPLIST, cmb2 = CMB1 + NOPW). And
+         * the sweep never re-asks an answer it recorded, so without this none of that would
+         * reach a card already scanned.
+         *
+         * In place: a scan's `f2f` column → NULL (a selection's price, owed again; an
+         * unpicked scan's own top-match price from scan time or the desktop's "Search F2F
+         * price" — PriceSweep reads only its candidates, so that one is owed nowhere), and
+         * every candidate's `f2f_conditions` key → removed (PriceSweep reads a missing key
+         * exactly like null — owed on an unpicked scan; a picked scan prices only its
+         * selection). Writes only those two columns, only on rows that change: updated_at,
+         * status, the selection and everything else stay as they were. A row whose JSON
+         * does not decode is left alone. Returns (selections, unpicked scans' own prices,
+         * candidate prints) reset. The caller holds the transaction.
          */
-        val REPRICE_SETS = setOf("plst", "ulst", "mb2", "cmb1", "cmb2")
-
-        /**
-         * store.py's `_reprice_sets`: drop the F2F answers recorded for printings of
-         * [sets], in place — a selection's `f2f` column → NULL, a candidate's
-         * `f2f_conditions` key → removed (PriceSweep reads a missing key exactly like
-         * null: both are owed). Writes only those two columns, only on rows that change:
-         * updated_at, status, the selection and everything else stay as they were. A row
-         * whose JSON does not decode is left alone. Returns (selections, candidates)
-         * reset. The caller holds the transaction.
-         */
-        internal fun repriceSets(db: SQLiteDatabase, sets: Set<String>): Pair<Int, Int> {
+        internal fun repriceAll(db: SQLiteDatabase): Triple<Int, Int, Int> {
             var nSel = 0
+            var nTop = 0
             var nCand = 0
             data class Raw(val id: Long, val sel: String?, val f2fNull: Boolean, val cands: String?)
             val rows = db.rawQuery("SELECT id, selection, f2f IS NULL, candidates FROM scans", null).use { c ->
@@ -168,7 +174,6 @@ class SqliteScanStore(file: File, private val clock: () -> String = ::isoNow) : 
                     c.getLong(2) != 0L, if (c.isNull(3)) null else c.getString(3))
                 out
             }
-            fun setCode(m: Map<*, *>): String = (m["set"] as? String).orEmpty().lowercase()
             for (r in rows) {
                 val (sel, cands) = try {
                     (if (r.sel.isNullOrEmpty()) null else MiniJson.parse(r.sel)) to
@@ -176,14 +181,14 @@ class SqliteScanStore(file: File, private val clock: () -> String = ::isoNow) : 
                 } catch (e: IllegalArgumentException) {
                     continue
                 }
-                if (!r.f2fNull && sel is Map<*, *> && setCode(sel) in sets) {
+                if (!r.f2fNull) {
                     db.execSQL("UPDATE scans SET f2f = NULL WHERE id = ?", arrayOf<Any?>(r.id))
-                    nSel++
+                    if (sel is Map<*, *> && sel.isNotEmpty()) nSel++ else nTop++
                 }
                 if (cands is List<*>) {
                     var dropped = 0
                     for (c in cands) {
-                        if (c is Map<*, *> && c.containsKey("f2f_conditions") && setCode(c) in sets) {
+                        if (c is Map<*, *> && c.containsKey("f2f_conditions")) {
                             @Suppress("UNCHECKED_CAST")
                             (c as MutableMap<String, Any?>).remove("f2f_conditions")   // MiniJson: LinkedHashMap
                             dropped++
@@ -196,7 +201,7 @@ class SqliteScanStore(file: File, private val clock: () -> String = ::isoNow) : 
                     }
                 }
             }
-            return nSel to nCand
+            return Triple(nSel, nTop, nCand)
         }
 
         /** server/store.py's `_SCHEMA`, verbatim. */
