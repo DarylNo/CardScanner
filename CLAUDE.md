@@ -125,10 +125,30 @@ Emancipation Angel, no code printed, forged "UMA" that way) nor the start of
 one (artists MSCHF/Milivoj read as MSC…/M11…); scored on ~11k generated
 strips: wrong confirmations 142 → 9. The collector number is NOT required
 (the rig read 087/254 as "0017314" but MH1 cleanly); compound collectors
-("A25-85") win outright so List copies don't misattribute; ambiguity = no-op.
+("2019-2", "IFIYW-7") win outright; ambiguity = no-op.
 An OCR promotion also requires ART AGREEMENT (within _OCR_ART_SLACK of the
 best candidate) — a misread code can never promote or auto-pick a printing
 that doesn't look like the scan.
+**The List (plst) — the collector line CANNOT tell a List card from its
+original (1.1.17, owner: "trouble with list cards"; measured on 19 Scryfall
+scans across every frame + RapidOCR):** a List card prints EXACTLY its
+original's line ("141/249 U · A25 • EN") plus a small planeswalker icon at the
+far left — never "PLST", never the compound. The old rule (a compound
+"A25-141" wins) rested on the opposite premise, so every 2015-frame List card
+(67 % of plst) was OCR-confirmed and AUTO-PICKED as its original, and an
+original #1 whose "•" read as "1" ("ECL 1EN") as its List copy. Now
+(`list_twins.py` / `ListTwins.kt`): a plst printing is the twin of the
+printing whose `SET.upper()-number` it carries (exact strings; "†" / "j"
+suffixes; 5,739 of 5,741 pair); step 1 skips List compounds; ANY hit with a
+twin among the candidates → None; `_ranked_candidates` inserts a twin from
+the FULL ranking right after its partner (a 12-slice left Sol Ring's at #17);
+`_mark_art_decisive` never picks one of a tied pair. Scored (generated strips,
+every printing a candidate): List cards 0 right / 194 WRONG → 0 / 0; the cost,
+originals that have a twin, 187 right → 0 (they wait for a pick: ~6 % of paper
+printings, 20–35 % of 2015–2019 sets). Getting those back needs the ICON —
+a tight-window match separated it on synthetic photos only; the old
+List-corner pHash (`visual_match._list_corner_decision`) never runs in
+production and measured 21/60 — measure on rig photos before building it.
 
 **Auto-pick grounds** (server, scan time): exactly one printing exists, OR
 the top candidate is OCR-confirmed — both file NM/Non-Foil/×1 with the
@@ -253,8 +273,21 @@ work, all measured — don't loosen any of it:
 - **Most-specific-first query ladder** ("name collector setname [foil]"),
   so the usual card costs 1 suggest + 1 product fetch.
 - **SKU set-code confirmation** before trusting a match — collector numbers
-  collide across sets, and a wrong-set price is worse than no price.
-- 24h disk cache, interruptible waits (Stop), request debug log.
+  collide across sets, and a wrong-set price is worse than no price. F2F's
+  SKU codes are not always Scryfall's (1.1.17, measured on live products):
+  plst = MB1 / FMB1 / PLIST / PLST by release wave (titles "Name [A25-141]
+  [The List] [Non-Foil]"), ulst = UPLIST, cmb2 = CMB1 + NOPW (and cmb1 refuses
+  NOPW) — before, every List card priced None or ANOTHER card's price.
+- **Titles:** the collector is the FIRST bracket (when it looks like one) —
+  a third of titles carry variant brackets ("[401] [Rulebook Showcase] [Set]"),
+  which brackets[-3] read as the collector; zero padding is ignored per
+  hyphen segment (PZ2-038 = PZ2-38). The set-name fallback takes only
+  collector-LESS titles of the card's own name (front face, accents folded) —
+  name-blind, it filed Buried Alive's $4.99 for a Mortuary. Golden-tested:
+  `scripts/export_f2f_match_fixtures.py` (function tables + recorded get_price
+  sessions over `tests/fixtures/facetoface/captured/`) → `F2fMatchParityTest`.
+- 24h disk cache (raw bodies, never match results), interruptible waits
+  (Stop), request debug log.
 `F2FUnavailableError` ≠ "no listing" — transport failure raises (stays
 retryable), a confirmed miss returns None (records an empty marker).
 On the phone the same client is `F2fPricer` over `F2fFetcher` on **Cronet**
@@ -275,7 +308,11 @@ cooldown; manual start overrides. On the phone `PriceSweep` is the port
 (golden-tested) and `PriceWorker` drives it — not a 60 s timed sweep but
 "if something is owed, price it": a check every 5 s while anything is owed,
 asleep until the next scan/pick/edit when nothing is (owner). Every filed
-scan is price-checked at once (it jumps the queue).
+scan is price-checked at once (it jumps the queue). A confirmed miss is never
+re-asked, so a matcher fix reaches old scans only through a store migration:
+1.1.17's (`PRAGMA user_version` 0 → 1, both stores, once, in one transaction)
+drops the F2F answers of plst / ulst / mb2 / cmb1 / cmb2 printings, and the
+sweep prices them again.
 
 **Concurrency:** `select_lock` serializes every selection read-modify-write —
 picks vs PATCH edits vs retro auto-picks (born when repeat copies merged into
@@ -563,7 +600,10 @@ lens on testers' phones), minSdk 29, arm64-v8a.
   lens …", `FocusLog`); the analyzer's hold ("Trigger held", "focus answered N
   ms after the Trigger — capture #k shot from the 3 frames after it", "focus
   hold timed out after 1.5 s — no focus answer; capture #k shot from the last
-  frames", a late answer re-taking the scene, a hold cancelled by a re-learn /
+  frames", a late answer re-taking the scene — dropped if the screen goes away
+  first, owed or still due (owner, 1.1.17: a card swapped during a Scans
+  round trip was taken into the scanned scene and never filed; the accepted
+  cost is a still card filed twice), a hold cancelled by a re-learn /
   new Area / camera restart); every watchdog re-arm with its value and the
   median; the 3-tries give-up. Each capture's `done #k` line carries the
   three frames' sharpness ("sharpness a / [b] / c", the bracketed one used —
@@ -1066,7 +1106,8 @@ lens on testers' phones), minSdk 29, arm64-v8a.
   (`applyMode(pushAuto)`, `appliedAuto`; before, every PATCH — a torch, a check
   time, the zoom box — ran `setAuto(true)`, which put a card already scanned in
   AWAIT_NEXT back to WATCHING and filed it twice two ticks later:
-  `deviceApi_aPatchThatKeepsTheModeNeverReArmsTray`), a new Area only when it
+  `deviceApi_aPatchThatKeepsTheModeNeverReArmsTray`; the update lock lifting
+  follows the same rule, `updateLock_liftingItNeverReArmsTray`), a new Area only when it
   changed (it re-learns the tray), the status line only when the mode or Area
   changed or a drawing was cancelled. A PATCH while the scan screen is STOPPED
   (no screen on the bridge — Tap to scan stops it after every scan, Scans and
@@ -1180,6 +1221,17 @@ Open threads:
   reference change, the owner's call. "Fit to cards" (suggesting an Area from
   where cards land) stays proposed, not approved.
 - Ranking time for heavily reprinted names (cache candidate images).
+- The List (1.1.17, tested in code, not on the phone — ML Kit's reading of a
+  List strip is inferred from the shared rule): scans filed BEFORE 1.1.17
+  that were auto-picked (⚠) from a 2015-frame collector line may be the List
+  copy filed as its original — nothing re-checks them. To win back the
+  auto-picks the twin rule costs, a planeswalker-icon test needs rig photos of
+  5–10 List cards and their originals (2015 and old frames). Not reachable
+  today: List prints of names past the 120-printing cap (basic lands) and
+  older List prints in the manual search (newest 40); ulst twins (plain
+  numbers — would need illustration_id). Store side (owner's repo): the
+  consignor mass-entry drops "PLST A25-141" lines and reads "Non-Foil" as foil
+  (admin mass-entry imports them correctly).
 - Proposed, awaiting the owner: a measured card-detection goal — score the
   current detector from real debug reports (phantom triggers, captures with no
   card quad, first-try identification) before changing anything; the trigger

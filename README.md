@@ -93,7 +93,11 @@ photo so its card matches the printing's.
 
 - A card is **auto-filed** (marked ⚠) when only one printing exists or when
   the collector line read off the card confirms the printing. Everything else
-  waits for you to pick.
+  waits for you to pick. A **List** card prints exactly the same collector line
+  as its original (only a small planeswalker icon at the bottom-left tells
+  them apart), so a card that has a List reprint is never auto-filed from its
+  collector line: its original and its List copy are both offered for you to
+  pick.
 - Every scan keeps its own row, in scan order, with a photo of the card
   (straightened, filling 95% of the picture); swipe a row to delete it (5 s
   Undo). **Filters → Bulk actions** has *Clear unpicked* and *Clear all*;
