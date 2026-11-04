@@ -282,8 +282,10 @@ work, all measured — don't loosen any of it:
   a third of titles carry variant brackets ("[401] [Rulebook Showcase] [Set]"),
   which brackets[-3] read as the collector; zero padding is ignored per
   hyphen segment (PZ2-038 = PZ2-38). The set-name fallback takes only
-  collector-LESS titles of the card's own name (front face, accents folded) —
-  name-blind, it filed Buried Alive's $4.99 for a Mortuary. Golden-tested:
+  collector-LESS titles of the card's own name: the title's name part EQUALS
+  the front face (accents folded), whole or cut at a title-side suffix (" //",
+  " -", " —", " (") — name-blind, it filed Buried Alive's $4.99 for a
+  Mortuary; with "starts with", Fireball's for a Fire // Ice. Golden-tested:
   `scripts/export_f2f_match_fixtures.py` (function tables + recorded get_price
   sessions over `tests/fixtures/facetoface/captured/`) → `F2fMatchParityTest`.
 - 24h disk cache (raw bodies, never match results), interruptible waits
@@ -311,8 +313,12 @@ asleep until the next scan/pick/edit when nothing is (owner). Every filed
 scan is price-checked at once (it jumps the queue). A confirmed miss is never
 re-asked, so a matcher fix reaches old scans only through a store migration:
 1.1.17's (`PRAGMA user_version` 0 → 1, both stores, once, in one transaction)
-drops the F2F answers of plst / ulst / mb2 / cmb1 / cmb2 printings, and the
-sweep prices them again.
+drops EVERY stored F2F answer and the sweep prices them all again (owner,
+2026-11-04, "every stored price": the old fallback was collector- and
+name-blind in every set and variant-bracket titles never matched their own
+collector, so any stored price may be another card's or printing's — a
+one-time catch-up from the phone's own connection at the usual pacing; new
+scans still jump the queue).
 
 **Concurrency:** `select_lock` serializes every selection read-modify-write —
 picks vs PATCH edits vs retro auto-picks (born when repeat copies merged into
@@ -1107,7 +1113,9 @@ lens on testers' phones), minSdk 29, arm64-v8a.
   time, the zoom box — ran `setAuto(true)`, which put a card already scanned in
   AWAIT_NEXT back to WATCHING and filed it twice two ticks later:
   `deviceApi_aPatchThatKeepsTheModeNeverReArmsTray`; the update lock lifting
-  follows the same rule, `updateLock_liftingItNeverReArmsTray`), a new Area only when it
+  follows the same rule, `updateLock_liftingItNeverReArmsTray`, and puts back
+  the line "Update required" covered — the scanner it only paused may still sit
+  in AWAIT_NEXT — `updateLock_liftingItPutsBackTheScannersLine`), a new Area only when it
   changed (it re-learns the tray), the status line only when the mode or Area
   changed or a drawing was cancelled. A PATCH while the scan screen is STOPPED
   (no screen on the bridge — Tap to scan stops it after every scan, Scans and
