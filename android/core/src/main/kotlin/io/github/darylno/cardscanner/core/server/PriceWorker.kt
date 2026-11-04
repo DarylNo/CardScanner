@@ -37,6 +37,9 @@ class PriceWorker(
         if (t != null && t !== Thread.currentThread()) t.join(2_000)
     }
 
+    /** Started and not stopped since (read-only; the phone server's lifecycle tests ask it). */
+    val running: Boolean get() = synchronized(lock) { thread != null }
+
     /** Something may now be owed: check at once instead of waiting out the poll. */
     fun wake() = synchronized(lock) { woken = true; lock.notifyAll() }
 

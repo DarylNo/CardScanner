@@ -261,9 +261,16 @@ class SettingsActivity : AppCompatActivity() {
         // ── Scans (owner, 2026-10-01: "need a way to delete all scans") ──
         col.addView(chrome.sectionHeader(getString(R.string.settings_scans)))
         val scansCard = chrome.card().apply { setPadding(dp(16), dp(4), dp(16), dp(4)) }
-        val count = runCatching { app.phoneServer.store.count() }.getOrDefault(0)
-        scansCard.addView(chrome.valueRow(getString(R.string.settings_delete_all), getString(R.string.settings_delete_all_desc),
-            resources.getQuantityString(R.plurals.scans_n, count, count)) { confirmDeleteAll() })
+        // Never waits for the store on this thread: while it is still opening (its one-time
+        // migrations) the row reads "…" and the count lands when the open is done.
+        val count = app.phoneServer.scanCountIfOpen()
+        val deleteRow = chrome.valueRow(getString(R.string.settings_delete_all), getString(R.string.settings_delete_all_desc),
+            count?.let { resources.getQuantityString(R.plurals.scans_n, it, it) } ?: getString(R.string.settings_scans_counting)) { confirmDeleteAll() }
+        if (count == null) withScanCount { n ->
+            (deleteRow.getChildAt(deleteRow.childCount - 1) as? android.widget.TextView)?.text =
+                resources.getQuantityString(R.plurals.scans_n, n, n)
+        }
+        scansCard.addView(deleteRow)
         col.addView(scansCard, lp())
 
         // ── Diagnostics ──
@@ -305,10 +312,9 @@ class SettingsActivity : AppCompatActivity() {
      * that there is no backup. Goes through the phone server as the owner (the pages'
      * own "Clear all"), then the count on this screen is refreshed.
      */
-    private fun confirmDeleteAll() {
-        val count = runCatching { app.phoneServer.store.count() }.getOrDefault(0)
+    private fun confirmDeleteAll() = withScanCount { count ->
         val what = resources.getQuantityString(R.plurals.scans_n, count, count)
-        if (count == 0) { Toast.makeText(this, R.string.settings_delete_all_none, Toast.LENGTH_SHORT).show(); return }
+        if (count == 0) { Toast.makeText(this, R.string.settings_delete_all_none, Toast.LENGTH_SHORT).show(); return@withScanCount }
         AlertDialog.Builder(this)
             .setTitle(getString(R.string.settings_delete_all_title, what))
             .setMessage(R.string.settings_delete_all_msg)
@@ -325,6 +331,21 @@ class SettingsActivity : AppCompatActivity() {
             }
             .setNegativeButton(R.string.cancel, null)
             .show()
+    }
+
+    /**
+     * The number of scans for [then], on this (the UI) thread: at once when the store is open,
+     * else counted on [io] — which waits for the store's open, never this thread — and handed
+     * back once the open is done (dropped if the screen has gone by then).
+     */
+    private fun withScanCount(then: (Int) -> Unit) {
+        app.phoneServer.scanCountIfOpen()?.let { then(it); return }
+        try {
+            io.execute {
+                val n = runCatching { app.phoneServer.store.count() }.getOrDefault(0)
+                runOnUiThread { if (!isFinishing && !isDestroyed) then(n) }
+            }
+        } catch (_: java.util.concurrent.RejectedExecutionException) { }   // the screen is closing
     }
 
     /** The debug report (diagnostics + the live log) through the share sheet — paste it anywhere. */

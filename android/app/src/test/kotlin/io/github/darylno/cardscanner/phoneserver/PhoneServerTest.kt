@@ -355,6 +355,90 @@ class PhoneServerTest {
         assertEquals(403, req(base, guest, "GET", "/api/device/snapshot.jpg?view=camera"))
     }
 
+    // ── the store opens off the main thread ─────────────────────────────────
+    // Its open runs the one-time migrations in one transaction (1.1.17's re-price rewrites
+    // every priced row): GatewayService calls newServer / onServing / onStopped on the MAIN
+    // thread, so none of them may open it there (review of 0b19864).
+
+    /** The lifecycle executor, run by hand. */
+    private class ByHand : java.util.concurrent.Executor {
+        val queued = ArrayDeque<Runnable>()
+        override fun execute(r: Runnable) { queued += r }
+        fun runAll() { while (queued.isNotEmpty()) queued.removeFirst().run() }
+    }
+
+    private val servers = mutableListOf<PhoneServer>()
+
+    @After fun closeServers() {
+        for (ps in servers) if (ps.storeOpen) { runCatching { ps.backend.worker.stop() }; ps.store.close() }
+    }
+
+    private fun phoneServerIn(dir: java.io.File, lifecycle: java.util.concurrent.Executor): PhoneServer {
+        val app = org.robolectric.RuntimeEnvironment.getApplication() as io.github.darylno.cardscanner.App
+        val ctx = object : android.content.ContextWrapper(app) { override fun getFilesDir() = dir }
+        return PhoneServer(ctx, app.identify, DeviceBridge(app.settings), lifecycle = lifecycle).also { servers += it }
+    }
+
+    @Test fun newServerAndOnServingNeverOpenTheStoreOnTheCaller() {
+        val dir = tmp.newFolder("files-a")
+        val lifecycle = ByHand()
+        val ps = phoneServerIn(dir, lifecycle)
+        ps.newServer(0)
+        ps.onServing()
+        assertTrue("the store opened on the caller's thread", !ps.storeOpen)
+        assertEquals(null, ps.storeOpenedOn)
+        assertTrue(!java.io.File(dir, "phoneserver/scans.db").exists())
+        assertEquals("the worker's start is queued", 1, lifecycle.queued.size)
+        lifecycle.runAll()                                              // the lifecycle thread
+        assertTrue(ps.storeOpen)
+        assertTrue("the queued start started the price worker", ps.backend.worker.running)
+        ps.onStopped()
+        assertTrue("the stop is queued too", ps.backend.worker.running)
+        lifecycle.runAll()
+        assertTrue(!ps.backend.worker.running)
+    }
+
+    @Test fun aStopBeforeTheOpenStopsTheWorkerTheQueuedStartStarts() {
+        val lifecycle = ByHand()
+        val ps = phoneServerIn(tmp.newFolder("files-b"), lifecycle)
+        ps.newServer(0)
+        ps.onServing()
+        val code = ps.admins.newCode()
+        ps.onStopped()                                                  // before the open ran
+        assertEquals("the one-time code goes at once", null, ps.admins.pendingCode)
+        assertTrue(code.isNotEmpty())
+        assertTrue("the stop opened the store on the caller's thread", !ps.storeOpen)
+        lifecycle.runAll()                                              // start, then stop — in call order
+        assertTrue(ps.storeOpen)
+        assertTrue("the stop ran after the queued start", !ps.backend.worker.running)
+
+        // A stop with nothing started never opens the store just to stop nothing.
+        val idle = ByHand()
+        val ps2 = phoneServerIn(tmp.newFolder("files-b2"), idle)
+        ps2.onStopped()
+        idle.runAll()
+        assertTrue(!ps2.storeOpen)
+    }
+
+    @Test fun aRequestBeforeTheOpenWaitsForItAndAnswers() {
+        val ps = phoneServerIn(tmp.newFolder("files-c"), ByHand())       // the lifecycle never runs here
+        val g = ps.newServer(0).also { gateway = it }
+        assertTrue("newServer opened the store on the caller's thread", !ps.storeOpen)
+        g.startServing()
+        val base = "http://127.0.0.1:${g.listeningPort}"
+        val owner = "${GatewayServer.ADMIN_COOKIE}=${ps.admins.ownerToken}"
+        val answer = java.util.concurrent.FutureTask { page(base, owner, "/api/scans") }
+        synchronized(ps.storeOpening) {                                 // the store is "opening" (its migrations)
+            Thread(answer, "client").start()
+            Thread.sleep(300)
+            assertTrue("the request waits for the open", !answer.isDone)
+        }
+        assertEquals("[]", answer.get(10, java.util.concurrent.TimeUnit.SECONDS))
+        assertTrue(ps.storeOpen)
+        assertTrue("a server thread opened it, not this one: ${ps.storeOpenedOn}",
+            ps.storeOpenedOn != null && ps.storeOpenedOn != Thread.currentThread().name)
+    }
+
     /** Stage 4: the phone's own review screen (a WebView on loopback) is admin through the owner token. */
     @Test fun thePhonesOwnReviewScreenIsAdmin() {
         val file = tmp.newFile("owner-admins.json").also { it.delete() }

@@ -1856,6 +1856,40 @@ class ScreensSmokeTest {
         assertEquals(listOf("setAuto(false)"), cam.autos)
     }
 
+    /**
+     * Settings at the N200's size while the scan store is still opening (its one-time
+     * migrations: review of 0b19864): the screen renders without waiting for it — the
+     * Delete all scans row reads "…" — and the count lands once the open is done, OFF the
+     * main thread; a tap on the row meanwhile is answered after the open, not dropped.
+     */
+    @Test
+    @Config(qualifiers = "w411dp-h914dp-xxhdpi")
+    fun settings_whileTheStoreOpens_rendersWithoutWaitingForIt() {
+        val ps = app.phoneServer
+        assertFalse("precondition: the store has not opened", ps.storeOpen)
+        lateinit var a: SettingsActivity
+        synchronized(ps.storeOpening) {                  // the store is "opening" the whole time
+            a = launch(SettingsActivity::class.java)
+            assertFalse("Settings opened the store on the main thread", ps.storeOpen)
+            assertNotNull("the row waits with …", findText(a.window.decorView, a.getString(R.string.settings_scans_counting)))
+            var v: View? = findText(a.window.decorView, a.getString(R.string.settings_delete_all))
+            while (v != null && !v.isClickable) v = v.parent as? View
+            assertNotNull("a clickable row", v)
+            v!!.performClick()                            // counted off the main thread, answered after the open
+            ShadowLooper.idleMainLooper()
+            assertFalse(ps.storeOpen)
+        }
+        val deadline = System.currentTimeMillis() + 5_000
+        while ((findText(a.window.decorView, "0 scans") == null ||
+                org.robolectric.shadows.ShadowToast.getTextOfLatestToast() == null) && System.currentTimeMillis() < deadline) {
+            ShadowLooper.idleMainLooper(); Thread.sleep(20)
+        }
+        assertNotNull("the count lands in the row", findText(a.window.decorView, "0 scans"))
+        assertEquals(a.getString(R.string.settings_delete_all_none), org.robolectric.shadows.ShadowToast.getTextOfLatestToast())
+        assertTrue("opened off the main thread: ${ps.storeOpenedOn}",
+            ps.storeOpenedOn != null && ps.storeOpenedOn != Thread.currentThread().name)
+    }
+
     /** Settings → Delete all scans: the count is shown, the dialog says it, and OK deletes every scan and photo. */
     @Test
     fun settings_deleteAllScans_asksThenDeletesEverything() {

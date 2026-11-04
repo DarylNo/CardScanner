@@ -81,6 +81,8 @@
     <string name="settings_card_list_note">The list is fetched when the app starts and on Refresh now; the last good list is kept for when it can\'t be reached. Format and setup: README → External card list.</string>
     <string name="settings_scans">Scans</string>
     <string name="settings_delete_all">Delete all scans</string>
+    <!-- The Delete all scans row while the scan store is still opening (its one-time migrations run on open). -->
+    <string name="settings_scans_counting">…</string>
     <string name="settings_delete_all_desc">Removes every scan and its photo from this phone. There is no backup — export a copy from the paired computer first if you want one.</string>
     <string name="settings_delete_all_title">Delete all %1$s?</string>
     <string name="settings_delete_all_msg">They will be gone from this phone for good — there is no backup and no undo.</string>

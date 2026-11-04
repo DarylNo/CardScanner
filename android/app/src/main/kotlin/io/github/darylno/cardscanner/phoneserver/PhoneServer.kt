@@ -17,6 +17,7 @@ import io.github.darylno.cardscanner.ident.LocalIdentify
 import io.github.darylno.cardscanner.ident.PhoneIdentifier
 import io.github.darylno.cardscanner.ident.TransportHttpJson
 import java.io.File
+import java.util.concurrent.Executor
 import java.util.concurrent.Executors
 
 /**
@@ -39,14 +40,48 @@ class PhoneServer(
     private val debugHeader: () -> String = { "" },
     /** The external card list now (null = off) — list_tags on every scan read. */
     private val cardList: () -> io.github.darylno.cardscanner.core.CardList.Parsed? = { null },
+    /**
+     * Where the store is opened and the pricing worker started / stopped: one thread, in
+     * order, never the caller's ([onServing] / [onStopped] come from the service's main
+     * thread). Tests pass one they run by hand.
+     */
+    private val lifecycle: Executor = Executors.newSingleThreadExecutor { r -> Thread(r, "store-open").apply { isDaemon = true } },
 ) :
     GatewayService.Host {
     private val root = File(ctx.filesDir, "phoneserver")
-    val store: SqliteScanStore by lazy { SqliteScanStore(File(root, "scans.db")) }
+
+    /**
+     * Held while the store opens (the [storeLazy]'s lock). The open runs the store's one-time
+     * migrations in ONE transaction — 1.1.17's re-price parses every row and rewrites every
+     * priced one: est. seconds on the N200 with thousands of scans, not measured — so it must
+     * never run on the main thread (an ANR; a kill mid-migration rolls it back to run again).
+     * The "store" log line says how long it took. Tests hold it to keep the open pending.
+     */
+    internal val storeOpening = Any()
+    private val storeLazy = lazy(storeOpening) { openStore() }
+    val store: SqliteScanStore by storeLazy
+    /** The store has opened (its migrations done): reading it no longer waits for the open. */
+    val storeOpen: Boolean get() = storeLazy.isInitialized()
+    /** The thread that opened the store (null = not yet) — tests check it was never the main one. */
+    @Volatile internal var storeOpenedOn: String? = null
+        private set
+
+    private fun openStore(): SqliteScanStore {
+        val t0 = System.nanoTime()
+        val s = SqliteScanStore(File(root, "scans.db"))
+        storeOpenedOn = Thread.currentThread().name
+        io.github.darylno.cardscanner.core.DebugLog.global.i("store",
+            "opened in ${(System.nanoTime() - t0) / 1_000_000} ms on ${Thread.currentThread().name}")
+        return s
+    }
+
+    /** The number of scans, or null while the store is still opening (never waits for it). */
+    fun scanCountIfOpen(): Int? = if (storeOpen) runCatching { store.count() }.getOrNull() else null
+
     val photos = PhotoDir(File(root, "scan_images"))
     private val scryfall by lazy { ScryfallPrintings(TransportHttpJson(OkHttpTransport())) }
 
-    val backend: PhoneBackend by lazy {
+    private val backendLazy = lazy {
         PhoneBackend(
             store, photos,
             pages = { name -> runCatching { ctx.assets.open("phoneserver/$name").use { it.readBytes() } }.getOrNull() },
@@ -67,6 +102,8 @@ class PhoneServer(
             cardList = cardList,
         )
     }
+    /** Opens the store on first use (see [storeOpening]): off the main thread only. */
+    val backend: PhoneBackend by backendLazy
     private val f2f by lazy { PhoneF2f(ctx, File(ctx.cacheDir, "facetoface")) }
     private val sweepExec = Executors.newSingleThreadExecutor { r -> Thread(r, "price-sweep").apply { isDaemon = true } }
 
@@ -106,16 +143,35 @@ class PhoneServer(
     fun stop() = GatewayService.stop(ctx)
 
     // ── GatewayService.Host ───────────────────────────────────────────────────
-    override fun newServer(port: Int) = GatewayServer(LocalUpstream(backend), port, admins = admins)
+    // The service calls these on the MAIN thread. None of them opens the store there: the
+    // gateway asks for the backend per request (a server thread waits for the open), and the
+    // worker is started / stopped on [lifecycle], in call order.
 
-    override fun onServing() {
-        backend.worker.start()               // price whatever is owed, then wait for scans
+    override fun newServer(port: Int) = GatewayServer(LocalUpstream { backend }, port, admins = admins)
+
+    override fun onServing() = onLifecycle("start the price worker") {
+        backend.worker.start()               // opens the store here; price whatever is owed, then wait for scans
     }
 
     override fun onStopped() {
         admins.cancelCode()                  // a code shown before the stop is not good after a restart
-        backend.sweep.cancel()               // first: a running sweep ends within one card…
-        backend.worker.stop()                // …so the worker's join doesn't time out on it
+        // Queued behind any start: a stop before the open finished still stops the worker that
+        // start will have started. A backend never built had no worker to stop.
+        onLifecycle("stop the price worker") {
+            if (!backendLazy.isInitialized()) return@onLifecycle
+            backend.sweep.cancel()           // first: a running sweep ends within one card…
+            backend.worker.stop()            // …so the worker's join doesn't time out on it
+        }
+    }
+
+    private fun onLifecycle(what: String, block: () -> Unit) {
+        val work = Runnable {
+            try { block() } catch (e: Exception) {
+                // Never up to the thread's uncaught handler: that would end the app. Logged instead.
+                io.github.darylno.cardscanner.core.DebugLog.global.e("server", "couldn't $what", e)
+            }
+        }
+        try { lifecycle.execute(work) } catch (_: java.util.concurrent.RejectedExecutionException) { work.run() }
     }
 
     /** The phone's own review screen: the local address and the owner's admin cookie. */
@@ -206,7 +262,10 @@ class PhoneServer(
         return LocalAddresses.joinUrl(ip, port, c) to c
     }
 
-    /** "N scans · X MB of photos · Y GB free" and whether it's past the warning line. */
+    /**
+     * "N scans · X MB of photos · Y GB free" and whether it's past the warning line.
+     * Waits for the store to open: off the main thread only (Settings reads it on its io thread).
+     */
     fun usage(): Usage {
         val n = runCatching { store.count() }.getOrDefault(0)
         val bytes = photos.sizeBytes()

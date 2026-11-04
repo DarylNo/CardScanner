@@ -168,8 +168,17 @@ class PhoneBackend(
  * [Upstream] that answers from the phone's [PhoneBackend] instead of the
  * computer — so the preview reuses the Share gateway unchanged (LAN-only,
  * join code, lockouts, cookies, relay).
+ *
+ * The backend comes from [backendOf], asked on the REQUEST thread: the phone
+ * server's store opens (and runs its one-time migrations) on first use, so
+ * building the gateway on the main thread must not open it — the first request
+ * waits for the open instead (PhoneServer.newServer). An open that fails
+ * answers 500, like any failure here.
  */
-class LocalUpstream(private val backend: PhoneBackend) : Upstream {
+class LocalUpstream(private val backendOf: () -> PhoneBackend) : Upstream {
+    /** A backend already built (tests). */
+    constructor(backend: PhoneBackend) : this({ backend })
+
     override fun proxy(method: String, pathAndQuery: String, headers: Map<String, String>, body: ByteArray?): Response {
         val path = pathAndQuery.substringBefore('?').let { URLDecoder.decode(it.replace("+", "%2B"), "UTF-8") }
         val query = if ('?' in pathAndQuery) pathAndQuery.substringAfter('?') else null
@@ -177,7 +186,7 @@ class LocalUpstream(private val backend: PhoneBackend) : Upstream {
             // The role comes ONLY from the gateway (it drops any a client sends and sets its
             // own); no header fails CLOSED as a guest.
             val role = if (headers[GatewayServer.ROLE_HEADER] == GatewayServer.ROLE_ADMIN) ROLE_ADMIN else ROLE_GUEST
-            backend.handle(ApiRequest(method, path, PhoneBackend.parseQuery(query), body, role))
+            backendOf().handle(ApiRequest(method, path, PhoneBackend.parseQuery(query), body, role))
         } catch (e: Exception) {
             ApiResponse.json(500, mapOf("error" to "${e.javaClass.simpleName}: ${e.message}"))
         }
