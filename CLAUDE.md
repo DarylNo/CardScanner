@@ -1085,7 +1085,15 @@ lens on testers' phones), minSdk 29, arm64-v8a.
   :8090 while the app runs; its notification carries Stop and hides the guest
   code on the lock screen. It stops itself after 30 min with no app screen
   visible and no non-loopback request (`shouldIdleStop`). The LAN leg is plain
-  HTTP (the pairing dialog says to pair on a trusted network).
+  HTTP (the pairing dialog says to pair on a trusted network). **The store
+  never opens or is read on the main thread** (1.1.17: its open runs the
+  one-time re-price — seconds on a big store, an ANR, and a kill mid-way rolls
+  it back to run again): `newServer` hands the gateway `LocalUpstream { backend }`
+  (the first request waits, on its own thread), the worker's start / stop run in
+  order on one "store-open" thread (a failed start retried every 30 s while
+  serving, `servingGen` drops a stale retry), Settings counts on its io thread
+  ("…" until then, one Delete-all dialog at a time); the debug log says
+  "store … opened in N ms".
 - **Roles.** A computer pairs as ADMIN with a one-time 8-digit code (10 min,
   single use, its own budget of 10 wrong tries, retired by a guest-code
   rotation) → a long-lived `cs_admin` cookie (only its SHA-256 on disk;
