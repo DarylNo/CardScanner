@@ -19,6 +19,9 @@ import io.github.darylno.cardscanner.ident.TransportHttpJson
 import java.io.File
 import java.util.concurrent.Executor
 import java.util.concurrent.Executors
+import java.util.concurrent.ScheduledExecutorService
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Stage 4 (owner, 2026-09-30: full cutover, the computer app is retired): the
@@ -46,6 +49,11 @@ class PhoneServer(
      * thread). Tests pass one they run by hand.
      */
     private val lifecycle: Executor = Executors.newSingleThreadExecutor { r -> Thread(r, "store-open").apply { isDaemon = true } },
+    /**
+     * Runs a task after a delay in ms — a worker start that failed is tried again this way (the
+     * task itself only queues the retry on [lifecycle]). Tests pass one they run by hand.
+     */
+    private val later: (Long, Runnable) -> Unit = { ms, r -> RETRY_TIMER.schedule(r, ms, TimeUnit.MILLISECONDS) },
 ) :
     GatewayService.Host {
     private val root = File(ctx.filesDir, "phoneserver")
@@ -60,7 +68,11 @@ class PhoneServer(
     internal val storeOpening = Any()
     private val storeLazy = lazy(storeOpening) { openStore() }
     val store: SqliteScanStore by storeLazy
-    /** The store has opened (its migrations done): reading it no longer waits for the open. */
+    /**
+     * The store has opened (its migrations done): reading it no longer waits for the open — but
+     * it can still wait for the store's lock (list() holds it while it decodes every row), so the
+     * main thread never reads it either way (Settings counts on its io thread).
+     */
     val storeOpen: Boolean get() = storeLazy.isInitialized()
     /** The thread that opened the store (null = not yet) — tests check it was never the main one. */
     @Volatile internal var storeOpenedOn: String? = null
@@ -74,9 +86,6 @@ class PhoneServer(
             "opened in ${(System.nanoTime() - t0) / 1_000_000} ms on ${Thread.currentThread().name}")
         return s
     }
-
-    /** The number of scans, or null while the store is still opening (never waits for it). */
-    fun scanCountIfOpen(): Int? = if (storeOpen) runCatching { store.count() }.getOrNull() else null
 
     val photos = PhotoDir(File(root, "scan_images"))
     private val scryfall by lazy { ScryfallPrintings(TransportHttpJson(OkHttpTransport())) }
@@ -149,12 +158,42 @@ class PhoneServer(
 
     override fun newServer(port: Int) = GatewayServer(LocalUpstream { backend }, port, admins = admins)
 
-    override fun onServing() = onLifecycle("start the price worker") {
-        backend.worker.start()               // opens the store here; price whatever is owed, then wait for scans
+    /**
+     * Bumped by every [onServing] and [onStopped] (on the caller's thread, before their task is
+     * queued): a start retry carries the generation it was made in and is dropped once it moved,
+     * so a stop (or a newer start) always wins over an older failed start's retry.
+     */
+    private val servingGen = AtomicInteger()
+
+    override fun onServing() = startWorker(servingGen.incrementAndGet(), attempt = 1)
+
+    /**
+     * Starts the price worker on [lifecycle] (the store opens there). If that fails — the open
+     * threw, e.g. SQLITE_FULL — it is tried again [START_RETRY_MS] later, again on [lifecycle],
+     * for as long as the server keeps serving: otherwise the worker stayed down until the next
+     * start of the server, although the store opens fine later on a request or an upload (and
+     * 1.1.17's re-price leaves every scan owed, review or not). Every failure and retry is logged.
+     */
+    private fun startWorker(gen: Int, attempt: Int): Unit = onLifecycle("start the price worker") {
+        val log = io.github.darylno.cardscanner.core.DebugLog.global
+        // Only a retry is dropped: a first start always runs (a stop queued behind it stops it).
+        if (attempt > 1 && gen != servingGen.get()) {
+            log.i("server", "price worker: retry #${attempt - 1} dropped — the server stopped (or restarted) since")
+            return@onLifecycle
+        }
+        try {
+            backend.worker.start()           // opens the store here; price whatever is owed, then wait for scans
+            if (attempt > 1) log.i("server", "price worker started on retry #${attempt - 1}")
+        } catch (e: Exception) {
+            log.e("server", "couldn't start the price worker (try $attempt) — trying again in " +
+                "${START_RETRY_MS / 1000} s", e)
+            later(START_RETRY_MS, Runnable { startWorker(gen, attempt + 1) })
+        }
     }
 
     override fun onStopped() {
         admins.cancelCode()                  // a code shown before the stop is not good after a restart
+        servingGen.incrementAndGet()         // a start retry still pending is dropped
         // Queued behind any start: a stop before the open finished still stops the worker that
         // start will have started. A backend never built had no worker to stop.
         onLifecycle("stop the price worker") {
@@ -286,5 +325,12 @@ class PhoneServer(
     companion object {
         const val PORT = 8090
         const val WARN_AT = 10_000
+        /** A price worker start that failed (the store's open threw) is tried again after this. */
+        const val START_RETRY_MS = 30_000L
+
+        /** The default [later]: one daemon thread, only ever asleep between failed starts. */
+        private val RETRY_TIMER: ScheduledExecutorService by lazy {
+            Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "store-retry").apply { isDaemon = true } }
+        }
     }
 }

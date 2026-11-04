@@ -1890,6 +1890,127 @@ class ScreensSmokeTest {
             ps.storeOpenedOn != null && ps.storeOpenedOn != Thread.currentThread().name)
     }
 
+    /**
+     * Holds the store's lock on another thread — standing in for a long list() (the price worker
+     * lists every scan on each poll) — and watches the main (test) thread: the moment it is
+     * BLOCKED inside the store (waiting for this lock), [mainBlocked] is set and the lock let go,
+     * so a regression shows as a failed assertion, never a hung test.
+     */
+    private class StoreBusy(private val lock: Any) {
+        private val main = Thread.currentThread()
+        @Volatile var mainBlocked = false
+            private set
+        private val done = java.util.concurrent.CountDownLatch(1)
+        private val held = java.util.concurrent.CountDownLatch(1)
+        private val holder = Thread({
+            synchronized(lock) {
+                held.countDown()
+                val store = io.github.darylno.cardscanner.phoneserver.SqliteScanStore::class.java.name
+                val deadline = System.nanoTime() + 20_000_000_000L
+                while (done.count > 0 && System.nanoTime() < deadline) {
+                    if (main.state == Thread.State.BLOCKED && main.stackTrace.any { it.className == store }) {
+                        mainBlocked = true; break
+                    }
+                    done.await(2, java.util.concurrent.TimeUnit.MILLISECONDS)
+                }
+            }
+        }, "store-busy").apply { isDaemon = true; start() }
+        init { held.await() }
+        fun release() { done.countDown(); holder.join(20_000) }
+    }
+
+    /** Polls the main looper until [cond] holds (or 5 s pass). */
+    private fun waitOnMain(cond: () -> Boolean) {
+        val deadline = System.currentTimeMillis() + 5_000
+        while (!cond() && System.currentTimeMillis() < deadline) { ShadowLooper.idleMainLooper(); Thread.sleep(20) }
+        ShadowLooper.idleMainLooper()
+    }
+
+    private fun clickRow(a: Activity, label: String) {
+        var v: View? = findText(a.window.decorView, label)
+        while (v != null && !v.isClickable) v = v.parent as? View
+        assertNotNull("a clickable $label row", v)
+        v!!.performClick()
+        ShadowLooper.idleMainLooper()
+    }
+
+    /**
+     * Review of 806a4cd (F1): once the store is open, Settings must still never take its lock on
+     * the main thread — list() holds it while it decodes every row, and the price worker lists on
+     * every poll (after 1.1.17's re-price every scan is owed), so a count there could stall the
+     * screen. With the lock held elsewhere, Settings renders ("…") and the Delete all scans tap
+     * returns without the main thread ever blocking on it; the count lands once it is free.
+     */
+    @Test
+    @Config(qualifiers = "w411dp-h914dp-xxhdpi")
+    fun settings_whileTheStoreIsBusy_neverWaitsForItsLockOnTheMainThread() {
+        for (name in listOf("Opt", "Shock")) app.phoneServer.backend.file(mapOf("identified" to true,
+            "card_read" to mapOf("name" to name), "confidence" to mapOf("name" to "high"),
+            "candidates" to listOf(mapOf("id" to name.lowercase(), "name" to name, "set" to "dom", "collector_number" to "1"),
+                mapOf("id" to "${name.lowercase()}2", "name" to name, "set" to "m19", "collector_number" to "2"))), null)
+        val lock = app.phoneServer.store.lock
+        val render = StoreBusy(lock)
+        lateinit var a: SettingsActivity
+        var rowWhileBusy: Boolean
+        try {
+            a = launch(SettingsActivity::class.java)
+            rowWhileBusy = findText(a.window.decorView, a.getString(R.string.settings_scans_counting)) != null
+        } finally { render.release() }
+        val tap = StoreBusy(lock)
+        var dialogWhileBusy: Boolean
+        try {
+            clickRow(a, a.getString(R.string.settings_delete_all))
+            dialogWhileBusy = org.robolectric.shadows.ShadowDialog.getLatestDialog()?.isShowing == true
+        } finally { tap.release() }
+        assertEquals("the main thread waited for the store's lock (render, tap)",
+            listOf(false, false), listOf(render.mainBlocked, tap.mainBlocked))
+        assertTrue("the row reads … while the store is busy", rowWhileBusy)
+        assertFalse("no dialog before the count", dialogWhileBusy)
+        waitOnMain { org.robolectric.shadows.ShadowDialog.getLatestDialog()?.isShowing == true }
+        assertNotNull("the count lands in the row", findText(a.window.decorView, "2 scans"))
+        val d = org.robolectric.shadows.ShadowDialog.getLatestDialog() as androidx.appcompat.app.AlertDialog
+        assertNotNull(findText(d.window!!.decorView, a.getString(R.string.settings_delete_all_title, "2 scans")))
+    }
+
+    /**
+     * Review of 806a4cd (F2): taps on Delete all scans while its count is pending (here: the store
+     * still opening) ask ONCE — before, each tap queued its own count and later stacked its own
+     * confirmation, and confirming two ran delete-all twice.
+     */
+    @Test
+    @Config(qualifiers = "w411dp-h914dp-xxhdpi")
+    fun settings_deleteAll_tappedThreeTimesWhileCounting_asksOnce() {
+        // Two scans already on disk, the store not yet open (its one-time migrations "running").
+        val file = java.io.File(app.filesDir, "phoneserver/scans.db")
+        io.github.darylno.cardscanner.phoneserver.SqliteScanStore(file).apply {
+            for (name in listOf("Opt", "Shock")) create(true, mapOf("name" to name), mapOf("name" to "high"),
+                listOf(mapOf("id" to name.lowercase(), "name" to name, "set" to "dom", "collector_number" to "1"),
+                    mapOf("id" to "${name.lowercase()}2", "name" to name, "set" to "m19", "collector_number" to "2")), null)
+            close()
+        }
+        val ps = app.phoneServer
+        assertFalse("precondition: the store has not opened", ps.storeOpen)
+        lateinit var a: SettingsActivity
+        synchronized(ps.storeOpening) {
+            a = launch(SettingsActivity::class.java)
+            repeat(3) { clickRow(a, a.getString(R.string.settings_delete_all)) }
+            assertTrue("nothing asked before the count", org.robolectric.shadows.ShadowDialog.getShownDialogs().isEmpty())
+        }
+        waitOnMain { org.robolectric.shadows.ShadowDialog.getShownDialogs().isNotEmpty() }
+        // Every queued count has landed by now (they are sub-millisecond once the store is open).
+        val until = System.currentTimeMillis() + 600
+        while (System.currentTimeMillis() < until) { ShadowLooper.idleMainLooper(); Thread.sleep(20) }
+        val shown = org.robolectric.shadows.ShadowDialog.getShownDialogs()
+        assertEquals("one confirmation for three taps", 1, shown.size)
+        assertNotNull(findText(shown[0].window!!.decorView, a.getString(R.string.settings_delete_all_title, "2 scans")))
+        // Asked and answered (Cancel): the next tap asks again.
+        (shown[0] as androidx.appcompat.app.AlertDialog).getButton(android.content.DialogInterface.BUTTON_NEGATIVE).performClick()
+        ShadowLooper.idleMainLooper()
+        clickRow(a, a.getString(R.string.settings_delete_all))
+        waitOnMain { org.robolectric.shadows.ShadowDialog.getShownDialogs().size == 2 }
+        assertEquals(2, org.robolectric.shadows.ShadowDialog.getShownDialogs().size)
+    }
+
     /** Settings → Delete all scans: the count is shown, the dialog says it, and OK deletes every scan and photo. */
     @Test
     fun settings_deleteAllScans_asksThenDeletesEverything() {
@@ -1900,13 +2021,12 @@ class ScreensSmokeTest {
         val a = launch(SettingsActivity::class.java)
         val row = findText(a.window.decorView, a.getString(R.string.settings_delete_all))
         assertNotNull(row)
+        // Counted off the main thread (review of 806a4cd): the number lands shortly after.
+        waitOnMain { findText(a.window.decorView, "2 scans") != null }
         assertNotNull("the row shows how many would go", findText(a.window.decorView, "2 scans"))
         // The row's click lands on its container (ScanChrome.valueRow): climb to the clickable parent.
-        var v: View? = row
-        while (v != null && !v.isClickable) v = v.parent as? View
-        assertNotNull("a clickable row", v)
-        v!!.performClick()
-        ShadowLooper.idleMainLooper()
+        clickRow(a, a.getString(R.string.settings_delete_all))
+        waitOnMain { org.robolectric.shadows.ShadowDialog.getLatestDialog()?.isShowing == true }
         val d = org.robolectric.shadows.ShadowDialog.getLatestDialog() as androidx.appcompat.app.AlertDialog
         assertTrue(d.isShowing)
         assertNotNull(findText(d.window!!.decorView, a.getString(R.string.settings_delete_all_title, "2 scans")))

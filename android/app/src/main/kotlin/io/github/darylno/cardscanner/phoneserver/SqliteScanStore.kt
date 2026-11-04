@@ -19,7 +19,12 @@ import java.io.File
  */
 class SqliteScanStore(file: File, private val clock: () -> String = ::isoNow) : ScanStore {
     private val db: SQLiteDatabase
-    private val lock = Any()
+    /**
+     * Held by every read and write — [list] for the whole decode of every row, and the price
+     * worker lists on every poll — so taking it can wait: never on the main thread. Internal so
+     * tests can hold it in place of a long [list].
+     */
+    internal val lock = Any()
 
     init {
         file.parentFile?.mkdirs()

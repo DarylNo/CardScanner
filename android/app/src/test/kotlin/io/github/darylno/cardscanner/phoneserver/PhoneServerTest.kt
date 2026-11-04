@@ -373,10 +373,17 @@ class PhoneServerTest {
         for (ps in servers) if (ps.storeOpen) { runCatching { ps.backend.worker.stop() }; ps.store.close() }
     }
 
-    private fun phoneServerIn(dir: java.io.File, lifecycle: java.util.concurrent.Executor): PhoneServer {
+    /** The retry timer, run by hand: each entry is (delay ms, task). */
+    private class Later : (Long, Runnable) -> Unit {
+        val queued = ArrayDeque<Pair<Long, Runnable>>()
+        override fun invoke(ms: Long, r: Runnable) { queued += ms to r }
+        fun runAll() { while (queued.isNotEmpty()) queued.removeFirst().second.run() }
+    }
+
+    private fun phoneServerIn(dir: java.io.File, lifecycle: java.util.concurrent.Executor, later: Later = Later()): PhoneServer {
         val app = org.robolectric.RuntimeEnvironment.getApplication() as io.github.darylno.cardscanner.App
         val ctx = object : android.content.ContextWrapper(app) { override fun getFilesDir() = dir }
-        return PhoneServer(ctx, app.identify, DeviceBridge(app.settings), lifecycle = lifecycle).also { servers += it }
+        return PhoneServer(ctx, app.identify, DeviceBridge(app.settings), lifecycle = lifecycle, later = later).also { servers += it }
     }
 
     @Test fun newServerAndOnServingNeverOpenTheStoreOnTheCaller() {
@@ -418,6 +425,87 @@ class PhoneServerTest {
         ps2.onStopped()
         idle.runAll()
         assertTrue(!ps2.storeOpen)
+    }
+
+    // Review of 806a4cd (F3): a start whose open threw (e.g. SQLITE_FULL) was only logged, and
+    // the worker stayed down until the server's next start — although the lazy open succeeds
+    // later on a request or an upload. It is now tried again 30 s later, on the lifecycle.
+
+    private fun serverLog(after: Long) = io.github.darylno.cardscanner.core.DebugLog.global.since(after, limit = 3000)
+        .filter { it.tag == "server" }.joinToString("\n") { it.msg }
+
+    @Test fun aStartWhoseOpenFailsIsRetriedOnTheLifecycleUntilItStarts() {
+        val t0 = io.github.darylno.cardscanner.core.DebugLog.global.lastSeq
+        val dir = tmp.newFolder("files-d")
+        val db = java.io.File(dir, "phoneserver/scans.db").apply { mkdirs() }   // a directory where the database goes: the open fails
+        val lifecycle = ByHand()
+        val later = Later()
+        val ps = phoneServerIn(dir, lifecycle, later)
+        ps.newServer(0)
+        ps.onServing()
+        lifecycle.runAll()
+        assertTrue("the open failed", !ps.storeOpen)
+        assertEquals("a retry, 30 s on", listOf(PhoneServer.START_RETRY_MS), later.queued.map { it.first })
+        assertEquals(30_000L, PhoneServer.START_RETRY_MS)
+        later.runAll()                                                  // 30 s on, still failing…
+        assertTrue("the retry runs on the lifecycle, not the timer's thread", !ps.storeOpen && lifecycle.queued.size == 1)
+        lifecycle.runAll()
+        assertTrue(!ps.storeOpen)
+        assertEquals("…so another retry", 1, later.queued.size)
+        assertTrue(db.delete())                                         // the disk has room again
+        later.runAll()
+        lifecycle.runAll()
+        assertTrue(ps.storeOpen)
+        assertTrue("the retry started the price worker", ps.backend.worker.running)
+        assertTrue("no retry after a start", later.queued.isEmpty())
+        val log = serverLog(t0)
+        assertTrue(log, log.contains("couldn't start the price worker (try 1) — trying again in 30 s"))
+        assertTrue(log, log.contains("couldn't start the price worker (try 2) — trying again in 30 s"))
+        assertTrue(log, log.contains("price worker started on retry #2"))
+        // …and the stop still stops it, in order.
+        ps.onStopped()
+        lifecycle.runAll()
+        assertTrue(!ps.backend.worker.running)
+    }
+
+    @Test fun aStopBeforeTheRetryLeavesTheWorkerStopped() {
+        val t0 = io.github.darylno.cardscanner.core.DebugLog.global.lastSeq
+        val dir = tmp.newFolder("files-e")
+        val db = java.io.File(dir, "phoneserver/scans.db").apply { mkdirs() }
+        val lifecycle = ByHand()
+        val later = Later()
+        val ps = phoneServerIn(dir, lifecycle, later)
+        ps.newServer(0)
+        ps.onServing()
+        lifecycle.runAll()
+        assertEquals(1, later.queued.size)
+        ps.onStopped()                                                  // the server stops before the retry is due
+        lifecycle.runAll()
+        assertTrue(db.delete())
+        later.runAll()
+        lifecycle.runAll()
+        assertTrue("the dropped retry opened nothing — no worker", !ps.storeOpen)
+        assertTrue("and set no further retry", later.queued.isEmpty())
+
+        // A stop → start before an old retry fires: only the new start runs (no second chain).
+        val dir2 = tmp.newFolder("files-f")
+        val db2 = java.io.File(dir2, "phoneserver/scans.db").apply { mkdirs() }
+        val l2 = ByHand()
+        val later2 = Later()
+        val ps2 = phoneServerIn(dir2, l2, later2)
+        ps2.onServing()
+        l2.runAll()                                                     // fails: retry A (old generation)
+        ps2.onStopped()
+        ps2.onServing()
+        l2.runAll()                                                     // the stop; the new start fails too: retry B
+        assertEquals(2, later2.queued.size)
+        assertTrue(db2.delete())
+        later2.runAll()                                                 // A is dropped, B starts the worker
+        l2.runAll()
+        assertTrue(ps2.storeOpen && ps2.backend.worker.running)
+        assertTrue(later2.queued.isEmpty())
+        val log = serverLog(t0)
+        assertTrue(log, log.contains("price worker: retry #1 dropped — the server stopped (or restarted) since"))
     }
 
     @Test fun aRequestBeforeTheOpenWaitsForItAndAnswers() {
