@@ -31,14 +31,17 @@ import io.github.darylno.cardscanner.core.AutoScanner
 import io.github.darylno.cardscanner.core.DebugLog
 import io.github.darylno.cardscanner.core.RoiFrac
 import io.github.darylno.cardscanner.core.ZoomFit
+import io.github.darylno.cardscanner.core.ZoomProbeRun
 import io.github.darylno.cardscanner.gateway.GatewayService
 import io.github.darylno.cardscanner.ui.AppSettings
 import io.github.darylno.cardscanner.ui.BatteryEstimate
 import io.github.darylno.cardscanner.ui.CameraPort
 import io.github.darylno.cardscanner.ui.Captured
+import io.github.darylno.cardscanner.ui.MeasureSession
 import io.github.darylno.cardscanner.ui.OverlayView
 import io.github.darylno.cardscanner.ui.Outcome
 import io.github.darylno.cardscanner.ui.PanelActivity
+import io.github.darylno.cardscanner.ui.ProbeListener
 import io.github.darylno.cardscanner.ui.ScanChrome
 import io.github.darylno.cardscanner.ui.ScanRate
 import io.github.darylno.cardscanner.ui.SettingsActivity
@@ -105,13 +108,46 @@ class MainActivity : AppCompatActivity() {
     private lateinit var measureText: TextView
     private lateinit var measureCount: TextView
     private lateinit var measureQuestion: TextView
-    private lateinit var measureYesNo: LinearLayout
+    /** The card's action row: Yes / No on a step with a question, the zoom probe's button on its step. */
+    private lateinit var measureActions: LinearLayout
+    private lateinit var measureYes: View
+    private lateinit var measureNo: View
+    /** The zoom probe's step (1.1.17): Run probe → Cancel probe while it runs → Run again. */
+    private lateinit var probeBtn: android.widget.Button
     private lateinit var measureNext: android.widget.Button
     private lateinit var measureBack: android.widget.Button
     private val measureTick = object : Runnable {
         override fun run() { if (app.measure.active) { refreshMeasure(); measureCard.postDelayed(this, 1000) } }
     }
     private lateinit var lockText: TextView
+
+    // ── the zoom probe on its measurement step (1.1.17: core ZoomProbeRun, CameraController's camera side) ──
+    /** The run started from here and not yet over (its number in the session), 0 = none. */
+    private var probeRun = 0
+    /** The running run's count line ("rung 7/15 · 1.60× · card 979 px at 1.50×"), null when none runs. */
+    private var probeCount: String? = null
+    /** What the last run ended with on this step — the session's runs together, or a refusal's words — null since entering it. */
+    private var probeWords: String? = null
+    /** A change from the computer came while the probe ran: it is applied once the probe has ended ([applyRemoteNow]). */
+    private var remoteDeferred = false
+    /**
+     * What the last identification said while the probe ran (review of a60e51d): the status pill
+     * is the probe's until it ends, then this comes under its end ([outcomeStatus]); null = none.
+     */
+    private var probeHeldStatus: String? = null
+    /**
+     * The Back key, during a measurement session: while the probe runs it only cancels it (the
+     * touch policy); otherwise it does what Back always does. Enabled only while a session is
+     * on, so the system's own back stays untouched outside one.
+     */
+    private val probeBack = object : androidx.activity.OnBackPressedCallback(false) {
+        override fun handleOnBackPressed() {
+            if (cancelProbeFor("the Back key")) return
+            isEnabled = false
+            onBackPressedDispatcher.onBackPressed()
+            isEnabled = app.measure.active
+        }
+    }
     private lateinit var traySeg: TextView
     private lateinit var tapSeg: TextView
     private lateinit var shutter: View
@@ -193,6 +229,7 @@ class MainActivity : AppCompatActivity() {
         settings = app.settings
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         awake = ScreenAwake(this, settings, "scan screen").also { lifecycle.addObserver(it) }
+        onBackPressedDispatcher.addCallback(this, probeBack)
         buildUi()
         applyMode()
         app.uploads.addListener(uploadListener)
@@ -210,6 +247,7 @@ class MainActivity : AppCompatActivity() {
 
     /** Move the camera choice [by] stops (Automatic + each lens, wrapping) and apply it at once. */
     private fun stepCamera(by: Int) {
+        if (cancelProbeFor("the camera pill")) return
         val next = CameraChoice.step(lenses, settings.cameraId, by)
         if (next == settings.cameraId) return
         settings.cameraId = next
@@ -268,13 +306,24 @@ class MainActivity : AppCompatActivity() {
                 // Already asked this instance (or back from app settings still denied): no re-ask loop.
                 setStatus(getString(R.string.camera_needed), Tone.ERR)
             }
+        } else if (probing()) {
+            // Paused, not stopped, mid-probe (an activity over this one): the camera kept running and
+            // so did the probe — what may have changed meanwhile waits for its end, as a PATCH does.
+            remoteDeferred = true
         } else {
+            // The computer may have changed the mode or the Area while we were stopped (it
+            // reached AppSettings only): catch up — and on a plain return touch neither.
+            if (settings.roi != appliedRoi || settings.auto != appliedAuto) {
+                if (drawing) cancelArea()
+                applyStoredModeAndArea()
+            }
             // Settings may have changed torch / AE / focus lock while we were away.
             camera?.setTorch(settings.torch)
             camera?.setAeLock(settings.aeLock)
             camera?.setHighRes(settings.highRes)
             camera?.setCamera(settings.cameraId)
             camera?.setZoomFit(settings.zoomFit)
+            camera?.setMeasureDetail(measureArmOn())          // a session started (or stopped) from Settings
             refreshCameraPill()
             // Belt-and-braces: another screen may have unbound the shared CameraProvider
             // while we were stopped; re-bind so the preview/scanning isn't dead.
@@ -306,7 +355,8 @@ class MainActivity : AppCompatActivity() {
     /**
      * The phone server's browser settings (DeviceApi): a change made on the computer is
      * re-read from AppSettings and applied here at once, like the phone's own controls;
-     * the browser draws the scan Area on [snapshotJpeg]'s picture of the tray.
+     * the browser draws the scan Area on [snapshotJpeg]'s picture of the tray (and shows
+     * [cameraSnapshot]'s zoomed one, "Camera view", to judge what the scanner sees).
      */
     private val remoteScreen = object : io.github.darylno.cardscanner.phoneserver.DeviceBridge.Screen {
         /** Applied on the UI thread; the future completes once it ran (the bridge waits for it ≤ 500 ms). */
@@ -320,25 +370,66 @@ class MainActivity : AppCompatActivity() {
 
         private fun applyRemote() {
             if (isFinishing || isDestroyed) return
-            if (drawing) cancelArea()
-            if (settings.roi != appliedRoi) {   // a new Area re-learns the tray — only when it changed
-                appliedRoi = settings.roi
-                camera?.setRoi(settings.roi)
+            // The touch policy reaches the computer too (1.1.17): a PATCH while the zoom probe runs
+            // only cancels it — through its verified restore — and the change, stored already,
+            // reaches the camera once the probe has ended (a torch, a lens, the switch mid-run
+            // would stop it with no restore, or spoil its frames).
+            if (probing()) {
+                if (!remoteDeferred) dlog.i("device", "a change from the computer during the zoom probe — the probe is cancelled; the change is applied once it is over")
+                remoteDeferred = true
+                camera?.cancelZoomProbe("a change from the computer")
+                return
             }
-            applyMode()
-            camera?.setTorch(settings.torch)
-            camera?.setAeLock(settings.aeLock)
-            camera?.setHighRes(settings.highRes)
-            camera?.setCamera(settings.cameraId)
-            camera?.setZoomFit(settings.zoomFit)
-            refreshCameraPill()
+            applyRemoteNow()
         }
 
         override fun snapshotJpeg(): ByteArray? = camera?.snapshotJpeg()
 
+        override fun cameraSnapshot() = camera?.cameraSnapshot()
+
         override fun zoomState() = camera?.zoomState()
     }
+
+    /** What the computer changed (already in AppSettings), handed to the camera — see [remoteScreen]. */
+    private fun applyRemoteNow() {
+        if (isFinishing || isDestroyed) return
+        // A drawing this cancels takes its drag prompt with it: the mode's line again.
+        val cancelled = drawing
+        if (cancelled) cancelArea()
+        applyStoredModeAndArea(restate = cancelled)
+        camera?.setTorch(settings.torch)
+        camera?.setAeLock(settings.aeLock)
+        camera?.setHighRes(settings.highRes)
+        camera?.setCamera(settings.cameraId)
+        camera?.setZoomFit(settings.zoomFit)
+        refreshCameraPill()
+    }
     private var appliedRoi: io.github.darylno.cardscanner.core.RoiFrac? = null
+    /** The mode the camera was last handed (setAuto), null = none yet — re-handed only when it changed ([applyStoredModeAndArea]). */
+    private var appliedAuto: Boolean? = null
+
+    /**
+     * Hand the camera the stored Area and mode where they moved since it last got them
+     * ([appliedRoi], [appliedAuto]): a change made on the computer. While this screen is
+     * started the bridge applies it at once ([remoteScreen]); while it is stopped — Tap to
+     * scan stops it after every scan (the scan opens), Scans and Settings do too — the
+     * bridge has no screen and only AppSettings changes, so [onResume] catches up here
+     * (review of 1.1.17: the camera kept the old mode under the old chip, and tapping the
+     * new mode's chip did nothing). Only what CHANGED reaches the camera (1.1.17): handing
+     * it Tray again re-arms a card that already scanned (AutoScanner.setAuto(true) →
+     * WATCHING), so any PATCH — a torch, a check time, the 📱 Scanner panel's zoom box —
+     * filed the card still sitting there a second time, two steady ticks later; a new Area
+     * re-learns the tray.
+     */
+    private fun applyStoredModeAndArea(restate: Boolean = false) {
+        val areaChanged = settings.roi != appliedRoi
+        val modeChanged = settings.auto != appliedAuto
+        if (areaChanged) {   // a new Area re-learns the tray — only when it changed
+            appliedRoi = settings.roi
+            camera?.setRoi(settings.roi)
+        }
+        applyMode(pushAuto = modeChanged, restate = restate || modeChanged || areaChanged)
+    }
 
     /** Battery % and charging state from the sticky ACTION_BATTERY_CHANGED broadcast (no receiver kept). */
     private fun readBattery(now: Long) {
@@ -452,14 +543,16 @@ class MainActivity : AppCompatActivity() {
         measureText = chrome.text("", 13f, ScanChrome.Palette.TEXT_DIM).apply { setPadding(0, dp(4), 0, 0) }
         measureCount = chrome.text("", 13f).apply { setPadding(0, dp(6), 0, 0) }
         measureQuestion = chrome.text("", 13f, bold = true).apply { setPadding(0, dp(8), 0, 0); visibility = View.GONE }
-        measureYesNo = LinearLayout(this).apply {
+        measureYes = chrome.smallButton(chrome.secondaryButton(getString(R.string.measure_yes)) { measureAnswer(true) })
+        measureNo = chrome.smallButton(chrome.secondaryButton(getString(R.string.measure_no)) { measureAnswer(false) })
+        probeBtn = chrome.smallButton(chrome.secondaryButton(getString(R.string.measure_probe_run)) { onProbeButton() })
+        measureActions = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL; visibility = View.GONE
-            addView(chrome.smallButton(chrome.secondaryButton(getString(R.string.measure_yes)) { measureAnswer(true) }),
-                LinearLayout.LayoutParams(wrap(), wrap()).apply { marginEnd = dp(8) })
-            addView(chrome.smallButton(chrome.secondaryButton(getString(R.string.measure_no)) { measureAnswer(false) }),
-                LinearLayout.LayoutParams(wrap(), wrap()))
+            addView(measureYes, LinearLayout.LayoutParams(wrap(), wrap()).apply { marginEnd = dp(8) })
+            addView(measureNo, LinearLayout.LayoutParams(wrap(), wrap()).apply { marginEnd = dp(8) })
+            addView(probeBtn, LinearLayout.LayoutParams(wrap(), wrap()))
         }
-        measureBack = chrome.smallButton(chrome.secondaryButton(getString(R.string.measure_back)) { app.measure.back(); afterMeasureStep() })
+        measureBack = chrome.smallButton(chrome.secondaryButton(getString(R.string.measure_back)) { measureBackStep() })
         measureNext = chrome.smallButton(chrome.primaryButton(getString(R.string.measure_next)) { measureNextStep() })
         val measureButtons = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -471,7 +564,7 @@ class MainActivity : AppCompatActivity() {
             addView(measureNext, LinearLayout.LayoutParams(wrap(), wrap()))
         }
         measureCard.addView(measureTitle); measureCard.addView(measureText); measureCard.addView(measureCount)
-        measureCard.addView(measureQuestion); measureCard.addView(measureYesNo, LinearLayout.LayoutParams(wrap(), wrap()).apply { topMargin = dp(6) })
+        measureCard.addView(measureQuestion); measureCard.addView(measureActions, LinearLayout.LayoutParams(wrap(), wrap()).apply { topMargin = dp(6) })
         measureCard.addView(measureButtons, LinearLayout.LayoutParams(match(), wrap()).apply { topMargin = dp(10) })
         top.addView(measureCard, LinearLayout.LayoutParams(match(), wrap()).apply { topMargin = dp(8) })
         root.addView(top, FrameLayout.LayoutParams(match(), wrap(), Gravity.TOP))
@@ -514,8 +607,10 @@ class MainActivity : AppCompatActivity() {
         // The mode switch · ⚙ Settings (right) — moved down from the top bar. Share sits
         // in the row below, above Scans (owner, 2026-10-02).
         // The standard share glyph (owner, 2026-10-02: "just use the standard share icon").
-        val shareBtn = chrome.iconChip(R.drawable.ic_share, getString(R.string.share)) { startActivity(Intent(this, ShareActivity::class.java)) }
-        val settingsBtn = chrome.chip("⚙") { startActivity(Intent(this, SettingsActivity::class.java)) }.apply {
+        val shareBtn = chrome.iconChip(R.drawable.ic_share, getString(R.string.share)) {
+            if (!cancelProbeFor("Share")) startActivity(Intent(this, ShareActivity::class.java))
+        }
+        val settingsBtn = chrome.chip("⚙") { if (!cancelProbeFor("Settings")) startActivity(Intent(this, SettingsActivity::class.java)) }.apply {
             contentDescription = getString(R.string.settings)
             textSize = 18f
         }
@@ -550,7 +645,7 @@ class MainActivity : AppCompatActivity() {
         val side = { v: View, g: Int -> FrameLayout(this).apply {
             addView(v, FrameLayout.LayoutParams(wrap(), wrap(), g or Gravity.CENTER_VERTICAL))
         } }
-        val scansBtn = chrome.chip(getString(R.string.scans)) { openPanel(0L) }
+        val scansBtn = chrome.chip(getString(R.string.scans)) { if (!cancelProbeFor("Scans")) openPanel(0L) }
         val leftStack = LinearLayout(this).apply {           // Share over Scans, left-aligned
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.START
@@ -569,9 +664,11 @@ class MainActivity : AppCompatActivity() {
         val lockCard = chrome.card().apply {
             addView(chrome.text(getString(R.string.update_required_title), 20f, bold = true))
             addView(lockText)
-            addView(chrome.primaryButton(getString(R.string.update_download)) { downloadUpdate() },
+            // The touch policy (review of a60e51d): the lock can come up mid-probe (UpdateLock's check
+            // answers late) and covers the card's Cancel probe; leaving would stop it with no restore.
+            addView(chrome.primaryButton(getString(R.string.update_download)) { if (!cancelProbeFor("Download update")) downloadUpdate() },
                 LinearLayout.LayoutParams(match(), wrap()))
-            addView(chrome.secondaryButton(getString(R.string.scans)) { openPanel(0L) },
+            addView(chrome.secondaryButton(getString(R.string.scans)) { if (!cancelProbeFor("Scans")) openPanel(0L) },
                 LinearLayout.LayoutParams(match(), wrap()).apply { topMargin = dp(10) })
         }
         lockView = FrameLayout(this).apply {
@@ -597,16 +694,22 @@ class MainActivity : AppCompatActivity() {
         showArea()
         overlay.onAreaDrawn = { r -> onAreaDrawn(r) }
         overlay.onDoubleTap = {
-            camera?.relearn()
-            setStatus(StatusText.RELEARN)
+            if (!cancelProbeFor("a double-tap")) {
+                camera?.relearn()
+                setStatus(StatusText.RELEARN)
+            }
         }
-        overlay.onTap = { x, y -> camera?.tapFocus(x, y) }
+        overlay.onTap = { x, y -> if (!cancelProbeFor("a tap on the preview")) camera?.tapFocus(x, y) }
     }
 
     // ── status ──────────────────────────────────────────────────────────────
     private enum class Tone { NORMAL, OK, ERR }
 
+    /** The status line's tone now (its colour) — what the update lock puts back with the line ([coverWithLockLine]). */
+    private var statusTone = Tone.NORMAL
+
     private fun setStatus(msg: String, tone: Tone = Tone.NORMAL) {
+        statusTone = tone
         statusView.text = msg
         statusView.setTextColor(
             when (tone) {
@@ -636,21 +739,34 @@ class MainActivity : AppCompatActivity() {
     }
 
     // ── modes / controls ────────────────────────────────────────────────────
-    private fun applyMode() {
+    /**
+     * Show the mode (the Tray|Tap chip, the Area, the overlay) and, with [pushAuto], hand
+     * it to the camera. Handing Tray over again is not harmless: it puts the scanner back
+     * to WATCHING, so a card that already scanned is shot again — the browser's PATCH
+     * passes false unless the mode changed ([appliedAuto]). The status line is the mode's
+     * own only with [restate] (or a default Area just drawn): a PATCH that keeps the mode
+     * and the Area leaves what the scanner or the identifier last said (review of 1.1.17 —
+     * "Tray: waiting for a steady view…" stayed up over "✓ <name> — … Next card…", since
+     * the scanner, rightly left in AWAIT_NEXT, says nothing new until that card leaves).
+     */
+    private fun applyMode(pushAuto: Boolean = true, restate: Boolean = pushAuto) {
         styleAuto()
         val drew = ensureArea()
         showArea()
         overlay.setBox(null, 176, 132, OverlayView.BoxState.SETTLING)
         updateAreaBtn()
-        camera?.setAuto(settings.auto)
-        setStatus(
+        if (pushAuto) {
+            camera?.setAuto(settings.auto)
+            appliedAuto = settings.auto
+        }
+        if (restate || drew) setStatus(
             when {
                 drew -> StatusText.AREA_DEFAULT
                 settings.auto -> StatusText.WAITING
                 else -> StatusText.AUTO_OFF
             }
         )
-        if (app.updates.locked) setStatus(getString(R.string.update_required_status), Tone.ERR)
+        if (app.updates.locked) coverWithLockLine()
     }
 
     /**
@@ -681,12 +797,14 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setAutoMode(auto: Boolean) {
+        if (cancelProbeFor("Tray | Tap")) return
         if (settings.auto == auto) return
         dlog.i("ui", "mode → ${if (auto) "Tray" else "Tap to scan"}")
         if (drawing) cancelArea()
         settings.auto = auto
         styleAuto()
         camera?.setAuto(settings.auto)
+        appliedAuto = settings.auto
         if (settings.auto) {
             // Tray scans wherever the card is put down: ask for a box around that spot
             // (owner). Cancel keeps the current Area.
@@ -751,6 +869,7 @@ class MainActivity : AppCompatActivity() {
 
     /** phone.html areaBtn: Cancel while drawing; clear an existing area; else start drawing. */
     private fun onAreaButton() {
+        if (cancelProbeFor("the Area button")) return
         when {
             drawing -> {
                 cancelArea(); setStatus(StatusText.AREA_UNCHANGED)
@@ -788,11 +907,31 @@ class MainActivity : AppCompatActivity() {
         camera?.setDrawing(false)  // …at the new Area's zoom
         appliedRoi = r
         updateAreaBtn()
-        setStatus(StatusText.AREA_SET)
+        // The off-centre hint (1.1.17): setArea ran just now on this thread, so the state has the new Area.
+        areaHintFor = r
+        setStatus(StatusText.areaSet(areaHint()))
     }
+
+    /**
+     * The Area the off-centre hint was said for (1.1.17), or null. After an Area is saved
+     * here the hint stays on the Tray's own lines — the area-set line while the new Area's
+     * tray is learned, then "watching for a card…" — until the next capture or another
+     * Area. The scanner's very next tick (Learning, ~200 ms: a new Area re-learns the tray)
+     * used to replace it, so in Tray, where switching asks for the box, the owner never
+     * read it (review of 39ef7cf). Tap to scan is unaffected (the scanner says nothing).
+     */
+    private var areaHintFor: RoiFrac? = null
+
+    /**
+     * The off-centre hint's short words while it is due ([areaHintFor] is still the Area) — read live — else null.
+     * With Zoom to fit off they name who would zoom ("centred, Zoom to fit would zoom …"): off, nothing zooms.
+     */
+    private fun areaHint(): String? =
+        areaHintFor?.takeIf { it == settings.roi }?.let { camera?.zoomState()?.let { st -> st.offCentre?.short(on = st.enabled) } }
 
     private fun onScanTap() {
         if (camera == null || app.updates.locked) return
+        if (cancelProbeFor("the shutter")) return          // the probe holds the camera: nothing is scanned
         dlog.i("ui", "shutter tapped")
         hideRetry()
         forgetLastCapture()   // a new capture supersedes the previous card
@@ -803,6 +942,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun onRetryTap() {
         if (app.updates.locked) return
+        if (cancelProbeFor("Retry")) return
         val id = retryScanId ?: return
         pendingReplace = id
         hideRetry()
@@ -861,8 +1001,11 @@ class MainActivity : AppCompatActivity() {
         cam.setRoi(settings.roi)
         appliedRoi = settings.roi
         cam.setAuto(settings.auto)
+        appliedAuto = settings.auto
+        cam.setMeasureDetail(measureArmOn())
         cam.bind(this, preview, cameraListener)
         syncPause()
+        refreshMeasure()                 // the zoom A/B's notes read the camera's zoom: there is one now
     }
 
     // ── the update lock ─────────────────────────────────────────────────────
@@ -878,14 +1021,69 @@ class MainActivity : AppCompatActivity() {
         val latest = app.updates.latest
         if (locked && latest != null) {
             lockText.text = getString(R.string.update_required_msg, latest.version, BuildConfig.VERSION_NAME)
-            hideRetry()
-            setStatus(getString(R.string.update_required_status), Tone.ERR)
+            coverWithLockLine()
         }
         val was = lockView.visibility == View.VISIBLE
         if (was != locked) dlog.w("update", if (locked) "a newer release (${latest?.version}) is out — scanning stopped" else "update lock lifted")
         lockView.visibility = if (locked) View.VISIBLE else View.GONE
         syncPause()
-        if (was && !locked) applyMode()   // (only a rolled-back release unlocks a running build)
+        if (was && !locked) liftLock()
+    }
+
+    /** A status line the update lock's own line went up over, and the mode it was said in. */
+    private class CoveredLine(val text: String, val tone: Tone, val auto: Boolean)
+
+    /**
+     * The line "Update required" covers — the last one it went up over: when the lock came up,
+     * or a newer one written under it since (an identification answering: the queue never
+     * stops) that a later lock check or PATCH covered again. Put back when the lock lifts
+     * ([liftLock]); null = nothing to put back (the lift says the mode's line). Locked since
+     * launch, it is the mode's line onCreate said (applyMode covers it, still unbound).
+     */
+    private var lockCovered: CoveredLine? = null
+
+    /** The Retry the lock hid (scan id, [captureGen] then): given back at the lift while that card is still the current one. */
+    private var lockHidRetry: Pair<Long, Int>? = null
+
+    /**
+     * Put the lock's own line up, remembering the line it covers ([lockCovered]) and the Retry
+     * it hides (the lock refuses Retry; a "Retry with a fresh capture?" line without its button
+     * would invite a tap on nothing).
+     */
+    private fun coverWithLockLine() {
+        val lockLine = getString(R.string.update_required_status)
+        val now = statusView.text.toString()
+        if (now != lockLine) lockCovered = CoveredLine(now, statusTone, settings.auto)
+        retryScanId?.let { lockHidRetry = it to captureGen }
+        hideRetry()
+        setStatus(lockLine, Tone.ERR)
+    }
+
+    /**
+     * Only a rolled-back release unlocks a running build. The lock only PAUSED detection — the
+     * scanner kept its state, e.g. AWAIT_NEXT on a card it already filed — so: hand the camera
+     * the mode only if it changed meanwhile (as a PATCH does — handing Tray over again puts a
+     * card that already scanned back to WATCHING, filed twice), and put back what the lock
+     * covered rather than restate the mode's line (review of e418d1c: "Tray: waiting for a
+     * steady view…" over a scanner still waiting for its card to leave — AwaitingNext ticks never
+     * rewrite the line — invited the owner to re-seat it, filed again). A line written under the
+     * lock since is newer: it stays. The mode's own line only when the mode changed, or when
+     * the lock covered nothing else.
+     */
+    private fun liftLock() {
+        val covered = lockCovered
+        val hidRetry = lockHidRetry
+        lockCovered = null
+        lockHidRetry = null
+        val lockLine = getString(R.string.update_required_status)
+        val pushAuto = settings.auto != appliedAuto
+        val showing = statusView.text.toString() == lockLine
+        val putBack = covered?.takeIf { showing && !pushAuto && it.auto == settings.auto }
+        applyMode(pushAuto = pushAuto, restate = pushAuto || (showing && putBack == null))
+        // (applyMode may have drawn Tap to scan's default Area: its line is newer.)
+        if (putBack != null && statusView.text.toString() == lockLine) setStatus(putBack.text, putBack.tone)
+        // No Trigger, NextCard, shutter or Retry since (each supersedes the card): its Retry is still good.
+        if (hidRetry != null && hidRetry.second == captureGen && retryScanId == null) offerRetry(hidRetry.first)
     }
 
     private fun downloadUpdate() {
@@ -962,7 +1160,10 @@ class MainActivity : AppCompatActivity() {
             // freezes there until the pipeline answers — not when it returns, which
             // painted the box grey in between (blue → grey → blue). Cancelled if
             // THIS capture fails (tagged by burst: two can be in flight).
-            runOnUiThread { vibrateTick(); overlay.beginHold(settings.checkMs.toLong(), id) }
+            runOnUiThread {
+                vibrateTick(); overlay.beginHold(settings.checkMs.toLong(), id)
+                areaHintFor = null       // the off-centre hint has had its say: scanning has started
+            }
             awake.poke(if (manual) "shutter" else "scan")   // a dimmed screen lights for the ✓
         }
 
@@ -1001,6 +1202,7 @@ class MainActivity : AppCompatActivity() {
                     if (!drawing) overlay.setRoi(viewRoi)
                 }
                 updateAreaBtn()
+                refreshMeasure()         // the zoom A/B's B line says the zoom it runs at
             }
         }
 
@@ -1025,8 +1227,11 @@ class MainActivity : AppCompatActivity() {
         when (event) {
             is AutoScanner.Event.Idle -> Unit
             is AutoScanner.Event.Learning -> {
-                if (event.learned) setStatus(StatusText.WATCHING)
-                else if (settings.auto) setStatus(StatusText.WAITING)
+                // An off-centre hint still due stays on screen: the area-set line while the new
+                // Area's tray is learned, then on the watching line ([areaHintFor]).
+                val hint = areaHint()
+                if (event.learned) setStatus(StatusText.withAreaHint(StatusText.WATCHING, hint))
+                else if (settings.auto) setStatus(if (hint != null) StatusText.areaSet(hint) else StatusText.WAITING)
             }
             is AutoScanner.Event.Watching -> {
                 overlay.setBox(event.box, sw, sh,
@@ -1067,20 +1272,32 @@ class MainActivity : AppCompatActivity() {
     private fun refreshMeasure() {
         if (!::measureCard.isInitialized) return
         val m = app.measure
+        probeBack.isEnabled = m.active
         if (!m.active) { measureCard.visibility = View.GONE; return }
         val st = m.step
+        val probeStep = st.action == MeasureSession.Action.PROBE
         measureCard.visibility = View.VISIBLE
         measureTitle.text = getString(R.string.measure_step, m.index + 1, m.steps.size, st.title)
         measureText.text = st.instruction
         val count = if (st.target > 0) getString(R.string.measure_captures_of, m.captures, st.target) else getString(R.string.measure_captures, m.captures)
-        measureCount.text = if (st.minutes > 0) {
+        measureCount.text = (if (st.minutes > 0) {
             val secs = ((System.currentTimeMillis() - m.stepStartedAt) / 1000L).coerceAtLeast(0)
             count + " · " + getString(R.string.measure_elapsed, secs / 60, secs % 60, st.minutes)
-        } else count
+        } else count) + m.countExtra(settings.auto, camera?.zoomState()) +   // the zoom A/B: tally, notes, summary (text only)
+            // The probe's step: where the run is, else how the last one ended, else what the session's runs say.
+            (if (probeStep) (probeCount ?: probeWords ?: m.probeLine())?.let { "\n$it" } ?: "" else "")
         val q = st.question
         measureQuestion.visibility = if (q != null) View.VISIBLE else View.GONE
         measureQuestion.text = q?.let { it + (m.answer?.let { a -> if (a) "  ✓ yes" else "  ✗ no" } ?: "") } ?: ""
-        measureYesNo.visibility = if (q != null) View.VISIBLE else View.GONE
+        measureYes.visibility = if (q != null) View.VISIBLE else View.GONE
+        measureNo.visibility = if (q != null) View.VISIBLE else View.GONE
+        probeBtn.visibility = if (probeStep) View.VISIBLE else View.GONE
+        if (probeStep) probeBtn.text = getString(when {
+            probing() -> R.string.measure_probe_cancel
+            probeWords != null || m.probeRuns.isNotEmpty() -> R.string.measure_probe_again
+            else -> R.string.measure_probe_run
+        })
+        measureActions.visibility = if (q != null || probeStep) View.VISIBLE else View.GONE
         measureBack.visibility = if (m.index > 0) View.VISIBLE else View.INVISIBLE
         measureNext.text = getString(if (m.isLast) R.string.measure_finish else R.string.measure_next)
     }
@@ -1088,28 +1305,143 @@ class MainActivity : AppCompatActivity() {
     private fun measureAnswer(yes: Boolean) { app.measure.answer(yes); refreshMeasure() }
 
     private fun measureNextStep() {
+        if (cancelProbeFor("Next")) return
         val wasLast = app.measure.isLast
         app.measure.next()
         afterMeasureStep()
         if (wasLast && !app.measure.active) DebugShare.share(this, app)     // the last step: hand over the report
     }
 
+    private fun measureBackStep() {
+        if (cancelProbeFor("Back")) return
+        app.measure.back()
+        afterMeasureStep()
+    }
+
     private fun measureStop() {
+        if (cancelProbeFor("Stop")) return
         app.measure.finish(abandoned = true)
         afterMeasureStep()
         setStatus(getString(R.string.measure_stopped), Tone.OK)
     }
 
-    /** A step changed its settings (AE lock, vibration, check time): apply what the camera reads live. */
+    /** The zoom A/B's arm steps measure each capture's identification-raster detail (CapturePipeline.measureDetail). */
+    private fun measureArmOn(): Boolean = app.measure.active && app.measure.step.arm != null
+
+    /**
+     * A step changed its settings (AE lock, vibration, check time, Zoom to fit) — or the
+     * session ended and put the owner's back: apply what the camera reads live. Before
+     * 1.1.17 only AE lock was pushed, so the zoom A/B's B step would have run at 1×.
+     */
     private fun afterMeasureStep() {
+        // The probe belongs to its step (Back / Next / Stop only cancel it while it runs — this is a guard).
+        if (probing() && (!app.measure.active || app.measure.step.action != MeasureSession.Action.PROBE))
+            camera?.cancelZoomProbe("the step changed")
+        probeWords = null
         camera?.setAeLock(settings.aeLock)
+        camera?.setZoomFit(settings.zoomFit)
+        camera?.setMeasureDetail(measureArmOn())
+        val m = app.measure
+        // The switch logs nothing when it did not change: record what this step zooms anyway
+        // (target, Area fit, lossless, lens max, MAX_ZOOM).
+        if (m.active && m.step.zoomFit != null) dlog.i("test", "step ${m.index + 1}/${m.steps.size} ${m.step.id} zoom: " +
+            (camera?.zoomState()?.describe() ?: "no camera"))
         refreshMeasure()
         measureCard.removeCallbacks(measureTick); if (app.measure.active) measureCard.postDelayed(measureTick, 1000)
     }
 
+    // ── the zoom probe (1.1.17) ─────────────────────────────────────────────
+    /** The probe runs: started from here and not over, or the camera says so. */
+    private fun probing(): Boolean = probeRun > 0 || camera?.zoomProbeRunning() == true
+
+    /**
+     * The touch policy: while the probe runs, every control on this screen ONLY cancels it —
+     * through its verified restore, never a stop that skips it (a screen left, a lens or Area
+     * changed) — and does nothing else; the owner taps again once it is over. True = it did.
+     */
+    private fun cancelProbeFor(control: String): Boolean {
+        if (!probing()) return false
+        dlog.i("ui", "$control during the zoom probe — it only cancels the probe")
+        camera?.cancelZoomProbe(control)
+        setStatus(StatusText.PROBE_CANCELLING)
+        return true
+    }
+
+    /** The probe step's button: Run probe / Run again, or Cancel probe while it runs. */
+    private fun onProbeButton() {
+        if (probing()) {
+            dlog.i("ui", "Cancel probe tapped")
+            camera?.cancelZoomProbe("Cancel probe")
+            return
+        }
+        val m = app.measure
+        if (!m.active || m.step.action != MeasureSession.Action.PROBE) return
+        val run = m.nextProbeRun()
+        val cam = camera
+        if (cam == null || !cam.startZoomProbe(run, m.probeEarlier(), ProbeUi(run))) {
+            probeWords = StatusText.PROBE_NOT_READY
+            setStatus(StatusText.PROBE_NOT_READY, Tone.ERR)
+            refreshMeasure()
+            return
+        }
+        dlog.i("ui", "Run probe tapped — zoom probe run $run")
+        probeRun = run
+        probeCount = null
+        probeHeldStatus = null
+        hideRetry()
+        refreshMeasure()
+        awake.poke("zoom probe")
+    }
+
+    /**
+     * One run's words on this screen (CameraAdapter posts each on the UI thread, in order). The
+     * Area is drawn where it sits at the zoom the camera ANSWERED, the card's outline and watch
+     * window are hidden (the analyzer is paused: they would be stale), the screen is kept lit.
+     */
+    private inner class ProbeUi(private val run: Int) : ProbeListener {
+        override fun onProgress(status: String, count: String, z: Double?) {
+            if (probeRun != run || isFinishing || isDestroyed) return
+            z?.let { zoomShown = it }
+            showArea()
+            updateAreaBtn()
+            overlay.setBox(null, 176, 132, OverlayView.BoxState.SETTLING)
+            setStatus(status)
+            probeCount = count
+            refreshMeasure()
+            awake.poke("zoom probe")
+        }
+
+        override fun onFinished(outcome: ZoomProbeRun.Outcome) {
+            val mine = probeRun == run
+            if (mine) { probeRun = 0; probeCount = null }
+            // Kept for the session (and the last verdict for Diagnostics / the computer) even if this screen is gone.
+            val words = app.measure.recordProbe(run, outcome)
+            if (isFinishing || isDestroyed) return
+            if (mine) probeWords = words
+            // The coordinator's end maps the Area again (onZoom): the chip and the overlay follow it there.
+            val (msg, tone) = when (outcome.kind) {
+                ZoomProbeRun.Kind.DONE -> StatusText.PROBE_DONE to Tone.OK
+                ZoomProbeRun.Kind.REFUSED -> StatusText.PROBE_REFUSED to Tone.ERR
+                ZoomProbeRun.Kind.CANCELLED -> outcome.words to Tone.NORMAL
+                ZoomProbeRun.Kind.STOPPED -> StatusText.PROBE_STOPPED to Tone.ERR
+            }
+            // A scan identified meanwhile (it was not opened): the probe's end in a few words, then what the scan said
+            // (review of a43cb5b: the pill has 2 lines, the long end line filled both and the held one was ellipsized
+            // away). The card above carries the probe's own words.
+            val held = probeHeldStatus.takeIf { !probing() }
+            if (held != null) probeHeldStatus = null
+            setStatus(held?.let { StatusText.probeEndShort(outcome.kind) + " · " + it } ?: msg, tone)
+            refreshMeasure()
+            if (remoteDeferred) { remoteDeferred = false; applyRemoteNow() }
+        }
+    }
+
     private fun handleCaptured(capture: Captured, manual: Boolean) {
         settings.addTiming(capture.timings)
-        if (app.measure.active) { app.measure.captured(); refreshMeasure() }
+        if (app.measure.active) {
+            app.measure.captured(capture.burstId, manual, capture.zoom, capture.cardLongPx(), capture.stripDetail, capture.iso)
+            refreshMeasure()
+        }
         val replace = if (manual) pendingReplace else null
         pendingReplace = null
         // Tapped with Auto off: this scan opens once it's identified (was Handheld's price check).
@@ -1136,7 +1468,10 @@ class MainActivity : AppCompatActivity() {
             capture.scene?.let { sceneByJob[jobId] = it }
             // Posted before any outcome can be (same reason); skipped if a Trigger/NextCard/
             // mode change superseded this capture while it was being written.
-            runOnUiThread { if (gen == captureGen) lastCaptureJobId = jobId }
+            runOnUiThread {
+                if (gen == captureGen) lastCaptureJobId = jobId
+                app.measure.queued(jobId, capture.burstId)       // the zoom A/B matches the outcome by it
+            }
         }
         try {
             io.execute(work)
@@ -1157,7 +1492,7 @@ class MainActivity : AppCompatActivity() {
                 queueView.text = t
                 queueView.visibility = if (t.isEmpty()) View.GONE else View.VISIBLE
                 if (lastError != null && awaitingOpen > 0) {
-                    setStatus(StatusText.QUEUED_OPEN)
+                    outcomeStatus(StatusText.QUEUED_OPEN)
                 }
             }
         }
@@ -1168,8 +1503,21 @@ class MainActivity : AppCompatActivity() {
     /** Tests drive the camera's callbacks (Robolectric has no camera to bind). */
     internal val cameraListenerForTest: CameraPort.Listener get() = cameraListener
 
+    /** Tests hand the screen an identification's outcome (Robolectric has no upload queue running). */
+    internal val uploadListenerForTest: UploadPort.Listener get() = uploadListener
+
+    /** Tests read what the status line says now. */
+    internal val statusForTest: String get() = statusView.text.toString()
+
+    /** Tests wait for a capture's job to become the current card (the queue answers on [io]). */
+    internal val lastCaptureJobIdForTest: String? get() = lastCaptureJobId
+
+    /** Tests deliver UpdateLock's "the lock state changed" (Robolectric never asks GitHub). */
+    internal fun updateLockChangedForTest() = lockListener()
+
     private fun handleOutcome(jobId: String, manual: Boolean, openScan: Boolean, replaceScanId: Long?, outcome: Outcome) {
         val scene = sceneByJob.remove(jobId)
+        if (app.measure.active) { app.measure.identified(jobId, outcome); refreshMeasure() }   // the zoom A/B's tally
         // Only the most recent capture's job may offer Retry (see lastCaptureJobId).
         val current = jobId == lastCaptureJobId
         // openScan = a shutter tap with Auto off: the scan opens once identified.
@@ -1184,40 +1532,52 @@ class MainActivity : AppCompatActivity() {
         })
         when (outcome) {
             is Outcome.NoCard -> {
-                setStatus(StatusText.NO_CARD, Tone.ERR)
+                outcomeStatus(StatusText.NO_CARD, Tone.ERR)
                 camera?.noCard(scene)
                 // A Retry that came back no_card left the failed row in place — keep offering
                 // Retry for it (phone.html does), but only while that card is still the current one.
                 if (current && replaceScanId != null && replaceScanId > 0) offerRetry(replaceScanId)
             }
             is Outcome.AutoFiled -> {
-                setStatus(StatusText.identified(outcome.json, manual), Tone.OK)
+                outcomeStatus(StatusText.identified(outcome.json, manual), Tone.OK)
                 if (openScan) openPick(outcome.scanId, true, outcome.json)
             }
             is Outcome.NeedsPick -> {
-                setStatus(StatusText.identified(outcome.json, manual), Tone.OK)
+                outcomeStatus(StatusText.identified(outcome.json, manual), Tone.OK)
                 if (manual) openPick(outcome.scanId, openScan, outcome.json)
             }
             is Outcome.BestGuess -> {
-                setStatus(StatusText.bestGuess(outcome.json, manual), Tone.ERR)
+                outcomeStatus(StatusText.bestGuess(outcome.json, manual), Tone.ERR)
                 if (manual) openPick(outcome.scanId, openScan, outcome.json)
             }
             is Outcome.NoMatch -> {
-                setStatus(StatusText.noMatch(outcome.json), Tone.ERR)
+                outcomeStatus(StatusText.noMatch(outcome.json), Tone.ERR)
                 // A stale job's NoMatch only sets the status line: another card is in view now.
                 if (current && outcome.scanId > 0) offerRetry(outcome.scanId)
             }
-            is Outcome.Rejected -> setStatus(getString(R.string.upload_rejected, outcome.code), Tone.ERR)
+            is Outcome.Rejected -> outcomeStatus(getString(R.string.upload_rejected, outcome.code), Tone.ERR)
         }
+    }
+
+    /**
+     * An identification's status line — held while the zoom probe runs (review of a60e51d): the
+     * pill is the probe's ("Zoom probe 7/15 · 1.60× — hands off the tray") until it ends, and the
+     * last line held comes under its end. Otherwise it is [setStatus].
+     */
+    private fun outcomeStatus(msg: String, tone: Tone = Tone.NORMAL) {
+        if (probing()) probeHeldStatus = msg else setStatus(msg, tone)
     }
 
     private fun openPick(scanId: Long, openScan: Boolean, json: org.json.JSONObject) {
         if (scanId <= 0) return
-        if (resumed) {
+        if (resumed && !probing()) {
             if (openScan) setStatus(StatusText.opening(json), Tone.OK)
             openPanel(scanId)
         } else {
-            setStatus(getString(R.string.open_scans_hint, StatusText.name(json)), Tone.OK)
+            // Mid-probe (review of a60e51d): opening it would leave this screen — a lifecycle stop that
+            // ends the probe with no verified restore. It is filed; it waits in Scans, as when away.
+            if (resumed) dlog.i("ui", "scan #$scanId identified during the zoom probe — not opened (leaving would stop the probe); it is in Scans")
+            outcomeStatus(getString(R.string.open_scans_hint, StatusText.name(json)), Tone.OK)
         }
     }
 }

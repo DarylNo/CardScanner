@@ -1,0 +1,56 @@
+{
+ "url": "https://facetofacegames.com/search/suggest.json?q=Urza%27s%20Saga%20114%20Mystery%20Booster%202&resources%5Btype%5D=product&resources%5Blimit%5D=20&resources%5Boptions%5D%5Bunavailable_products%5D=show",
+ "body": {
+  "resources": {
+   "results": {
+    "products": [
+     {
+      "title": "Urza's Saga [114] [White Border] [Mystery Booster 2] [Non-Foil]",
+      "handle": "urzas-saga-114-white-border-mystery-booster-2-non-foil",
+      "available": true
+     },
+     {
+      "title": "Urza, Lord High Artificer [244] [Future Frame] [Mystery Booster 2] [Foil]",
+      "handle": "urza-lord-high-artificer-244-future-frame-mystery-booster-2-foil",
+      "available": false
+     },
+     {
+      "title": "Urza's Bauble [237] [Future Frame] [Mystery Booster 2] [Foil]",
+      "handle": "urzas-bauble-237-future-frame-mystery-booster-2-foil",
+      "available": true
+     },
+     {
+      "title": "Urza's Bauble [237] [Future Frame] [Mystery Booster 2] [Non-Foil]",
+      "handle": "urzas-bauble-237-future-frame-mystery-booster-2-non-foil",
+      "available": true
+     },
+     {
+      "title": "Umbral Mantle [101] [White Border] [Mystery Booster 2] [Non-Foil]",
+      "handle": "umbral-mantle-101-white-border-mystery-booster-2-non-foil",
+      "available": true
+     },
+     {
+      "title": "Mystery Booster 2 - Booster Box",
+      "handle": "mystery-booster-2-booster-box",
+      "available": false
+     },
+     {
+      "title": "Uro, Titan of Nature's Wrath [93] [White Border] [Mystery Booster 2] [Non-Foil]",
+      "handle": "uro-titan-of-natures-wrath-93-white-border-mystery-booster-2-non-foil",
+      "available": true
+     },
+     {
+      "title": "Sensei's Divining Top [231] [Future Frame] [Mystery Booster 2] [Non-Foil]",
+      "handle": "senseis-divining-top-231-future-frame-mystery-booster-2-non-foil",
+      "available": true
+     },
+     {
+      "title": "Mystic Sanctuary [110] [White Border] [Mystery Booster 2] [Non-Foil]",
+      "handle": "mystic-sanctuary-110-white-border-mystery-booster-2-non-foil",
+      "available": true
+     }
+    ]
+   }
+  }
+ }
+}

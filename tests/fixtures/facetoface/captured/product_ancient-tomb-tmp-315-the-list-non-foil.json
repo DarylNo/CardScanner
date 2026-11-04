@@ -1,0 +1,23 @@
+{
+ "url": "https://facetofacegames.com/products/ancient-tomb-tmp-315-the-list-non-foil.json",
+ "body": {
+  "product": {
+   "title": "Ancient Tomb [TMP-315] [The List] [Non-Foil]",
+   "handle": "ancient-tomb-tmp-315-the-list-non-foil",
+   "variants": [
+    {
+     "sku": "SIN-MTG-PLIST-574-ENG-NM-NF",
+     "title": "NM",
+     "option1": "NM",
+     "price": "199.99"
+    },
+    {
+     "sku": "SIN-MTG-PLIST-574-ENG-PL-NF",
+     "title": "PL",
+     "option1": "PL",
+     "price": "179.99"
+    }
+   ]
+  }
+ }
+}

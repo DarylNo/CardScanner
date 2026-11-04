@@ -4,6 +4,7 @@ import android.content.ContentValues
 import android.database.Cursor
 import android.database.DatabaseUtils
 import android.database.sqlite.SQLiteDatabase
+import io.github.darylno.cardscanner.core.DebugLog
 import io.github.darylno.cardscanner.core.MiniJson
 import io.github.darylno.cardscanner.core.server.ScanStore
 import io.github.darylno.cardscanner.core.server.isoNow
@@ -13,11 +14,17 @@ import java.io.File
  * [ScanStore] on the phone's own SQLite (Stage 3a) — the rig's `scans` table,
  * column for column (server/store.py), so a row reads back exactly as the
  * Python store's `dict(row)`. JSON fields are TEXT, decoded on every read.
- * The golden API replay runs against this class too (SqliteScanStoreTest).
+ * The golden API replay runs against this class too (PhoneServerTest); the
+ * one-time re-price on open ([repriceAll]) is SqliteScanStoreTest.
  */
 class SqliteScanStore(file: File, private val clock: () -> String = ::isoNow) : ScanStore {
     private val db: SQLiteDatabase
-    private val lock = Any()
+    /**
+     * Held by every read and write — [list] for the whole decode of every row, and the price
+     * worker lists on every poll — so taking it can wait: never on the main thread. Internal so
+     * tests can hold it in place of a long [list].
+     */
+    internal val lock = Any()
 
     init {
         file.parentFile?.mkdirs()
@@ -28,6 +35,38 @@ class SqliteScanStore(file: File, private val clock: () -> String = ::isoNow) : 
             val out = HashSet<String>(); while (c.moveToNext()) out += c.getString(1); out
         }
         if ("flagged" !in cols) db.execSQL("ALTER TABLE scans ADD COLUMN flagged INTEGER NOT NULL DEFAULT 0")
+        migrate()
+    }
+
+    /**
+     * store.py's `_migrate`: data migrations by PRAGMA user_version, each in ONE
+     * transaction with its stamp, so each runs exactly once (a fresh file runs them
+     * on an empty table and is stamped too). A failure rolls back and leaves the
+     * version as it was — retried on the next open; the store still opens (it holds
+     * the only copy of the scans).
+     */
+    private fun migrate() {
+        if (db.version >= 1) return
+        try {
+            var reset = Triple(0, 0, 0)
+            db.beginTransaction()                    // EXCLUSIVE; re-read the stamp inside it
+            try {
+                if (db.version < 1) {
+                    reset = repriceAll(db)
+                    db.version = 1
+                }
+                db.setTransactionSuccessful()
+            } finally {
+                db.endTransaction()
+            }
+            val (nSel, nTop, nCand) = reset
+            if (nSel > 0 || nTop > 0 || nCand > 0) {
+                DebugLog.global.i("store", "re-price: $nSel selection(s) and $nCand candidate print(s) " +
+                    "dropped their F2F answer, $nTop unpicked scan(s) their top-match price")
+            }
+        } catch (e: Exception) {
+            DebugLog.global.w("store", "re-price failed, retried on the next open: $e")
+        }
     }
 
     override fun create(identified: Boolean, cardRead: Map<String, Any?>?, confidence: Map<String, Any?>?,
@@ -102,6 +141,74 @@ class SqliteScanStore(file: File, private val clock: () -> String = ::isoNow) : 
     }
 
     companion object {
+        /**
+         * store.py's `_reprice_all` — the one-time re-price (PRAGMA user_version 0 → 1,
+         * release 1.1.17): EVERY F2F answer recorded before it is dropped once, and
+         * PriceWorker prices again from the phone's own connection at its usual pacing — a
+         * one-time catch-up; new scans still jump the queue (PriceSweep.priceCheck). The
+         * owner chose all, not just The List's sets: the 1.1.17 matcher change (F2fPricer,
+         * facetoface.py) reaches every set. The old set-name fallback was collector- and
+         * name-blind in EVERY set — an unstocked card filed another card of the same set's
+         * price (Mortuary [STH-66] → Buried Alive's $4.99) — and a title with variant
+         * brackets ("Lightning Bolt [401] [Rulebook Showcase] [Commander Legends: Battle for
+         * Baldur's Gate] [Non-Foil]", about a third of F2F's titles) never matched its own
+         * collector, so a showcase / borderless / Secret Lair printing often holds the
+         * regular printing's price. The List's prints were never found under their own SKUs
+         * at all (plst = MB1 / FMB1 / PLIST / PLST, ulst = UPLIST, cmb2 = CMB1 + NOPW). And
+         * the sweep never re-asks an answer it recorded, so without this none of that would
+         * reach a card already scanned.
+         *
+         * In place: a scan's `f2f` column → NULL (a selection's price, owed again; an
+         * unpicked scan's own top-match price from scan time or the desktop's "Search F2F
+         * price" — PriceSweep reads only its candidates, so that one is owed nowhere), and
+         * every candidate's `f2f_conditions` key → removed (PriceSweep reads a missing key
+         * exactly like null — owed on an unpicked scan; a picked scan prices only its
+         * selection). Writes only those two columns, only on rows that change: updated_at,
+         * status, the selection and everything else stay as they were. A row whose JSON
+         * does not decode is left alone. Returns (selections, unpicked scans' own prices,
+         * candidate prints) reset. The caller holds the transaction.
+         */
+        internal fun repriceAll(db: SQLiteDatabase): Triple<Int, Int, Int> {
+            var nSel = 0
+            var nTop = 0
+            var nCand = 0
+            data class Raw(val id: Long, val sel: String?, val f2fNull: Boolean, val cands: String?)
+            val rows = db.rawQuery("SELECT id, selection, f2f IS NULL, candidates FROM scans", null).use { c ->
+                val out = ArrayList<Raw>()
+                while (c.moveToNext()) out += Raw(c.getLong(0), if (c.isNull(1)) null else c.getString(1),
+                    c.getLong(2) != 0L, if (c.isNull(3)) null else c.getString(3))
+                out
+            }
+            for (r in rows) {
+                val (sel, cands) = try {
+                    (if (r.sel.isNullOrEmpty()) null else MiniJson.parse(r.sel)) to
+                        (if (r.cands.isNullOrEmpty()) null else MiniJson.parse(r.cands))
+                } catch (e: IllegalArgumentException) {
+                    continue
+                }
+                if (!r.f2fNull) {
+                    db.execSQL("UPDATE scans SET f2f = NULL WHERE id = ?", arrayOf<Any?>(r.id))
+                    if (sel is Map<*, *> && sel.isNotEmpty()) nSel++ else nTop++
+                }
+                if (cands is List<*>) {
+                    var dropped = 0
+                    for (c in cands) {
+                        if (c is Map<*, *> && c.containsKey("f2f_conditions")) {
+                            @Suppress("UNCHECKED_CAST")
+                            (c as MutableMap<String, Any?>).remove("f2f_conditions")   // MiniJson: LinkedHashMap
+                            dropped++
+                        }
+                    }
+                    if (dropped > 0) {
+                        db.execSQL("UPDATE scans SET candidates = ? WHERE id = ?",
+                            arrayOf<Any?>(MiniJson.stringify(cands), r.id))
+                        nCand += dropped
+                    }
+                }
+            }
+            return Triple(nSel, nTop, nCand)
+        }
+
         /** server/store.py's `_SCHEMA`, verbatim. */
         const val SCHEMA = """
 CREATE TABLE IF NOT EXISTS scans (

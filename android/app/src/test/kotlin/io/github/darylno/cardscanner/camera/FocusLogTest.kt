@@ -1,5 +1,6 @@
 package io.github.darylno.cardscanner.camera
 
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -112,5 +113,37 @@ class FocusLogTest {
         assertEquals("AF FOCUSED_LOCKED · lens 4.00 dpt", ring.latest()!!.describe(calibrated = false))
         ring.clear()
         assertNull(ring.latest())
+    }
+
+    /**
+     * The zoom probe (1.1.17) reads each frame's OWN zoom: CONTROL_ZOOM_RATIO and the crop
+     * region ride the meta (plain Ints — this test is plain JUnit, no android.graphics.Rect),
+     * and the 5-argument form every caller before 1.1.17 used still builds a meta without them.
+     */
+    @Test fun aFramesZoomAndCropAreKept() {
+        val m = FrameMetaRing.Meta(100, 4, 4.2f, 16_666_667, 400, zoomRatio = 1.6f, crop = intArrayOf(0, 0, 4160, 3120))
+        assertEquals(1.6f, m.zoomRatio!!, 0f)
+        assertArrayEquals(intArrayOf(0, 0, 4160, 3120), m.crop)
+        val old = FrameMetaRing.Meta(100, 4, 4.2f, 16_666_667, 400)
+        assertNull(old.zoomRatio); assertNull(old.crop)
+        assertEquals("the words are the same as before", old.describe(true), m.describe(true))
+        val ring = FrameMetaRing()
+        ring.put(m)
+        assertSame(m, ring.at(100))
+        // The frame's zoom by the live read-back's rule (ZoomProbe.frameZoom): CONTROL_ZOOM_RATIO when it is
+        // not 1 (API 30+: the crop is then the full array), else the active array ÷ the crop's width.
+        assertEquals(1.6, m.frameZoom(4160)!!, 1e-6)
+        assertEquals(2.0, FrameMetaRing.Meta(1, null, null, null, null, zoomRatio = 1f, crop = intArrayOf(1040, 780, 2080, 1560))
+            .frameZoom(4160)!!, 1e-9)
+        assertEquals(2.0, FrameMetaRing.Meta(1, null, null, null, null, crop = intArrayOf(1040, 780, 2080, 1560)).frameZoom(4160)!!, 1e-9)
+        assertEquals("no crop, ratio 1: 1", 1.0, FrameMetaRing.Meta(1, null, null, null, null, zoomRatio = 1f).frameZoom(4160)!!, 1e-9)
+        assertNull("nothing reported", old.frameZoom(4160))
+        // Whether the HAL's crop is centred on the active array (a logged fact, not evidence on API 30+).
+        assertEquals(true, m.cropCentred(4160, 3120))
+        assertEquals(true, FrameMetaRing.Meta(1, null, null, null, null, crop = intArrayOf(1040, 780, 2080, 1560)).cropCentred(4160, 3120))
+        assertEquals("a crop 3 % off to the right", false,
+            FrameMetaRing.Meta(1, null, null, null, null, crop = intArrayOf(1165, 780, 2080, 1560)).cropCentred(4160, 3120))
+        assertNull(old.cropCentred(4160, 3120))
+        assertNull("the active array unknown", m.cropCentred(null, null))
     }
 }

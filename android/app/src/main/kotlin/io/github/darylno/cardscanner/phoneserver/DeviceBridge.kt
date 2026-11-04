@@ -2,6 +2,7 @@ package io.github.darylno.cardscanner.phoneserver
 
 import io.github.darylno.cardscanner.core.CameraChoice
 import io.github.darylno.cardscanner.core.DebugLog
+import io.github.darylno.cardscanner.core.MiniJson
 import io.github.darylno.cardscanner.core.server.DeviceApi
 import io.github.darylno.cardscanner.ui.AppSettings
 import java.util.concurrent.TimeUnit
@@ -29,6 +30,8 @@ class DeviceBridge(
         fun applyRemoteSettings(): java.util.concurrent.Future<*>?
         /** The current upright frame as JPEG, or null. Called off the UI thread. */
         fun snapshotJpeg(): ByteArray?
+        /** `snapshot.jpg?view=camera`: the zoomed frame as the camera delivers it, or null. Off the UI thread. */
+        fun cameraSnapshot(): DeviceApi.Picture? = null
         /** The camera's zoom now (any thread), or null. */
         fun zoomState(): io.github.darylno.cardscanner.core.ZoomCoordinator.State? = null
     }
@@ -87,9 +90,16 @@ class DeviceBridge(
 
     override fun snapshot(): ByteArray? = screen?.snapshotJpeg()
 
+    override fun cameraSnapshot(): DeviceApi.Picture? = screen?.cameraSnapshot()
+
     override fun zoom() = screen?.zoomState()
 
     override fun cameraLive(): Boolean = screen != null
+
+    /** The last zoom probe's verdict (1.1.17), from the settings — there with the scan screen closed too; null = never run. */
+    @Suppress("UNCHECKED_CAST")
+    override fun zoomProbe(): Map<String, Any?>? =
+        settings.zoomProbeLast?.let { runCatching { MiniJson.parse(it) as? Map<String, Any?> }.getOrNull() }
 
     companion object {
         /** Longest a PATCH waits for the scan screen to apply it before answering. */

@@ -71,8 +71,10 @@ object PrintingCandidates {
      * every paper printing (print counts span ALL of them, not just the ranked
      * cap); [ranked] is the art matcher's output in ITS order. Sorted (stably)
      * by multi_distance, falling back to phash_distance (missing -> 2^30), the
-     * top [topN] projected, [ocrHint] applied (pipeline._apply_ocr_hint — a
-     * separate port; identity by default), then `art_decisive` marked.
+     * top [topN] — plus each one's List twin that ranked below them, right
+     * after it ([ListTwins.withTwins]; the list may run past [topN]) —
+     * projected, [ocrHint] applied (pipeline._apply_ocr_hint — a separate
+     * port; identity by default), then `art_decisive` marked.
      */
     fun rankedCandidates(
         allPrintings: List<Map<String, Any?>>,
@@ -82,7 +84,7 @@ object PrintingCandidates {
     ): List<LinkedHashMap<String, Any?>> {
         val sorted = ranked.sortedWith { a, b -> Py.compareNum(rankKey(a), rankKey(b)) }
         val counts = Popularity.printCountsByOracle(allPrintings)
-        val candidates = ocrHint(sorted.take(topN).map { candidateDict(it, countFor(counts, it)) })
+        val candidates = ocrHint(ListTwins.withTwins(sorted, topN).map { candidateDict(it, countFor(counts, it)) })
         markArtDecisive(candidates)
         return candidates
     }
@@ -90,13 +92,27 @@ object PrintingCandidates {
     private fun rankKey(p: Map<String, Any?>): Any? =
         p["multi_distance"] ?: Py.get(p, "phash_distance", 1L shl 30)
 
-    /** pipeline._mark_art_decisive: flag candidates[0] when its art lead is beyond doubt. */
+    /**
+     * pipeline._mark_art_decisive: flag candidates[0] when its art lead is
+     * beyond doubt. A List twin of #1 within the gap (or with no distance)
+     * blocks it — a List card hashes like its original; the runner-up is the
+     * first candidate that is NOT #1's twin (a twin [rankedCandidates] pulled
+     * in from below sits at #2 however far back it ranked).
+     */
     fun markArtDecisive(candidates: List<MutableMap<String, Any?>>) {
         if (candidates.size < 2 || Py.truthy(candidates[0]["ocr_confirmed"])) return
-        val d0 = candidates[0]["multi_distance"]
-        val d1 = candidates[1]["multi_distance"]
+        val top = candidates[0]
+        val d0 = top["multi_distance"]
+        val rest = candidates.subList(1, candidates.size)
+        for (c in rest) {
+            if (!ListTwins.twins(top, c)) continue
+            val dt = c["multi_distance"]
+            if (d0 == null || dt == null || Py.compareNum(Py.minus(dt, d0), ART_DECISIVE_GAP) < 0) return
+        }
+        val runner = rest.firstOrNull { !ListTwins.twins(top, it) } ?: rest[0]
+        val d1 = runner["multi_distance"]
         if (d0 != null && d1 != null && Py.compareNum(d0, ART_DECISIVE_CEILING) <= 0 &&
             Py.compareNum(Py.minus(d1, d0), ART_DECISIVE_GAP) >= 0
-        ) candidates[0]["art_decisive"] = true
+        ) top["art_decisive"] = true
     }
 }

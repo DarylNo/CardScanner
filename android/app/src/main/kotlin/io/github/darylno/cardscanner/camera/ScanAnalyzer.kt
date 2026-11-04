@@ -178,6 +178,18 @@ class CaptureBurst(
  * comes back is not a change, and a still card across a real change is learned
  * as part of the new empty tray (never scanned twice). With the zoom off none
  * of this runs: the Area arrives at 1× exactly as [setRoi] always did.
+ *
+ * THE ZOOM PROBE (1.1.17, core ZoomProbeRun; the coordinator holds the gate closed
+ * for every rung): its frames come from their OWN tap ([probeFrames]), served only
+ * inside the closed gate — nothing ticks, copies into the ring or fires while it
+ * runs, and the open-gate path is untouched. [canProbe] reads, after the gate
+ * closed, whether the scanned card may be probed; [stopSnapshots] keeps the
+ * browser's picture from being labelled with a rung the camera has not answered;
+ * [rebaseAfterProbe] re-takes the scanned scene after a VERIFIED end (the same
+ * card in the same place — the probe's AF pass and AE lock change how it looks),
+ * never after an abort, and only on the first sample of the reopening that end
+ * started: a later closure or the camera going away ([cameraAway]) drops it.
+ * Nothing here calls [fire] for the probe.
  */
 class ScanAnalyzer(
     private val commands: Executor,
@@ -236,6 +248,14 @@ class ScanAnalyzer(
     private var heldTimedOut = false
     /** Re-take the scanned scene from the next sample (a late focus settled). */
     private var rebaseNext = false
+    /**
+     * The zoom probe's VERIFIED end owes the same rebase — but only to the first sample of the reopening
+     * that end started ([rebaseAfterProbe]). Any later gate closure ([closeZoomGate]), the camera going away
+     * ([cameraAway]: stopped, closed, reopening — also with no zoom in use, when no gate closes) or a rebind
+     * drops it: carried across a round trip, the first sample back took a card swapped while the screen
+     * was away into the scanned scene and it was never filed (review of a43cb5b).
+     */
+    private var probeRebaseNext = false
     private var deferredBox: Box? = null
     private var deferStartTs = NONE
     private var focusReadyTs = NONE
@@ -258,6 +278,17 @@ class ScanAnalyzer(
      */
     private var snapZ: Double? = null
     private var snapDropLeft = 0
+
+    // --- the zoom probe's own tap (analysis thread; served only inside the closed gate) ---
+    /** An outstanding [probeFrames] ask: [skip] frames dropped (their timestamps kept), then [n] copied. */
+    private class ProbeAsk(val skip: Int, val n: Int, val give: (LongArray, List<Nv21Frame>) -> Unit) {
+        val skipped = ArrayList<Long>(skip)
+        val frames = ArrayList<Nv21Frame>(n)
+    }
+    private var probeAsk: ProbeAsk? = null
+    /** Chroma row scratch for the probe's copies (each frame gets its own NV21 array: nothing is held between asks). */
+    private var probeURow = ByteArray(0)
+    private var probeVRow = ByteArray(0)
 
     // --- display + shadow-mode state (analysis thread; never read by the scanner) ---
     /**
@@ -348,6 +379,8 @@ class ScanAnalyzer(
     @Volatile private var zoomDropped = 0L
     @Volatile private var zoomClosures = 0L
     @Volatile private var zoomChanges = 0L
+    /** Frames copied for the zoom probe (Diagnostics). */
+    @Volatile private var probeCopies = 0L
     /** The zoom ticks are mapped at now (Diagnostics; written on the analysis thread). */
     @Volatile var currentZoom = 1.0
         private set
@@ -399,6 +432,8 @@ class ScanAnalyzer(
             if (sz != null) {
                 if (snapDropLeft > 0) snapDropLeft-- else serveSnapshot(p, rotation, timestampNs, sz)
             }
+            // The zoom probe's frames: its own tap, only here — the probe holds this gate for every rung.
+            if (probeAsk != null) serveProbe(p, rotation, timestampNs)
             return
         }
         // A browser asked for a picture of the tray (scan-Area drawing): hand over this frame.
@@ -427,8 +462,8 @@ class ScanAnalyzer(
             ticks++
             lastSample = g
             lastGrayDims = intArrayOf(g.w, g.h)
-            if (rebaseNext) {
-                rebaseNext = false
+            if (rebaseNext || probeRebaseNext) {
+                rebaseNext = false; probeRebaseNext = false
                 if (scanner.mode == AutoScanner.Mode.AWAIT_NEXT) scanner.rebaseScene(g)
             }
             val ev = scanner.tick(g)
@@ -620,6 +655,44 @@ class ScanAnalyzer(
             snapRing.copyFrom(p, rotation, timestampNs)
             runCatching { give(snapRing.snapshotLast(1).first(), z) }
         }
+    }
+
+    /** The zoom probe's tap ([probeFrames]): skip, then copy, then hand the copies over once. Closed gate only. */
+    private fun serveProbe(p: YuvPlanes, rotation: Int, timestampNs: Long) {
+        val ask = probeAsk ?: return
+        if (ask.skipped.size < ask.skip) { ask.skipped += timestampNs; return }
+        val f = runCatching { copyProbeFrame(p, rotation, timestampNs) }.getOrElse {
+            errors++; lastError = "zoom probe frame: $it"
+            cancelProbe()                                // answered empty at once: the runner skips the rung
+            return
+        }
+        ask.frames += f
+        probeCopies++
+        if (ask.frames.size >= ask.n) {
+            probeAsk = null
+            runCatching { ask.give(ask.skipped.toLongArray(), ask.frames) }
+        }
+    }
+
+    /** This frame as its own NV21 copy (FrameRing's stride-honouring copy, no ring held). */
+    private fun copyProbeFrame(p: YuvPlanes, rotation: Int, timestampNs: Long): Nv21Frame {
+        require(p.width > 0 && p.height > 0 && p.width % 2 == 0 && p.height % 2 == 0) {
+            "NV21 needs even, positive dimensions: ${p.width}x${p.height}"
+        }
+        val needU = (p.width / 2 - 1) * p.uPixelStride + 1
+        val needV = (p.width / 2 - 1) * p.vPixelStride + 1
+        if (probeURow.size < needU) probeURow = ByteArray(needU)
+        if (probeVRow.size < needV) probeVRow = ByteArray(needV)
+        val dst = ByteArray(Nv21Frame.byteCount(p.width, p.height))
+        FrameRing.copyNv21(p, dst, probeURow, probeVRow)
+        return Nv21Frame(dst, p.width, p.height, rotation, timestampNs)
+    }
+
+    /** An outstanding probe ask is answered EMPTY (the gate opened / closed again / the camera restarted): never served late. */
+    private fun cancelProbe() {
+        val ask = probeAsk ?: return
+        probeAsk = null
+        runCatching { ask.give(LongArray(0), emptyList()) }
     }
 
     // ---- the watch window + shadow mode (display / log only) ----
@@ -965,6 +1038,7 @@ class ScanAnalyzer(
 
     private fun applyMapping(ratio: Double, view: RoiFrac?, settle: Boolean, why: String) {
         snapZ = null
+        cancelProbe()                                  // the gate opens (or the Area moved): the probe is over
         val newRatio = ratio != zoomZ
         if (newRatio || view != roi) {
             roi = view
@@ -972,7 +1046,7 @@ class ScanAnalyzer(
             currentZoom = ratio
             scanner.reset()
             cancelHold(if (newRatio) "zoom change" else "new Area")
-            if (newRatio) { rebaseNext = false; heldTimedOut = false; zoomChanges++ }
+            if (newRatio) { rebaseNext = false; probeRebaseNext = false; heldTimedOut = false; zoomChanges++ }
             lastSample = null; lastBox = null; lastBoxInfo = null
             clearWatch(if (newRatio) "zoom change" else "new area")
             if (newRatio) safeLog("zoom") { "frames now at %.2f× ($why) — the Area is %s of the zoomed frame; re-learning the empty tray"
@@ -1001,6 +1075,8 @@ class ScanAnalyzer(
         zoomDropLeft = 0
         zoomResyncAsked = false
         snapZ = null
+        cancelProbe()                                  // a new closure is someone else's: the probe closes the gate BEFORE it asks
+        dropProbeRebase(why)                           // owed to the reopening the probe's end started, not to this one
         manualStartTs = NONE
         if (deferring) {
             cancelHold("the camera's zoom is changing")
@@ -1021,6 +1097,96 @@ class ScanAnalyzer(
             snapZ = ratio
             snapDropLeft = SETTLE_DROP_FRAMES
         }
+    }
+
+    // ---- the zoom probe (1.1.17): commands from CameraController's runner ----
+
+    /**
+     * The zoom probe's frames at the camera's current zoom: the next [skip] frames that reach
+     * the CLOSED gate are dropped (they may predate the rung — their timestamps are handed
+     * back, so the caller can ask their own CaptureResults what zoom they were at), the [n]
+     * after them copied, and [give] gets both, once, on the analysis thread. Served ONLY
+     * inside the closed gate: with it open the ask just waits, and it is answered EMPTY when
+     * the gate opens or closes again, the camera restarts, or [cancelProbeFrames] — never
+     * served late. A newer ask answers the older one empty first.
+     */
+    fun probeFrames(skip: Int, n: Int, give: (LongArray, List<Nv21Frame>) -> Unit) = post {
+        cancelProbe()
+        probeAsk = ProbeAsk(skip.coerceAtLeast(0), n.coerceAtLeast(1), give)
+    }
+
+    /** Drop an outstanding [probeFrames] ask (answered empty): the probe ended or was stopped. */
+    fun cancelProbeFrames() = post { cancelProbe() }
+
+    /**
+     * Stop serving the browser's picture inside the closed gate ([snapshotsAt]) until the next
+     * [snapshotsAt] — before every probe rung is asked (frames between the ask and the camera's
+     * answer are at neither zoom) and when the probe ends or is stopped (the coordinator's
+     * gate closure is idempotent, so an abort never reaches [closeZoomGate] to clear it).
+     */
+    fun stopSnapshots() = post { snapZ = null }
+
+    /**
+     * The zoom probe's VERIFIED end (the same card in the same place): re-take the scanned scene
+     * from the next sample, as a late focus does — the probe's AF pass and AE lock changed how the
+     * still card looks, which would read as a swap and scan it again. Acts only while a card has
+     * scanned (AWAIT_NEXT / capturing); a real zoom change afterwards drops it (it re-learns). Never
+     * asked after an abort: a card swapped while the screen was away must scan.
+     */
+    fun rebaseAfterProbe() = post { probeRebaseNext = true }
+
+    /**
+     * The camera stopped, closed or is reopening (ZoomCoordinator.Port.cameraAway — also with no zoom in
+     * use, when no gate closes): a rebase the probe's verified end still owes is dropped. The owner may
+     * swap the card while the screen is away, and that card must scan; the worst the drop can do is
+     * re-scan the still card the probe's AF / AE made look different.
+     *
+     * The late-focus rebase goes the same way (owner, on the 1.1.17 review finding): owed ([rebaseNext])
+     * or still due from a focus pass not yet answered ([heldTimedOut] — its answer may arrive while the
+     * screen is away). A Scans / Settings round trip does not rebind the camera, so before this the first
+     * sample back took a card swapped in meanwhile into the scanned scene and it was never filed. The
+     * accepted cost: the same still card, first shot in a blur and now in focus, may read as a new one
+     * and be filed twice — visible, and a swipe deletes it.
+     */
+    fun cameraAway(why: String) = post { dropProbeRebase(why); dropFocusRebase(why) }
+
+    private fun dropFocusRebase(why: String) {
+        if (!rebaseNext && !heldTimedOut) return
+        val owed = if (rebaseNext) "owed" else "still due (its focus pass had not answered)"
+        rebaseNext = false; heldTimedOut = false
+        safeLog("focus") { "first card: the late-focus rebase is dropped before any sample took it ($owed) — $why (a card swapped meanwhile will scan)" }
+    }
+
+    private fun dropProbeRebase(why: String) {
+        if (!probeRebaseNext) return
+        probeRebaseNext = false
+        safeLog("zoom") { "the zoom probe's rebase is dropped before any sample took it — $why (a card swapped meanwhile will scan)" }
+    }
+
+    /**
+     * May the zoom probe run now? Read on the analysis thread AFTER the probe closed the gate
+     * (commands and frames share it, so nothing moves meanwhile): [answer] null = yes, else the
+     * refusal in the owner's words. Tray must have scanned the card (AWAIT_NEXT — a capture held
+     * for focus was dropped by the closure, so it reads as still watching and is asked again on
+     * reopening); no shutter or held capture pending, and no rebase owed by a first-card hold that
+     * timed out — its focus pass still out ([heldTimedOut]) or answered and not yet taken
+     * ([rebaseNext]). Inside the closed gate no sample would take that rebase (and the probe's own
+     * AF pass supersedes the card pass, so it answers right there), and a stop or an unverified end
+     * maps the identical view, which keeps it: the first sample afterwards would re-take whatever
+     * card lay there — a card swapped meanwhile never scanned (review of c758bc7). Refused, the
+     * late answer re-takes the STILL card on the next tick; the owner runs the probe a second
+     * later. Once the probe passes this, nothing inside the closed gate can owe one again: no hold
+     * ends there. Tap to scan: any card in the Area will do.
+     */
+    fun canProbe(answer: (String?) -> Unit) = post {
+        val why = when {
+            !zoomGateClosed -> PROBE_GATE_OPEN
+            mode != ScanMode.MOUNT -> PROBE_NO_MOUNT
+            manualPending || deferring || heldTimedOut || rebaseNext -> PROBE_SCAN_PENDING
+            scanner.autoEnabled && scanner.mode != AutoScanner.Mode.AWAIT_NEXT -> PROBE_NOT_SCANNED
+            else -> null
+        }
+        runCatching { answer(why) }
     }
 
     /** Pause ticks while the user drags a new area (phone.html settingArea). */
@@ -1047,7 +1213,8 @@ class ScanAnalyzer(
         // would stay SCANNING (capturing, owed a captureDone) — Auto dead.
         if (deferring) scanner.reset()
         cancelHold("camera restarted")
-        rebaseNext = false; heldTimedOut = false
+        rebaseNext = false; probeRebaseNext = false; heldTimedOut = false
+        cancelProbe()
         scanner.cameraRestarted()
         ring.clear()
         clearWatch("camera restarted")
@@ -1075,6 +1242,7 @@ class ScanAnalyzer(
             if (x > 0) append(" · texture $x avg ${"%.2f".format(textureNsTotal / 1e6 / x)} ms")
             if (zoomClosures > 0 || currentZoom != 1.0) append(" · zoom %.2f× (%d change(s), gate closed %d time(s), %d frame(s) dropped settling)"
                 .format(currentZoom, zoomChanges, zoomClosures, zoomDropped))
+            if (probeCopies > 0) append(" · probe frames $probeCopies")
         }
     }
 
@@ -1097,6 +1265,11 @@ class ScanAnalyzer(
         const val SETTLE_DROP_FRAMES = 2
         /** Longest a first-card capture waits for focus before shooting anyway. */
         const val FOCUS_WAIT_NS = 1_500_000_000L
+        /** [canProbe]'s refusals (the owner's words; nothing changed). */
+        const val PROBE_NOT_SCANNED = "Let the card scan first (wait for the ✓), then Run probe"
+        const val PROBE_SCAN_PENDING = "A scan is in progress — a second"
+        const val PROBE_NO_MOUNT = "The zoom probe runs on the mount only (Tray or Tap to scan)"
+        const val PROBE_GATE_OPEN = "The camera did not pause for the probe — try again in a second"
         /** Shadow mode: "WOULD re-arm" when logHP p75 ≥ START_THRESHOLD this many ticks running (~0.4 s). */
         const val REARM_TICKS = 2
         /** Shadow mode: at most one event line per this (3000-line ring, 5 ticks/s)… */

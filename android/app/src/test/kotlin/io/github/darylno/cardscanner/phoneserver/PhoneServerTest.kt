@@ -273,10 +273,14 @@ class PhoneServerTest {
         settings.roi = null
         val bridge = DeviceBridge(settings)
         var applied = 0
-        bridge.screen = object : DeviceBridge.Screen {
+        var cameraPic: io.github.darylno.cardscanner.core.server.DeviceApi.Picture? =
+            io.github.darylno.cardscanner.core.server.DeviceApi.Picture(byteArrayOf(-1, -40, -1, 7), 1.9, 1200, 1600)
+        val screen = object : DeviceBridge.Screen {
             override fun applyRemoteSettings(): java.util.concurrent.Future<*>? { applied++; return null }
             override fun snapshotJpeg(): ByteArray? = byteArrayOf(-1, -40, -1)
+            override fun cameraSnapshot() = cameraPic
         }
+        bridge.screen = screen
         val b = PhoneBackend(store, PhotoDir(tmp.newFolder("p2")), pages = { null }, version = "t",
             search = { emptyList() }, lanIp = { null }, packRows = { 0 },
             f2f = { _, _, _, _, _ -> F2fAnswer.NotListed }, launch = { it.run() }, now = { 0.0 },
@@ -309,11 +313,218 @@ class PhoneServerTest {
         assertEquals(2, applied)
         assertEquals(400, req(base, admin, "PATCH", "/api/device", """{"zoom_fit":"on"}"""))
         settings.zoomFit = false
-        client.newCall(Request.Builder().url("$base/api/device/snapshot.jpg").header("Cookie", admin).build())
-            .execute().use { r -> assertEquals(200, r.code); assertEquals("image/jpeg", r.header("Content-Type")) }
+        fun snap(cookie: String, q: String = "") =
+            client.newCall(Request.Builder().url("$base/api/device/snapshot.jpg$q").header("Cookie", cookie).build()).execute()
+        snap(admin).use { r ->
+            assertEquals(200, r.code); assertEquals("image/jpeg", r.header("Content-Type"))
+            assertEquals(null, r.header("X-Zoom-Ratio"))
+            assertEquals(listOf(-1, -40, -1), r.body!!.bytes().map { it.toInt() })
+        }
+        // 1.1.17: the camera view — the zoomed frame, its own zoom relayed through the gateway.
+        assertEquals(listOf("base", "camera"), st["snapshot_views"])
+        snap(admin, "?view=camera&t=1").use { r ->
+            assertEquals(200, r.code); assertEquals("image/jpeg", r.header("Content-Type"))
+            assertEquals("1.900", r.header("X-Zoom-Ratio"))
+            assertEquals("1200x1600", r.header("X-Frame-Size"))
+            assertEquals(listOf(-1, -40, -1, 7), r.body!!.bytes().map { it.toInt() })
+        }
+        snap(admin, "?view=base").use { r -> assertEquals(200, r.code); assertEquals(null, r.header("X-Zoom-Ratio")) }
+        snap(admin, "?view=wide").use { r -> assertEquals(400, r.code) }
+        assertEquals(403, req(base, guest, "GET", "/api/device/snapshot.jpg?view=camera"))
+        cameraPic = null                                                // open, but no frame within 2 s
+        snap(admin, "?view=camera").use { r ->
+            assertEquals(503, r.code)
+            // This screen reports no zoom (MainActivity's with no camera started): the zoom is not
+            // named as the reason (review of d0b65bf).
+            val body = r.body!!.string()
+            assertTrue(body, body.contains("no picture within 2 s — check the scan screen on the phone"))
+            assertTrue(body, !body.contains("zoom"))
+        }
         bridge.screen = null                                            // scan screen closed
-        client.newCall(Request.Builder().url("$base/api/device/snapshot.jpg").header("Cookie", admin).build())
-            .execute().use { r -> assertEquals(503, r.code) }
+        snap(admin).use { r -> assertEquals(503, r.code) }
+        snap(admin, "?view=camera").use { r ->
+            assertEquals(503, r.code)
+            assertTrue(r.body!!.string().contains("open the scan screen on the phone"))
+        }
+        // A screen that has no camera view (DeviceBridge.Screen's default): 503, not the base picture.
+        bridge.screen = object : DeviceBridge.Screen {
+            override fun applyRemoteSettings(): java.util.concurrent.Future<*>? = null
+            override fun snapshotJpeg(): ByteArray? = byteArrayOf(-1, -40, -1)
+        }
+        snap(admin, "?view=camera").use { r -> assertEquals(503, r.code) }
+        assertEquals(403, req(base, guest, "GET", "/api/device/snapshot.jpg?view=camera"))
+    }
+
+    // ── the store opens off the main thread ─────────────────────────────────
+    // Its open runs the one-time migrations in one transaction (1.1.17's re-price rewrites
+    // every priced row): GatewayService calls newServer / onServing / onStopped on the MAIN
+    // thread, so none of them may open it there (review of 0b19864).
+
+    /** The lifecycle executor, run by hand. */
+    private class ByHand : java.util.concurrent.Executor {
+        val queued = ArrayDeque<Runnable>()
+        override fun execute(r: Runnable) { queued += r }
+        fun runAll() { while (queued.isNotEmpty()) queued.removeFirst().run() }
+    }
+
+    private val servers = mutableListOf<PhoneServer>()
+
+    @After fun closeServers() {
+        for (ps in servers) if (ps.storeOpen) { runCatching { ps.backend.worker.stop() }; ps.store.close() }
+    }
+
+    /** The retry timer, run by hand: each entry is (delay ms, task). */
+    private class Later : (Long, Runnable) -> Unit {
+        val queued = ArrayDeque<Pair<Long, Runnable>>()
+        override fun invoke(ms: Long, r: Runnable) { queued += ms to r }
+        fun runAll() { while (queued.isNotEmpty()) queued.removeFirst().second.run() }
+    }
+
+    private fun phoneServerIn(dir: java.io.File, lifecycle: java.util.concurrent.Executor, later: Later = Later()): PhoneServer {
+        val app = org.robolectric.RuntimeEnvironment.getApplication() as io.github.darylno.cardscanner.App
+        val ctx = object : android.content.ContextWrapper(app) { override fun getFilesDir() = dir }
+        return PhoneServer(ctx, app.identify, DeviceBridge(app.settings), lifecycle = lifecycle, later = later).also { servers += it }
+    }
+
+    @Test fun newServerAndOnServingNeverOpenTheStoreOnTheCaller() {
+        val dir = tmp.newFolder("files-a")
+        val lifecycle = ByHand()
+        val ps = phoneServerIn(dir, lifecycle)
+        ps.newServer(0)
+        ps.onServing()
+        assertTrue("the store opened on the caller's thread", !ps.storeOpen)
+        assertEquals(null, ps.storeOpenedOn)
+        assertTrue(!java.io.File(dir, "phoneserver/scans.db").exists())
+        assertEquals("the worker's start is queued", 1, lifecycle.queued.size)
+        lifecycle.runAll()                                              // the lifecycle thread
+        assertTrue(ps.storeOpen)
+        assertTrue("the queued start started the price worker", ps.backend.worker.running)
+        ps.onStopped()
+        assertTrue("the stop is queued too", ps.backend.worker.running)
+        lifecycle.runAll()
+        assertTrue(!ps.backend.worker.running)
+    }
+
+    @Test fun aStopBeforeTheOpenStopsTheWorkerTheQueuedStartStarts() {
+        val lifecycle = ByHand()
+        val ps = phoneServerIn(tmp.newFolder("files-b"), lifecycle)
+        ps.newServer(0)
+        ps.onServing()
+        val code = ps.admins.newCode()
+        ps.onStopped()                                                  // before the open ran
+        assertEquals("the one-time code goes at once", null, ps.admins.pendingCode)
+        assertTrue(code.isNotEmpty())
+        assertTrue("the stop opened the store on the caller's thread", !ps.storeOpen)
+        lifecycle.runAll()                                              // start, then stop — in call order
+        assertTrue(ps.storeOpen)
+        assertTrue("the stop ran after the queued start", !ps.backend.worker.running)
+
+        // A stop with nothing started never opens the store just to stop nothing.
+        val idle = ByHand()
+        val ps2 = phoneServerIn(tmp.newFolder("files-b2"), idle)
+        ps2.onStopped()
+        idle.runAll()
+        assertTrue(!ps2.storeOpen)
+    }
+
+    // Review of 806a4cd (F3): a start whose open threw (e.g. SQLITE_FULL) was only logged, and
+    // the worker stayed down until the server's next start — although the lazy open succeeds
+    // later on a request or an upload. It is now tried again 30 s later, on the lifecycle.
+
+    private fun serverLog(after: Long) = io.github.darylno.cardscanner.core.DebugLog.global.since(after, limit = 3000)
+        .filter { it.tag == "server" }.joinToString("\n") { it.msg }
+
+    @Test fun aStartWhoseOpenFailsIsRetriedOnTheLifecycleUntilItStarts() {
+        val t0 = io.github.darylno.cardscanner.core.DebugLog.global.lastSeq
+        val dir = tmp.newFolder("files-d")
+        val db = java.io.File(dir, "phoneserver/scans.db").apply { mkdirs() }   // a directory where the database goes: the open fails
+        val lifecycle = ByHand()
+        val later = Later()
+        val ps = phoneServerIn(dir, lifecycle, later)
+        ps.newServer(0)
+        ps.onServing()
+        lifecycle.runAll()
+        assertTrue("the open failed", !ps.storeOpen)
+        assertEquals("a retry, 30 s on", listOf(PhoneServer.START_RETRY_MS), later.queued.map { it.first })
+        assertEquals(30_000L, PhoneServer.START_RETRY_MS)
+        later.runAll()                                                  // 30 s on, still failing…
+        assertTrue("the retry runs on the lifecycle, not the timer's thread", !ps.storeOpen && lifecycle.queued.size == 1)
+        lifecycle.runAll()
+        assertTrue(!ps.storeOpen)
+        assertEquals("…so another retry", 1, later.queued.size)
+        assertTrue(db.delete())                                         // the disk has room again
+        later.runAll()
+        lifecycle.runAll()
+        assertTrue(ps.storeOpen)
+        assertTrue("the retry started the price worker", ps.backend.worker.running)
+        assertTrue("no retry after a start", later.queued.isEmpty())
+        val log = serverLog(t0)
+        assertTrue(log, log.contains("couldn't start the price worker (try 1) — trying again in 30 s"))
+        assertTrue(log, log.contains("couldn't start the price worker (try 2) — trying again in 30 s"))
+        assertTrue(log, log.contains("price worker started on retry #2"))
+        // …and the stop still stops it, in order.
+        ps.onStopped()
+        lifecycle.runAll()
+        assertTrue(!ps.backend.worker.running)
+    }
+
+    @Test fun aStopBeforeTheRetryLeavesTheWorkerStopped() {
+        val t0 = io.github.darylno.cardscanner.core.DebugLog.global.lastSeq
+        val dir = tmp.newFolder("files-e")
+        val db = java.io.File(dir, "phoneserver/scans.db").apply { mkdirs() }
+        val lifecycle = ByHand()
+        val later = Later()
+        val ps = phoneServerIn(dir, lifecycle, later)
+        ps.newServer(0)
+        ps.onServing()
+        lifecycle.runAll()
+        assertEquals(1, later.queued.size)
+        ps.onStopped()                                                  // the server stops before the retry is due
+        lifecycle.runAll()
+        assertTrue(db.delete())
+        later.runAll()
+        lifecycle.runAll()
+        assertTrue("the dropped retry opened nothing — no worker", !ps.storeOpen)
+        assertTrue("and set no further retry", later.queued.isEmpty())
+
+        // A stop → start before an old retry fires: only the new start runs (no second chain).
+        val dir2 = tmp.newFolder("files-f")
+        val db2 = java.io.File(dir2, "phoneserver/scans.db").apply { mkdirs() }
+        val l2 = ByHand()
+        val later2 = Later()
+        val ps2 = phoneServerIn(dir2, l2, later2)
+        ps2.onServing()
+        l2.runAll()                                                     // fails: retry A (old generation)
+        ps2.onStopped()
+        ps2.onServing()
+        l2.runAll()                                                     // the stop; the new start fails too: retry B
+        assertEquals(2, later2.queued.size)
+        assertTrue(db2.delete())
+        later2.runAll()                                                 // A is dropped, B starts the worker
+        l2.runAll()
+        assertTrue(ps2.storeOpen && ps2.backend.worker.running)
+        assertTrue(later2.queued.isEmpty())
+        val log = serverLog(t0)
+        assertTrue(log, log.contains("price worker: retry #1 dropped — the server stopped (or restarted) since"))
+    }
+
+    @Test fun aRequestBeforeTheOpenWaitsForItAndAnswers() {
+        val ps = phoneServerIn(tmp.newFolder("files-c"), ByHand())       // the lifecycle never runs here
+        val g = ps.newServer(0).also { gateway = it }
+        assertTrue("newServer opened the store on the caller's thread", !ps.storeOpen)
+        g.startServing()
+        val base = "http://127.0.0.1:${g.listeningPort}"
+        val owner = "${GatewayServer.ADMIN_COOKIE}=${ps.admins.ownerToken}"
+        val answer = java.util.concurrent.FutureTask { page(base, owner, "/api/scans") }
+        synchronized(ps.storeOpening) {                                 // the store is "opening" (its migrations)
+            Thread(answer, "client").start()
+            Thread.sleep(300)
+            assertTrue("the request waits for the open", !answer.isDone)
+        }
+        assertEquals("[]", answer.get(10, java.util.concurrent.TimeUnit.SECONDS))
+        assertTrue(ps.storeOpen)
+        assertTrue("a server thread opened it, not this one: ${ps.storeOpenedOn}",
+            ps.storeOpenedOn != null && ps.storeOpenedOn != Thread.currentThread().name)
     }
 
     /** Stage 4: the phone's own review screen (a WebView on loopback) is admin through the owner token. */

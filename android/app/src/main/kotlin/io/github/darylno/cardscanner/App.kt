@@ -54,7 +54,9 @@ class App : Application() {
             // Unit tests (Robolectric) never ask GitHub: a live answer would race the test's own state.
             fetch = if (android.os.Build.FINGERPRINT == "robolectric") { { null } }
                 else io.github.darylno.cardscanner.update.UpdateLock::fetchLatest)
-        identify = LocalIdentify(this)
+        // Unit tests (Robolectric) never download the card database: each test's App fetched the real
+        // pack from GitHub on its own thread, and 1.1.17's suite ran the test heap out of memory.
+        identify = LocalIdentify(this, fetchAllowed = android.os.Build.FINGERPRINT != "robolectric")
         cardList = io.github.darylno.cardscanner.phoneserver.ExternalCardList(this, settings,
             // Unit tests (Robolectric) never fetch a list.
             fetch = if (android.os.Build.FINGERPRINT == "robolectric") { { throw java.io.IOException("tests") } }
@@ -70,7 +72,10 @@ class App : Application() {
         identify.onAppStart { if (it is io.github.darylno.cardscanner.ident.ArtPackStore.Check.Installed) uploads.retryNow() }
     }
 
-    fun newCamera(): CameraPort = Adapters.camera(this, settings)
+    /** Builds the scan screen's camera. Tests put a recording [CameraPort] here (Robolectric has no camera to bind). */
+    internal var cameraFactory: (Context, AppSettings) -> CameraPort = Adapters::camera
+
+    fun newCamera(): CameraPort = cameraFactory(this, settings)
 
     // ── the live log ────────────────────────────────────────────────────────
     private val crashFile get() = java.io.File(filesDir, "last-crash.txt")

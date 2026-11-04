@@ -31,7 +31,12 @@ class OcrTextTest {
     @Test fun joinedTextFeedsTheMatcher() {
         // ML Kit's typical slips — lowercase, I/1, O/0, S/5 — are the confusion classes.
         assertEquals("mh1", OcrMatch.matchPrinting(OcrText.joinLines(listOf(listOf("O87/2S4 u", "mhI • EN"))), edict))
-        assertEquals("plst", OcrMatch.matchPrinting(OcrText.joinLines(listOf(listOf("A25-85", "PLST"))), edict))
+        // A List card prints its ORIGINAL's line (plst A25-85 reads "085/249 C" /
+        // "A25 • EN"; never "A25-85" or "PLST"): beside its twin, no printing is named.
+        assertNull(OcrMatch.matchPrinting(OcrText.joinLines(listOf(listOf("085/249 C", "A25 • EN"))), edict))
+        assertNull(OcrMatch.matchPrinting(OcrText.joinLines(listOf(listOf("A25-85", "PLST"))), edict))
+        assertEquals("a25", OcrMatch.matchPrinting(OcrText.joinLines(listOf(listOf("085/249 C", "A25 • EN"))),
+                                                   edict.filter { it["set"] != "plst" }))
         assertNull(OcrMatch.matchPrinting(OcrText.joinLines(listOf(listOf("Illus. Kev Walker"))), edict))
     }
 }

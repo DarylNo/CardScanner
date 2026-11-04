@@ -1,0 +1,61 @@
+{
+ "url": "https://facetofacegames.com/search/suggest.json?q=Earl%20of%20Squirrel&resources%5Btype%5D=product&resources%5Blimit%5D=20&resources%5Boptions%5D%5Bunavailable_products%5D=show",
+ "body": {
+  "resources": {
+   "results": {
+    "products": [
+     {
+      "title": "Earl of Squirrel [108] [Unstable] [Non-Foil]",
+      "handle": "earl-of-squirrel-108-unstable-non-foil",
+      "available": true
+     },
+     {
+      "title": "Earl of Squirrel [108] [Unstable] [Foil]",
+      "handle": "earl-of-squirrel-108-unstable-foil",
+      "available": true
+     },
+     {
+      "title": "Earl of Squirrel [108] [Unstable Promos] [Foil]",
+      "handle": "earl-of-squirrel-108-unstable-promos-foil",
+      "available": true
+     },
+     {
+      "title": "Earl of Squirrel [108] [UST Set Symbol] [The List: Unfinity Foil Edition] [Foil]",
+      "handle": "earl-of-squirrel-108-ust-set-symbol-the-list-unfinity-foil-edition-foil",
+      "available": false
+     },
+     {
+      "title": "Squirrel Sovereign [175] [Modern Horizons 2] [Non-Foil]",
+      "handle": "squirrel-sovereign-175-modern-horizons-2-non-foil",
+      "available": true
+     },
+     {
+      "title": "Squirrel Sovereign [240] [Bloomburrow: Commander] [Non-Foil]",
+      "handle": "squirrel-sovereign-240-bloomburrow-commander-non-foil",
+      "available": true
+     },
+     {
+      "title": "Squirrel Sovereign [415] [Retro Frame] [Modern Horizons 2] [Non-Foil]",
+      "handle": "squirrel-sovereign-415-retro-frame-modern-horizons-2-non-foil",
+      "available": true
+     },
+     {
+      "title": "Squirrel Sovereign [415] [Retro Frame] [Modern Horizons 2] [Etched Foil]",
+      "handle": "squirrel-sovereign-415-retro-frame-modern-horizons-2-etched-foil",
+      "available": false
+     },
+     {
+      "title": "Squirrel Sovereign [175] [Modern Horizons 2] [Foil]",
+      "handle": "squirrel-sovereign-175-modern-horizons-2-foil",
+      "available": true
+     },
+     {
+      "title": "Deranged Hermit [101] [Urza's Legacy] [Non-Foil]",
+      "handle": "deranged-hermit-101-urzas-legacy-non-foil",
+      "available": true
+     }
+    ]
+   }
+  }
+ }
+}

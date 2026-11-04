@@ -1,0 +1,23 @@
+{
+ "url": "https://facetofacegames.com/products/lightning-bolt-a25-141-the-list-non-foil.json",
+ "body": {
+  "product": {
+   "title": "Lightning Bolt [A25-141] [The List] [Non-Foil]",
+   "handle": "lightning-bolt-a25-141-the-list-non-foil",
+   "variants": [
+    {
+     "sku": "SIN-MTG-PLIST-429-ENG-NM-NF",
+     "title": "NM",
+     "option1": "NM",
+     "price": "3.49"
+    },
+    {
+     "sku": "SIN-MTG-PLIST-429-ENG-PL-NF",
+     "title": "PL",
+     "option1": "PL",
+     "price": "2.79"
+    }
+   ]
+  }
+ }
+}

@@ -1,5 +1,6 @@
 package io.github.darylno.cardscanner.ui
 
+import io.github.darylno.cardscanner.core.ZoomProbeRun
 import org.json.JSONObject
 
 /**
@@ -28,6 +29,41 @@ object StatusText {
     const val AREA_CLEARED = "Scan area cleared — full frame. Empty the tray to re-learn…"
     const val AREA_SET = "Scan area set. Empty the tray to re-learn…"
     const val RELEARN = "Re-learning the empty tray — keep it clear…"
+    /** The zoom probe's touch policy (1.1.17): a control tapped while it runs only cancels it. */
+    const val PROBE_CANCELLING = "Cancelling the zoom probe — hands off the tray; tap again once it is over"
+    const val PROBE_DONE = "Zoom probe over — nothing filed. What it found is on the card above"
+    const val PROBE_REFUSED = "Zoom probe not run — the card above says why"
+    const val PROBE_STOPPED = "Zoom probe stopped — nothing filed. The card above says why"
+    const val PROBE_NOT_READY = "The camera is not ready — try again in a second"
+
+    /**
+     * The zoom probe's end in a few words, in front of a scan's line held while it ran ("Zoom probe over ·
+     * ✓ Duress — ready: tap Scans…"): the pill has 2 lines, and the card above carries the probe's own words.
+     * No "nothing filed" here — the scan beside it WAS filed (by the scanner, not the probe).
+     */
+    fun probeEndShort(kind: ZoomProbeRun.Kind): String = when (kind) {
+        ZoomProbeRun.Kind.DONE -> "Zoom probe over"
+        ZoomProbeRun.Kind.REFUSED -> "Zoom probe not run"
+        ZoomProbeRun.Kind.CANCELLED -> "Zoom probe cancelled"
+        ZoomProbeRun.Kind.STOPPED -> "Zoom probe stopped"
+    }
+
+    /**
+     * After an Area is saved on the phone: [offCentre] = the off-centre hint's short
+     * words (ZoomFit.OffCentre.short, 1.1.17) — "Scan area set — centred, it would zoom
+     * 1.90× (this Area: 1.00×). Empty the tray to re-learn…" — or null: [AREA_SET].
+     */
+    fun areaSet(offCentre: String?): String =
+        if (offCentre == null) AREA_SET else "Scan area set — $offCentre. Empty the tray to re-learn…"
+
+    /**
+     * A Tray line ([WATCHING]) with the off-centre hint after it while the hint is due —
+     * "Tray: watching for a card… Off-centre Area: centred, it would zoom 1.90× (this
+     * Area: 1.00×)." — or [line] as it is (review of 1.1.17: the scanner's next tick put
+     * its own line over [areaSet]'s, so in Tray the hint was never read).
+     */
+    fun withAreaHint(line: String, offCentre: String?): String =
+        if (offCentre == null) line else "$line Off-centre Area: $offCentre."
 
     private val POP_CALLOUT = mapOf("staple" to "★ staple", "strong" to "very popular", "solid" to "popular")
 

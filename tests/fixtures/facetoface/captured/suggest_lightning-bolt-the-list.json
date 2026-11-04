@@ -1,0 +1,61 @@
+{
+ "url": "https://facetofacegames.com/search/suggest.json?q=Lightning%20Bolt%20The%20List&resources%5Btype%5D=product&resources%5Blimit%5D=20&resources%5Boptions%5D%5Bunavailable_products%5D=show",
+ "body": {
+  "resources": {
+   "results": {
+    "products": [
+     {
+      "title": "Lightning Bolt [E01-54] [The List] [Non-Foil]",
+      "handle": "lightning-bolt-e01-54-the-list-non-foil",
+      "available": true
+     },
+     {
+      "title": "Lightning Bolt [A25-141] [The List] [Non-Foil]",
+      "handle": "lightning-bolt-a25-141-the-list-non-foil",
+      "available": true
+     },
+     {
+      "title": "Lightning Bolt [PF19-1] [The List] [Non-Foil]",
+      "handle": "lightning-bolt-pf19-1-the-list-non-foil",
+      "available": true
+     },
+     {
+      "title": "Burst Lightning [P10-8] [The List] [Non-Foil]",
+      "handle": "burst-lightning-p10-8-the-list-non-foil",
+      "available": false
+     },
+     {
+      "title": "Lightning Bolt [163] [Foundations: Commander] [Non-Foil]",
+      "handle": "lightning-bolt-163-foundations-commander-non-foil",
+      "available": false
+     },
+     {
+      "title": "Lightning Axe [TSP-168] [The List] [Non-Foil]",
+      "handle": "lightning-axe-tsp-168-the-list-non-foil",
+      "available": true
+     },
+     {
+      "title": "Lightning Bolt [401] [Rulebook Showcase] [Commander Legends: Battle for Baldur's Gate] [Non-Foil]",
+      "handle": "lightning-bolt-401-rulebook-showcase-commander-legends-battle-for-baldurs-gate-non-foil",
+      "available": true
+     },
+     {
+      "title": "Lightning Bolt [401] [Rulebook Showcase] [Commander Legends: Battle for Baldur's Gate] [Foil]",
+      "handle": "lightning-bolt-401-rulebook-showcase-commander-legends-battle-for-baldurs-gate-foil",
+      "available": true
+     },
+     {
+      "title": "Lightning Bolt [161] [Limited Edition Alpha] [Non-Foil]",
+      "handle": "lightning-bolt-161-limited-edition-alpha-non-foil",
+      "available": false
+     },
+     {
+      "title": "Lightning Bolt [806] [Jumpstart] [Marvel Super Heroes: Commander] [Foil]",
+      "handle": "lightning-bolt-806-jumpstart-marvel-super-heroes-commander-foil",
+      "available": true
+     }
+    ]
+   }
+  }
+ }
+}

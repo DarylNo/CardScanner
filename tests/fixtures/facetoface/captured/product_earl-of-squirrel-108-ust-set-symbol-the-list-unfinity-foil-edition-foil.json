@@ -1,0 +1,23 @@
+{
+ "url": "https://facetofacegames.com/products/earl-of-squirrel-108-ust-set-symbol-the-list-unfinity-foil-edition-foil.json",
+ "body": {
+  "product": {
+   "title": "Earl of Squirrel [108] [UST Set Symbol] [The List: Unfinity Foil Edition] [Foil]",
+   "handle": "earl-of-squirrel-108-ust-set-symbol-the-list-unfinity-foil-edition-foil",
+   "variants": [
+    {
+     "sku": "SIN-MTG-UPLIST-35-ENG-NM-F",
+     "title": "NM",
+     "option1": "NM",
+     "price": "7.99"
+    },
+    {
+     "sku": "SIN-MTG-UPLIST-35-ENG-PL-F",
+     "title": "PL",
+     "option1": "PL",
+     "price": "6.39"
+    }
+   ]
+  }
+ }
+}

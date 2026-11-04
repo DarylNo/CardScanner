@@ -1,0 +1,61 @@
+{
+ "url": "https://facetofacegames.com/search/suggest.json?q=Ancient%20Tomb%20The%20List&resources%5Btype%5D=product&resources%5Blimit%5D=20&resources%5Boptions%5D%5Bunavailable_products%5D=show",
+ "body": {
+  "resources": {
+   "results": {
+    "products": [
+     {
+      "title": "Ancient Tomb [TMP-315] [The List] [Non-Foil]",
+      "handle": "ancient-tomb-tmp-315-the-list-non-foil",
+      "available": true
+     },
+     {
+      "title": "Ancient Cornucopia [BIG-16] [The List] [Non-Foil]",
+      "handle": "ancient-cornucopia-big-16-the-list-non-foil",
+      "available": true
+     },
+     {
+      "title": "Klauth, Unrivaled Ancient [AFC-50] [The List] [Non-Foil]",
+      "handle": "klauth-unrivaled-ancient-afc-50-the-list-non-foil",
+      "available": true
+     },
+     {
+      "title": "Sheltering Ancient [CSP-121] [The List] [Foil]",
+      "handle": "sheltering-ancient-csp-121-the-list-foil",
+      "available": true
+     },
+     {
+      "title": "Ancient Lumberknot [VOW-230] [The List] [Non-Foil]",
+      "handle": "ancient-lumberknot-vow-230-the-list-non-foil",
+      "available": true
+     },
+     {
+      "title": "Ancient Excavation [PZ2-038] [The List] [Non-Foil]",
+      "handle": "ancient-excavation-pz2-038-the-list-non-foil",
+      "available": true
+     },
+     {
+      "title": "Forgotten Ancient [NCC-291] [The List] [Non-Foil]",
+      "handle": "forgotten-ancient-ncc-291-the-list-non-foil",
+      "available": true
+     },
+     {
+      "title": "Ancient Grudge [MM3-88] [The List] [Non-Foil]",
+      "handle": "ancient-grudge-mm3-88-the-list-non-foil",
+      "available": false
+     },
+     {
+      "title": "Ancient Brontodon [XLN-175] [The List] [Non-Foil]",
+      "handle": "ancient-brontodon-xln-175-the-list-non-foil",
+      "available": false
+     },
+     {
+      "title": "Ancient Craving [P02-62] [The List] [Non-Foil]",
+      "handle": "ancient-craving-p02-62-the-list-non-foil",
+      "available": false
+     }
+    ]
+   }
+  }
+ }
+}

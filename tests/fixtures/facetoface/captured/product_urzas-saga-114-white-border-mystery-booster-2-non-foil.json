@@ -1,0 +1,23 @@
+{
+ "url": "https://facetofacegames.com/products/urzas-saga-114-white-border-mystery-booster-2-non-foil.json",
+ "body": {
+  "product": {
+   "title": "Urza's Saga [114] [White Border] [Mystery Booster 2] [Non-Foil]",
+   "handle": "urzas-saga-114-white-border-mystery-booster-2-non-foil",
+   "variants": [
+    {
+     "sku": "SIN-MTG-MB2-114-ENG-NM-NF",
+     "title": "NM",
+     "option1": "NM",
+     "price": "59.99"
+    },
+    {
+     "sku": "SIN-MTG-MB2-114-ENG-PL-NF",
+     "title": "PL",
+     "option1": "PL",
+     "price": "50.99"
+    }
+   ]
+  }
+ }
+}

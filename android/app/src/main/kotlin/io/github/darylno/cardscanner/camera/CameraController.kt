@@ -40,13 +40,50 @@ import io.github.darylno.cardscanner.core.CameraChoice
 import io.github.darylno.cardscanner.core.DebugLog
 import io.github.darylno.cardscanner.core.FocusPoint
 import io.github.darylno.cardscanner.core.Gray
+import io.github.darylno.cardscanner.core.Nv21Bgr
+import io.github.darylno.cardscanner.core.Nv21Frame
 import io.github.darylno.cardscanner.core.RoiFrac
+import io.github.darylno.cardscanner.core.Rotation
 import io.github.darylno.cardscanner.core.ZoomCoordinator
 import io.github.darylno.cardscanner.core.ZoomFit
+import io.github.darylno.cardscanner.core.ZoomProbe
+import io.github.darylno.cardscanner.core.ZoomProbeRun
 import io.github.darylno.cardscanner.core.ZoomSnapshot
+import io.github.darylno.cardscanner.core.server.DeviceApi
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
+
+/**
+ * `/api/device/snapshot.jpg`'s picture of one analysis frame taken at zoom `z`
+ * ([CameraController.snapshotJpeg] / [CameraController.cameraSnapshot]; pure OpenCV,
+ * so the JVM tests run it, SnapshotPictureTest).
+ */
+internal object SnapshotPicture {
+    /**
+     * [base]: the BASE-space picture — zoomed, the view scaled by 1/z on grey
+     * ([ZoomSnapshot]), so the browser draws the stored base Area on it 1:1 (what
+     * `snapshot.jpg` always served). Else the frame as it is (`?view=camera`). Long side
+     * ≤ [maxSide], never scaled up; the Picture's w×h is the encoded size.
+     */
+    fun encode(frame: Nv21Frame, z: Double, maxSide: Int, base: Boolean): DeviceApi.Picture {
+        val upright = Nv21Bgr.toUprightBgr(frame)
+        val bgr = if (base && z > 1.0) ZoomSnapshot.composeBase(upright, z).also { upright.release() } else upright
+        try {
+            val scale = maxSide.toDouble() / maxOf(bgr.cols(), bgr.rows())
+            if (scale < 1.0) {
+                val small = org.opencv.core.Mat()
+                org.opencv.imgproc.Imgproc.resize(bgr, small, org.opencv.core.Size(), scale, scale,
+                    org.opencv.imgproc.Imgproc.INTER_AREA)
+                try { return DeviceApi.Picture(CapturePipeline.encodeJpeg(small), z, small.cols(), small.rows()) }
+                finally { small.release() }
+            }
+            return DeviceApi.Picture(CapturePipeline.encodeJpeg(bgr), z, bgr.cols(), bgr.rows())
+        } finally {
+            bgr.release()
+        }
+    }
+}
 
 /** A Mount capture this much softer than the session's median re-arms the card-focus pass. */
 private const val SOFT_CAPTURE_RATIO = 0.5
@@ -55,7 +92,8 @@ private const val CARD_FOCUS_TRIES = 3
 /**
  * A finished capture: [result] on success, else [error]. [scene] is for [CameraController.onNoCard].
  * [lens] = the camera's own report for the frame the pipeline chose (AF state, lens
- * position, exposure, ISO — "is it focusing?"), or null when none was kept.
+ * position, exposure, ISO — "is it focusing?"), or null when none was kept; [iso] =
+ * that frame's ISO alone (the zoom A/B compares it), or null.
  */
 class CaptureOutcome(
     val id: Long,
@@ -67,6 +105,7 @@ class CaptureOutcome(
     val lens: String? = null,
     /** The camera zoom the burst was taken at (the capture line's "@ z×"). */
     val zoom: Double = 1.0,
+    val iso: Int? = null,
 )
 
 /**
@@ -111,6 +150,14 @@ class CaptureOutcome(
  * every detach, so the zoom is re-applied after every bind, camera re-open and
  * screen start; the analyzer's settle gate is closed meanwhile. Logged under
  * `zoom`: what was asked, what the camera reports, what bound the ratio.
+ *
+ * THE ZOOM PROBE (1.1.17, [startZoomProbe]; core ZoomProbeRun sequences it, the
+ * coordinator's probe mode holds the analyzer's gate): its camera side is
+ * [ZoomProbeGlue] over this class — the coordinator's rung answers and aborts posted to
+ * the runner, the analyzer's probe frames, one AF pass on the card, the probe's AE/AWB
+ * lock ORed into the owner's, and a `zoom-probe` worker that measures each rung
+ * ([ProbeMeasure]) off the capture pipeline. It files nothing. Logged under `probe`
+ * (the runner's lines), `focus` (its passes) and `zoom` (the coordinator's).
  *
  * Threading: construct, command and [start] on the main thread. [Listener]
  * callbacks arrive on the main thread. Analyzer commands are forwarded to the
@@ -168,6 +215,7 @@ class CameraController(
             val metas = request.frames.map { frameMeta.at(it.timestampNs) }
             val ok = pipeline.submit(request.frames, request.cropRoi) { r ->
                 val lens = r.getOrNull()?.let { res -> runCatching { lensAtCapture(request, metas, res.sharpestIndex) }.getOrNull() }
+                val iso = r.getOrNull()?.let { res -> runCatching { isoAtCapture(request, metas, res.sharpestIndex) }.getOrNull() }
                 r.getOrNull()?.let { res ->
                     // Only captures where a card was found count: an empty-tray
                     // (phantom) capture is always "soft", and letting it re-arm the
@@ -181,7 +229,7 @@ class CameraController(
                 }
                 val outcome = CaptureOutcome(
                     request.id, request.trigger, request.mode, request.scene, r.getOrNull(), r.exceptionOrNull(), lens,
-                    request.zoom,
+                    request.zoom, iso,
                 )
                 main.post { listener.onCapture(outcome) }
             }
@@ -278,16 +326,21 @@ class CameraController(
     private val frameMeta = FrameMetaRing()
     private val metaCallback = object : CameraCaptureSession.CaptureCallback() {
         override fun onCaptureCompleted(s: CameraCaptureSession, r: CaptureRequest, result: TotalCaptureResult) {
-            metaAfState = result.get(android.hardware.camera2.CaptureResult.CONTROL_AF_STATE)
-            metaFocusDist = result.get(android.hardware.camera2.CaptureResult.LENS_FOCUS_DISTANCE)
-            metaExposureNs = result.get(android.hardware.camera2.CaptureResult.SENSOR_EXPOSURE_TIME)
-            metaIso = result.get(android.hardware.camera2.CaptureResult.SENSOR_SENSITIVITY)
+            val af = result.get(android.hardware.camera2.CaptureResult.CONTROL_AF_STATE)
+            val dist = result.get(android.hardware.camera2.CaptureResult.LENS_FOCUS_DISTANCE)
+            val exp = result.get(android.hardware.camera2.CaptureResult.SENSOR_EXPOSURE_TIME)
+            val iso = result.get(android.hardware.camera2.CaptureResult.SENSOR_SENSITIVITY)
+            val zr = if (Build.VERSION.SDK_INT >= 30) result.get(android.hardware.camera2.CaptureResult.CONTROL_ZOOM_RATIO) else null
+            val crop = result.get(android.hardware.camera2.CaptureResult.SCALER_CROP_REGION)
+            metaAfState = af; metaFocusDist = dist; metaExposureNs = exp; metaIso = iso
             metaStab = result.get(android.hardware.camera2.CaptureResult.CONTROL_VIDEO_STABILIZATION_MODE)
-            if (Build.VERSION.SDK_INT >= 30) metaZoomRatio = result.get(android.hardware.camera2.CaptureResult.CONTROL_ZOOM_RATIO)
-            metaCrop = result.get(android.hardware.camera2.CaptureResult.SCALER_CROP_REGION)
+            if (Build.VERSION.SDK_INT >= 30) metaZoomRatio = zr
+            metaCrop = crop
             metaSeq.incrementAndGet()
             result.get(android.hardware.camera2.CaptureResult.SENSOR_TIMESTAMP)?.let { ts ->
-                frameMeta.put(FrameMetaRing.Meta(ts, metaAfState, metaFocusDist, metaExposureNs, metaIso))
+                // This frame's OWN zoom and crop ride its meta: the zoom probe asks each frame what zoom it was at.
+                frameMeta.put(FrameMetaRing.Meta(ts, af, dist, exp, iso, zr,
+                    crop?.let { intArrayOf(it.left, it.top, it.width(), it.height()) }))
             }
         }
     }
@@ -305,9 +358,15 @@ class CameraController(
         return newest.describe(focusCalibrated) + " (the newest frame's report — the chosen frame's was not kept)"
     }
 
+    /** The chosen frame's own ISO (as [lensAtCapture] finds its report; never another frame's), or null. Capture thread. */
+    private fun isoAtCapture(request: CaptureBurst, metas: List<FrameMetaRing.Meta?>, chosen: Int): Int? {
+        val frame = request.frames.getOrNull(chosen) ?: return null
+        return (metas.getOrNull(chosen) ?: frameMeta.at(frame.timestampNs))?.iso
+    }
+
     // ---------------- zoom to fit the Area (core ZoomCoordinator; this is its CameraX glue) ----------------
 
-    private val zoom = ZoomCoordinator(object : ZoomCoordinator.Port {
+    private val zoom: ZoomCoordinator = ZoomCoordinator(object : ZoomCoordinator.Port {
         override fun request(gen: Int, ratio: Double) = applyZoomRatio(gen, ratio)
         override fun closeGate(why: String) = analyzer.closeZoomGate(why)
         override fun map(ratio: Double, view: RoiFrac?, settle: Boolean, why: String) {
@@ -333,6 +392,12 @@ class CameraController(
         }
         override fun later(ms: Long, block: () -> Unit) { main.postDelayed({ if (!released) block() }, ms) }
         override fun readBack(): Double? = freshReadBack()
+        // The probe's half (posted to the runner, the tap and the slot stopped on an abort): ZoomProbeGlue.
+        override fun probeAt(gen: Int, asked: Double, camera: Double, readBack: Double?, error: String?) =
+            probe.probeAt(gen, asked, camera, readBack, error)
+        override fun probeEnded(why: String) = probe.probeEnded(why)
+        override fun probeRebase(why: String) = probe.probeRebase(why)
+        override fun cameraAway(why: String) = analyzer.cameraAway(why)
     }, log = { DebugLog.global.i("zoom", it) })
 
     /** The screen's lifecycle: CameraX drops the zoom when the camera detaches (ON_STOP) and the zoom is re-applied at ON_START. */
@@ -359,7 +424,8 @@ class CameraController(
             if (released) return@addListener
             try {
                 f.get()
-                runCatching { DebugLog.global.i("zoom", "camera reports " + describeReadBack()) }
+                // The probe's rung line carries this evidence per frame (and once per rung, not per ask).
+                if (!zoom.probing) runCatching { DebugLog.global.i("zoom", "camera reports " + describeReadBack()) }
                 zoom.onApplied(gen, freshReadBack())
             } catch (e: Exception) {
                 val c = e.cause ?: e
@@ -444,22 +510,25 @@ class CameraController(
     var cameraId: String? = null
         private set
 
-    /** Pick the camera that scans (null = Automatic) — rebinds when it changes. */
+    /** Pick the camera that scans (null = Automatic) — rebinds when it changes (and stops a zoom probe: the rebind re-learns). */
     fun setCamera(id: String?) {
         if (id == cameraId) return
         cameraId = id
+        probe.stopNow("the camera setting changed — the camera is bound again")
         if (camera != null) bind()
     }
 
-    /** Standard 1600×1200 / High 2048×1536 — rebinds. */
+    /** Standard 1600×1200 / High 2048×1536 — rebinds (and stops a zoom probe: the rebind re-learns). */
     fun setResolution(res: Resolution) {
         if (res == resolution) return
         resolution = res
+        probe.stopNow("the resolution changed — the camera is bound again")
         if (camera != null) bind()
     }
 
     /** Unbind and stop the worker threads (Activity onDestroy). */
     fun release() {
+        probe.stopNow("the scan screen closed")                // while the camera is still there (the AE lock goes back)
         released = true
         if (lifecycleWatched) runCatching { owner.lifecycle.removeObserver(lifecycleWatch) }
         analysis?.clearAnalyzer()
@@ -470,6 +539,7 @@ class CameraController(
         camera = null; analysis = null; preview = null
         analysisExecutor.shutdown()
         pipeline.shutdown()
+        if (probeWorker.isInitialized()) probeWorker.value.shutdownNow()
     }
 
     private fun resolutionSelector(): ResolutionSelector = ResolutionSelector.Builder()
@@ -545,6 +615,7 @@ class CameraController(
         val stream = an.resolutionInfo?.resolution ?: resolution.size
         val lossless = active?.let { ZoomFit.lossless(it.width(), it.height(), stream.width, stream.height) }
         val lensMax = runCatching { cam.cameraInfo.zoomState.value?.maxZoomRatio?.toDouble() }.getOrNull()
+        boundLossless = lossless; boundLensMax = lensMax
         zoom.cameraBound(lossless, lensMax)
         if (!lifecycleWatched) { owner.lifecycle.addObserver(lifecycleWatch); lifecycleWatched = true }
         pendingLockWhy = "camera bind"
@@ -622,13 +693,19 @@ class CameraController(
         }
     }
 
+    /**
+     * The owner's AE/AWB lock — ORed with the zoom probe's ([ZoomProbeGlue.probeLocked]: ISO and exposure stay put
+     * across its rungs). applyRemote pushes the owner's setting on every PATCH, so the owner's
+     * value cannot be the probe's lever.
+     */
     private fun applyAeAwbLock() {
         val cam = camera ?: return
+        val lock = aeAwbLock || probe.probeLocked
         runCatching {
             Camera2CameraControl.from(cam.cameraControl).addCaptureRequestOptions(
                 CaptureRequestOptions.Builder()
-                    .setCaptureRequestOption(CaptureRequest.CONTROL_AE_LOCK, aeAwbLock)
-                    .setCaptureRequestOption(CaptureRequest.CONTROL_AWB_LOCK, aeAwbLock)
+                    .setCaptureRequestOption(CaptureRequest.CONTROL_AE_LOCK, lock)
+                    .setCaptureRequestOption(CaptureRequest.CONTROL_AWB_LOCK, lock)
                     .build(),
             )
         }
@@ -687,8 +764,14 @@ class CameraController(
         applyAeAwbLock()
     }
 
+    /** The zoom A/B's arm steps: each capture also measures its identification raster's detail (CapturePipeline). */
+    fun setMeasureDetail(on: Boolean) { pipeline.measureDetail = on }
+
     /** Tap on the preview ([x],[y] in PreviewView pixels). Mount: lock there; Handheld: AF there, auto-cancel. */
     fun tapToFocus(x: Float, y: Float) {
+        // The touch policy (1.1.17): during the zoom probe a tap only cancels it (through its verified
+        // restore) — the owner taps again to focus there.
+        if (probe.running) { probe.cancel("a tap on the preview"); return }
         val cam = camera ?: return
         val view = previewView ?: return
         val pt = view.meteringPointFactory.createPoint(x, y)
@@ -839,6 +922,72 @@ class CameraController(
         }, ContextCompat.getMainExecutor(context))
     }
 
+    // ---------------- the zoom probe (1.1.17: core ZoomProbeRun sequences it; this is its camera side) ----------------
+
+    /** The scan screen's view of a probe run. Main thread. */
+    interface ProbeListener {
+        /** Where the run is: the status pill's words, the measurement card's, and the zoom the camera last ANSWERED (draw the Area there). */
+        fun onProgress(p: ZoomProbeRun.Progress) {}
+        /** The run ended — exactly once: refused, stopped, cancelled or done (with its result). */
+        fun onFinished(o: ZoomProbeRun.Outcome) {}
+    }
+
+    /** This lens's limits, kept at bind for [ZoomProbe.Facts]. */
+    private var boundLossless: Double? = null
+    private var boundLensMax: Double? = null
+    /** The probe's worker thread — never the capture pipeline (its lastSummary, the watch window and the watchdog stay the scanner's). */
+    private val probeWorker = lazy { Executors.newSingleThreadExecutor { r -> Thread(r, "zoom-probe") } }
+
+    /** The probe's camera side ([ZoomProbeGlue]) over this camera. */
+    private val probe: ZoomProbeGlue = ZoomProbeGlue(analyzer, object : ZoomProbeGlue.Cam {
+        override fun post(block: () -> Unit) { main.post(block) }
+        // Tagged with the run's token (API 28+): the run's end removes its timers from the main looper at once.
+        override fun postDelayed(ms: Long, token: Any, block: () -> Unit) { main.postDelayed({ if (!released) block() }, token, ms) }
+        override fun cancelDelayed(token: Any) = main.removeCallbacksAndMessages(token)
+        override fun now(): Long = SystemClock.elapsedRealtime()
+        override fun ready(): Boolean = !released && camera != null && analysis != null
+        override fun applyAeLock() = applyAeAwbLock()
+        override fun focus(u: Double, v: Double, why: String, done: (Boolean?) -> Unit): Boolean {
+            val p = FocusPoint.Point(u, v, onCard = true)
+            val c = sensorPoint(p) ?: return false
+            if (camera == null || analysis == null) return false
+            focusAtSensor(c, lock = true, what = "zoom probe: focused on the card", why = why, where = p.describe(), onDone = done)
+            return true
+        }
+        override fun lensDpt(): Double? = metaFocusDist?.toDouble()
+        override fun metaAt(timestampNs: Long): FrameMetaRing.Meta? = frameMeta.at(timestampNs)
+        override fun activeArray(): IntArray? = activeArray?.let { intArrayOf(it.width(), it.height()) }
+        override fun baseArea(): RoiFrac? = roi
+        override fun highRes(): Boolean = resolution == Resolution.HIGH
+        override fun facts(restoreZ: Double): ZoomProbe.Facts {
+            val geo = analyzer.lastFrameGeometry
+            val w = geo?.let { Rotation.uprightWidth(it[0], it[1], it[2]) } ?: resolution.size.width
+            val h = geo?.let { Rotation.uprightHeight(it[0], it[1], it[2]) } ?: resolution.size.height
+            val act = activeArray
+            return ZoomProbe.Facts(boundCameraId ?: "?", w, h, resolution == Resolution.HIGH, act?.width(), act?.height(),
+                boundLossless, boundLensMax, restoreZ)
+        }
+        override fun armCardFocus(why: String) { if (scanMode == ScanMode.MOUNT) this@CameraController.armCardFocus(why) }
+        override fun worker(): java.util.concurrent.Executor = probeWorker.value
+    })
+
+    init { probe.zoom = zoom }
+
+    /**
+     * Run the zoom probe: [run] = its number in the session, [earlier] = the earlier VALID runs'
+     * 1× card thumbnails (the same card again does not count as another). False = no run was made
+     * (no camera, released, or one already runs) — nothing changed. True = the run is under way:
+     * every outcome, a refusal included, comes back through [l]. While it runs the analyzer's gate
+     * stays closed (nothing ticks, copies or fires): it files nothing. Main thread.
+     */
+    fun startZoomProbe(run: Int, earlier: List<ZoomProbeRun.Earlier>, l: ProbeListener): Boolean =
+        probe.start(run, earlier, l, seed = SystemClock.elapsedRealtime() xor run.toLong())
+
+    /** The owner cancelled (Cancel probe, or a control the touch policy turns into a cancel): the verified restore. */
+    fun cancelZoomProbe(why: String) = probe.cancel(why)
+
+    fun zoomProbeRunning(): Boolean = probe.running
+
     // ---------------- diagnostics ----------------
 
     /**
@@ -846,26 +995,24 @@ class CameraController(
      * scan Area fractions live in, so a browser can draw the Area on it. Null when no frame
      * arrives within [timeoutMs] (camera not bound). Blocks the caller; never the UI thread.
      */
-    fun snapshotJpeg(maxSide: Int = 1280, timeoutMs: Long = 2_000): ByteArray? {
-        val got = java.util.concurrent.ArrayBlockingQueue<Pair<io.github.darylno.cardscanner.core.Nv21Frame, Double>>(1)
+    fun snapshotJpeg(maxSide: Int = 1280, timeoutMs: Long = 2_000): ByteArray? =
+        snapshot(maxSide, timeoutMs, base = true)?.jpeg
+
+    /**
+     * `snapshot.jpg?view=camera` (1.1.17): the upright analysis frame AS THE CAMERA DELIVERS
+     * IT — zoomed, no grey ring, long side ≤ [maxSide] (2048: the stream's own pixels, so
+     * focus can be judged) — with the zoom that frame was taken at. The same one-slot
+     * request as [snapshotJpeg], obeying the zoom settle gate (null: no frame in time).
+     */
+    fun cameraSnapshot(maxSide: Int = 2048, timeoutMs: Long = 2_000): DeviceApi.Picture? =
+        snapshot(maxSide, timeoutMs, base = false)
+
+    /** The next analyzed frame and its zoom ([ScanAnalyzer.requestSnapshotAt]) as a picture, or null in [timeoutMs]. */
+    private fun snapshot(maxSide: Int, timeoutMs: Long, base: Boolean): DeviceApi.Picture? {
+        val got = java.util.concurrent.ArrayBlockingQueue<Pair<Nv21Frame, Double>>(1)
         analyzer.requestSnapshotAt { f, z -> got.offer(f to z) }
         val (frame, z) = got.poll(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS) ?: return null
-        val upright = io.github.darylno.cardscanner.core.Nv21Bgr.toUprightBgr(frame)
-        // Zoomed: the BASE-space picture (the zoomed view scaled by 1/z on grey) — the browser
-        // draws the stored base Area on it 1:1.
-        val bgr = if (z > 1.0) ZoomSnapshot.composeBase(upright, z).also { upright.release() } else upright
-        try {
-            val scale = maxSide.toDouble() / maxOf(bgr.cols(), bgr.rows())
-            if (scale < 1.0) {
-                val small = org.opencv.core.Mat()
-                org.opencv.imgproc.Imgproc.resize(bgr, small, org.opencv.core.Size(), scale, scale,
-                    org.opencv.imgproc.Imgproc.INTER_AREA)
-                try { return CapturePipeline.encodeJpeg(small) } finally { small.release() }
-            }
-            return CapturePipeline.encodeJpeg(bgr)
-        } finally {
-            bgr.release()
-        }
+        return SnapshotPicture.encode(frame, z, maxSide, base)
     }
 
     /**

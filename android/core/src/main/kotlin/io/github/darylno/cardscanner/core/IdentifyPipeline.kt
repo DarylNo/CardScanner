@@ -12,8 +12,9 @@ import java.util.concurrent.CancellationException
  *  - `ArtIndex.identify`: [CardExtract.warpOrFrame] → [ArtMatcher.identify];
  *  - `_ranked_candidates`: [ScryfallPrintings.getAllPrintings] (via
  *    [printings]) → [PrintingRanker.rankPrintings] on the warped sharpest
- *    frame → [PrintingCandidates.rankedCandidates] (sort by multi, top N,
- *    print counts), whose OCR hint is `_apply_ocr_hint`:
+ *    frame → [PrintingCandidates.rankedCandidates] (sort by multi, top N
+ *    plus their List twins ranked below — [ListTwins.withTwins] — print
+ *    counts), whose OCR hint is `_apply_ocr_hint`:
  *    [CardExtract.extractCard], detected only → [OcrStrip.readBottomStrip]
  *    → [IdentifyDecisions.applyOcrHint]; then `art_decisive`.
  *

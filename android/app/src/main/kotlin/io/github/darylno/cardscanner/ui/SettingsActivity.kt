@@ -261,9 +261,14 @@ class SettingsActivity : AppCompatActivity() {
         // ── Scans (owner, 2026-10-01: "need a way to delete all scans") ──
         col.addView(chrome.sectionHeader(getString(R.string.settings_scans)))
         val scansCard = chrome.card().apply { setPadding(dp(16), dp(4), dp(16), dp(4)) }
-        val count = runCatching { app.phoneServer.store.count() }.getOrDefault(0)
-        scansCard.addView(chrome.valueRow(getString(R.string.settings_delete_all), getString(R.string.settings_delete_all_desc),
-            resources.getQuantityString(R.plurals.scans_n, count, count)) { confirmDeleteAll() })
+        // Never touches the store on this thread — not even once it is open: the row reads "…"
+        // and the count, taken on [io], lands when it is ready (see [countScans]).
+        val deleteRow = chrome.valueRow(getString(R.string.settings_delete_all), getString(R.string.settings_delete_all_desc),
+            getString(R.string.settings_scans_counting)) { confirmDeleteAll() }
+        val countText = deleteRow.getChildAt(deleteRow.childCount - 1) as? android.widget.TextView
+        scanCountText = countText
+        countScans { n -> if (scanCountText === countText) countText?.text = resources.getQuantityString(R.plurals.scans_n, n, n) }
+        scansCard.addView(deleteRow)
         col.addView(scansCard, lp())
 
         // ── Diagnostics ──
@@ -291,6 +296,12 @@ class SettingsActivity : AppCompatActivity() {
             startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP))
             finish()
         }, lp(10))
+        // Just the zoom A/B (1.1.17): A1, the probe step, B, A2. Not offered while a session is on — Resume covers it.
+        if (!app.measure.active) diagCard.addView(chrome.secondaryButton(getString(R.string.measure_run_zoom)) {
+            app.measure.start(MeasureSession.Plan.ZOOM)
+            startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP))
+            finish()
+        }, lp(10))
         col.addView(diagCard, lp())
     }
 
@@ -300,7 +311,14 @@ class SettingsActivity : AppCompatActivity() {
      * own "Clear all"), then the count on this screen is refreshed.
      */
     private fun confirmDeleteAll() {
-        val count = runCatching { app.phoneServer.store.count() }.getOrDefault(0)
+        // One count, one dialog: taps while this one is still counting are ignored (each used to
+        // queue its own count and stack its own dialog — confirming two ran delete-all twice).
+        if (deleteAllCounting) return
+        deleteAllCounting = true
+        if (!countScans { count -> deleteAllCounting = false; askDeleteAll(count) }) deleteAllCounting = false
+    }
+
+    private fun askDeleteAll(count: Int) {
         val what = resources.getQuantityString(R.plurals.scans_n, count, count)
         if (count == 0) { Toast.makeText(this, R.string.settings_delete_all_none, Toast.LENGTH_SHORT).show(); return }
         AlertDialog.Builder(this)
@@ -320,6 +338,26 @@ class SettingsActivity : AppCompatActivity() {
             .setNegativeButton(R.string.cancel, null)
             .show()
     }
+
+    /** The Delete all scans row's count (this render's): an older render's count never lands on it. */
+    private var scanCountText: android.widget.TextView? = null
+    /** A Delete all scans tap is being counted: further taps wait for its dialog. */
+    private var deleteAllCounting = false
+
+    /**
+     * The number of scans for [then], ALWAYS counted on [io] and handed back on this (the UI)
+     * thread — dropped if the screen has gone by then. Never on this thread, even with the store
+     * open: a count takes the store's lock, which list() holds while it decodes every row (the
+     * price worker lists on every poll), and the first count also waits for the store's open
+     * (its one-time migrations). False when nothing was queued (the screen is closing).
+     */
+    private fun countScans(then: (Int) -> Unit): Boolean = try {
+        io.execute {
+            val n = runCatching { app.phoneServer.store.count() }.getOrDefault(0)
+            runOnUiThread { if (!isFinishing && !isDestroyed) then(n) }
+        }
+        true
+    } catch (_: java.util.concurrent.RejectedExecutionException) { false }
 
     /** The debug report (diagnostics + the live log) through the share sheet — paste it anywhere. */
     private fun shareDebugReport() = DebugShare.share(this, app)

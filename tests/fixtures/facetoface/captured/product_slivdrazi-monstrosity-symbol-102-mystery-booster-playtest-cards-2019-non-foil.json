@@ -1,0 +1,23 @@
+{
+ "url": "https://facetofacegames.com/products/slivdrazi-monstrosity-symbol-102-mystery-booster-playtest-cards-2019-non-foil.json",
+ "body": {
+  "product": {
+   "title": "Slivdrazi Monstrosity - Symbol [102] [Mystery Booster Playtest Cards 2019] [Non-Foil]",
+   "handle": "slivdrazi-monstrosity-symbol-102-mystery-booster-playtest-cards-2019-non-foil",
+   "variants": [
+    {
+     "sku": "M-CMB1-Slivdrazi_-102-NM-NF",
+     "title": "NM",
+     "option1": "NM",
+     "price": "54.99"
+    },
+    {
+     "sku": "M-CMB1-Slivdrazi_-102-PL-NF",
+     "title": "PL",
+     "option1": "PL",
+     "price": "46.74"
+    }
+   ]
+  }
+ }
+}

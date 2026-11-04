@@ -1,0 +1,41 @@
+{
+ "url": "https://facetofacegames.com/search/suggest.json?q=Mortuary%20STH-66%20The%20List&resources%5Btype%5D=product&resources%5Blimit%5D=20&resources%5Boptions%5D%5Bunavailable_products%5D=show",
+ "body": {
+  "resources": {
+   "results": {
+    "products": [
+     {
+      "title": "Mortuary [66] [Stronghold] [Non-Foil]",
+      "handle": "mortuary-66-stronghold-non-foil",
+      "available": true
+     },
+     {
+      "title": "Buried Alive [WTH-63] [The List] [Non-Foil]",
+      "handle": "buried-alive-wth-63-the-list-non-foil",
+      "available": false
+     },
+     {
+      "title": "Filth [JUD-66] [The List] [Non-Foil]",
+      "handle": "filth-jud-66-the-list-non-foil",
+      "available": true
+     },
+     {
+      "title": "Shizo, Death's Storehouse [CHK-283] [The List] [Foil]",
+      "handle": "shizo-deaths-storehouse-chk-283-the-list-foil",
+      "available": true
+     },
+     {
+      "title": "Living Death [A25-96] [The List] [Non-Foil]",
+      "handle": "living-death-a25-96-the-list-non-foil",
+      "available": true
+     },
+     {
+      "title": "Macabre Waltz [SOI-121] [The List] [Non-Foil]",
+      "handle": "macabre-waltz-soi-121-the-list-non-foil",
+      "available": true
+     }
+    ]
+   }
+  }
+ }
+}

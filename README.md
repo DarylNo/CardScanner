@@ -72,6 +72,14 @@ tells it apart (megapixels, autofocus or fixed focus, focal length).
 **Automatic** (the default) uses the main back camera. Changing it re-learns
 the empty tray. A paired computer can change it too, from 📱 Scanner.
 
+**Zoom to fit the Area** (Settings → Camera, off for now while it's being
+tried) zooms the camera in so your Area fills the view: more pixels on each
+card. The camera zooms about the middle of its picture, so an Area drawn off to
+one side can hardly zoom. When moving it to the middle would help, the app says
+so after you draw it ("centred, Zoom to fit would zoom 1.90× (here 1.00×)"),
+and on a paired computer 📱 Scanner shows a dashed box where the centred Area
+would sit — move the tray (or the Area) toward it.
+
 ## Reviewing
 
 **Scans** opens the scan list on the phone: each scan's printings ranked by
@@ -85,7 +93,11 @@ photo so its card matches the printing's.
 
 - A card is **auto-filed** (marked ⚠) when only one printing exists or when
   the collector line read off the card confirms the printing. Everything else
-  waits for you to pick.
+  waits for you to pick. A **List** card prints exactly the same collector line
+  as its original (only a small planeswalker icon at the bottom-left tells
+  them apart), so a card that has a List reprint is never auto-filed from its
+  collector line: its original and its List copy are both offered for you to
+  pick.
 - Every scan keeps its own row, in scan order, with a photo of the card
   (straightened, filling 95% of the picture); swipe a row to delete it (5 s
   Undo). **Filters → Bulk actions** has *Clear unpicked* and *Clear all*;
@@ -170,7 +182,9 @@ On the same Wi-Fi, or the phone's hotspot:
   column builder, or TXT in Mana Exchange's mass-entry format) and change the
   phone's scanner settings (**📱 Scanner**: mode, scan Area drawn on a live
   picture of the tray, camera, torch, resolution, exposure lock, vibration, check
-  mark time).
+  mark time, Zoom to fit). Above the picture, **Whole frame** is where you draw
+  the Area; **Camera view** shows what the camera really sees, zoomed and at
+  full detail — the place to judge focus.
 - **Guests:** the **Share** screen shows a 6-digit code. Guests can review,
   pick, edit and **flag** cards for deletion; the admin sees "Delete flagged".
   **New guest code** ends every guest session.
@@ -197,7 +211,14 @@ paste into a bug report. On the phone: Settings → Diagnostics → **Share debu
 report**. With USB or wireless debugging on, `adb logcat -s CardScanner` shows
 the same lines. **Run the measurement session** (same screen) walks you
 through the rig tests step by step on the scan screen, counting captures and
-marking the log, then shares the report at the end.
+marking the log, then shares the report at the end. **Run the zoom steps**
+(same screen, about 10 minutes) asks just one question — does Zoom to fit help
+on your mount? You put the same 10 cards down at normal zoom, run a short zoom
+probe on the card left on the tray (hands off for about 30 s, then once more on
+a different card), put the 10 cards down zoomed, then once more at normal zoom.
+At the end your own settings are put back and the report is shared: send it
+over, it says whether to turn Zoom to fit on. The 30 test scans stay in Scans;
+delete them there.
 
 ## Your data
 

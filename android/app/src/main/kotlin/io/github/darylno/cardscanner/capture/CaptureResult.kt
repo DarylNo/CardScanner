@@ -1,6 +1,7 @@
 package io.github.darylno.cardscanner.capture
 
 import io.github.darylno.cardscanner.core.RoiPx
+import io.github.darylno.cardscanner.core.ZoomDetail
 
 /**
  * What one capture produced, ready for upload.
@@ -17,7 +18,9 @@ import io.github.darylno.cardscanner.core.RoiPx
  * in Handheld); [sharpness] is per captured frame (time order, the Laplacian
  * variance of the Area's grey) and [sharpestIndex] indexes it — the frame the
  * primary and the quad come from. [timingsMs] keys: sharpness, convert, quad,
- * flatten, encode, total.
+ * flatten, encode, total. [detail] = the identification raster's detail
+ * ([ZoomDetail.identRaster]), measured only during the zoom A/B's arm steps
+ * (CapturePipeline.measureDetail), else null.
  */
 class CaptureResult(
     val primary: ByteArray,
@@ -31,12 +34,14 @@ class CaptureResult(
     val frameHeight: Int,
     val sharpness: DoubleArray,
     val sharpestIndex: Int,
+    val detail: ZoomDetail.Ident? = null,
 ) {
-    /** One line for the status/diagnostics log. */
+    /** One line for the status/diagnostics log (the zoom A/B's detail after the sharpness, only when measured). */
     fun summary(): String = buildString {
         append(if (flattened) "flattened m=$margin" else if (quad != null) "raw (no margin fits)" else "raw (no quad)")
         append(" · ${primary.size / 1024} KB + ${fallbacks.size} fallback")
         append(" · ").append(sharpnessText())
+        detail?.let { append(" · strip detail %.0f · card detail %.0f (630×880)".format(java.util.Locale.ROOT, it.strip, it.card)) }
         append(" · ")
         append(timingsMs.entries.joinToString(" ") { "${it.key}=${it.value}ms" })
     }

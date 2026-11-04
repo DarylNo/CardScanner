@@ -2,6 +2,7 @@ package io.github.darylno.cardscanner.f2f
 
 import org.json.JSONArray
 import org.json.JSONObject
+import java.text.Normalizer
 
 /** A printing to price (facetoface.get_price's arguments). */
 data class ProbeCard(
@@ -26,7 +27,9 @@ sealed class PriceOutcome {
 /**
  * facetoface.FaceToFaceClient.get_price ported: most-specific-first query
  * ladder, foil filter, collector (or promo set-name) narrowing, and SKU
- * set-code confirmation over at most 5 candidate product fetches.
+ * set-code confirmation over at most 5 candidate product fetches. The
+ * matching is golden-tested against the reference (F2fMatchParityTest,
+ * scripts/export_f2f_match_fixtures.py) — change facetoface.py first.
  */
 class F2fPricer(
     private val fetcher: F2fFetcher,
@@ -44,7 +47,7 @@ class F2fPricer(
         try {
             for (q in queries(card)) {
                 if (isStopped()) return PriceOutcome.Stopped
-                val match = matchPrinting(suggest(q), foilLabel, wantCollector, wantSet, wantSetName) ?: continue
+                val match = matchPrinting(suggest(q), foilLabel, wantCollector, wantSet, wantSetName, card.name) ?: continue
                 val conditions = variantsToConditions(match.second)
                 if (conditions.isEmpty()) continue
                 return PriceOutcome.Found(match.first.optString("handle", ""), conditions)
@@ -73,16 +76,23 @@ class F2fPricer(
 
     private fun matchPrinting(
         products: List<JSONObject>, foilLabel: String, wantCollector: String, wantSet: String, wantSetName: String,
+        name: String,
     ): Pair<JSONObject, List<JSONObject>>? {
         if (products.isEmpty()) return null
         // 1) foil filter
         val foilMatches = products.map { it to parseTitleBrackets(it.optString("title", "")) }
             .filter { norm(it.second.foilLabel) == norm(foilLabel) }
         if (foilMatches.isEmpty()) return null
-        // 2) collector match; promos without a collector fall back to set name
+        // 2) collector match; promos without a collector fall back to set name —
+        //    only collector-less titles of THIS card's name (any product of the
+        //    set name filed another List card's price: Mortuary → Buried Alive;
+        //    a name that merely started with it, Fireball's on a Fire // Ice)
         var candidates = foilMatches.filter { it.second.collector.isNotEmpty() && normCollector(it.second.collector) == wantCollector }
         if (candidates.isEmpty() && wantSetName.isNotEmpty()) {
-            candidates = foilMatches.filter { norm(it.second.setName) == wantSetName }
+            candidates = foilMatches.filter {
+                it.second.collector.isEmpty() && norm(it.second.setName) == wantSetName &&
+                    titleNamesCard(it.first.optString("title", ""), name)
+            }
         }
         if (candidates.isEmpty()) return null
         // 3) SKU set-code confirmation
@@ -138,27 +148,74 @@ class F2fPricer(
 
         private val NON_ALNUM = Regex("[^a-z0-9]")
         private val BRACKETS = Regex("""\[([^\]]+)]""")
+        private val MARKS = Regex("""\p{Mn}+""")
+
+        /** facetoface._COLLECTOR_RE, a FULL match: "141", "0083", "185j", "A25-141", "PZ2-038", "M19-185j". */
+        private val COLLECTOR = Regex("""(?:[A-Za-z0-9]{1,6}-)?[0-9]+[A-Za-z★†]?""")
+
+        /**
+         * facetoface._SKU_SET_RULES: a SKU confirms the set when it has EVERY
+         * segment of one group and no veto segment. plst = the List's waves
+         * (M-MB1 2019-11, M-FMB1 2020-03 foils, PLIST 2020-09 → 2024-02, PLST
+         * 2024-08+); ulst = SIN-MTG-UPLIST; cmb2 = M-CMB1-NOPW, which cmb1 vetoes.
+         */
+        private class SkuRule(val groups: List<List<String>>, val vetoes: List<String> = emptyList())
+
+        private val SKU_SET_RULES = mapOf(
+            "plst" to SkuRule(listOf(listOf("plst"), listOf("plist"), listOf("mb1"), listOf("fmb1"))),
+            "ulst" to SkuRule(listOf(listOf("ulst"), listOf("uplist"))),
+            "cmb2" to SkuRule(listOf(listOf("cmb2"), listOf("cmb1", "nopw"))),
+            "cmb1" to SkuRule(listOf(listOf("cmb1")), vetoes = listOf("nopw")),
+        )
 
         fun norm(s: String): String = NON_ALNUM.replace(s.lowercase(), "")
 
-        fun normCollector(s: String): String {
-            val t = s.trim().lowercase()
-            return t.trimStart('0').ifEmpty { t }
+        /** facetoface._norm_collector: lowercase, leading zeros stripped per hyphen segment ("PZ2-038" == "PZ2-38"). */
+        fun normCollector(s: String): String =
+            s.trim().lowercase().split('-').joinToString("-") { seg ->
+                seg.trimStart('0').ifEmpty { if (seg.isEmpty()) "" else "0" }
+            }
+
+        /** facetoface._norm_name: NFD minus Mn marks, lowercased, alphanumeric only. */
+        fun normName(s: String): String = norm(MARKS.replace(Normalizer.normalize(s, Normalizer.Form.NFD), ""))
+
+        /**
+         * facetoface._NAME_END: where a title's name part may run on past the card's name — " //" (back face),
+         * " -" / " —" (a language or note), " (" (a variant). A plain space, exactly as the reference spells it.
+         */
+        private val NAME_END = Regex(" +(?://|-|—|\\()")
+
+        /**
+         * facetoface._title_names_card: the title's text before "[" IS the card's front face — equal whole, or cut
+         * at its first NAME_END (the uncut form keeps "Erase (Not the Urza's Legacy One)"); never an empty one.
+         * Equal, not "starts with": Fireball, Shockwave, Mountain Goat, Fog Bank are other cards.
+         */
+        fun titleNamesCard(title: String, name: String): Boolean {
+            val want = normName(name.split(" // ")[0])
+            if (want.isEmpty()) return false
+            val part = title.substringBefore('[')
+            // split(limit = 2)[0] = the text before the first match, a leading match giving "" — re.split(maxsplit=1)[0].
+            return want == normName(part) || want == normName(part.split(NAME_END, limit = 2)[0])
         }
 
+        /** facetoface._parse_title_brackets: foil = last, set = second-last, collector = FIRST (≥ 3, if it looks like one). */
         fun parseTitleBrackets(title: String): TitleParts {
-            val b = BRACKETS.findAll(title).map { it.groupValues[1] }.toList()
+            val b = BRACKETS.findAll(title).map { it.groupValues[1].trim() }.toList()
             if (b.isEmpty()) return TitleParts("", "", "")
             return TitleParts(
-                collector = if (b.size >= 3) b[b.size - 3].trim() else "",
-                setName = if (b.size >= 2) b[b.size - 2].trim() else "",
-                foilLabel = b.last().trim(),
+                collector = if (b.size >= 3 && COLLECTOR.matches(b[0])) b[0] else "",
+                setName = if (b.size >= 2) b[b.size - 2] else "",
+                foilLabel = b.last(),
             )
         }
 
         fun skuMatchesSet(sku: String, setCode: String): Boolean {
             val want = setCode.lowercase()
-            return want.isNotEmpty() && sku.split('-').any { it.lowercase() == want }
+            if (want.isEmpty()) return false
+            val segments = sku.split('-').map { it.lowercase() }.toSet()
+            val rule = SKU_SET_RULES[want] ?: SkuRule(listOf(listOf(want)))
+            if (rule.vetoes.any { it in segments }) return false
+            return rule.groups.any { group -> group.all { it in segments } }
         }
 
         fun variantsToConditions(variants: List<JSONObject>): Map<String, Double> {

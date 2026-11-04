@@ -129,6 +129,85 @@ object ZoomFit {
         else Choice(zr, raw, limit, false, f, lossless, lensMax)
     }
 
+    // ── the off-centre hint (1.1.17) ──
+
+    /**
+     * Centring must gain at least this much zoom before the hint speaks: two [STEP]s.
+     * PROVISIONAL — a judgement, not a measurement (one step is the floor's own noise).
+     */
+    const val OFF_CENTRE_GAIN = 0.10
+
+    /**
+     * [a] moved to the frame centre, the same size: its fit is then the best any
+     * Area of that size can have, 1 / max(w, h). Always valid (the sides are
+     * kept, each ≥ [RoiFrac.MIN_SIDE]).
+     */
+    fun centred(a: RoiFrac): RoiFrac {
+        val hw = (a.x1 - a.x0) / 2; val hh = (a.y1 - a.y0) / 2
+        fun at(e: Double) = RoiFrac.orNull((0.5 - hw - e).coerceIn(0.0, 1.0), (0.5 - hh - e).coerceIn(0.0, 1.0),
+            (0.5 + hw + e).coerceIn(0.0, 1.0), (0.5 + hh + e).coerceIn(0.0, 1.0))
+        // Rounding can take an ulp off a side that is exactly MIN_SIDE: widen by a hair then.
+        return at(0.0) ?: at(1e-12)!!
+    }
+
+    /**
+     * CameraX zooms about the frame centre, so an Area off to one side zooms less
+     * than the same Area would in the middle. [now] = what the Area zooms where it
+     * is, [centred] = what it would zoom at [centredArea]; [dx] / [dy] = the Area's
+     * centre minus the frame's, in fractions of the frame (+dx = right, +dy =
+     * below, in the upright frame as the preview shows it).
+     */
+    class OffCentre(val now: Choice, val centred: Choice, val centredArea: RoiFrac, val dx: Double, val dy: Double) {
+        /**
+         * "the Area's centre is 20 % right of the frame centre — centred, the same Area
+         * would zoom 1.90× (this Area: 1.00×, its fit allows only 1.06×)". Whole % of the
+         * frame and the ratios only (no cm, no ages): the log is deduplicated on it.
+         */
+        fun describe(): String = "the Area's centre is ${where()} the frame centre — centred, the same Area would zoom " +
+            "%.2f× (this Area: %.2f×%s)".format(java.util.Locale.ROOT, centred.z, now.z,
+                if (now.belowMin) ", its fit allows only %.2f×".format(java.util.Locale.ROOT, now.raw) else "")
+
+        /**
+         * "centred, it would zoom 1.90× (this Area: 1.00×)" — the scan screen's status after an Area is saved.
+         * [on] = Zoom to fit is on; off, nothing zooms either way, so it names who would (review of a43cb5b:
+         * "it would zoom 1.90×" read as a fact with the switch off, this build's default): "centred, Zoom to fit
+         * would zoom 1.90× (here 1.00×)" — as short as the on words, so both fit the scan screen's 2-line pill.
+         */
+        fun short(on: Boolean = true): String =
+            if (on) "centred, it would zoom %.2f× (this Area: %.2f×)".format(java.util.Locale.ROOT, centred.z, now.z)
+            else "centred, Zoom to fit would zoom %.2f× (here %.2f×)".format(java.util.Locale.ROOT, centred.z, now.z)
+
+        private fun where(): String {
+            val x = Math.round(abs(dx) * 100); val y = Math.round(abs(dy) * 100)
+            val parts = listOfNotNull(
+                if (x > 0) "$x % ${if (dx > 0) "right" else "left"}" else null,
+                if (y > 0) "$y % ${if (dy > 0) "below" else "above"}" else null,
+            )
+            return when {
+                parts.isEmpty() -> "under 1 % off"           // a hair off-centre can still cross 1.10×
+                y > 0 -> parts.joinToString(" and ")         // "… 15 % above the frame centre"
+                else -> parts.single() + " of"               // "20 % right of the frame centre"
+            }
+        }
+    }
+
+    /**
+     * The off-centre hint for the stored (base) [area], with the same caps as
+     * [choose]: non-null only when the Area fit is what binds now (also "below
+     * 1.10×") and centring the same Area would zoom at least [OFF_CENTRE_GAIN]
+     * more. Read-only — it never changes a zoom; computed whatever the switch says,
+     * so the owner sees it before turning Zoom to fit on.
+     */
+    fun offCentre(area: RoiFrac?, lossless: Double?, lensMax: Double?, cap: Double = MAX_ZOOM): OffCentre? {
+        val a = area ?: return null
+        val now = choose(a, lossless, lensMax, cap)
+        if (now.limit != Limit.FIT) return null
+        val c = centred(a)
+        val cen = choose(c, lossless, lensMax, cap)
+        if (cen.z - now.z < OFF_CENTRE_GAIN - 1e-9) return null
+        return OffCentre(now, cen, c, (a.x0 + a.x1) / 2 - 0.5, (a.y0 + a.y1) / 2 - 0.5)
+    }
+
     /** Base fraction [b] on one axis → the view fraction at zoom [z]. */
     fun toViewAxis(b: Double, z: Double): Double = if (z == 1.0) b else 0.5 + (b - 0.5) * z
 

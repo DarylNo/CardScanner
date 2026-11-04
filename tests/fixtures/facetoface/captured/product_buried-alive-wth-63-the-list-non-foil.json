@@ -1,0 +1,23 @@
+{
+ "url": "https://facetofacegames.com/products/buried-alive-wth-63-the-list-non-foil.json",
+ "body": {
+  "product": {
+   "title": "Buried Alive [WTH-63] [The List] [Non-Foil]",
+   "handle": "buried-alive-wth-63-the-list-non-foil",
+   "variants": [
+    {
+     "sku": "SIN-MTG-PLST-WTH-63-ENG-NM-NF",
+     "title": "NM",
+     "option1": "NM",
+     "price": "4.99"
+    },
+    {
+     "sku": "SIN-MTG-PLST-WTH-63-ENG-PL-NF",
+     "title": "PL",
+     "option1": "PL",
+     "price": "3.99"
+    }
+   ]
+  }
+ }
+}

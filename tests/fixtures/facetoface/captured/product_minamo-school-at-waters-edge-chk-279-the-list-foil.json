@@ -1,0 +1,23 @@
+{
+ "url": "https://facetofacegames.com/products/minamo-school-at-waters-edge-chk-279-the-list-foil.json",
+ "body": {
+  "product": {
+   "title": "Minamo, School at Water's Edge [CHK-279] [The List] [Foil]",
+   "handle": "minamo-school-at-waters-edge-chk-279-the-list-foil",
+   "variants": [
+    {
+     "sku": "M-FMB1-Minamo_Sc-118-NM-F",
+     "title": "NM",
+     "option1": "NM",
+     "price": "99.99"
+    },
+    {
+     "sku": "M-FMB1-Minamo_Sc-118-PL-F",
+     "title": "PL",
+     "option1": "PL",
+     "price": "79.99"
+    }
+   ]
+  }
+ }
+}

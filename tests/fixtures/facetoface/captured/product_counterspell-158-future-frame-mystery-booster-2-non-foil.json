@@ -1,0 +1,23 @@
+{
+ "url": "https://facetofacegames.com/products/counterspell-158-future-frame-mystery-booster-2-non-foil.json",
+ "body": {
+  "product": {
+   "title": "Counterspell [158] [Future Frame] [Mystery Booster 2] [Non-Foil]",
+   "handle": "counterspell-158-future-frame-mystery-booster-2-non-foil",
+   "variants": [
+    {
+     "sku": "SIN-MTG-MB2-158-ENG-NM-NF",
+     "title": "NM",
+     "option1": "NM",
+     "price": "5.99"
+    },
+    {
+     "sku": "SIN-MTG-MB2-158-ENG-PL-NF",
+     "title": "PL",
+     "option1": "PL",
+     "price": "4.79"
+    }
+   ]
+  }
+ }
+}

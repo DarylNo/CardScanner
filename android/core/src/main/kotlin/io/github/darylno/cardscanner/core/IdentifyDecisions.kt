@@ -63,13 +63,27 @@ object IdentifyDecisions {
         return hd <= dists.min() + slack
     }
 
-    /** `_mark_art_decisive`: flag candidates[0] `art_decisive` when its lead is beyond doubt. */
+    /**
+     * `_mark_art_decisive`: flag candidates[0] `art_decisive` when its lead is
+     * beyond doubt. A List twin of #1 ([ListTwins]) within the gap, or with no
+     * distance, blocks it (a List card hashes like its original: 0–8 apart,
+     * measured); the runner-up is the first candidate that is NOT #1's twin,
+     * so a twin pulled in from below the top N never widens the gap.
+     */
     fun markArtDecisive(candidates: List<MutableMap<String, Any?>>) {
         if (candidates.size < 2 || truthy(candidates[0]["ocr_confirmed"])) return
-        val d0 = num(candidates[0], "multi_distance")
-        val d1 = num(candidates[1], "multi_distance")
+        val top = candidates[0]
+        val d0 = num(top, "multi_distance")
+        val rest = candidates.subList(1, candidates.size)
+        for (c in rest) {
+            if (!ListTwins.twins(top, c)) continue
+            val dt = num(c, "multi_distance")
+            if (d0 == null || dt == null || dt - d0 < ART_DECISIVE_GAP) return
+        }
+        val runner = rest.firstOrNull { !ListTwins.twins(top, it) } ?: rest[0]
+        val d1 = num(runner, "multi_distance")
         if (d0 != null && d1 != null && d0 <= ART_DECISIVE_CEILING && d1 - d0 >= ART_DECISIVE_GAP) {
-            candidates[0]["art_decisive"] = true
+            top["art_decisive"] = true
         }
     }
 

@@ -22,7 +22,11 @@ import java.util.concurrent.Executors
  * on Wi-Fi (the pack is rebuilt weekly). Scans taken before the pack lands
  * wait in the upload queue and are identified once it does.
  */
-class LocalIdentify(private val ctx: Context) {
+class LocalIdentify(
+    private val ctx: Context,
+    /** False in unit tests (Robolectric): every check is Skipped, nothing is downloaded. */
+    private val fetchAllowed: Boolean = true,
+) {
     val store = ArtPackStore(File(ctx.filesDir, "artpack"))
 
     @Volatile var lastCheck: ArtPackStore.Check? = null
@@ -73,6 +77,10 @@ class LocalIdentify(private val ctx: Context) {
 
     /** Check for a new pack in the background ([force] = now, any network). */
     fun checkAsync(force: Boolean, done: (ArtPackStore.Check) -> Unit = {}) {
+        if (!fetchAllowed) {
+            ArtPackStore.Check.Skipped("unit tests never download the card database").also { lastCheck = it; runCatching { done(it) } }
+            return
+        }
         try {
             io.execute {
                 checking = true

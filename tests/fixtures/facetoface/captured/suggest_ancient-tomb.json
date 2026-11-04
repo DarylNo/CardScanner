@@ -1,0 +1,61 @@
+{
+ "url": "https://facetofacegames.com/search/suggest.json?q=Ancient%20Tomb&resources%5Btype%5D=product&resources%5Blimit%5D=20&resources%5Boptions%5D%5Bunavailable_products%5D=show",
+ "body": {
+  "resources": {
+   "results": {
+    "products": [
+     {
+      "title": "Ancient Tomb [91] [Borderless] [Edge of Eternities: Stellar Sights] [Galaxy Foil]",
+      "handle": "ancient-tomb-91-borderless-edge-of-eternities-stellar-sights-galaxy-foil",
+      "available": false
+     },
+     {
+      "title": "Ancient Tomb [mlp315] [Mark Le Pine] [World Championship Decks 1999] [Non-Foil]",
+      "handle": "ancient-tomb-mlp315-mark-le-pine-world-championship-decks-1999-non-foil",
+      "available": false
+     },
+     {
+      "title": "Ancient Tomb [36] [Masterpiece Series] [Zendikar Expeditions] [Foil]",
+      "handle": "ancient-tomb-36-masterpiece-series-zendikar-expeditions-foil",
+      "available": false
+     },
+     {
+      "title": "Ancient Tomb [kb315] [Kai Budde] [World Championship Decks 1999] [Non-Foil]",
+      "handle": "ancient-tomb-kb315-kai-budde-world-championship-decks-1999-non-foil",
+      "available": false
+     },
+     {
+      "title": "Ancient Tomb - Foil - Scan 15083",
+      "handle": "ancient-tomb-foil-scan-15083",
+      "available": false
+     },
+     {
+      "title": "Ancient Tomb - Foil - Scan 11134",
+      "handle": "ancient-tomb-foil-scan-11134",
+      "available": false
+     },
+     {
+      "title": "Ancient Tomb — Masterpiece Series|Foil — ID 20331",
+      "handle": "ancient-tomb-masterpiece-seriesfoil-id-20331",
+      "available": false
+     },
+     {
+      "title": "Ancient Tomb - Foil - Scan 11520",
+      "handle": "ancient-tomb-foil-scan-11520",
+      "available": false
+     },
+     {
+      "title": "Ancient Tomb - Foil - Scan 15609",
+      "handle": "ancient-tomb-foil-scan-15609",
+      "available": false
+     },
+     {
+      "title": "Ancient Tomb — Borderless|Poster|Galaxy Foil — ID 17576",
+      "handle": "ancient-tomb-borderlesspostergalaxy-foil-id-17576",
+      "available": false
+     }
+    ]
+   }
+  }
+ }
+}

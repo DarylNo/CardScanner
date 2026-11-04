@@ -1,0 +1,61 @@
+{
+ "url": "https://facetofacegames.com/search/suggest.json?q=Slivdrazi%20Monstrosity&resources%5Btype%5D=product&resources%5Blimit%5D=20&resources%5Boptions%5D%5Bunavailable_products%5D=show",
+ "body": {
+  "resources": {
+   "results": {
+    "products": [
+     {
+      "title": "Slivdrazi Monstrosity - Symbol [102] [Mystery Booster Playtest Cards 2019] [Non-Foil]",
+      "handle": "slivdrazi-monstrosity-symbol-102-mystery-booster-playtest-cards-2019-non-foil",
+      "available": false
+     },
+     {
+      "title": "Slivdrazi Monstrosity - No Symbol [102] [Mystery Booster Playtest Cards 2021] [Non-Foil]",
+      "handle": "slivdrazi-monstrosity-no-symbol-102-mystery-booster-playtest-cards-2021-non-foil",
+      "available": true
+     },
+     {
+      "title": "Moldgraf Monstrosity [83] [Duskmourn: House of Horror: Commander] [Non-Foil]",
+      "handle": "moldgraf-monstrosity-83-duskmourn-house-of-horror-commander-non-foil",
+      "available": true
+     },
+     {
+      "title": "Moldgraf Monstrosity [156] [Commander 2018] [Non-Foil]",
+      "handle": "moldgraf-monstrosity-156-commander-2018-non-foil",
+      "available": true
+     },
+     {
+      "title": "Vorinclex, Monstrous Raider [320] [Showcase] [Kaldheim] [Non-Foil]",
+      "handle": "vorinclex-monstrous-raider-320-showcase-kaldheim-non-foil",
+      "available": true
+     },
+     {
+      "title": "Vorinclex, Monstrous Raider [199] [Kaldheim] [Foil]",
+      "handle": "vorinclex-monstrous-raider-199-kaldheim-foil",
+      "available": false
+     },
+     {
+      "title": "Vorinclex, Monstrous Raider [199] [Kaldheim] [Non-Foil]",
+      "handle": "vorinclex-monstrous-raider-199-kaldheim-non-foil",
+      "available": true
+     },
+     {
+      "title": "Ravenous Chupacabra [1764] [Borderless] [Monstrous Magazine] [Secret Lair Drop] [Foil]",
+      "handle": "ravenous-chupacabra-1764-borderless-monstrous-magazine-secret-lair-drop-foil",
+      "available": true
+     },
+     {
+      "title": "Secret Lair Drop Series - Monstrous Magazines - Foil Edition",
+      "handle": "secret-lair-drop-series-monstrous-magazines-foil-edition",
+      "available": false
+     },
+     {
+      "title": "Secret Lair Drop Series - Monstrous Magazines",
+      "handle": "secret-lair-drop-series-monstrous-magazines",
+      "available": false
+     }
+    ]
+   }
+  }
+ }
+}

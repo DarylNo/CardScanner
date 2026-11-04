@@ -38,8 +38,64 @@ CREATE TABLE IF NOT EXISTS scans (
 """
 
 
+# The one-time re-price (PRAGMA user_version 0 → 1, release 1.1.17): EVERY F2F
+# answer recorded before it is dropped once, and the sweep prices again from the
+# scanner's own connection (the phone's, in the app) at its usual pacing — a
+# one-time catch-up; new scans still jump the queue.
+# The owner chose all, not just The List's sets: the 1.1.17 matcher change
+# (facetoface.py) reaches every set. The old set-name fallback was collector- and
+# name-blind in EVERY set — an unstocked card filed another card of the same
+# set's price (Mortuary [STH-66] → Buried Alive's $4.99) — and a title with
+# variant brackets ("Lightning Bolt [401] [Rulebook Showcase] [Commander
+# Legends: Battle for Baldur's Gate] [Non-Foil]", about a third of F2F's titles)
+# never matched its own collector, so a showcase / borderless / Secret Lair
+# printing often holds the regular printing's price. The List's prints were
+# never found under their own SKUs at all (plst = MB1 / FMB1 / PLIST / PLST,
+# ulst = UPLIST, cmb2 = CMB1 + NOPW). And the sweep never re-asks an answer it
+# recorded, so without this none of that would reach a card already scanned.
+
+
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def _reprice_all(conn: sqlite3.Connection) -> tuple[int, int, int]:
+    """Drop every F2F answer recorded, in place: a scan's ``f2f`` column →
+    NULL (a selection's price, owed again; an unpicked scan's own top-match
+    price from scan time or the desktop's "Search F2F price" — the sweep reads
+    only its candidates, so that one is owed nowhere), and every candidate's
+    ``f2f_conditions`` key → removed (the sweep reads a missing key exactly
+    like None — owed on an unpicked scan; a picked scan prices only its
+    selection). Writes only those two columns, only
+    on rows that change: updated_at, status, the selection and everything else
+    stay as they were. A row whose JSON does not decode is left alone. Returns
+    (selections, unpicked scans' own prices, candidate prints) reset. The
+    caller holds the transaction."""
+    n_sel = n_top = n_cand = 0
+    rows = conn.execute("SELECT id, selection, f2f, candidates FROM scans").fetchall()
+    for sid, sel_raw, f2f_raw, cands_raw in rows:
+        try:
+            sel = json.loads(sel_raw) if sel_raw not in (None, "") else None
+            cands = json.loads(cands_raw) if cands_raw not in (None, "") else None
+        except ValueError:
+            continue
+        if f2f_raw is not None:
+            conn.execute("UPDATE scans SET f2f = NULL WHERE id = ?", (sid,))
+            if isinstance(sel, dict) and sel:
+                n_sel += 1
+            else:
+                n_top += 1
+        if isinstance(cands, list):
+            dropped = 0
+            for c in cands:
+                if isinstance(c, dict) and "f2f_conditions" in c:
+                    del c["f2f_conditions"]
+                    dropped += 1
+            if dropped:
+                conn.execute("UPDATE scans SET candidates = ? WHERE id = ?",
+                             (json.dumps(cands), sid))
+                n_cand += dropped
+    return n_sel, n_top, n_cand
 
 
 class ScanStore:
@@ -59,6 +115,36 @@ class ScanStore:
                 self._conn.execute(
                     "ALTER TABLE scans ADD COLUMN flagged INTEGER NOT NULL DEFAULT 0")
             self._conn.commit()
+            self._migrate()
+
+    def _migrate(self) -> None:
+        """Data migrations by ``PRAGMA user_version``, each in ONE transaction
+        with its stamp, so each runs exactly once (a fresh file runs them on an
+        empty table and is stamped too). A failure rolls back and leaves the
+        version as it was — retried on the next open; the store still opens."""
+        def version() -> int:
+            return self._conn.execute("PRAGMA user_version").fetchone()[0]
+
+        if version() >= 1:
+            return
+        try:
+            # IMMEDIATE + re-read: a second process opening the same file
+            # waits, then sees the stamp and does nothing.
+            self._conn.execute("BEGIN IMMEDIATE")
+            n_sel = n_top = n_cand = 0
+            if version() < 1:
+                n_sel, n_top, n_cand = _reprice_all(self._conn)
+                self._conn.execute("PRAGMA user_version = 1")
+            self._conn.commit()
+        except sqlite3.Error as exc:
+            if self._conn.in_transaction:
+                self._conn.rollback()
+            print(f"  [store] re-price failed, retried on the next open: {exc}")
+            return
+        if n_sel or n_top or n_cand:
+            print(f"  [store] re-price: {n_sel} selection(s) and {n_cand} candidate "
+                  f"print(s) dropped their F2F answer, {n_top} unpicked scan(s) their "
+                  f"top-match price")
 
     # ── serialization helpers ──────────────────────────────────────────────────
 

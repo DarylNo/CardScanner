@@ -1,0 +1,36 @@
+{
+ "url": "https://facetofacegames.com/search/suggest.json?q=Lightning%20Bolt%20A25-141%20The%20List&resources%5Btype%5D=product&resources%5Blimit%5D=20&resources%5Boptions%5D%5Bunavailable_products%5D=show",
+ "body": {
+  "resources": {
+   "results": {
+    "products": [
+     {
+      "title": "Lightning Bolt [A25-141] [The List] [Non-Foil]",
+      "handle": "lightning-bolt-a25-141-the-list-non-foil",
+      "available": true
+     },
+     {
+      "title": "Lightning Bolt [E01-54] [The List] [Non-Foil]",
+      "handle": "lightning-bolt-e01-54-the-list-non-foil",
+      "available": true
+     },
+     {
+      "title": "Lightning Bolt [141] [Masters 25] [Foil]",
+      "handle": "lightning-bolt-141-masters-25-foil",
+      "available": true
+     },
+     {
+      "title": "Lightning Bolt [141] [Masters 25] [Non-Foil]",
+      "handle": "lightning-bolt-141-masters-25-non-foil",
+      "available": true
+     },
+     {
+      "title": "Lightning Bolt [PF19-1] [The List] [Non-Foil]",
+      "handle": "lightning-bolt-pf19-1-the-list-non-foil",
+      "available": true
+     }
+    ]
+   }
+  }
+ }
+}

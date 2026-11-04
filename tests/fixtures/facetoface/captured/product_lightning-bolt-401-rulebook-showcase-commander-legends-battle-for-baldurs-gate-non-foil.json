@@ -1,0 +1,23 @@
+{
+ "url": "https://facetofacegames.com/products/lightning-bolt-401-rulebook-showcase-commander-legends-battle-for-baldurs-gate-non-foil.json",
+ "body": {
+  "product": {
+   "title": "Lightning Bolt [401] [Rulebook Showcase] [Commander Legends: Battle for Baldur's Gate] [Non-Foil]",
+   "handle": "lightning-bolt-401-rulebook-showcase-commander-legends-battle-for-baldurs-gate-non-foil",
+   "variants": [
+    {
+     "sku": "SIN-MTG-CLB-401-ENG-NM-NF",
+     "title": "NM",
+     "option1": "NM",
+     "price": "3.49"
+    },
+    {
+     "sku": "SIN-MTG-CLB-401-ENG-PL-NF",
+     "title": "PL",
+     "option1": "PL",
+     "price": "2.39"
+    }
+   ]
+  }
+ }
+}

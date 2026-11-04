@@ -1,0 +1,21 @@
+{
+ "url": "https://facetofacegames.com/search/suggest.json?q=Ancient%20Tomb%20TMP-315%20The%20List&resources%5Btype%5D=product&resources%5Blimit%5D=20&resources%5Boptions%5D%5Bunavailable_products%5D=show",
+ "body": {
+  "resources": {
+   "results": {
+    "products": [
+     {
+      "title": "Ancient Tomb [TMP-315] [The List] [Non-Foil]",
+      "handle": "ancient-tomb-tmp-315-the-list-non-foil",
+      "available": true
+     },
+     {
+      "title": "Ancient Tomb [315] [Tempest] [Non-Foil]",
+      "handle": "ancient-tomb-315-tempest-non-foil",
+      "available": true
+     }
+    ]
+   }
+  }
+ }
+}

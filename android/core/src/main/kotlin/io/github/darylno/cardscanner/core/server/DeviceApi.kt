@@ -3,6 +3,7 @@ package io.github.darylno.cardscanner.core.server
 import io.github.darylno.cardscanner.core.MiniJson
 import io.github.darylno.cardscanner.core.RoiFrac
 import io.github.darylno.cardscanner.core.ZoomCoordinator
+import io.github.darylno.cardscanner.core.ZoomFit
 
 /**
  * The scanner phone's own settings, from the browser (owner request
@@ -16,17 +17,49 @@ import io.github.darylno.cardscanner.core.ZoomCoordinator
  *                                     or an id from `cameras` [{id, label}])
  *   GET   /api/device/snapshot.jpg  → the camera's current upright frame, the
  *                                     space the scan Area fractions live in
+ *   GET   /api/device/snapshot.jpg?view=camera
+ *                                   → the zoomed frame as the camera delivers it
+ *                                     (headers `X-Zoom-Ratio`, `X-Frame-Size`)
  *
  * `roi` is the scan Area as fractions of the upright frame
  * `{"x0","y0","x1","y1"}` (the app's [RoiFrac]; each side ≥ its minimum), or
  * null for the full frame.
  *
  * "Zoom to fit the Area" (1.1.14): `zoom_fit` (true / false) is the switch;
- * `zoom` = `{ratio, target, limit, fit, lossless, max, settling, drawing}` while
- * the scan screen has its camera, else null (`drawing`: an Area is being drawn on
- * the phone, the camera zoomed out to 1× for it). `roi` stays BASE (1×) fractions at any zoom,
- * and the snapshot stays a base-space picture (the zoomed view on grey), so a
- * box drawn on it still maps 1:1.
+ * `zoom` = `{ratio, target, limit, fit, lossless, max, settling, drawing, would,
+ * off_centre}` while the scan screen has its camera, else null (`drawing`: an
+ * Area is being drawn on the phone, the camera zoomed out to 1× for it). `roi`
+ * stays BASE (1×) fractions at any zoom, and the snapshot stays a base-space
+ * picture (the zoomed view on grey), so a box drawn on it still maps 1:1.
+ *
+ * The off-centre hint (1.1.17), whatever the switch says: `would` =
+ * `{z, limit, fit}`, what this Area zooms with the switch on; `off_centre` = null,
+ * or `{now, centred, dx, dy, centred_roi, words}` when the Area fit binds and the
+ * SAME Area centred would zoom ≥ 0.10× more — `centred_roi` (base fractions) is
+ * where it would sit, `dx`/`dy` the Area's centre minus the frame's (+ = right /
+ * below), `words` worded on the phone like `limit`. Read-only: PATCH has no key
+ * for either.
+ *
+ * The camera view (1.1.17): `snapshot_views` = `["base","camera"]` says this phone
+ * answers `?view=camera` (an older one answers every view with the base picture, so
+ * the desktop shows its "Whole frame | Camera view" toggle only when it is listed).
+ * `view=camera` is the upright analysis frame AS THE CAMERA DELIVERS IT — zoomed,
+ * no grey ring, long side ≤ 2048 (the stream's own pixels, to judge focus) — with
+ * the zoom that frame was taken at in `X-Zoom-Ratio` ("1.900") and its size in
+ * `X-Frame-Size` ("1200x1600"): the Area sits at ½ + (b − ½)·z of it, never at the
+ * polled `zoom.ratio` (a frame and a poll can straddle a zoom change). No query,
+ * `?t=` only and `view=base` stay the base picture above, byte for byte; any other
+ * view is 400 before a picture is taken. No picture → 503: the scan screen closed (today's
+ * words), else "no picture within 2 s" — naming the zoom only while `zoom.settling` says so.
+ * Admin only like the rest ([ScanServer.adminOnly] reads the path, never the query).
+ *
+ * The zoom probe (1.1.17), REPORTED, never driven, from here (it runs from the
+ * measurement session's step on the phone): `zoom.probing` = it holds the camera
+ * now (`zoom.ratio` is then the camera's rung, never `settling` — the analyzer is
+ * paused on purpose) and `zoom.probe` = where it is, in the phone's words ("rung
+ * 7/15 · 1.60× · …"), null otherwise; top-level `zoom_probe` = the last probe's
+ * verdict as the phone keeps it (`{at, camera, stream, words, …}`, null = never
+ * run) — with the scan screen closed too. PATCH has no key for either.
  */
 class DeviceApi(private val device: DeviceControl) {
 
@@ -37,12 +70,21 @@ class DeviceApi(private val device: DeviceControl) {
         fun write(s: DeviceState)
         /** The current upright camera frame as JPEG, or null when the scan screen isn't open. */
         fun snapshot(): ByteArray?
+        /**
+         * `?view=camera`: the current upright frame as the camera delivers it (zoomed, no
+         * grey ring) with its own zoom, or null — the scan screen isn't open, its camera
+         * isn't running, or no frame came in time (e.g. the zoom settling: [zoom] says so).
+         * The default: a control with no camera view.
+         */
+        fun cameraSnapshot(): Picture? = null
         /** True while the scan screen (the camera) is open. */
         fun cameraLive(): Boolean
         /** The cameras the Camera setting offers on this phone, as (id, label); empty = unknown. */
         fun cameras(): List<Pair<String, String>> = emptyList()
         /** The live zoom (the scan screen's camera), or null when it isn't open. */
         fun zoom(): ZoomCoordinator.State? = null
+        /** The last zoom probe's verdict as the phone keeps it (its settings — no camera needed), or null = never run. */
+        fun zoomProbe(): Map<String, Any?>? = null
     }
 
     /** [auto] = the mode: true = "tray" (hands-free), false = "tap" (tap to scan). */
@@ -57,6 +99,9 @@ class DeviceApi(private val device: DeviceControl) {
         val zoomFit: Boolean = false,
     )
 
+    /** A camera-view picture: the JPEG, the zoom its frame was taken at (1.0 = none), its size in px. */
+    class Picture(val jpeg: ByteArray, val ratio: Double, val w: Int, val h: Int)
+
     companion object {
         const val MODE_TRAY = "tray"
         const val MODE_TAP = "tap"
@@ -64,15 +109,44 @@ class DeviceApi(private val device: DeviceControl) {
         const val CHECK_MS_DEFAULT = 2_500
         const val CHECK_MS_MIN = 250
         const val CHECK_MS_MAX = 10_000
+        /** `snapshot.jpg?view=`: the base-space picture (the default) or the camera's own view. */
+        const val VIEW_BASE = "base"
+        const val VIEW_CAMERA = "camera"
+        private const val NO_CAMERA = "the camera isn't running — open the scan screen on the phone"
+        /** The camera view had no frame in time while the phone reported its zoom settling (the gate). */
+        private const val NO_PICTURE_ZOOMING = "no picture within 2 s — the camera's zoom is changing; try again"
+        /** …and with nothing settling: Zoom to fit off, a camera still starting, or none (permission). */
+        private const val NO_PICTURE = "no picture within 2 s — check the scan screen on the phone and try again"
     }
 
     fun handle(req: ApiRequest): ApiResponse? = when {
         req.path == "/api/device" && req.method == "GET" -> ApiResponse.json(200, state())
         req.path == "/api/device" && req.method == "PATCH" -> patch(req)
-        req.path == "/api/device/snapshot.jpg" && req.method == "GET" ->
-            device.snapshot()?.let { ApiResponse(200, "image/jpeg", it) }
-                ?: ApiResponse.json(503, mapOf("error" to "the camera isn't running — open the scan screen on the phone"))
+        req.path == "/api/device/snapshot.jpg" && req.method == "GET" -> snapshot(req.query["view"])
         else -> null
+    }
+
+    private fun snapshot(view: String?): ApiResponse = when (view) {
+        null, VIEW_BASE -> device.snapshot()?.let { ApiResponse(200, "image/jpeg", it) }
+            ?: ApiResponse.json(503, mapOf("error" to NO_CAMERA))
+        VIEW_CAMERA -> {
+            // The zoom is named as the reason only when the phone says it is settling — before the
+            // wait or after it (the gate opens the moment the settle is over). Review of d0b65bf:
+            // it was said whenever the screen was open, with Zoom to fit OFF (no gate) and at once
+            // from a scan screen whose camera never started (no camera permission).
+            val settling = device.zoom()?.settling == true
+            device.cameraSnapshot()?.let { p ->
+                ApiResponse(200, "image/jpeg", p.jpeg, linkedMapOf(
+                    "X-Zoom-Ratio" to "%.3f".format(java.util.Locale.ROOT, p.ratio),
+                    "X-Frame-Size" to "${p.w}x${p.h}",
+                ))
+            } ?: ApiResponse.json(503, mapOf("error" to when {
+                !device.cameraLive() -> NO_CAMERA
+                settling || device.zoom()?.settling == true -> NO_PICTURE_ZOOMING
+                else -> NO_PICTURE
+            }))
+        }
+        else -> bad("view must be \"$VIEW_BASE\" or \"$VIEW_CAMERA\"")
     }
 
     fun state(): Map<String, Any?> {
@@ -85,8 +159,12 @@ class DeviceApi(private val device: DeviceControl) {
             "camera" to (s.cameraId ?: CAMERA_AUTO),
             "cameras" to device.cameras().map { (id, label) -> linkedMapOf("id" to id, "label" to label) },
             "camera_live" to device.cameraLive(),
+            // snapshot.jpg?view=camera (1.1.17) — an older phone app lists nothing and answers the base picture.
+            "snapshot_views" to listOf(VIEW_BASE, VIEW_CAMERA),
             "zoom_fit" to s.zoomFit,
             "zoom" to device.zoom()?.let(::zoomJson),
+            // The zoom probe's last verdict (1.1.17): read-only, also with the scan screen closed.
+            "zoom_probe" to device.zoomProbe(),
         )
     }
 
@@ -94,18 +172,36 @@ class DeviceApi(private val device: DeviceControl) {
     private fun zoomJson(z: ZoomCoordinator.State): Map<String, Any?> {
         val t = z.target
         fun r2(v: Double?) = v?.takeIf { it.isFinite() }?.let { Math.round(it * 100) / 100.0 }
+        fun r4(v: Double) = Math.round(v * 10_000) / 10_000.0
         return linkedMapOf(
             "ratio" to r2(z.ratio),
             "target" to r2(t.z),
-            "limit" to (if (t.belowMin) "below ${"%.2f".format(java.util.Locale.ROOT, io.github.darylno.cardscanner.core.ZoomFit.MIN_USEFUL)}× (${t.limit.words})" else t.limit.words),
+            "limit" to limitWords(t),
             "fit" to r2(t.fit),
             "lossless" to r2(t.lossless),
             "max" to r2(t.lensMax),
             "settling" to z.settling,
             // An Area being drawn on the phone: the camera is zoomed out to 1× for it (the panel says so).
             "drawing" to z.drawing,
+            // The off-centre hint (1.1.17): what this Area would zoom with the switch on, and centred.
+            "would" to z.area?.let { linkedMapOf("z" to r2(it.z), "limit" to limitWords(it), "fit" to r2(it.fit)) },
+            "off_centre" to z.offCentre?.let { o ->
+                val c = o.centredArea
+                linkedMapOf(
+                    "now" to r2(o.now.z), "centred" to r2(o.centred.z), "dx" to r4(o.dx), "dy" to r4(o.dy),
+                    "centred_roi" to linkedMapOf("x0" to r4(c.x0), "y0" to r4(c.y0), "x1" to r4(c.x1), "y1" to r4(c.y1)),
+                    "words" to o.describe(),
+                )
+            },
+            // The zoom probe holds the camera (1.1.17): `ratio` is its rung; `probe` says where it is.
+            "probing" to z.probing,
+            "probe" to z.probeNote?.takeIf { z.probing },
         )
     }
+
+    /** "the Area fit" / "below 1.10× (the Area fit)" — what bound a ratio, as the panel shows it. */
+    private fun limitWords(c: ZoomFit.Choice): String =
+        if (c.belowMin) "below ${"%.2f".format(java.util.Locale.ROOT, ZoomFit.MIN_USEFUL)}× (${c.limit.words})" else c.limit.words
 
     private fun patch(req: ApiRequest): ApiResponse {
         val body = req.body?.let {

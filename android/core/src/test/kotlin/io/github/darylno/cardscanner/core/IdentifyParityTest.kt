@@ -73,7 +73,9 @@ class IdentifyParityTest {
             PrintingRanker(PrintingRankerParityTest.Companion.FixtureImages()), CannedOcr(s["ocr_text"] as String))
         val bytes = PrintingRankerParityTest.file("scans/${s["scan"]}.jpg").readBytes()
         val frame = Imgcodecs.imdecode(MatOfByte(*bytes), Imgcodecs.IMREAD_COLOR)
-        try { return pipeline.scan(listOf(frame)) } finally { frame.release() }
+        // A scenario may narrow the slice (`top_n`) to put a List twin below it.
+        val topN = (s["top_n"] as? Number)?.toInt() ?: PrintingCandidates.SCAN_TOP_N
+        try { return pipeline.scan(listOf(frame), topN) } finally { frame.release() }
     }
 
     @Suppress("UNCHECKED_CAST")

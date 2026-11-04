@@ -1,0 +1,56 @@
+{
+ "url": "https://facetofacegames.com/search/suggest.json?q=Counterspell%20158%20Mystery%20Booster%202&resources%5Btype%5D=product&resources%5Blimit%5D=20&resources%5Boptions%5D%5Bunavailable_products%5D=show",
+ "body": {
+  "resources": {
+   "results": {
+    "products": [
+     {
+      "title": "Counterspell [158] [Future Frame] [Mystery Booster 2] [Non-Foil]",
+      "handle": "counterspell-158-future-frame-mystery-booster-2-non-foil",
+      "available": true
+     },
+     {
+      "title": "Counterspell [158] [Future Frame] [Mystery Booster 2] [Foil]",
+      "handle": "counterspell-158-future-frame-mystery-booster-2-foil",
+      "available": true
+     },
+     {
+      "title": "Counterbalance [157] [Future Frame] [Mystery Booster 2] [Non-Foil]",
+      "handle": "counterbalance-157-future-frame-mystery-booster-2-non-foil",
+      "available": true
+     },
+     {
+      "title": "Counterbalance [157] [Future Frame] [Mystery Booster 2] [Foil]",
+      "handle": "counterbalance-157-future-frame-mystery-booster-2-foil",
+      "available": true
+     },
+     {
+      "title": "Mystery Booster 2 - Booster Box",
+      "handle": "mystery-booster-2-booster-box",
+      "available": false
+     },
+     {
+      "title": "Contamination [178] [Future Frame] [Mystery Booster 2] [Non-Foil]",
+      "handle": "contamination-178-future-frame-mystery-booster-2-non-foil",
+      "available": true
+     },
+     {
+      "title": "Displacer Kitten [27] [White Border] [Mystery Booster 2] [Non-Foil]",
+      "handle": "displacer-kitten-27-white-border-mystery-booster-2-non-foil",
+      "available": true
+     },
+     {
+      "title": "Pact of Negation [169] [Future Frame] [Mystery Booster 2] [Foil]",
+      "handle": "pact-of-negation-169-future-frame-mystery-booster-2-foil",
+      "available": true
+     },
+     {
+      "title": "Wasteland [115] [White Border] [Mystery Booster 2] [Non-Foil]",
+      "handle": "wasteland-115-white-border-mystery-booster-2-non-foil",
+      "available": true
+     }
+    ]
+   }
+  }
+ }
+}

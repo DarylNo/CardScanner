@@ -101,26 +101,37 @@ object OcrMatch {
      * `match_printing`: the id of the ONE candidate the OCR [blob] names, or
      * null when zero or several match (ambiguity never guesses).
      *
-     *  1. a compound collector number ("A25-85", "2019-2"; canonical ≥4
+     *  1. a compound collector number ("2019-2", "IFIYW-7"; canonical ≥4
      *     chars) found in the blob wins outright when exactly one candidate
-     *     has it — a List copy prints its ORIGINAL set's code;
+     *     has it — never a List printing's ("A25-85"): a List card does not
+     *     print it;
      *  2. else a UNIQUE set-code hit — the code as a WHOLE word, or glued to
      *     a language tag ([LANG_TAGS]); never the start of another word
      *     (artists MSCHF / Milivoj read as MSC… / M11…);
      *  3. else, among several set hits, a unique collector-number hit.
      * Compound and collector numbers compare against the words run together
      * (the reader splits them at "/" and "-").
+     *
+     * The List ([ListTwins]): a List card prints EXACTLY its original
+     * printing's line (plst A25-141 reads "141/249 U" / "A25 • EN"), so a hit
+     * whose List twin is also a candidate — either direction, whichever step
+     * found it — is ambiguity: null.
      */
     fun matchPrinting(blob: String, candidates: List<Map<String, Any?>>): String? {
         val words = canonWords(blob).split(' ').filter { it.isNotEmpty() }   // idempotent
         if (words.isEmpty()) return null
         val b = words.joinToString("")
+        val hit = hit(words, b, candidates) ?: return null
+        if (ListTwins.hasTwinAmong(hit, candidates)) return null
+        return hit["id"]?.toString()
+    }
 
+    private fun hit(words: List<String>, b: String, candidates: List<Map<String, Any?>>): Map<String, Any?>? {
         val compound = candidates.filter { c ->
             val cn = field(c, "collector_number")
-            '-' in cn && canon(cn).let { it.length >= 4 && b.contains(it) }
+            !ListTwins.isListPrinting(c) && '-' in cn && canon(cn).let { it.length >= 4 && b.contains(it) }
         }
-        if (compound.size == 1) return compound[0]["id"]?.toString()
+        if (compound.size == 1) return compound[0]
 
         val hits = candidates.filter { c ->
             val code = canon(field(c, "set"))
@@ -128,13 +139,13 @@ object OcrMatch {
                 it == code || (it.startsWith(code) && it.substring(code.length) in LANG_TAGS)
             }
         }
-        if (hits.size == 1) return hits[0]["id"]?.toString()
+        if (hits.size == 1) return hits[0]
 
         if (hits.size > 1) {
             val collHits = hits.filter { c ->
                 canon(field(c, "collector_number")).let { it.length >= 2 && b.contains(it) }
             }
-            if (collHits.size == 1) return collHits[0]["id"]?.toString()
+            if (collHits.size == 1) return collHits[0]
         }
         return null
     }

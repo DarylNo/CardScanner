@@ -81,6 +81,8 @@
     <string name="settings_card_list_note">The list is fetched when the app starts and on Refresh now; the last good list is kept for when it can\'t be reached. Format and setup: README → External card list.</string>
     <string name="settings_scans">Scans</string>
     <string name="settings_delete_all">Delete all scans</string>
+    <!-- The Delete all scans row while the scan store is still opening (its one-time migrations run on open). -->
+    <string name="settings_scans_counting">…</string>
     <string name="settings_delete_all_desc">Removes every scan and its photo from this phone. There is no backup — export a copy from the paired computer first if you want one.</string>
     <string name="settings_delete_all_title">Delete all %1$s?</string>
     <string name="settings_delete_all_msg">They will be gone from this phone for good — there is no backup and no undo.</string>
@@ -97,6 +99,7 @@
     <string name="settings_share_report">Share debug report</string>
     <string name="measure_run">Run the measurement session</string>
     <string name="measure_resume">Resume the measurement session</string>
+    <string name="measure_run_zoom">Run the zoom steps (about 10 min)</string>
     <string name="measure_step">Step %1$d of %2$d · %3$s</string>
     <string name="measure_captures">Captures during this step: %1$d</string>
     <string name="measure_captures_of">Captures during this step: %1$d of %2$d</string>
@@ -107,6 +110,9 @@
     <string name="measure_stop">Stop</string>
     <string name="measure_yes">Yes</string>
     <string name="measure_no">No</string>
+    <string name="measure_probe_run">Run probe</string>
+    <string name="measure_probe_cancel">Cancel probe</string>
+    <string name="measure_probe_again">Run again</string>
     <string name="measure_stopped">Measurement session stopped — your settings are back.</string>
 
     <!-- Share -->
