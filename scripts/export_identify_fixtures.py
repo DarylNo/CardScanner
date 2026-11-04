@@ -48,14 +48,19 @@ from mtg_card_scanner.scryfall import ScryfallClient  # noqa: E402
 RES = ROOT / "android" / "core" / "src" / "test" / "resources"
 OUT = RES / "identify"
 
-# (scenario key, ranker scan, canned OCR text or "" for nothing read)
+# (scenario key, ranker scan, canned OCR text or "" for nothing read[, top_n])
 SCENARIOS = [
     ("bolt_m10_ocr", "bolt_m10", "146/249 C\nM10 • EN CHRISTOPHER MOELLER"),
     ("bolt_m10_blind", "bolt_m10", ""),
     ("bolt_4ed_blind", "bolt_4ed", ""),
-    ("bolt_plst_ocr", "bolt_plst", "CLB-187 PLST • EN"),
+    # A List card prints its ORIGINAL's line (plst CLB-187 = clb #187's
+    # "C 0187" / "CLB • EN"), and clb 187 is a candidate: no confirmation.
+    ("bolt_plst_ocr", "bolt_plst", "C 0187\nCLB • EN Illus. Christopher Moeller"),
     ("shivan_7ed_blind", "shivan_7ed", ""),
     ("wastes_ogw_blind", "wastes_ogw", ""),
+    # a25 141 ranks #8 and its List twin plst A25-141 #9: with a top 8 the
+    # twin is pulled in right after it, and A25's own line confirms neither.
+    ("bolt_m10_twin_below", "bolt_m10", "141/249 U\nA25 • EN Christopher Moeller", 8),
 ]
 
 
@@ -137,14 +142,19 @@ def build() -> dict[str, bytes]:
     real_read = ocr_id.read_bottom_strip
     scenarios = {}
     try:
-        for key, scan, text in SCENARIOS:
+        for key, scan, text, *rest in SCENARIOS:
             # The phone's OcrStrip unions its engine's two reads into canonical words.
             canned = ocr_id.canon_words(" ".join([text, text]))
             ocr_id.read_bottom_strip = lambda card_bgr, _t=canned: _t
             frame = cv2.imdecode(np.frombuffer((RES / "ranker" / "scans" / f"{scan}.jpg").read_bytes(),
                                                np.uint8), cv2.IMREAD_COLOR)
-            result = pipeline.scan_candidates([frame])
-            scenarios[key] = {"scan": scan, "ocr_text": text, "result": result}
+            scenarios[key] = {"scan": scan, "ocr_text": text}
+            if rest:
+                scenarios[key]["top_n"] = rest[0]
+                result = pipeline.scan_candidates([frame], top_n=rest[0])
+            else:
+                result = pipeline.scan_candidates([frame])
+            scenarios[key]["result"] = result
     finally:
         ocr_id.read_bottom_strip = real_read
         tmp.cleanup()

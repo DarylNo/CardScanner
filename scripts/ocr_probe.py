@@ -125,8 +125,10 @@ def explain_match(blob, cands):
     """Mirror match_printing step by step, then assert it agrees."""
     c = ocr_id._canon
     lines = []
+    from mtg_card_scanner.list_twins import has_twin_among, is_list_printing
     comp = [x for x in cands
-            if "-" in str(x.get("collector_number", ""))
+            if not is_list_printing(x)          # a List card never prints its compound
+            and "-" in str(x.get("collector_number", ""))
             and len(c(x.get("collector_number", ""))) >= 4
             and c(x.get("collector_number", "")) in blob]
     for x in cands:
@@ -143,6 +145,13 @@ def explain_match(blob, cands):
                      f"Δ{d if d is not None else '-':>4}  "
                      f"{'; '.join(flags) or '-'}")
     sid = ocr_id.match_printing(blob, cands)
+    hit = ocr_id._hit(ocr_id.canon_words(blob).split(),
+                      "".join(ocr_id.canon_words(blob).split()), cands) if blob else None
+    if hit is not None and sid is None and has_twin_among(hit, cands):
+        why = (f"{hit.get('set', '').upper()} #{hit.get('collector_number', '')} read, but its "
+               f"List twin is a candidate too (the List card prints its original's "
+               f"line) -> ambiguous, no-op")
+        return sid, why, lines
     if not blob:
         why = "blob empty -> no-op (nothing read)"
     elif len(comp) == 1:

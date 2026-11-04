@@ -74,9 +74,57 @@ def test_ambiguous_resolved_by_collector():
     assert match_printing("PMEI 20192", CANDS) == "pmei-a"
 
 
-def test_list_copy_wins_over_original_set():
-    # a List card prints "A25-85": compound collector beats the bare set hit
-    assert match_printing("A25-85 PW", CANDS) == "plst"
+def test_a_list_card_and_its_original_print_the_same_line():
+    # A List card prints its ORIGINAL printing's line — plst A25-85 Diabolic
+    # Edict reads "085/249 C" / "A25 • EN", never "PLST" and never "A25-85" —
+    # so with both candidates there, the line names both: no-op, never the
+    # original (a List copy auto-picked as A25 was every 2015-frame List card).
+    assert match_printing("085/249 C A25 • EN Illus. Ryan Pancoast", CANDS) is None
+    assert match_printing("C 0085 A25 • EN", CANDS) is None
+    assert match_printing("A25EN", CANDS) is None
+    # Nor does a compound collector read in the text pick the List copy:
+    # List compounds are never printed.
+    assert match_printing("A25-85 PW", CANDS) is None
+    assert match_printing("A25-85 PLST", CANDS) is None
+
+
+def test_without_its_twin_the_original_is_confirmed():
+    twin_absent = [_c("a25", "a25", "141"), _c("m10", "m10", "146")]
+    assert match_printing("141/249 U A25 • EN", twin_absent) == "a25"
+    with_twin = twin_absent + [_c("plst", "plst", "A25-141")]
+    assert match_printing("141/249 U A25 • EN", with_twin) is None
+    # a List card in the list never blocks a printing it does not reproduce
+    assert match_printing("146/249 C M10 • EN", with_twin) == "m10"
+
+
+def test_an_original_number_one_is_not_its_list_twin():
+    # ECL #1 Changeling Wayfinder: "C 0001" / "ECL • EN" with the "•" read as
+    # "1". Run together, "0001EC11EN" contains plst ECL-1's "EC11" — the old
+    # compound rule picked the List copy for an ORIGINAL card (46 plst twins
+    # have an original #1).
+    pair = [_c("ecl", "ecl", "1"), _c("plst", "plst", "ECL-1")]
+    assert match_printing("C 0001 ECL 1EN", pair) is None
+    assert match_printing("C 0001 EC1 1EN", pair) is None
+    assert match_printing("C 0001 ECL 1EN", [pair[0], _c("m10", "m10", "146")]) == "ecl"
+
+
+def test_a_list_twin_blocks_every_kind_of_hit():
+    # step 3 (several set hits, the collector decides) — and the dagger twin
+    jud = [_c("jud78", "jud", "78"), _c("jud79", "jud", "79"),
+           _c("plst", "plst", "JUD-78†")]
+    assert match_printing("78/143 JUD", jud) is None
+    assert match_printing("79/143 JUD", jud) == "jud79"
+    # step 1 (a non-List compound): a List copy of the Secret Lair card
+    sld = [_c("sld", "sld", "IFIYW-7"), _c("plst", "plst", "SLD-IFIYW-7")]
+    assert match_printing("IFIYW-7", sld) is None
+    assert match_printing("IFIYW-7", sld[:1] + [_c("m10", "m10", "146")]) == "sld"
+    # a misread "PLST" naming the List copy still meets its original
+    assert match_printing("PLST", CANDS) is None
+
+
+def test_non_list_compounds_still_win_outright():
+    assert match_printing("pmei 2024-5", CANDS) == "pmei-b"
+    assert match_printing("PMEI 2019-2 MH1", CANDS) == "pmei-a"
 
 
 def test_art_double_check_blocks_disagreeing_promotions():

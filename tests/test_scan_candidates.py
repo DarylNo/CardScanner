@@ -391,3 +391,68 @@ def test_candidates_without_legalities_omit_formats():
     p = _pipeline(FakeIndex([_match(distance=80)]),
                   FakeScryfall([_printing("id", "m10", "146", "Magic 2010")]))
     assert "formats" not in p.scan_candidates(FRAME)["candidates"][0]["popularity"]
+
+
+# ── The List: a twin ranked outside the top 12 joins its original ────────────
+
+def _list_ranking():
+    """a25 141 ranked #1, 13 other printings, its List twin plst A25-141 LAST
+    (#15 — outside the top 12). FakeArtMatcher spaces them 5 apart."""
+    others = [_printing(f"id-o{i}", f"s{i:02d}", str(100 + i), f"Set {i}")
+              for i in range(13)]
+    return ([_printing("id-a25", "a25", "141", "Masters 25")] + others
+            + [_printing("id-plst", "plst", "A25-141", "The List")])
+
+
+def _ocr_reads(monkeypatch, text):
+    from mtg_card_scanner import card_detect, ocr_id
+    monkeypatch.setattr(card_detect, "extract_card", lambda f: (f, True))
+    monkeypatch.setattr(ocr_id, "read_bottom_strip", lambda img: text)
+
+
+def test_a_list_twin_outside_the_top_12_is_inserted_after_its_original(monkeypatch):
+    _ocr_reads(monkeypatch, "")
+    p = _pipeline(FakeIndex([_match(distance=80)]), FakeScryfall(_list_ranking()))
+    cands = p.scan_candidates(FRAME)["candidates"]
+    assert [c["id"] for c in cands[:3]] == ["id-a25", "id-plst", "id-o0"]
+    assert len(cands) == 13                       # the top 12 + the twin
+    assert [c["id"] for c in cands[2:]] == [f"id-o{i}" for i in range(11)]
+
+
+def test_the_original_s_line_never_confirms_it_beside_its_list_twin(monkeypatch):
+    # The List copy prints "141/249 U / A25 • EN" exactly like a25 141: with
+    # the twin pulled in, the read is ambiguous — no OCR confirmation, no
+    # art-decisive pick on the inserted twin's wide gap, no auto-pick.
+    _ocr_reads(monkeypatch, "141/249 U A25 • EN Illus. Christopher Moeller")
+    p = _pipeline(FakeIndex([_match(distance=80)]), FakeScryfall(_list_ranking()))
+    out = p.scan_candidates(FRAME)
+    top = out["candidates"][0]
+    assert top["id"] == "id-a25"
+    assert not top.get("ocr_confirmed")
+    assert not top.get("art_decisive")
+
+
+def test_a_twin_the_ranking_cap_dropped_is_not_added(monkeypatch):
+    _ocr_reads(monkeypatch, "141/249 U A25 • EN")
+
+    class Capped(FakeArtMatcher):
+        def rank_printings(self, frame, printings):
+            return super().rank_printings(frame, [x for x in printings if x["set"] != "plst"])
+
+    p = _pipeline(FakeIndex([_match(distance=80)]), FakeScryfall(_list_ranking()))
+    p._cached_art_matcher = Capped()
+    cands = p.scan_candidates(FRAME)["candidates"]
+    assert len(cands) == 12 and "id-plst" not in [c["id"] for c in cands]
+    assert cands[0]["id"] == "id-a25" and cands[0]["ocr_confirmed"] is True
+
+
+def test_a_list_card_ranked_first_pulls_its_original_in(monkeypatch):
+    _ocr_reads(monkeypatch, "C 0187 CLB • EN")
+    printings = ([_printing("id-plst", "plst", "CLB-187", "The List")]
+                 + [_printing(f"id-o{i}", f"s{i:02d}", str(100 + i), f"Set {i}")
+                    for i in range(12)]
+                 + [_printing("id-clb", "clb", "187", "Battle for Baldur's Gate")])
+    p = _pipeline(FakeIndex([_match(distance=80)]), FakeScryfall(printings))
+    cands = p.scan_candidates(FRAME)["candidates"]
+    assert [c["id"] for c in cands[:2]] == ["id-plst", "id-clb"]
+    assert not cands[0].get("ocr_confirmed") and not cands[0].get("art_decisive")

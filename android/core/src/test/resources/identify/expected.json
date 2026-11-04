@@ -11010,7 +11010,7 @@
   },
   "bolt_plst_ocr": {
    "scan": "bolt_plst",
-   "ocr_text": "CLB-187 PLST \u2022 EN",
+   "ocr_text": "C 0187\nCLB \u2022 EN Illus. Christopher Moeller",
    "result": {
     "identified": true,
     "card_read": {
@@ -11058,24 +11058,24 @@
         "commander": "legal"
        }
       },
-      "id": "132dc07f-74e2-4bd7-bdb1-4f5d5253c7f2",
+      "id": "ae5f9fb1-5a55-4db3-98a1-2628e3598c18",
       "name": "Lightning Bolt",
-      "set": "plst",
-      "set_name": "The List",
-      "collector_number": "CLB-187",
+      "set": "clb",
+      "set_name": "Commander Legends: Battle for Baldur's Gate",
+      "collector_number": "187",
       "rarity": "common",
-      "released_at": "2026-11-09",
+      "released_at": "2022-06-10",
       "border_color": "black",
       "frame": "2015",
       "promo": false,
       "finishes": [
-       "nonfoil"
+       "nonfoil",
+       "foil"
       ],
-      "image_small": "https://cards.scryfall.io/small/front/1/3/132dc07f-74e2-4bd7-bdb1-4f5d5253c7f2.jpg?1787678033",
-      "image_normal": "https://cards.scryfall.io/normal/front/1/3/132dc07f-74e2-4bd7-bdb1-4f5d5253c7f2.jpg?1787678033",
+      "image_small": "https://cards.scryfall.io/small/front/a/e/ae5f9fb1-5a55-4db3-98a1-2628e3598c18.jpg?1783922736",
+      "image_normal": "https://cards.scryfall.io/normal/front/a/e/ae5f9fb1-5a55-4db3-98a1-2628e3598c18.jpg?1783922736",
       "phash_distance": 12,
-      "multi_distance": 110,
-      "ocr_confirmed": true
+      "multi_distance": 110
      },
      {
       "popularity": {
@@ -11096,22 +11096,21 @@
         "commander": "legal"
        }
       },
-      "id": "ae5f9fb1-5a55-4db3-98a1-2628e3598c18",
+      "id": "132dc07f-74e2-4bd7-bdb1-4f5d5253c7f2",
       "name": "Lightning Bolt",
-      "set": "clb",
-      "set_name": "Commander Legends: Battle for Baldur's Gate",
-      "collector_number": "187",
+      "set": "plst",
+      "set_name": "The List",
+      "collector_number": "CLB-187",
       "rarity": "common",
-      "released_at": "2022-06-10",
+      "released_at": "2026-11-09",
       "border_color": "black",
       "frame": "2015",
       "promo": false,
       "finishes": [
-       "nonfoil",
-       "foil"
+       "nonfoil"
       ],
-      "image_small": "https://cards.scryfall.io/small/front/a/e/ae5f9fb1-5a55-4db3-98a1-2628e3598c18.jpg?1783922736",
-      "image_normal": "https://cards.scryfall.io/normal/front/a/e/ae5f9fb1-5a55-4db3-98a1-2628e3598c18.jpg?1783922736",
+      "image_small": "https://cards.scryfall.io/small/front/1/3/132dc07f-74e2-4bd7-bdb1-4f5d5253c7f2.jpg?1787678033",
+      "image_normal": "https://cards.scryfall.io/normal/front/1/3/132dc07f-74e2-4bd7-bdb1-4f5d5253c7f2.jpg?1787678033",
       "phash_distance": 12,
       "multi_distance": 110
      },
@@ -11489,6 +11488,43 @@
       ],
       "image_small": "https://cards.scryfall.io/small/front/f/f/ff204024-20a5-4bb9-82b6-f6b4337efd60.jpg?1783933733",
       "image_normal": "https://cards.scryfall.io/normal/front/f/f/ff204024-20a5-4bb9-82b6-f6b4337efd60.jpg?1783933733",
+      "phash_distance": 28,
+      "multi_distance": 172
+     },
+     {
+      "popularity": {
+       "edhrec_rank": 157,
+       "top_percent": 0.486,
+       "tier": "staple",
+       "label": "Staple",
+       "game_changer": false,
+       "reserved": false,
+       "print_count": 68,
+       "formats": {
+        "standard": "not_legal",
+        "pioneer": "not_legal",
+        "modern": "legal",
+        "legacy": "legal",
+        "vintage": "legal",
+        "pauper": "legal",
+        "commander": "legal"
+       }
+      },
+      "id": "0f29ea1f-a226-4ec4-8297-109e2f2b5c69",
+      "name": "Lightning Bolt",
+      "set": "plst",
+      "set_name": "The List",
+      "collector_number": "PF19-1",
+      "rarity": "rare",
+      "released_at": "2020-09-01",
+      "border_color": "black",
+      "frame": "2015",
+      "promo": false,
+      "finishes": [
+       "nonfoil"
+      ],
+      "image_small": "https://cards.scryfall.io/small/front/0/f/0f29ea1f-a226-4ec4-8297-109e2f2b5c69.jpg?1783929639",
+      "image_normal": "https://cards.scryfall.io/normal/front/0/f/0f29ea1f-a226-4ec4-8297-109e2f2b5c69.jpg?1783929639",
       "phash_distance": 28,
       "multi_distance": 172
      }
@@ -12480,6 +12516,379 @@
       "image_normal": "https://cards.scryfall.io/normal/front/d/9/d9b38015-985f-4718-a6f8-fe19de225801.jpg?1783919224",
       "phash_distance": 32,
       "multi_distance": 198
+     }
+    ],
+    "error": null
+   }
+  },
+  "bolt_m10_twin_below": {
+   "scan": "bolt_m10",
+   "ocr_text": "141/249 U\nA25 \u2022 EN Christopher Moeller",
+   "top_n": 8,
+   "result": {
+    "identified": true,
+    "card_read": {
+     "name": "Lightning Bolt",
+     "set_code": "m11",
+     "collector_number": "149",
+     "foil": false,
+     "language": "en",
+     "condition_estimate": "NM",
+     "condition_reason": "not assessed (no vision model)",
+     "artist": "",
+     "alternates": [
+      {
+       "name": "Decoy 16",
+       "distance": 57
+      },
+      {
+       "name": "Decoy 79",
+       "distance": 61
+      }
+     ]
+    },
+    "confidence": {
+     "name": "high",
+     "set": "high",
+     "collector": "high"
+    },
+    "candidates": [
+     {
+      "popularity": {
+       "edhrec_rank": 157,
+       "top_percent": 0.486,
+       "tier": "staple",
+       "label": "Staple",
+       "game_changer": false,
+       "reserved": false,
+       "print_count": 68,
+       "formats": {
+        "standard": "not_legal",
+        "pioneer": "not_legal",
+        "modern": "legal",
+        "legacy": "legal",
+        "vintage": "legal",
+        "pauper": "legal",
+        "commander": "legal"
+       }
+      },
+      "id": "ce711943-c1a1-43a0-8b89-8d169cfb8e06",
+      "name": "Lightning Bolt",
+      "set": "jmp",
+      "set_name": "Jumpstart",
+      "collector_number": "342",
+      "rarity": "uncommon",
+      "released_at": "2020-07-17",
+      "border_color": "black",
+      "frame": "2015",
+      "promo": false,
+      "finishes": [
+       "nonfoil"
+      ],
+      "image_small": "https://cards.scryfall.io/small/front/c/e/ce711943-c1a1-43a0-8b89-8d169cfb8e06.jpg?1783930384",
+      "image_normal": "https://cards.scryfall.io/normal/front/c/e/ce711943-c1a1-43a0-8b89-8d169cfb8e06.jpg?1783930384",
+      "phash_distance": 8,
+      "multi_distance": 82
+     },
+     {
+      "popularity": {
+       "edhrec_rank": 157,
+       "top_percent": 0.486,
+       "tier": "staple",
+       "label": "Staple",
+       "game_changer": false,
+       "reserved": false,
+       "print_count": 68,
+       "formats": {
+        "standard": "not_legal",
+        "pioneer": "not_legal",
+        "modern": "legal",
+        "legacy": "legal",
+        "vintage": "legal",
+        "pauper": "legal",
+        "commander": "legal"
+       }
+      },
+      "id": "ccee0b4c-0cb0-4c0f-8ddc-bc74b8b97273",
+      "name": "Lightning Bolt",
+      "set": "e01",
+      "set_name": "Archenemy: Nicol Bolas",
+      "collector_number": "54",
+      "rarity": "uncommon",
+      "released_at": "2017-06-16",
+      "border_color": "black",
+      "frame": "2015",
+      "promo": false,
+      "finishes": [
+       "nonfoil"
+      ],
+      "image_small": "https://cards.scryfall.io/small/front/c/c/ccee0b4c-0cb0-4c0f-8ddc-bc74b8b97273.jpg?1783936148",
+      "image_normal": "https://cards.scryfall.io/normal/front/c/c/ccee0b4c-0cb0-4c0f-8ddc-bc74b8b97273.jpg?1783936148",
+      "phash_distance": 8,
+      "multi_distance": 84
+     },
+     {
+      "popularity": {
+       "edhrec_rank": 157,
+       "top_percent": 0.486,
+       "tier": "staple",
+       "label": "Staple",
+       "game_changer": false,
+       "reserved": false,
+       "print_count": 68,
+       "formats": {
+        "standard": "not_legal",
+        "pioneer": "not_legal",
+        "modern": "legal",
+        "legacy": "legal",
+        "vintage": "legal",
+        "pauper": "legal",
+        "commander": "legal"
+       }
+      },
+      "id": "32a180dd-9641-4546-8940-9b21084f0c71",
+      "name": "Lightning Bolt",
+      "set": "plst",
+      "set_name": "The List",
+      "collector_number": "E01-54",
+      "rarity": "uncommon",
+      "released_at": "2019-11-07",
+      "border_color": "black",
+      "frame": "2015",
+      "promo": false,
+      "finishes": [
+       "nonfoil"
+      ],
+      "image_small": "https://cards.scryfall.io/small/front/3/2/32a180dd-9641-4546-8940-9b21084f0c71.jpg?1783932042",
+      "image_normal": "https://cards.scryfall.io/normal/front/3/2/32a180dd-9641-4546-8940-9b21084f0c71.jpg?1783932042",
+      "phash_distance": 8,
+      "multi_distance": 84
+     },
+     {
+      "popularity": {
+       "edhrec_rank": 157,
+       "top_percent": 0.486,
+       "tier": "staple",
+       "label": "Staple",
+       "game_changer": false,
+       "reserved": false,
+       "print_count": 68,
+       "formats": {
+        "standard": "not_legal",
+        "pioneer": "not_legal",
+        "modern": "legal",
+        "legacy": "legal",
+        "vintage": "legal",
+        "pauper": "legal",
+        "commander": "legal"
+       }
+      },
+      "id": "a6de74d2-0668-49c6-a385-bf706bfed8f7",
+      "name": "Lightning Bolt",
+      "set": "gn3",
+      "set_name": "Game Night: Free-for-All",
+      "collector_number": "83",
+      "rarity": "uncommon",
+      "released_at": "2022-10-14",
+      "border_color": "black",
+      "frame": "2015",
+      "promo": false,
+      "finishes": [
+       "nonfoil"
+      ],
+      "image_small": "https://cards.scryfall.io/small/front/a/6/a6de74d2-0668-49c6-a385-bf706bfed8f7.jpg?1783920269",
+      "image_normal": "https://cards.scryfall.io/normal/front/a/6/a6de74d2-0668-49c6-a385-bf706bfed8f7.jpg?1783920269",
+      "phash_distance": 8,
+      "multi_distance": 84
+     },
+     {
+      "popularity": {
+       "edhrec_rank": 157,
+       "top_percent": 0.486,
+       "tier": "staple",
+       "label": "Staple",
+       "game_changer": false,
+       "reserved": false,
+       "print_count": 68,
+       "formats": {
+        "standard": "not_legal",
+        "pioneer": "not_legal",
+        "modern": "legal",
+        "legacy": "legal",
+        "vintage": "legal",
+        "pauper": "legal",
+        "commander": "legal"
+       }
+      },
+      "id": "f29ba16f-c8fb-42fe-aabf-87089cb214a7",
+      "name": "Lightning Bolt",
+      "set": "2x2",
+      "set_name": "Double Masters 2022",
+      "collector_number": "117",
+      "rarity": "uncommon",
+      "released_at": "2022-07-08",
+      "border_color": "black",
+      "frame": "2015",
+      "promo": false,
+      "finishes": [
+       "nonfoil",
+       "foil"
+      ],
+      "image_small": "https://cards.scryfall.io/small/front/f/2/f29ba16f-c8fb-42fe-aabf-87089cb214a7.jpg?1783921885",
+      "image_normal": "https://cards.scryfall.io/normal/front/f/2/f29ba16f-c8fb-42fe-aabf-87089cb214a7.jpg?1783921885",
+      "phash_distance": 8,
+      "multi_distance": 88
+     },
+     {
+      "popularity": {
+       "edhrec_rank": 157,
+       "top_percent": 0.486,
+       "tier": "staple",
+       "label": "Staple",
+       "game_changer": false,
+       "reserved": false,
+       "print_count": 68,
+       "formats": {
+        "standard": "not_legal",
+        "pioneer": "not_legal",
+        "modern": "legal",
+        "legacy": "legal",
+        "vintage": "legal",
+        "pauper": "legal",
+        "commander": "legal"
+       }
+      },
+      "id": "677da834-7f4a-4f60-9151-de7ddcf29622",
+      "name": "Lightning Bolt",
+      "set": "mm2",
+      "set_name": "Modern Masters 2015",
+      "collector_number": "122",
+      "rarity": "uncommon",
+      "released_at": "2015-05-22",
+      "border_color": "black",
+      "frame": "2015",
+      "promo": false,
+      "finishes": [
+       "nonfoil",
+       "foil"
+      ],
+      "image_small": "https://cards.scryfall.io/small/front/6/7/677da834-7f4a-4f60-9151-de7ddcf29622.jpg?1783938404",
+      "image_normal": "https://cards.scryfall.io/normal/front/6/7/677da834-7f4a-4f60-9151-de7ddcf29622.jpg?1783938404",
+      "phash_distance": 10,
+      "multi_distance": 90
+     },
+     {
+      "popularity": {
+       "edhrec_rank": 157,
+       "top_percent": 0.486,
+       "tier": "staple",
+       "label": "Staple",
+       "game_changer": false,
+       "reserved": false,
+       "print_count": 68,
+       "formats": {
+        "standard": "not_legal",
+        "pioneer": "not_legal",
+        "modern": "legal",
+        "legacy": "legal",
+        "vintage": "legal",
+        "pauper": "legal",
+        "commander": "legal"
+       }
+      },
+      "id": "0852f9f3-d7ef-4d31-93e3-93bc7c5a4ec9",
+      "name": "Lightning Bolt",
+      "set": "fdc",
+      "set_name": "Foundations Commander",
+      "collector_number": "163",
+      "rarity": "uncommon",
+      "released_at": "2026-10-02",
+      "border_color": "black",
+      "frame": "2015",
+      "promo": false,
+      "finishes": [
+       "nonfoil",
+       "foil"
+      ],
+      "image_small": "https://cards.scryfall.io/small/front/0/8/0852f9f3-d7ef-4d31-93e3-93bc7c5a4ec9.jpg?1789753088",
+      "image_normal": "https://cards.scryfall.io/normal/front/0/8/0852f9f3-d7ef-4d31-93e3-93bc7c5a4ec9.jpg?1789753088",
+      "phash_distance": 10,
+      "multi_distance": 90
+     },
+     {
+      "popularity": {
+       "edhrec_rank": 157,
+       "top_percent": 0.486,
+       "tier": "staple",
+       "label": "Staple",
+       "game_changer": false,
+       "reserved": false,
+       "print_count": 68,
+       "formats": {
+        "standard": "not_legal",
+        "pioneer": "not_legal",
+        "modern": "legal",
+        "legacy": "legal",
+        "vintage": "legal",
+        "pauper": "legal",
+        "commander": "legal"
+       }
+      },
+      "id": "e3285e6b-3e79-4d7c-bf96-d920f973b122",
+      "name": "Lightning Bolt",
+      "set": "a25",
+      "set_name": "Masters 25",
+      "collector_number": "141",
+      "rarity": "uncommon",
+      "released_at": "2018-03-16",
+      "border_color": "black",
+      "frame": "2015",
+      "promo": false,
+      "finishes": [
+       "nonfoil",
+       "foil"
+      ],
+      "image_small": "https://cards.scryfall.io/small/front/e/3/e3285e6b-3e79-4d7c-bf96-d920f973b122.jpg?1783935143",
+      "image_normal": "https://cards.scryfall.io/normal/front/e/3/e3285e6b-3e79-4d7c-bf96-d920f973b122.jpg?1783935143",
+      "phash_distance": 10,
+      "multi_distance": 98
+     },
+     {
+      "popularity": {
+       "edhrec_rank": 157,
+       "top_percent": 0.486,
+       "tier": "staple",
+       "label": "Staple",
+       "game_changer": false,
+       "reserved": false,
+       "print_count": 68,
+       "formats": {
+        "standard": "not_legal",
+        "pioneer": "not_legal",
+        "modern": "legal",
+        "legacy": "legal",
+        "vintage": "legal",
+        "pauper": "legal",
+        "commander": "legal"
+       }
+      },
+      "id": "df77bf7d-546a-416b-a2fe-8038a4125af5",
+      "name": "Lightning Bolt",
+      "set": "plst",
+      "set_name": "The List",
+      "collector_number": "A25-141",
+      "rarity": "uncommon",
+      "released_at": "2021-06-19",
+      "border_color": "black",
+      "frame": "2015",
+      "promo": false,
+      "finishes": [
+       "nonfoil"
+      ],
+      "image_small": "https://cards.scryfall.io/small/front/d/f/df77bf7d-546a-416b-a2fe-8038a4125af5.jpg?1783926564",
+      "image_normal": "https://cards.scryfall.io/normal/front/d/f/df77bf7d-546a-416b-a2fe-8038a4125af5.jpg?1783926564",
+      "phash_distance": 10,
+      "multi_distance": 98
      }
     ],
     "error": null

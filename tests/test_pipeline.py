@@ -179,3 +179,57 @@ def test_art_decisive_defers_to_ocr():
              _cd("b", 200)]
     _mark_art_decisive(cands)
     assert "art_decisive" not in cands[0]         # OCR already settled it
+
+
+def _tw(i, s, n, d):
+    return {"id": i, "set": s, "collector_number": n, "multi_distance": d}
+
+
+def test_art_decisive_a_pulled_in_list_twin_never_widens_the_gap():
+    # _ranked_candidates inserts a List twin that ranked below the top N
+    # right after its original — at #2, however far back it ranked. The gap
+    # is still measured to the real runner-up (gap 5 here, not 40).
+    from mtg_card_scanner.pipeline import _mark_art_decisive
+    cands = [_tw("a", "a25", "141", 100), _tw("t", "plst", "A25-141", 140),
+             _tw("b", "m10", "146", 105), _tw("c", "2x2", "117", 110)]
+    _mark_art_decisive(cands)
+    assert "art_decisive" not in cands[0]
+    # the List copy at #1, its original pulled in behind it
+    cands = [_tw("t", "plst", "CLB-187", 100), _tw("a", "clb", "187", 140),
+             _tw("b", "sta", "105", 104)]
+    _mark_art_decisive(cands)
+    assert "art_decisive" not in cands[0]
+
+
+def test_art_decisive_never_picks_one_of_a_tied_list_pair():
+    # A true twin hashes like its original (0-8 apart, measured): skipping it
+    # to find the runner-up must not make the pair look decisive.
+    from mtg_card_scanner.pipeline import _mark_art_decisive
+    for d_twin in (100, 108, 129, None):
+        cands = [_tw("a", "a25", "141", 100), _tw("t", "plst", "A25-141", d_twin),
+                 _tw("b", "m10", "146", 170)]
+        _mark_art_decisive(cands)
+        assert "art_decisive" not in cands[0], d_twin
+    cands = [_tw("a", "jud", "78", 90), _tw("b", "m10", "146", 150),
+             _tw("t", "plst", "JUD-78†", 95)]
+    _mark_art_decisive(cands)
+    assert "art_decisive" not in cands[0]
+
+
+def test_art_decisive_over_a_list_twin_with_different_art():
+    # Scryfall's plst OGW-183 is the non-full-art Wastes (183a); a full-art
+    # ogw 183 scan leads it by 82 — different art, the art decides.
+    from mtg_card_scanner.pipeline import _mark_art_decisive
+    cands = [_tw("o", "ogw", "183", 94), _tw("s", "sld", "795★", 166),
+             _tw("a", "ogw", "183a", 176), _tw("t", "plst", "OGW-183", 176)]
+    _mark_art_decisive(cands)
+    assert cands[0]["art_decisive"] is True
+    # a List card of ANOTHER printing never blocks
+    other = [_tw("b", "m10", "146", 100), _tw("t", "plst", "A25-141", 101),
+             _tw("a", "a25", "141", 170)]
+    _mark_art_decisive(other)
+    assert "art_decisive" not in other[0]          # gap 1 to the runner-up
+    other = [_tw("b", "m10", "146", 100), _tw("a", "a25", "141", 170),
+             _tw("t", "plst", "A25-141", 170)]
+    _mark_art_decisive(other)
+    assert other[0]["art_decisive"] is True

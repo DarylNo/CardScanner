@@ -20,6 +20,7 @@ from mtg_card_scanner.art_index import (
     _NO_CARD_DISTANCE,
 )
 from mtg_card_scanner.card_read import CardRead
+from mtg_card_scanner.list_twins import twins, with_twins
 from mtg_card_scanner.card_detect import extract_card, frame_sharpness, is_blank_surface
 from mtg_card_scanner.scryfall import ScryfallClient, ScryfallError
 from mtg_card_scanner.output import ScanResult, OutputWriter, build_result, format_listing
@@ -77,14 +78,33 @@ _ART_DECISIVE_CEILING = 140
 
 
 def _mark_art_decisive(candidates: list[dict]) -> None:
-    """Flag candidates[0] art_decisive when its lead is beyond-doubt wide."""
+    """Flag candidates[0] art_decisive when its lead is beyond-doubt wide.
+
+    The List (list_twins.py): a List card reproduces its original printing,
+    so a TRUE twin pair hashes alike — measured over the committed ranker
+    scans, 20 same-art twin pairs sat 0-8 apart (15 tied exactly). So a List
+    twin of #1 within the gap (or with no distance) blocks the pick, and the
+    runner-up is the best candidate that is NOT #1's twin: a twin
+    _ranked_candidates pulled in from below the top N sits at #2 however far
+    back it ranked, and must not widen the gap. A twin further back than the
+    gap has different art and does not block: Scryfall numbers the List
+    Wastes OGW-183, but it is the non-full-art 183a — a full-art ogw 183
+    scanned 82 ahead of it."""
     if len(candidates) < 2 or candidates[0].get("ocr_confirmed"):
         return
-    d0 = candidates[0].get("multi_distance")
-    d1 = candidates[1].get("multi_distance")
+    top = candidates[0]
+    d0 = top.get("multi_distance")
+    rest = candidates[1:]
+    for c in rest:
+        if twins(top, c):
+            dt = c.get("multi_distance")
+            if d0 is None or dt is None or dt - d0 < _ART_DECISIVE_GAP:
+                return
+    runner = next((c for c in rest if not twins(top, c)), rest[0])
+    d1 = runner.get("multi_distance")
     if (d0 is not None and d1 is not None and d0 <= _ART_DECISIVE_CEILING
             and d1 - d0 >= _ART_DECISIVE_GAP):
-        candidates[0]["art_decisive"] = True
+        top["art_decisive"] = True
 
 
 def _confidence_for(distance: int) -> str:
@@ -343,6 +363,9 @@ class Pipeline:
         reprints tie on art alone; the title/textbox regions — valid here
         because each printing is compared against its OWN image — break those
         ties toward the actual frame/typesetting in front of the camera.
+
+        The top *top_n*, plus any List twin of one of them that ranked lower,
+        inserted right after it — so the list may run past *top_n*.
         """
         printings = self.scryfall.get_all_printings(name)
         ranked = self.art_matcher.rank_printings(frame, printings)
@@ -352,8 +375,11 @@ class Pipeline:
             else p.get("phash_distance", 1 << 30),
         )
         counts = print_counts_by_oracle(printings)
+        # The top N, plus each one's List twin when the twin ranked below them
+        # (list_twins.with_twins — same-art reprints rank in noise): so the
+        # collector line meets both, and a human can pick either.
         candidates = [_candidate_dict(p, counts.get(oracle_key(p)))
-                      for p in ranked[:top_n]]
+                      for p in with_twins(ranked, top_n)]
         candidates = self._apply_ocr_hint(frame, candidates)
         _mark_art_decisive(candidates)
         return candidates

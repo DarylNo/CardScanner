@@ -21,6 +21,8 @@ from __future__ import annotations
 import re
 from typing import Any, Optional
 
+from mtg_card_scanner.list_twins import has_twin_among, is_list_printing
+
 # OCR confusion classes: two characters compare equal when they share a class.
 _CONFUSION = {
     "1": "1", "I": "1", "L": "1", "|": "1",
@@ -179,26 +181,44 @@ def match_printing(blob: str, candidates: list[dict[str, Any]]) -> Optional[str]
     "087/254" as "0017314" but its "MH1" cleanly, and that confirmation was
     right.
 
-    The List nuance: List cards print their ORIGINAL set's code inside the
-    collector number ("A25-85"), so a plain set-code hit would misattribute
-    a List copy to the original set. When the text also contains another
-    candidate's compound collector number, that other candidate wins.
+    The List (list_twins.py): a List card prints EXACTLY its original
+    printing's line — plst A25-141 Lightning Bolt reads "141/249 U" /
+    "A25 • EN", never "PLST" and never its compound number "A25-141"; only a
+    small planeswalker icon marks it. So the line names the pair equally:
+    whatever step finds the hit, a hit whose List twin (either direction) is
+    also a candidate is ambiguity — None (the old belief that List cards
+    print "A25-85" had every 2015-frame List card auto-picked as its
+    original, and an original #1 whose "•" read as "1" — "C 0001 ECL 1EN" —
+    as plst ECL-1). List compounds are never looked for (step 1); the other
+    compounds ("2019-2", "IFIYW-7") are printed and still win outright.
     """
     words = canon_words(blob or "").split()     # idempotent — raw or canonical input
     if not words:
         return None
     joined = "".join(words)      # numbers may be split by "/" or "-": compare run-together
 
-    # 1. Compound collector numbers ("A25-85", "2019-2") are the most
-    #    specific token a card prints — an exact hit wins outright. This is
-    #    what keeps a List copy (prints its ORIGINAL set's code) from being
-    #    misattributed to the original set.
+    hit = _hit(words, joined, candidates)
+    if hit is None:
+        return None
+    # The List: the line a List card prints is its original's — when both
+    # are candidates, the read names both. Ambiguity never guesses.
+    if has_twin_among(hit, candidates):
+        return None
+    return hit.get("id")
+
+
+def _hit(words: list[str], joined: str,
+         candidates: list[dict[str, Any]]) -> Optional[dict[str, Any]]:
+    # 1. Compound collector numbers ("2019-2", "IFIYW-7") are the most
+    #    specific token a card prints — an exact hit wins outright. Never a
+    #    List printing's ("A25-85"): a List card does not print it.
     compound = [c for c in candidates
-                if "-" in str(c.get("collector_number", ""))
+                if not is_list_printing(c)
+                and "-" in str(c.get("collector_number", ""))
                 and len(_canon(c.get("collector_number", ""))) >= 4
                 and _canon(c.get("collector_number", "")) in joined]
     if len(compound) == 1:
-        return compound[0].get("id")
+        return compound[0]
 
     # 2. Unique set-code hit — the code as a whole word (+ a language tag).
     def set_read(c: dict[str, Any]) -> bool:
@@ -209,7 +229,7 @@ def match_printing(blob: str, candidates: list[dict[str, Any]]) -> Optional[str]
 
     hits = [c for c in candidates if set_read(c)]
     if len(hits) == 1:
-        return hits[0].get("id")
+        return hits[0]
 
     # 3. Several set hits (or same set twice) — collector number decides.
     if len(hits) > 1:
@@ -217,5 +237,5 @@ def match_printing(blob: str, candidates: list[dict[str, Any]]) -> Optional[str]
                      if len(_canon(c.get("collector_number", ""))) >= 2
                      and _canon(c.get("collector_number", "")) in joined]
         if len(coll_hits) == 1:
-            return coll_hits[0].get("id")
+            return coll_hits[0]
     return None

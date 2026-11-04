@@ -4,12 +4,15 @@ Android app's JVM tests (android/core: OcrMatchParityTest).
 
 The phone ports two things from the server and must give THE SAME ANSWERS:
 
-  ocr_id.py    _canon (confusion classes), match_printing (compound
-               collectors win outright, UNIQUE set-code hit, collector
-               tiebreak, ambiguity = None), and read_bottom_strip's strip
-               crop + two preprocessing variants (the OCR ENGINE itself is
-               swapped for ML Kit on the phone; its text feeds the same
-               matcher).
+  ocr_id.py    _canon (confusion classes), match_printing (non-List
+               compound collectors win outright, UNIQUE set-code hit,
+               collector tiebreak, ambiguity = None — and a hit whose List
+               twin is also a candidate is ambiguity), and
+               read_bottom_strip's strip crop + two preprocessing variants
+               (the OCR ENGINE itself is swapped for ML Kit on the phone;
+               its text feeds the same matcher).
+  list_twins   is_list_twin over every pair of the real printings, and
+               with_twins (the top N + List twins ranked below them).
   pipeline.py  _confidence_for, _is_confident (110, or <=140 with a >=20 lead
                over the 2nd NAME), _art_agrees / _OCR_ART_SLACK,
                _apply_ocr_hint, _mark_art_decisive, _identify's multi-frame
@@ -51,7 +54,7 @@ import numpy as np
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from mtg_card_scanner import art_index, ocr_id, pipeline  # noqa: E402
+from mtg_card_scanner import art_index, list_twins, ocr_id, pipeline  # noqa: E402
 from mtg_card_scanner.art_index import ArtIndexError  # noqa: E402
 from mtg_card_scanner.ocr_id import _canon, canon_words, match_printing  # noqa: E402
 
@@ -166,8 +169,24 @@ RARITY = {"common": "C", "uncommon": "U", "rare": "R", "mythic": "M",
           "special": "S", "bonus": "T"}
 
 
+def _printed_as(p: dict) -> dict:
+    """What the physical card prints: a List card (plst "A25-141") prints its
+    ORIGINAL printing's line ("141/249 U" / "A25 • EN") — never "PLST" and
+    never the compound; Scryfall's "†" / "j" (JUD-78†, M19-185j) are not
+    printed either."""
+    cn = str(p.get("collector_number", ""))
+    if list_twins.is_list_printing(p) and "-" in cn:
+        head, num = cn.split("-", 1)
+        if num.endswith(("†", "j")):
+            num = num[:-1]
+        return {**p, "set": head.lower(), "collector_number": num}
+    return p
+
+
 def _line(p: dict, style: int) -> str:
-    """A plausible bottom-left collector strip for printing *p*."""
+    """A plausible bottom-left collector strip for printing *p* — a List
+    card's is its original's (_printed_as)."""
+    p = _printed_as(p)
     cn, sc = p["collector_number"], p["set"].upper()
     r = RARITY.get(p.get("rarity", ""), "C")
     artist = p.get("artist", "")
@@ -261,6 +280,36 @@ def build_match(printings: dict) -> tuple[dict, list]:
         add(blob, "confusable_sets", "set codes equal under confusion")
     for blob in ["", "anything"]:
         add(blob, "empty", "no candidates")
+    # The List: a List card prints its ORIGINAL's line (plst A25-141 reads
+    # "141/249 U" / "A25 • EN"), so with its twin among the candidates the
+    # read names both — None, whichever step hit.
+    lists["list_twin"] = [_c("a25", "a25", "141"), _c("plst", "plst", "A25-141"),
+                          _c("m10", "m10", "146")]
+    lists["twin_absent"] = [_c("a25", "a25", "141"), _c("m10", "m10", "146")]
+    for blob in ["141/249 U A25 • EN Illus. Christopher Moeller", "U 0141 A25 • EN",
+                 "A25EN", "a2s 141", "A25-141", "A25-141 PLST", "PLST", "A25 PLST",
+                 "146/249 C M10 • EN", "M10 A25", "141 146", ""]:
+        add(blob, "list_twin", "the List card's line is its original's")
+        add(blob, "twin_absent", "the same reads without the List copy")
+    # An ORIGINAL #1 whose "•" reads as "1": "C 0001 ECL 1EN" — run together
+    # it contains plst ECL-1's "EC11" (the old compound rule picked the List
+    # copy). Alone, the original is confirmed.
+    lists["ecl_one"] = [_c("ecl", "ecl", "1"), _c("plst", "plst", "ECL-1")]
+    lists["ecl_orig"] = [_c("ecl", "ecl", "1"), _c("m10", "m10", "146")]
+    for blob in ["C 0001 ECL 1EN", "C 0001 EC1 1EN", "C 0001 ECL • EN", "ECL-1",
+                 "0001 ECL1EN", "PLST ECL"]:
+        add(blob, "ecl_one", "original #1 vs its List twin")
+        add(blob, "ecl_orig", "original #1 alone")
+    # The dagger twin (step 3 hit) and a List copy of a printed compound
+    # (step 1 hit).
+    lists["dagger_twin"] = [_c("jud78", "jud", "78"), _c("jud79", "jud", "79"),
+                            _c("plst", "plst", "JUD-78†")]
+    for blob in ["78/143 JUD", "79/143 JUD", "JUD", "JUD-78", "JUD 78†"]:
+        add(blob, "dagger_twin", "JUD-78† twins jud 78")
+    lists["compound_twin"] = [_c("sld", "sld", "IFIYW-7"),
+                              _c("plst", "plst", "SLD-IFIYW-7"), _c("m10", "m10", "146")]
+    for blob in ["IFIYW-7", "SLD IFIYW-7", "SLD-IFIYW-7", "M10 IFIYW-7"]:
+        add(blob, "compound_twin", "a List copy of a printed compound")
     # A set code only counts as a WHOLE word (+ a glued language tag):
     # 2026-09-29 an AVR Emancipation Angel, no code printed, "confirmed" as
     # UMA from letters that met across words; artists MSCHF / Milivoj begin
@@ -393,6 +442,60 @@ def _same(name: str, have: bytes, want: bytes) -> bool:
     return False
 
 
+# ── list_twins: is_list_twin / with_twins ───────────────────────────────────
+
+def build_list_twins(printings: dict) -> dict:
+    """is_list_twin over EVERY ordered pair of each name's real printings
+    (recorded sparsely: the [i, j] where printing i is printing j's List
+    twin), hand shapes, and with_twins over real-shaped rankings."""
+    pairs = {}
+    for name, recs in printings.items():
+        pairs[name] = [[i, j] for i, t in enumerate(recs) for j, x in enumerate(recs)
+                       if list_twins.is_list_twin(t, x)]
+        # every List printing recorded here reproduces a printing of its name
+        assert {i for i, _ in pairs[name]} == {
+            i for i, r in enumerate(recs) if list_twins.is_list_printing(r)}, name
+    def P(s, n):
+        return {"id": f"{s}:{n}", "set": s, "collector_number": n}
+    hand = [P("plst", "A25-141"), P("a25", "141"), P("PLST", "a25-141"), P("A25", "141"),
+            P("plst", "TAFR-1"), P("tafr", "1"), P("afr", "1"), P("plst", "JUD-78†"),
+            P("jud", "78"), P("jud", "78†"), P("plst", "M19-185j"), P("m19", "185"),
+            P("plst", "CHK-160"), P("chk", "160a"), P("plst", "TD0-A80"), P("td0", "A80"),
+            P("tdo", "A80"), P("td0", "a80"), P("plst", "SLD-IFIYW-7"), P("sld", "IFIYW-7"),
+            P("plst", "A25141"), P("plst", "-141"), P("", "141"), P("plst", "A25-"),
+            P("a25", ""), {"id": "bare"}, {"id": "none", "set": None, "collector_number": None},
+            {"id": "int", "set": "a25", "collector_number": 141}, P("mb1", "A25-141"),
+            P("plst", "A25-141x"), P("a25", "141x"), P("plst", "A2S-141")]
+    hand_pairs = [[i, j] for i, t in enumerate(hand) for j, x in enumerate(hand)
+                  if list_twins.is_list_twin(t, x)]
+    with_rows = []
+    rankings = {
+        "orig_first": [P("m10", "146"), P("a25", "141"), P("2x2", "117"), P("mm2", "122"),
+                       P("plst", "A25-141"), P("plst", "M10-146"), P("e01", "54")],
+        "list_first": [P("plst", "CLB-187"), P("sta", "105"), P("clb", "187")],
+        "two_twins": [P("m19", "185"), P("plst", "M19-185j"), P("x", "1"),
+                      P("plst", "M19-185"), P("m19", "186")],
+        "shared": [P("plst", "M19-185j"), P("plst", "M19-185"), P("y", "2"), P("m19", "185")],
+        "none": [P("a", "1"), P("b", "2"), P("c", "3")],
+        "empty": [],
+    }
+    for name, recs in printings.items():
+        # each name's printings in a deterministic scrambled order
+        rankings[f"{name}"] = sorted(recs, key=lambda r: hashlib.sha1(
+            r["id"].encode()).hexdigest())
+    for key, ranked in rankings.items():
+        for top_n in (0, 1, 2, 3, 5, 12, 40, 1000):
+            out = list_twins.with_twins(ranked, top_n)
+            with_rows.append({"ranking": key, "top_n": top_n,
+                              "out": [ranked.index(p) for p in out]})
+    return {"list_sets": sorted(list_twins.LIST_SETS), "pairs": pairs, "hand": hand,
+            "hand_pairs": hand_pairs,
+            "rankings": {k: [{"id": r.get("id"), "set": r.get("set"),
+                              "collector_number": r.get("collector_number")} for r in v]
+                         for k, v in rankings.items()},
+            "with_twins": with_rows}
+
+
 # ── pipeline decisions ──────────────────────────────────────────────────────
 
 EDGES = sorted({0, 1, 50, 89, 90, 91, 109, 110, 111, 119, 120, 121, 129, 130, 131,
@@ -455,6 +558,40 @@ def build_mark_art_decisive() -> list:
             before = copy.deepcopy(cands)
             pipeline._mark_art_decisive(cands)
             rows.append({"in": before, "out": cands})
+    # The List: a twin of #1 within the gap (or without a distance) blocks
+    # it; the runner-up skips #1's twins (a twin pulled in from below the top
+    # N sits at #2 however far back it ranked); a twin further back than the
+    # gap (different art) and a List card of ANOTHER printing do not block.
+    pr = {"a25": ("a25", "141"), "plst": ("plst", "A25-141"), "m10": ("m10", "146"),
+          "pm10": ("plst", "M10-146"), "jud": ("jud", "78"), "pjud": ("plst", "JUD-78†"),
+          "PLST": ("PLST", "a25-141"), "x": ("2x2", "117")}
+    for order, ds in [(["a25", "m10", "plst"], [100, 170, 180]),
+                      (["a25", "plst", "m10"], [100, 170, 171]),
+                      (["a25", "plst", "m10"], [100, 140, 105]),
+                      (["a25", "plst", "m10", "x"], [100, 140, 131, 132]),
+                      (["a25", "plst", "m10"], [100, 104, 170]),
+                      (["a25", "plst", "m10"], [100, None, 170]),
+                      (["a25", "plst", "m10"], [None, 100, 170]),
+                      (["a25", "plst", "m10"], [100, 129, 170]),
+                      (["a25", "plst", "m10"], [100, 130, 170]),
+                      (["a25", "plst", "m10"], [100, 130, None]),
+                      (["a25", "m10", "plst"], [139.5, 169.5, 169.0]),
+                      (["plst", "m10", "a25"], [100, 170, 171]),
+                      (["plst", "a25", "m10"], [100, 108, 170]),
+                      (["m10", "a25", "plst"], [100, 170, 170]),
+                      (["m10", "a25", "pm10"], [100, 170, 170]),
+                      (["m10", "pm10", "a25"], [100, 101, 170]),
+                      (["m10", "plst", "a25"], [100, 101, 170]),
+                      (["jud", "m10", "pjud"], [90, 150, 95]),
+                      (["a25", "m10", "PLST"], [100, 170, 104]),
+                      (["a25", "plst"], [100, 100]),
+                      (["plst", "a25"], [100, 140]),
+                      (["plst", "a25"], [150, 200])]:
+        cands = [{"id": k, "set": pr[k][0], "collector_number": pr[k][1],
+                  "multi_distance": d} for k, d in zip(order, ds)]
+        before = copy.deepcopy(cands)
+        pipeline._mark_art_decisive(cands)
+        rows.append({"in": before, "out": cands})
     return rows
 
 
@@ -702,6 +839,7 @@ def build() -> dict[str, bytes]:
         "canon_words": build_canon_words(),
         "lists": lists,
         "match": match_rows,
+        "list_twins": build_list_twins(printings),
         "strip": strip,
         "confidence_for": build_confidence(),
         "is_confident": build_is_confident(),
