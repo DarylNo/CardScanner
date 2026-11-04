@@ -1140,8 +1140,22 @@ class ScanAnalyzer(
      * use, when no gate closes): a rebase the probe's verified end still owes is dropped. The owner may
      * swap the card while the screen is away, and that card must scan; the worst the drop can do is
      * re-scan the still card the probe's AF / AE made look different.
+     *
+     * The late-focus rebase goes the same way (owner, on the 1.1.17 review finding): owed ([rebaseNext])
+     * or still due from a focus pass not yet answered ([heldTimedOut] — its answer may arrive while the
+     * screen is away). A Scans / Settings round trip does not rebind the camera, so before this the first
+     * sample back took a card swapped in meanwhile into the scanned scene and it was never filed. The
+     * accepted cost: the same still card, first shot in a blur and now in focus, may read as a new one
+     * and be filed twice — visible, and a swipe deletes it.
      */
-    fun cameraAway(why: String) = post { dropProbeRebase(why) }
+    fun cameraAway(why: String) = post { dropProbeRebase(why); dropFocusRebase(why) }
+
+    private fun dropFocusRebase(why: String) {
+        if (!rebaseNext && !heldTimedOut) return
+        val owed = if (rebaseNext) "owed" else "still due (its focus pass had not answered)"
+        rebaseNext = false; heldTimedOut = false
+        safeLog("focus") { "first card: the late-focus rebase is dropped before any sample took it ($owed) — $why (a card swapped meanwhile will scan)" }
+    }
 
     private fun dropProbeRebase(why: String) {
         if (!probeRebaseNext) return

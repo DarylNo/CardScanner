@@ -229,6 +229,42 @@ class ScanAnalyzerTest {
         assertTrue(focus().joinToString("\n"), focus().any { it.contains("answered after the hold gave up") })
     }
 
+    /**
+     * The late-focus rebase must not survive the screen going away (owner's call on the 1.1.17
+     * review finding — the same rule as the zoom probe's rebase): a first card whose focus hold
+     * timed out owes the scanner a rebase once its focus pass answers ([ScanAnalyzer.focusDone]).
+     * A Scans / Settings round trip does not rebind the camera, so before this fix the owed rebase
+     * (answered before the stop, or answering while away) was taken by the first sample back — and a
+     * card swapped in while the owner was away became the scanned scene and was never filed. Now the
+     * stop drops it, answered or still due, and the swapped card IS scanned. Accepted cost: the SAME
+     * still card, re-seen in focus, may read as a new one and be filed twice (visible, swipe to delete).
+     */
+    @Test fun aScreenStopDropsTheLateFocusRebaseAndASwappedCardScans() {
+        for (answered in listOf("before the stop", "while away")) {
+            val rec = Recorder()
+            val log = DebugLog(200, clock = { 0L })
+            val a = ScanAnalyzer(direct, rec, outlineFinder = boxFinder, shadowMode = false, log = log)
+            a.focusFirst = { true }
+            feedTo(a, tray, 12); feedTo(a, card, 12)
+            feedTo(a, card, (ScanAnalyzer.FOCUS_WAIT_NS / 100_000_000L).toInt() + 1)   // the hold gives up
+            assertEquals(answered, 1, rec.bursts.size)
+            a.focusFirst = { false }
+            if (answered == "before the stop") a.focusDone()     // the rebase is owed…
+            a.cameraAway("the scan screen stopped")              // …and the owner goes to Scans
+            if (answered == "while away") a.focusDone()          // the pass answers while the screen is away
+            // Away: the owner swapped the card. Back: the same camera (a round trip never rebinds).
+            val before = rec.updates.size
+            feedTo(a, printed, 30)
+            val after = rec.updates.drop(before)
+            assertTrue("$answered: no re-learn", after.none { it.event is AutoScanner.Event.Learning })
+            assertEquals("$answered: the swapped card IS scanned — ${after.map { describe(it.event) }}", 2, rec.bursts.size)
+            assertTrue("$answered: ${log.all().map { it.msg }}", log.all().any {
+                it.tag == "focus" && it.msg.startsWith("first card: the late-focus rebase is dropped")
+            })
+            assertTrue(answered, rec.errors.isEmpty())
+        }
+    }
+
     /** A held capture that a re-learn / new Area / camera restart drops is logged, not silently lost. */
     @Test fun aCancelledHoldIsLogged() {
         val rec = Recorder()
