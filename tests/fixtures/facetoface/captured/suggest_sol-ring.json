@@ -1,0 +1,61 @@
+{
+ "url": "https://facetofacegames.com/search/suggest.json?q=Sol%20Ring&resources%5Btype%5D=product&resources%5Blimit%5D=20&resources%5Boptions%5D%5Bunavailable_products%5D=show",
+ "body": {
+  "resources": {
+   "results": {
+    "products": [
+     {
+      "title": "Sol Ring [1011] [Borderless] [Pride Across the Multiverse] [Secret Lair Drop] [Non-Foil]",
+      "handle": "sol-ring-1011-borderless-pride-across-the-multiverse-secret-lair-drop-non-foil",
+      "available": true
+     },
+     {
+      "title": "Sol Ring — Elven|Serial Numbered|158/300|Foil — ID 20534",
+      "handle": "sol-ring-elvenserial-numbered158300foil-id-20534",
+      "available": false
+     },
+     {
+      "title": "Sol Ring [1905] [Borderless] [Everyone's Invited] [Secret Lair Drop] [Foil]",
+      "handle": "sol-ring-1905-borderless-everyones-invited-secret-lair-drop-foil",
+      "available": false
+     },
+     {
+      "title": "Sol Ring // Sol Ring [1512] [Borderless] [Raining Cats and Dogs] [Secret Lair Drop] [Foil]",
+      "handle": "sol-ring-sol-ring-1512-borderless-raining-cats-and-dogs-secret-lair-drop-foil",
+      "available": false
+     },
+     {
+      "title": "Sol Ring — ID 17743",
+      "handle": "sol-ring-id-17743",
+      "available": false
+     },
+     {
+      "title": "Sol Ring [1494] [Borderless] [Wormhole] [Secret Lair Drop] [Galaxy Foil]",
+      "handle": "sol-ring-1494-borderless-wormhole-secret-lair-drop-galaxy-foil",
+      "available": true
+     },
+     {
+      "title": "Sol Ring [1074] [Retro Frame] [Dan Frazier] [Secret Lair Drop] [Etched Foil]",
+      "handle": "sol-ring-1074-retro-frame-dan-frazier-secret-lair-drop-etched-foil",
+      "available": true
+     },
+     {
+      "title": "Sol Ring [7] [MagicFest 2019] [Foil]",
+      "handle": "sol-ring-7-magicfest-2019-foil",
+      "available": true
+     },
+     {
+      "title": "Sol Ring [428] [Retro Frame] [30th Anniversary Edition] [Non-Foil]",
+      "handle": "sol-ring-428-retro-frame-30th-anniversary-edition-non-foil",
+      "available": false
+     },
+     {
+      "title": "Sol Ring [270] [Limited Edition Beta] [Non-Foil]",
+      "handle": "sol-ring-270-limited-edition-beta-non-foil",
+      "available": false
+     }
+    ]
+   }
+  }
+ }
+}

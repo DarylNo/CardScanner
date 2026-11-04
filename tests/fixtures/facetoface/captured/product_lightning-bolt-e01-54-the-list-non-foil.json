@@ -1,0 +1,23 @@
+{
+ "url": "https://facetofacegames.com/products/lightning-bolt-e01-54-the-list-non-foil.json",
+ "body": {
+  "product": {
+   "title": "Lightning Bolt [E01-54] [The List] [Non-Foil]",
+   "handle": "lightning-bolt-e01-54-the-list-non-foil",
+   "variants": [
+    {
+     "sku": "M-MB1-Lightning_-1001-NM-NF",
+     "title": "NM",
+     "option1": "NM",
+     "price": "3.49"
+    },
+    {
+     "sku": "M-MB1-Lightning_-1001-PL-NF",
+     "title": "PL",
+     "option1": "PL",
+     "price": "2.79"
+    }
+   ]
+  }
+ }
+}

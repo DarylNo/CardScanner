@@ -1,0 +1,23 @@
+{
+ "url": "https://facetofacegames.com/products/lightning-bolt-187-commander-legends-battle-for-baldurs-gate-non-foil.json",
+ "body": {
+  "product": {
+   "title": "Lightning Bolt [187] [Commander Legends: Battle for Baldur's Gate] [Non-Foil]",
+   "handle": "lightning-bolt-187-commander-legends-battle-for-baldurs-gate-non-foil",
+   "variants": [
+    {
+     "sku": "SIN-MTG-CLB-187-ENG-NM-NF",
+     "title": "NM",
+     "option1": "NM",
+     "price": "3.49"
+    },
+    {
+     "sku": "SIN-MTG-CLB-187-ENG-PL-NF",
+     "title": "PL",
+     "option1": "PL",
+     "price": "2.79"
+    }
+   ]
+  }
+ }
+}

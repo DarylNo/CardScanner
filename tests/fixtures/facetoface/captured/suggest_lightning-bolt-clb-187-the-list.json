@@ -1,0 +1,51 @@
+{
+ "url": "https://facetofacegames.com/search/suggest.json?q=Lightning%20Bolt%20CLB-187%20The%20List&resources%5Btype%5D=product&resources%5Blimit%5D=20&resources%5Boptions%5D%5Bunavailable_products%5D=show",
+ "body": {
+  "resources": {
+   "results": {
+    "products": [
+     {
+      "title": "Lightning Bolt [187] [Commander Legends: Battle for Baldur's Gate] [Foil]",
+      "handle": "lightning-bolt-187-commander-legends-battle-for-baldurs-gate-foil",
+      "available": true
+     },
+     {
+      "title": "Lightning Bolt [187] [Commander Legends: Battle for Baldur's Gate] [Non-Foil]",
+      "handle": "lightning-bolt-187-commander-legends-battle-for-baldurs-gate-non-foil",
+      "available": true
+     },
+     {
+      "title": "Lightning Bolt [PF19-1] [The List] [Non-Foil]",
+      "handle": "lightning-bolt-pf19-1-the-list-non-foil",
+      "available": true
+     },
+     {
+      "title": "Lightning Bolt [E01-54] [The List] [Non-Foil]",
+      "handle": "lightning-bolt-e01-54-the-list-non-foil",
+      "available": true
+     },
+     {
+      "title": "Lightning Bolt [A25-141] [The List] [Non-Foil]",
+      "handle": "lightning-bolt-a25-141-the-list-non-foil",
+      "available": true
+     },
+     {
+      "title": "Lightning Bolt - Scan 12680",
+      "handle": "lightning-bolt-scan-12680",
+      "available": false
+     },
+     {
+      "title": "Lightning Bolt - Scan 12679",
+      "handle": "lightning-bolt-scan-12679",
+      "available": false
+     },
+     {
+      "title": "Lightning Bolt - Scan 14795",
+      "handle": "lightning-bolt-scan-14795",
+      "available": false
+     }
+    ]
+   }
+  }
+ }
+}

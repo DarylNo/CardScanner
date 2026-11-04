@@ -64,6 +64,10 @@ jobs:
         run: python scripts/export_pack_fixture.py --check
       - name: F2F pacing table matches facetoface.py
         run: python scripts/export_f2f_pacing_fixture.py --check
+      # F2fMatchParityTest: title/collector/SKU matching and get_price sessions
+      # replayed over captured storefront answers, from the real facetoface.py.
+      - name: F2F matching fixture matches facetoface.py
+        run: python scripts/export_f2f_match_fixtures.py --check
       # Art-fingerprint parity (HashParityTest): expected.json is recomputed
       # from the committed input images with the SERVER's art_index/imagehash
       # code on the freshly installed Pillow/scipy/numpy — a library release

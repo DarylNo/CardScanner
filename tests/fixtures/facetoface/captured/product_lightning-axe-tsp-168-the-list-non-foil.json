@@ -1,0 +1,23 @@
+{
+ "url": "https://facetofacegames.com/products/lightning-axe-tsp-168-the-list-non-foil.json",
+ "body": {
+  "product": {
+   "title": "Lightning Axe [TSP-168] [The List] [Non-Foil]",
+   "handle": "lightning-axe-tsp-168-the-list-non-foil",
+   "variants": [
+    {
+     "sku": "SIN-MTG-PLIST-428-ENG-NM-NF",
+     "title": "NM",
+     "option1": "NM",
+     "price": "0.49"
+    },
+    {
+     "sku": "SIN-MTG-PLIST-428-ENG-PL-NF",
+     "title": "PL",
+     "option1": "PL",
+     "price": "0.39"
+    }
+   ]
+  }
+ }
+}

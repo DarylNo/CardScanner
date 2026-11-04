@@ -1,0 +1,23 @@
+{
+ "url": "https://facetofacegames.com/products/klauth-unrivaled-ancient-afc-50-the-list-non-foil.json",
+ "body": {
+  "product": {
+   "title": "Klauth, Unrivaled Ancient [AFC-50] [The List] [Non-Foil]",
+   "handle": "klauth-unrivaled-ancient-afc-50-the-list-non-foil",
+   "variants": [
+    {
+     "sku": "SIN-MTG-PLST-AFC-50-ENG-NM-NF",
+     "title": "NM",
+     "option1": "NM",
+     "price": "16.99"
+    },
+    {
+     "sku": "SIN-MTG-PLST-AFC-50-ENG-PL-NF",
+     "title": "PL",
+     "option1": "PL",
+     "price": "14.44"
+    }
+   ]
+  }
+ }
+}

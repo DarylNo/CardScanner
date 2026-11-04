@@ -163,6 +163,8 @@ data class RequestRecord(
 /**
  * facetoface's 24 h disk cache: one file per URL (`sha1(url).json`), written
  * atomically (temp + rename); a torn/corrupt entry is a miss, never an error.
+ * It holds the storefront's RAW bodies, never a match result, so a change to
+ * F2fPricer's matching applies on the very next lookup.
  */
 class F2fCache(private val dir: java.io.File, private val ttlMs: Long = 24 * 3600 * 1000L,
                private val nowMs: () -> Long = System::currentTimeMillis) {

@@ -1,0 +1,23 @@
+{
+ "url": "https://facetofacegames.com/products/earl-of-squirrel-108-unstable-promos-foil.json",
+ "body": {
+  "product": {
+   "title": "Earl of Squirrel [108] [Unstable Promos] [Foil]",
+   "handle": "earl-of-squirrel-108-unstable-promos-foil",
+   "variants": [
+    {
+     "sku": "MP-Earl_of_-PUST-108-NM-F",
+     "title": "NM",
+     "option1": "NM",
+     "price": "2.49"
+    },
+    {
+     "sku": "MP-Earl_of_-PUST-108-PL-F",
+     "title": "PL",
+     "option1": "PL",
+     "price": "1.99"
+    }
+   ]
+  }
+ }
+}

@@ -1,0 +1,61 @@
+{
+ "url": "https://facetofacegames.com/search/suggest.json?q=Lightning%20Bolt&resources%5Btype%5D=product&resources%5Blimit%5D=20&resources%5Boptions%5D%5Bunavailable_products%5D=show",
+ "body": {
+  "resources": {
+   "results": {
+    "products": [
+     {
+      "title": "Lightning Bolt [161] [Limited Edition Alpha] [Non-Foil]",
+      "handle": "lightning-bolt-161-limited-edition-alpha-non-foil",
+      "available": false
+     },
+     {
+      "title": "Lightning Bolt - Scan 15245",
+      "handle": "lightning-bolt-scan-15245",
+      "available": false
+     },
+     {
+      "title": "Lightning Bolt [163] [Foundations: Commander] [Non-Foil]",
+      "handle": "lightning-bolt-163-foundations-commander-non-foil",
+      "available": false
+     },
+     {
+      "title": "Lightning Bolt - Scan 15243",
+      "handle": "lightning-bolt-scan-15243",
+      "available": false
+     },
+     {
+      "title": "Lightning Bolt [162] [Intl Collectors Edition] [Non-Foil]",
+      "handle": "lightning-bolt-162-intl-collectors-edition-non-foil",
+      "available": false
+     },
+     {
+      "title": "Lightning Bolt [0083] [Full Art] [Mountain, Go] [Secret Lair Drop] [Foil]",
+      "handle": "lightning-bolt-0083-full-art-mountain-go-secret-lair-drop-foil",
+      "available": true
+     },
+     {
+      "title": "Lightning Bolt - Scan 12680",
+      "handle": "lightning-bolt-scan-12680",
+      "available": false
+     },
+     {
+      "title": "Lightning Bolt [Judge Gift Cards 1998] [Foil]",
+      "handle": "lightning-bolt-judge-gift-cards-1998-foil",
+      "available": false
+     },
+     {
+      "title": "Lightning Bolt - Scan 14794",
+      "handle": "lightning-bolt-scan-14794",
+      "available": false
+     },
+     {
+      "title": "Lightning Bolt [162] [Limited Edition Beta] [Non-Foil]",
+      "handle": "lightning-bolt-162-limited-edition-beta-non-foil",
+      "available": false
+     }
+    ]
+   }
+  }
+ }
+}

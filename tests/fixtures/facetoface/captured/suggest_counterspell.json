@@ -1,0 +1,61 @@
+{
+ "url": "https://facetofacegames.com/search/suggest.json?q=Counterspell&resources%5Btype%5D=product&resources%5Blimit%5D=20&resources%5Boptions%5D%5Bunavailable_products%5D=show",
+ "body": {
+  "resources": {
+   "results": {
+    "products": [
+     {
+      "title": "Counterspell - Scan 14747",
+      "handle": "counterspell-scan-14747",
+      "available": false
+     },
+     {
+      "title": "Counterspell [15] [Strixhaven Mystical Archive] [Foil]",
+      "handle": "counterspell-15-strixhaven-mystical-archive-foil",
+      "available": true
+     },
+     {
+      "title": "Counterspell [55] [Limited Edition Beta] [Non-Foil]",
+      "handle": "counterspell-55-limited-edition-beta-non-foil",
+      "available": false
+     },
+     {
+      "title": "Counterspell [61] [Foundations: Commander] [Non-Foil]",
+      "handle": "counterspell-61-foundations-commander-non-foil",
+      "available": false
+     },
+     {
+      "title": "Counterspell - French [54] [Foreign Black Border: French] [Non-Foil]",
+      "handle": "counterspell-french-54-foreign-black-border-french-non-foil",
+      "available": false
+     },
+     {
+      "title": "Counterspell - Scan 15848",
+      "handle": "counterspell-scan-15848",
+      "available": false
+     },
+     {
+      "title": "Counterspell — Scan 15927",
+      "handle": "counterspell-scan-15927",
+      "available": false
+     },
+     {
+      "title": "Counterspell — Scan 15926",
+      "handle": "counterspell-scan-15926",
+      "available": false
+     },
+     {
+      "title": "Counterspell [54] [30th Anniversary Edition] [Non-Foil]",
+      "handle": "counterspell-54-30th-anniversary-edition-non-foil",
+      "available": false
+     },
+     {
+      "title": "Counterspell [54] [Revised Edition] [Non-Foil]",
+      "handle": "counterspell-54-revised-edition-non-foil",
+      "available": true
+     }
+    ]
+   }
+  }
+ }
+}

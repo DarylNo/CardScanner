@@ -1,0 +1,31 @@
+{
+ "url": "https://facetofacegames.com/search/suggest.json?q=Rhystic%20Study%20PCY-45%20The%20List&resources%5Btype%5D=product&resources%5Blimit%5D=20&resources%5Boptions%5D%5Bunavailable_products%5D=show",
+ "body": {
+  "resources": {
+   "results": {
+    "products": [
+     {
+      "title": "Rhystic Study [PCY-45] [The List] [Non-Foil]",
+      "handle": "rhystic-study-pcy-45-the-list-non-foil",
+      "available": true
+     },
+     {
+      "title": "Rhystic Study [45] [Prophecy] [Non-Foil]",
+      "handle": "rhystic-study-45-prophecy-non-foil",
+      "available": true
+     },
+     {
+      "title": "Rhystic Study [45] [Prophecy] [Foil]",
+      "handle": "rhystic-study-45-prophecy-foil",
+      "available": false
+     },
+     {
+      "title": "Rhystic Study — Damaged|Foil — ID 21458",
+      "handle": "rhystic-study-damagedfoil-id-21458",
+      "available": false
+     }
+    ]
+   }
+  }
+ }
+}

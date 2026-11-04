@@ -1,0 +1,61 @@
+{
+ "url": "https://facetofacegames.com/search/suggest.json?q=Lightning%20Bolt%20187%20Commander%20Legends%3A%20Battle%20for%20Baldur%27s%20Gate&resources%5Btype%5D=product&resources%5Blimit%5D=20&resources%5Boptions%5D%5Bunavailable_products%5D=show",
+ "body": {
+  "resources": {
+   "results": {
+    "products": [
+     {
+      "title": "Lightning Bolt [187] [Commander Legends: Battle for Baldur's Gate] [Foil]",
+      "handle": "lightning-bolt-187-commander-legends-battle-for-baldurs-gate-foil",
+      "available": true
+     },
+     {
+      "title": "Lightning Bolt [187] [Commander Legends: Battle for Baldur's Gate] [Non-Foil]",
+      "handle": "lightning-bolt-187-commander-legends-battle-for-baldurs-gate-non-foil",
+      "available": true
+     },
+     {
+      "title": "Lightning Bolt [401] [Rulebook Showcase] [Commander Legends: Battle for Baldur's Gate] [Non-Foil]",
+      "handle": "lightning-bolt-401-rulebook-showcase-commander-legends-battle-for-baldurs-gate-non-foil",
+      "available": true
+     },
+     {
+      "title": "Lightning Bolt [401] [Rulebook Showcase] [Commander Legends: Battle for Baldur's Gate] [Foil]",
+      "handle": "lightning-bolt-401-rulebook-showcase-commander-legends-battle-for-baldurs-gate-foil",
+      "available": true
+     },
+     {
+      "title": "Javelin of Lightning [185] [Commander Legends: Battle for Baldur's Gate] [Non-Foil]",
+      "handle": "javelin-of-lightning-185-commander-legends-battle-for-baldurs-gate-non-foil",
+      "available": true
+     },
+     {
+      "title": "Lightning Greaves [864] [Commander Legends: Battle for Baldur's Gate] [Non-Foil]",
+      "handle": "lightning-greaves-864-commander-legends-battle-for-baldurs-gate-non-foil",
+      "available": false
+     },
+     {
+      "title": "Demon Bolt [787] [Commander Legends: Battle for Baldur's Gate] [Non-Foil]",
+      "handle": "demon-bolt-787-commander-legends-battle-for-baldurs-gate-non-foil",
+      "available": false
+     },
+     {
+      "title": "Ingenious Artillerist [182] [Commander Legends: Battle for Baldur's Gate] [Foil]",
+      "handle": "ingenious-artillerist-182-commander-legends-battle-for-baldurs-gate-foil",
+      "available": true
+     },
+     {
+      "title": "Javelin of Lightning [185] [Commander Legends: Battle for Baldur's Gate] [Foil]",
+      "handle": "javelin-of-lightning-185-commander-legends-battle-for-baldurs-gate-foil",
+      "available": true
+     },
+     {
+      "title": "Ingenious Artillerist [182] [Commander Legends: Battle for Baldur's Gate] [Non-Foil]",
+      "handle": "ingenious-artillerist-182-commander-legends-battle-for-baldurs-gate-non-foil",
+      "available": true
+     }
+    ]
+   }
+  }
+ }
+}

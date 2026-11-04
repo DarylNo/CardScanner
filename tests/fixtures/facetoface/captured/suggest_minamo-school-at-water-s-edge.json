@@ -1,0 +1,61 @@
+{
+ "url": "https://facetofacegames.com/search/suggest.json?q=Minamo%2C%20School%20at%20Water%27s%20Edge&resources%5Btype%5D=product&resources%5Blimit%5D=20&resources%5Boptions%5D%5Bunavailable_products%5D=show",
+ "body": {
+  "resources": {
+   "results": {
+    "products": [
+     {
+      "title": "Minamo, School at Water's Edge — Foil — ID 20487",
+      "handle": "minamo-school-at-waters-edge-foil-id-20487",
+      "available": false
+     },
+     {
+      "title": "Minamo, School at Water's Edge [279] [Champions of Kamigawa] [Non-Foil]",
+      "handle": "minamo-school-at-waters-edge-279-champions-of-kamigawa-non-foil",
+      "available": true
+     },
+     {
+      "title": "Academy on the Bay - Minamo, School at Water's Edge [27] [Borderless] [Stardates] [Foil]",
+      "handle": "academy-on-the-bay-minamo-school-at-waters-edge-27-borderless-stardates-foil",
+      "available": false
+     },
+     {
+      "title": "Academy on the Bay - Minamo, School at Water's Edge [27] [Borderless] [Stardates] [Non-Foil]",
+      "handle": "academy-on-the-bay-minamo-school-at-waters-edge-27-borderless-stardates-non-foil",
+      "available": false
+     },
+     {
+      "title": "Minamo, School at Water's Edge [279] [Champions of Kamigawa] [Foil]",
+      "handle": "minamo-school-at-waters-edge-279-champions-of-kamigawa-foil",
+      "available": false
+     },
+     {
+      "title": "Minamo, School at Water's Edge — Foil — ID 18417",
+      "handle": "minamo-school-at-waters-edge-foil-id-18417",
+      "available": false
+     },
+     {
+      "title": "Minamo, School at Water's Edge [CHK-279] [The List] [Foil]",
+      "handle": "minamo-school-at-waters-edge-chk-279-the-list-foil",
+      "available": true
+     },
+     {
+      "title": "Dol Amroth - Minamo, School at Water's Edge [369] [Borderless] [Realms and Relics] [The Lord of the Rings: Tales of Middle-earth: Commander] [Non-Foil]",
+      "handle": "dol-amroth-minamo-school-at-waters-edge-369-borderless-realms-and-relics-the-lord-of-the-rings-tales-of-middle-earth-commander-non-foil",
+      "available": true
+     },
+     {
+      "title": "Dol Amroth - Minamo, School at Water's Edge [369] [Borderless] [Realms and Relics] [The Lord of the Rings: Tales of Middle-earth: Commander] [Foil]",
+      "handle": "dol-amroth-minamo-school-at-waters-edge-369-borderless-realms-and-relics-the-lord-of-the-rings-tales-of-middle-earth-commander-foil",
+      "available": true
+     },
+     {
+      "title": "Dol Amroth - Minamo, School at Water's Edge [399] [Borderless] [Realms and Relics] [The Lord of the Rings: Tales of Middle-earth: Commander] [Surge Foil]",
+      "handle": "dol-amroth-minamo-school-at-waters-edge-399-borderless-realms-and-relics-the-lord-of-the-rings-tales-of-middle-earth-commander-surge-foil",
+      "available": true
+     }
+    ]
+   }
+  }
+ }
+}

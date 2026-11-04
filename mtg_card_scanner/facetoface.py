@@ -24,6 +24,7 @@ import json
 import re
 import threading
 import time
+import unicodedata
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Optional
@@ -115,43 +116,103 @@ def _norm(s: str) -> str:
 
 
 def _norm_collector(s: str) -> str:
-    """Normalise a collector number for comparison (strip leading zeros, lowercase)."""
+    """Normalise a collector number for comparison: lowercase, and leading
+    zeros stripped PER hyphen segment (a segment of only zeros keeps one "0").
+    F2F zero-pads some List compounds — ``[PZ2-038]`` for Scryfall's
+    ``PZ2-38`` — so "0083" == "83" and "PZ2-038" == "PZ2-38"."""
     s = str(s or "").strip().lower()
-    return s.lstrip("0") or s
+    return "-".join(seg.lstrip("0") or ("0" if seg else "") for seg in s.split("-"))
+
+
+def _norm_name(s: str) -> str:
+    """A card name for comparison: accents stripped (NFD minus Mn marks),
+    lowercased, alphanumeric only — "Lim-Dûl's Vault" == "Lim-Dul's Vault"."""
+    s = "".join(c for c in unicodedata.normalize("NFD", s or "")
+                if unicodedata.category(c) != "Mn")
+    return re.sub(r"[^a-z0-9]", "", s.lower())
+
+
+def _title_names_card(title: str, name: str) -> bool:
+    """True if the product title's name part (the text before the first "[")
+    starts with the card's front face. An empty front face never matches —
+    a name that normalises to nothing would otherwise match every title."""
+    want = _norm_name(str(name or "").split(" // ")[0])
+    return bool(want) and _norm_name(str(title or "").split("[", 1)[0]).startswith(want)
+
+
+# A first bracket that IS a collector number: "141", "0083", "185j", "12★",
+# and the List's compounds "A25-141", "PF19-1", "PZ2-038", "TAFR-1",
+# "M19-185j" — never "Rulebook Showcase", "30th Anniversary Edition",
+# "2019 Judge Promo" (narrow on purpose: World Championship numbers like
+# "mlp315" are left to the set-name fallback, as before).
+# ASCII digits and a FULL match (the Kotlin port's Regex.matches): Python's
+# \d would take any Unicode digit and its $ a trailing newline.
+_COLLECTOR_RE = re.compile(r"(?:[A-Za-z0-9]{1,6}-)?[0-9]+[A-Za-z★†]?")
 
 
 def _parse_title_brackets(title: str) -> dict[str, str]:
     """
     Parse a Face to Face product title into its parts.
 
-    Titles look like ``Name [collector] [set name] [foil]`` — but promos omit the
-    collector: ``Name [set name] [foil]``. The last bracket is always the foil
-    label, the second-last is the set name, and a third (when present) is the
-    collector number.
+    Titles look like ``Name [collector] [set name] [foil]`` — but promos omit
+    the collector (``Name [set name] [foil]``) and about a third of titles carry
+    variant brackets between the collector and the set name (``Lightning Bolt
+    [401] [Rulebook Showcase] [Commander Legends: Battle for Baldur's Gate]
+    [Non-Foil]``, ``Urza's Saga [114] [White Border] [Mystery Booster 2]
+    [Non-Foil]``). The last bracket is always the foil label, the second-last
+    the set name, and the collector is the FIRST bracket when there are at
+    least three and it looks like a collector number (else "").
     """
-    brackets = re.findall(r"\[([^\]]+)\]", title)
+    brackets = [b.strip() for b in re.findall(r"\[([^\]]+)\]", title)]
     out = {"collector": "", "set_name": "", "foil_label": ""}
     if not brackets:
         return out
-    out["foil_label"] = brackets[-1].strip()
+    out["foil_label"] = brackets[-1]
     if len(brackets) >= 2:
-        out["set_name"] = brackets[-2].strip()
-    if len(brackets) >= 3:
-        out["collector"] = brackets[-3].strip()
+        out["set_name"] = brackets[-2]
+    if len(brackets) >= 3 and _COLLECTOR_RE.fullmatch(brackets[0]):
+        out["collector"] = brackets[0]
     return out
 
 
+# Scryfall set code → the SKU segments that confirm it, where F2F files the set
+# under other codes (measured live 2026-11-04). Each entry is (any-of groups —
+# a SKU matches when it has EVERY segment of one group —, segments that veto).
+#   plst: F2F's List SKUs follow the release wave — M-MB1-Rhystic_St-468
+#         (2019-11), M-FMB1-Minamo_Sc-118-NM-F (2020-03 foils),
+#         SIN-MTG-PLIST-429 / M-PLIST-Lightning_-142 (2020-09 → 2024-02),
+#         SIN-MTG-PLST-AFC-50 (2024-08+). Scryfall folded mb1/fmb1 into plst.
+#   ulst: SIN-MTG-UPLIST-35-ENG-NM-F (Earl of Squirrel [The List: Unfinity
+#         Foil Edition]).
+#   cmb2: filed as cmb1 + NOPW — M-CMB1-NOPW-Slivdrazi_-102 (the 2021 "No
+#         Symbol" playtest card) — so cmb1 must veto NOPW
+#         (M-CMB1-Slivdrazi_-102 is the 2019 card).
+_SKU_SET_RULES: dict[str, tuple[tuple[tuple[str, ...], ...], tuple[str, ...]]] = {
+    "plst": ((("plst",), ("plist",), ("mb1",), ("fmb1",)), ()),
+    "ulst": ((("ulst",), ("uplist",)), ()),
+    "cmb2": ((("cmb2",), ("cmb1", "nopw")), ()),
+    "cmb1": ((("cmb1",),), ("nopw",)),
+}
+
+
 def _sku_matches_set(sku: str, set_code: str) -> bool:
-    """True if *set_code* appears as a hyphen-separated segment of the SKU.
+    """True if the SKU's hyphen-separated segments confirm *set_code*.
 
     F2F's SKU format has drifted over time — ``M-M11-Lightning_-149-NM-NF``
     (set at segment 2) vs ``SIN-MTG-CLB-309-ENG-NM-NF`` (set at segment 3) —
-    so the set code is matched positionally-agnostic.  The other segments
-    (SIN/MTG/ENG, conditions, finishes, collector digits) don't collide with
-    real Scryfall set codes.
+    so the set code is matched positionally-agnostic, as an exact segment
+    (case-insensitive). The other segments (SIN/MTG/ENG, conditions,
+    finishes, collector digits) don't collide with real Scryfall set codes.
+    A few sets are filed under other codes: ``_SKU_SET_RULES``.
     """
     want = (set_code or "").lower()
-    return bool(want) and want in (p.lower() for p in str(sku or "").split("-"))
+    if not want:
+        return False
+    segments = {p.lower() for p in str(sku or "").split("-")}
+    groups, vetoes = _SKU_SET_RULES.get(want, (((want,),), ()))
+    if any(v in segments for v in vetoes):
+        return False
+    return any(all(seg in segments for seg in group) for group in groups)
 
 
 def _variants_to_conditions(variants: list[dict[str, Any]]) -> dict[str, float]:
@@ -248,6 +309,9 @@ def _default_get_json(cache_dir: Path,
                 state["delay"] = min(_CEIL_DELAY, state["delay"] * _SLOWDOWN)
 
     def get_json(url: str) -> Any:
+        # The cache holds the storefront's RAW bodies keyed by URL — never a
+        # match result — so a change to the matching rules applies on the very
+        # next lookup (the F2fCache port keeps the same contract).
         key = hashlib.sha1(url.encode()).hexdigest()
         cached = cache_dir / f"{key}.json"
         try:
@@ -432,7 +496,7 @@ class FaceToFaceClient:
                 continue
             tried.add(q)
             match = self._match_printing(
-                self._suggest(q), foil_label, want_collector, want_set, want_set_name
+                self._suggest(q), foil_label, want_collector, want_set, want_set_name, name
             )
             if match is None:
                 continue
@@ -459,6 +523,7 @@ class FaceToFaceClient:
         want_collector: str,
         want_set: str,
         want_set_name: str,
+        name: str,
     ) -> Optional[tuple[dict[str, Any], list[dict[str, Any]]]]:
         """Return ``(product, variants)`` for the confirmed printing, or None."""
         if not products:
@@ -476,7 +541,11 @@ class FaceToFaceClient:
 
         # 2) Narrow to confident candidates: prefer collector-number matches;
         #    for promos without a collector in the title, fall back to set-name.
-        #    If neither identifies a candidate, don't guess.
+        #    If neither identifies a candidate, don't guess. The fallback takes
+        #    ONLY collector-less titles of THIS card's name: it used to admit any
+        #    product of the set name, and a List lookup F2F doesn't stock filed
+        #    another List card's price (Mortuary [STH-66] → Buried Alive
+        #    [WTH-63], $4.99; Bolt [CLB-187] → Bolt [PF19-1], $23.99).
         candidates = [
             p for p in foil_matches
             if p["_parts"]["collector"]
@@ -485,7 +554,9 @@ class FaceToFaceClient:
         if not candidates and want_set_name:
             candidates = [
                 p for p in foil_matches
-                if _norm(p["_parts"]["set_name"]) == want_set_name
+                if not p["_parts"]["collector"]
+                and _norm(p["_parts"]["set_name"]) == want_set_name
+                and _title_names_card(p.get("title", ""), name)
             ]
         if not candidates:
             return None
