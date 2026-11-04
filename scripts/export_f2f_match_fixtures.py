@@ -8,9 +8,11 @@ MATCHING — which product a printing resolves to — so the two cannot drift:
 
   * function tables: the REAL _parse_title_brackets / _norm_collector /
     _sku_matches_set / _norm_name / _title_names_card over every product title
-    and SKU in the captured storefront answers (plus a few hand-written edge
-    shapes, listed in EXTRA_* below — inputs only, the answers are the
-    reference's);
+    and SKU in the captured storefront answers and the declared synthetic
+    bodies (plus a few hand-written edge shapes, listed in EXTRA_* below —
+    inputs only, the answers are the reference's). _title_names_card runs on
+    FULL titles (brackets and all: the port's cut at "[" is part of what is
+    pinned), one per distinct name part, against every name;
   * sessions: the REAL get_price replayed over storefront answers captured live
     on 2026-11-04 (tests/fixtures/facetoface/captured/, one file per URL, trimmed
     to the fields the client reads) and the older m10/m11 Bolt fixture — every
@@ -18,7 +20,14 @@ MATCHING — which product a printing resolves to — so the two cannot drift:
     conditions, or null). Where a ladder rung was never captured, the session
     DECLARES a stand-in (another captured answer) and the fixture lists the URL
     under "stand_ins": those answers are real F2F bodies, just for another query.
-    Any undeclared uncaptured URL fails the export.
+    Where no capture shows the shape a rule needs (a collector-less promo's
+    product, a decoy whose name merely starts with the card's), the session
+    DECLARES a SYNTHETIC body (SYNTHETIC below: hand-written, an id that is
+    never a URL, a note saying why) — for a suggest rung through "stand_ins",
+    for a product fetch through "products" (handle → body id); the fixture
+    lists the URLs a synthetic body answered under the session's "synthetic"
+    and every synthetic body used, with its note, under the top-level
+    "synthetic". Any undeclared uncaptured URL fails the export.
 
 Writes android/app/src/test/resources/f2f/match.json; F2fMatchParityTest replays
 (a) through F2fPricer's companion functions and (b) through F2fPricer over a fake
@@ -74,23 +83,81 @@ EXTRA_TITLES = [
     "Ice [Promo] [Foil]",
     "_____ [Unhinged Promos] [Foil]",
     "Aether Vial [Promo] [Foil]",
+    # The set-name fallback's name check: the name part must EQUAL the front
+    # face, whole or cut at the first title-side suffix (" //", " -", " —", " (").
+    "Shockwave [Promo] [Foil]",
+    "Shock [Promo] [Foil]",
+    "Mountain Goat [Promo] [Foil]",
+    "Fog Bank [Promo] [Foil]",
+    "Fireball - French [Promo] [Foil]",
+    "Lightning Bolt (Retro) [Promo] [Foil]",
+    "Lightning Bolt  -  French [Promo] [Foil]",
+    "Lightning Bolt—Foil [Promo] [Foil]",
+    "Lightning Bolt-French [Promo] [Foil]",
+    "Lightning Bolt (Retro) - French // x [Promo] [Foil]",
+    "Erase (Not the Urza's Legacy One) [Unglued] [Non-Foil]",
+    "B.F.M. (Big Furry Monster) [Unglued] [Non-Foil]",
+    " - Lightning Bolt [Promo] [Foil]",
+    " (Retro) [Promo] [Foil]",
+    "// [Promo] [Foil]",
+    "Fire // Ice // Extra [Promo] [Foil]",
 ]
 EXTRA_COLLECTORS = [
     "PZ2-38", "pz2-038", "CLB-187", "STH-66", "JUD-78†", "M19-185j", "0", "00", "000", "",
     "-", "0-0", "A-0", "007a", " 0083 ", "TAFR-01", "1-", "-01", "A25-0141",
 ]
 SET_CODES = ["plst", "plist", "mb1", "fmb1", "ulst", "uplist", "ust", "pust", "cmb1", "cmb2",
-             "nopw", "mb2", "clb", "a25", "tmp", "m10", "m11", "PLST", ""]
+             "nopw", "mb2", "clb", "a25", "tmp", "m10", "m11", "PLST", "jgp", "g05", ""]
 EXTRA_SKUS = [
     "SIN-MTG-CMB2-102-ENG-NM-NF", "SIN-MTG-A25-141-ENG-NM-NF", "M-M11-Lightning_-149-NM-NF",
     "SIN-MTG-CLB-309-ENG-NM-NF", "m-cmb1-nopw-x-102-nm-nf", "M-CMB1-NOPWX-x-102-NM-NF", "",
     "PLST", "plist",
 ]
 EXTRA_NAMES = ["Fire // Ice", "Lim-Dûl's Vault", "Æther Vial", "Aether Vial", "_____", "Sol Ring",
-               "Jötun Grunt", "İstanbul", "Dandân", "ﬁre", "Emeritus of Conflict"]
+               "Jötun Grunt", "İstanbul", "Dandân", "ﬁre", "Emeritus of Conflict",
+               "Fire", "Fireball", "Shock", "Shockwave", "Mountain", "Mountain Goat", "Fog", "Fog Bank",
+               "Erase", "Erase (Not the Urza's Legacy One)", "B.F.M. (Big Furry Monster)", "Lim",
+               "Lightning", "Lightning Axe", "Ancient Tomb", "Minamo, School at Water's Edge",
+               "Academy on the Bay", "Counterspell // x", ""]
 
-# Each session: get_price's arguments, and stand-ins for ladder rungs that were
-# never captured (query text → the captured query whose answer stands in).
+_JGP_BOLT = "lightning-bolt-judge-gift-cards-1998-foil"   # a real handle (the "Lightning Bolt" capture)
+_G05_FIREBALL = "fireball-judge-gift-cards-2005-foil"
+
+# Hand-written bodies for shapes no capture shows (see the docstring). Ids are
+# never URLs, so an uncaptured URL can only reach one through a declaration.
+SYNTHETIC: dict[str, dict] = {
+    f"synthetic:product/{_JGP_BOLT}": {
+        "note": "the product behind the captured title 'Lightning Bolt [Judge Gift Cards 1998] "
+                "[Foil]' (not captured): an old-format SKU naming JGP, prices made up",
+        "body": {"product": {"title": "Lightning Bolt [Judge Gift Cards 1998] [Foil]", "handle": _JGP_BOLT,
+                             "variants": [
+                                 {"sku": "M-JGP-Lightning_-NM-F", "title": "NM", "option1": "NM",
+                                  "price": "49.99"},
+                                 {"sku": "M-JGP-Lightning_-PL-F", "title": "PL", "option1": "PL",
+                                  "price": "39.99"}]}},
+    },
+    "synthetic:suggest/Fire // Ice": {
+        "note": "a suggest for Fire // Ice offering Fireball's collector-less G05 promo (same set "
+                "name, foil) beside Fire // Ice's own numbered APC printings",
+        "body": {"resources": {"results": {"products": [
+            {"title": "Fireball [Judge Gift Cards 2005] [Foil]", "handle": _G05_FIREBALL},
+            {"title": "Fire // Ice [128] [Apocalypse] [Foil]", "handle": "fire-ice-128-apocalypse-foil"},
+            {"title": "Fire // Ice [128] [Apocalypse] [Non-Foil]", "handle": "fire-ice-128-apocalypse-non-foil"},
+        ]}}},
+    },
+    f"synthetic:product/{_G05_FIREBALL}": {
+        "note": "Fireball's G05 promo: an SKU that confirms g05, so only the name check keeps its "
+                "price off a Fire // Ice",
+        "body": {"product": {"title": "Fireball [Judge Gift Cards 2005] [Foil]", "handle": _G05_FIREBALL,
+                             "variants": [
+                                 {"sku": "M-G05-Fireball-NM-F", "title": "NM", "option1": "NM",
+                                  "price": "19.99"}]}},
+    },
+}
+
+# Each session: get_price's arguments, stand-ins for ladder rungs that were
+# never captured (query text → the captured query, or a SYNTHETIC id, whose
+# answer stands in) and declared answers for product fetches (handle → body id).
 SESSIONS: list[dict] = [
     {"id": "bolt_plst_a25_141", "note": "List, PLIST-wave SKU (SIN-MTG-PLIST-429)",
      "card": ["Lightning Bolt", "plst", "A25-141", False, "The List"]},
@@ -140,6 +207,28 @@ SESSIONS: list[dict] = [
     {"id": "bolt_m11_149", "note": "the original fixture: same name, another set",
      "card": ["Lightning Bolt", "m11", "149", False, "Magic 2011"],
      "stand_ins": {"Lightning Bolt 149 Magic 2011": LEGACY_SUGGEST}},
+    # The set-name fallback's name check (collector-less titles of the set name):
+    {"id": "axe_jgp_on_the_bolt_answer", "note": "Lightning Axe's JGP promo over the captured Bolt "
+     "answer, which holds 'Lightning Bolt [Judge Gift Cards 1998] [Foil]' — another card's promo, "
+     "never fetched (a name-blind check would file Bolt's price: the declared product)",
+     "card": ["Lightning Axe", "jgp", "", True, "Judge Gift Cards 1998"],
+     "stand_ins": {"Lightning Axe Judge Gift Cards 1998 foil": "Lightning Bolt",
+                   "Lightning Axe foil": "Lightning Bolt",
+                   "Lightning Axe": "Lightning Bolt"},
+     "products": {_JGP_BOLT: f"synthetic:product/{_JGP_BOLT}"}},
+    {"id": "bolt_jgp_collectorless_promo", "note": "the card's own collector-less promo is found "
+     "through the set-name fallback (the captured Bolt answer; the product is synthetic)",
+     "card": ["Lightning Bolt", "jgp", "", True, "Judge Gift Cards 1998"],
+     "stand_ins": {"Lightning Bolt Judge Gift Cards 1998 foil": "Lightning Bolt",
+                   "Lightning Bolt foil": "Lightning Bolt"},
+     "products": {_JGP_BOLT: f"synthetic:product/{_JGP_BOLT}"}},
+    {"id": "fire_ice_g05_fireball_decoy", "note": "a decoy whose name merely STARTS WITH the card's "
+     "front face (Fireball vs Fire // Ice, same set name, an SKU confirming g05) — never fetched",
+     "card": ["Fire // Ice", "g05", "", True, "Judge Gift Cards 2005"],
+     "stand_ins": {"Fire // Ice Judge Gift Cards 2005 foil": "synthetic:suggest/Fire // Ice",
+                   "Fire // Ice foil": "synthetic:suggest/Fire // Ice",
+                   "Fire // Ice": "synthetic:suggest/Fire // Ice"},
+     "products": {_G05_FIREBALL: f"synthetic:product/{_G05_FIREBALL}"}},
 ]
 
 
@@ -164,7 +253,8 @@ def _query_of(url: str) -> str:
 
 
 def load_bodies() -> tuple[dict, dict]:
-    """(body id → body, suggest query text → body id). Captured ids are their URLs."""
+    """(body id → body, suggest query text → body id). Captured ids are their
+    URLs; SYNTHETIC ids are not, so only a declaration reaches one."""
     bodies: dict = {}
     by_query: dict = {}
     for path in sorted(CAPTURED.glob("*.json")):
@@ -176,11 +266,19 @@ def load_bodies() -> tuple[dict, dict]:
     for path in sorted(FIX.glob("product_*.json")):
         handle = path.stem[len("product_"):]
         bodies[f"{m._BASE}/products/{handle}.json"] = _trim(json.loads(path.read_text(encoding="utf-8")))
+    for body_id, spec in SYNTHETIC.items():
+        assert body_id.startswith("synthetic:") and body_id not in bodies, body_id
+        bodies[body_id] = _trim(spec["body"])
     return bodies, by_query
+
+
+def _handle_of(url: str) -> str:
+    return url.rsplit("/products/", 1)[1][:-len(".json")]
 
 
 def run_session(spec: dict, bodies: dict, by_query: dict) -> dict:
     stand_ins = spec.get("stand_ins", {})
+    products = spec.get("products", {})
     requests: list[str] = []
     answers: dict[str, str] = {}
 
@@ -188,6 +286,8 @@ def run_session(spec: dict, bodies: dict, by_query: dict) -> dict:
         if "/search/suggest.json" in url and _query_of(url) in stand_ins:
             target = stand_ins[_query_of(url)]
             body_id = target if target in bodies else by_query[target]
+        elif "/products/" in url and _handle_of(url) in products:
+            body_id = products[_handle_of(url)]
         elif url in bodies:
             body_id = url
         else:
@@ -206,6 +306,7 @@ def run_session(spec: dict, bodies: dict, by_query: dict) -> dict:
         "requests": requests,
         "answers": answers,
         "stand_ins": [u for u in requests if answers[u] != u],
+        "synthetic": [u for u in requests if answers[u] in SYNTHETIC],
         "result": None if price is None else {"handle": price.handle, "conditions": price.conditions},
     }
 
@@ -247,8 +348,12 @@ def build() -> bytes:
                                     + [s["card"]["collector_number"] for s in sessions]
                                     + EXTRA_COLLECTORS))
     names = list(dict.fromkeys([s["card"]["name"] for s in sessions] + EXTRA_NAMES))
-    # _title_names_card reads only the text before the first "[".
-    name_parts = list(dict.fromkeys(t.split("[", 1)[0] for t in titles))
+    # _title_names_card reads only the text before the first "[": one FULL title
+    # (brackets and all) per distinct name part covers every input it can see.
+    first_title: dict[str, str] = {}
+    for t in titles:
+        first_title.setdefault(t.split("[", 1)[0], t)
+    name_parts = list(first_title)
     tables = {
         "parse_title": _table(["title", "collector", "set_name", "foil_label"],
                               [[t, p["collector"], p["set_name"], p["foil_label"]]
@@ -259,14 +364,17 @@ def build() -> bytes:
                                    for sku in _skus(bodies) for code in SET_CODES]),
         "norm_name": _table(["in", "out"], [[n, m._norm_name(n)] for n in names + name_parts]),
         "title_names_card": _table(["title", "name", "match"],
-                                   [[t, n, m._title_names_card(t, n)] for t in name_parts for n in names]),
+                                   [[t, n, m._title_names_card(t, n)]
+                                    for t in first_title.values() for n in names]),
     }
     doc = {
         "about": "Generated by scripts/export_f2f_match_fixtures.py from the real facetoface.py over "
-                 "F2F answers captured 2026-11-04 (tests/fixtures/facetoface/captured) — do not hand-edit.",
+                 "F2F answers captured 2026-11-04 (tests/fixtures/facetoface/captured) and the declared "
+                 "synthetic bodies listed under \"synthetic\" — do not hand-edit.",
         "base": m._BASE,
         "bodies": {b: bodies[b] for b in used},
         "sessions": sessions,
+        "synthetic": {b: SYNTHETIC[b]["note"] for b in used if b in SYNTHETIC},
     }
     # One table row per line keeps the file small and its diffs readable.
     text = json.dumps(doc, indent=1, sort_keys=True, ensure_ascii=False)

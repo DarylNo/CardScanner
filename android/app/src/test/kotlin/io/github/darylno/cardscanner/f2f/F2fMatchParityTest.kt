@@ -15,7 +15,10 @@ import org.junit.Test
  *      MB1 / FMB1 / PLIST / PLST, ulst's UPLIST, cmb2's CMB1-NOPW, variant
  *      titles like "[401] [Rulebook Showcase] [CLB] [Non-Foil]");
  *  (b) get_price sessions over those answers — every URL requested, in order,
- *      and the product it resolved to (or none).
+ *      and the product it resolved to (or none). A few shapes no capture shows
+ *      (a collector-less promo's product, a decoy whose name merely STARTS WITH
+ *      the card's — Fireball vs Fire // Ice) are declared SYNTHETIC bodies,
+ *      listed under the fixture's "synthetic".
  * Regenerate the fixture, never hand-edit it; change facetoface.py first.
  */
 class F2fMatchParityTest {
@@ -68,7 +71,7 @@ class F2fMatchParityTest {
     }
 
     @Test
-    fun titleNamesCard_matchesTheReference() = table("title_names_card", 1000) { r ->
+    fun titleNamesCard_matchesTheReference() = table("title_names_card", 3000) { r ->
         val got = F2fPricer.titleNamesCard(r.getString(0), r.getString(1))
         if (got == r.getBoolean(2)) null else "'${r.getString(0)}' names '${r.getString(1)}': want ${r.getBoolean(2)} got $got"
     }
@@ -78,7 +81,7 @@ class F2fMatchParityTest {
     fun getPriceSessions_requestTheSameUrlsAndResolveTheSameProduct() {
         val bodies = fixture.getJSONObject("bodies")
         val sessions = fixture.getJSONArray("sessions")
-        assertTrue("fixture has sessions", sessions.length() >= 15)
+        assertTrue("fixture has sessions", sessions.length() >= 20)
         val bad = mutableListOf<String>()
         for (i in 0 until sessions.length()) {
             val s = sessions.getJSONObject(i)

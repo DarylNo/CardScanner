@@ -132,12 +132,27 @@ def _norm_name(s: str) -> str:
     return re.sub(r"[^a-z0-9]", "", s.lower())
 
 
+# Where a title's name part may run on past the card's name: " //" (the back
+# face — "Sol Ring // Sol Ring"), " -" / " —" (a language or note — "Counterspell
+# - French", "Slivdrazi Monstrosity - Symbol"), " (" (a variant). A plain space,
+# not \s, so the Kotlin port's Regex matches exactly the same text.
+_NAME_END = re.compile(r" +(?://|-|—|\()")
+
+
 def _title_names_card(title: str, name: str) -> bool:
     """True if the product title's name part (the text before the first "[")
-    starts with the card's front face. An empty front face never matches —
-    a name that normalises to nothing would otherwise match every title."""
+    IS the card's front face: equal as a whole, or once cut at its first
+    _NAME_END suffix (the uncut form keeps names that hold " (" themselves —
+    "Erase (Not the Urza's Legacy One)"). Compared with _norm_name. Equal, not
+    "starts with": Fireball, Shockwave, Mountain Goat and Fog Bank start with
+    Fire (// Ice), Shock, Mountain and Fog, and the set-name fallback filed
+    their promos' prices. An empty front face never matches — a name that
+    normalises to nothing would otherwise match a title that does too."""
     want = _norm_name(str(name or "").split(" // ")[0])
-    return bool(want) and _norm_name(str(title or "").split("[", 1)[0]).startswith(want)
+    if not want:
+        return False
+    part = str(title or "").split("[", 1)[0]
+    return want in (_norm_name(part), _norm_name(_NAME_END.split(part, 1)[0]))
 
 
 # A first bracket that IS a collector number: "141", "0083", "185j", "12★",

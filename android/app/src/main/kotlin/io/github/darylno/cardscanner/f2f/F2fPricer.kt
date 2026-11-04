@@ -85,7 +85,8 @@ class F2fPricer(
         if (foilMatches.isEmpty()) return null
         // 2) collector match; promos without a collector fall back to set name —
         //    only collector-less titles of THIS card's name (any product of the
-        //    set name filed another List card's price: Mortuary → Buried Alive)
+        //    set name filed another List card's price: Mortuary → Buried Alive;
+        //    a name that merely started with it, Fireball's on a Fire // Ice)
         var candidates = foilMatches.filter { it.second.collector.isNotEmpty() && normCollector(it.second.collector) == wantCollector }
         if (candidates.isEmpty() && wantSetName.isNotEmpty()) {
             candidates = foilMatches.filter {
@@ -178,10 +179,23 @@ class F2fPricer(
         /** facetoface._norm_name: NFD minus Mn marks, lowercased, alphanumeric only. */
         fun normName(s: String): String = norm(MARKS.replace(Normalizer.normalize(s, Normalizer.Form.NFD), ""))
 
-        /** facetoface._title_names_card: the title's text before "[" starts with the card's front face (never an empty one). */
+        /**
+         * facetoface._NAME_END: where a title's name part may run on past the card's name — " //" (back face),
+         * " -" / " —" (a language or note), " (" (a variant). A plain space, exactly as the reference spells it.
+         */
+        private val NAME_END = Regex(" +(?://|-|—|\\()")
+
+        /**
+         * facetoface._title_names_card: the title's text before "[" IS the card's front face — equal whole, or cut
+         * at its first NAME_END (the uncut form keeps "Erase (Not the Urza's Legacy One)"); never an empty one.
+         * Equal, not "starts with": Fireball, Shockwave, Mountain Goat, Fog Bank are other cards.
+         */
         fun titleNamesCard(title: String, name: String): Boolean {
             val want = normName(name.split(" // ")[0])
-            return want.isNotEmpty() && normName(title.substringBefore('[')).startsWith(want)
+            if (want.isEmpty()) return false
+            val part = title.substringBefore('[')
+            // split(limit = 2)[0] = the text before the first match, a leading match giving "" — re.split(maxsplit=1)[0].
+            return want == normName(part) || want == normName(part.split(NAME_END, limit = 2)[0])
         }
 
         /** facetoface._parse_title_brackets: foil = last, set = second-last, collector = FIRST (≥ 3, if it looks like one). */

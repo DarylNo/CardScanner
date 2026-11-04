@@ -14,6 +14,7 @@ from mtg_card_scanner.facetoface import (
     _norm_collector,
     _parse_title_brackets,
     _sku_matches_set,
+    _title_names_card,
 )
 
 _FIX = Path(__file__).parent / "fixtures" / "facetoface"
@@ -483,3 +484,86 @@ def test_collectorless_promo_of_the_right_name_still_matches_via_set_name():
     p = FaceToFaceClient(get_json=get_json).get_price(
         "Lightning Bolt", "jgp", "", foil=True, set_name="Judge Gift Cards 1998")
     assert p is not None and p.handle == "lightning-bolt-judge-gift-cards-1998-foil"
+
+
+# ── The set-name fallback's name check: EQUAL, not "starts with" ─────────────
+#
+# The fallback compared the title's name part with startswith, so a collector-
+# less promo of ANOTHER card whose name merely begins with this card's front
+# face was filed: Fire // Ice took Fireball's price, Shock Shockwave's,
+# Mountain Mountain Goat's, Fog Fog Bank's. The name part must now EQUAL the
+# front face — as a whole, or cut at the first title-side suffix: " //" (the
+# back face), " -" / " —" (a language or note), " (" (a variant).
+
+
+@pytest.mark.parametrize("title, name, want", [
+    # another card whose name starts with this one's front face
+    ("Fireball [Judge Gift Cards 2005] [Foil]", "Fire // Ice", False),
+    ("Shockwave [Promo] [Foil]", "Shock", False),
+    ("Mountain Goat [Promo] [Foil]", "Mountain", False),
+    ("Fog Bank [Promo] [Foil]", "Fog", False),
+    ("Fireball - French [Promo] [Foil]", "Fire // Ice", False),
+    ("Ice [Promo] [Foil]", "Fire // Ice", False),
+    # the card itself, plain or with a title-side suffix
+    ("Lightning Bolt [Judge Gift Cards 1998] [Foil]", "Lightning Bolt", True),
+    ("Fire // Ice [Promo] [Foil]", "Fire // Ice", True),
+    ("Sol Ring // Sol Ring [1512] [Borderless] [Raining Cats and Dogs] [Secret Lair Drop] [Foil]",
+     "Sol Ring", True),
+    ("Counterspell - French [54] [Foreign Black Border: French] [Non-Foil]", "Counterspell", True),
+    ("Slivdrazi Monstrosity - Symbol [102] [Mystery Booster Playtest Cards 2019] [Non-Foil]",
+     "Slivdrazi Monstrosity", True),
+    ("Minamo, School at Water's Edge — Foil — ID 20487", "Minamo, School at Water's Edge", True),
+    ("Lightning Bolt (Retro) [Promo] [Foil]", "Lightning Bolt", True),
+    # a card name that itself holds " (" matches uncut; a hyphen inside a word
+    # is no suffix; accents are folded
+    ("Erase (Not the Urza's Legacy One) [Unglued] [Non-Foil]", "Erase (Not the Urza's Legacy One)", True),
+    ("Lim-Dul's Vault [Alliances Promos] [Non-Foil]", "Lim-Dûl's Vault", True),
+    ("Lim-Dul's Vault [Alliances Promos] [Non-Foil]", "Lim", False),
+    # an empty front face never matches
+    ("_____ [Unhinged Promos] [Foil]", "_____", False),
+])
+def test_title_names_card_wants_the_front_face_exactly(title, name, want):
+    assert _title_names_card(title, name) is want
+
+
+@pytest.mark.parametrize("name, decoy", [
+    ("Fire // Ice", "Fireball"),
+    ("Shock", "Shockwave"),
+    ("Mountain", "Mountain Goat"),
+    ("Fog", "Fog Bank"),
+])
+def test_set_name_fallback_never_files_a_longer_name_that_starts_with_the_card(name, decoy):
+    """The suggest offers only ANOTHER card's collector-less promo of the same
+    set name, its SKU confirming the set: nothing may be fetched or filed."""
+    set_name = "Judge Gift Cards 2005"
+    handle = decoy.lower().replace(" ", "-") + "-judge-gift-cards-2005-foil"
+    fetched = []
+
+    def get_json(url):
+        if "/search/suggest.json" in url:
+            return {"resources": {"results": {"products": [
+                {"title": f"{decoy} [{set_name}] [Foil]", "handle": handle}]}}}
+        fetched.append(url)
+        return {"product": {"handle": handle, "variants": [
+            {"option1": "NM", "price": "9.99", "sku": "M-G05-Decoy-NM-F"}]}}
+
+    assert FaceToFaceClient(get_json=get_json).get_price(
+        name, "g05", "", foil=True, set_name=set_name) is None
+    assert fetched == []
+
+
+@pytest.mark.parametrize("name, title", [
+    ("Fire // Ice", "Fire // Ice [Judge Gift Cards 2005] [Foil]"),
+    ("Counterspell", "Counterspell - French [Judge Gift Cards 2005] [Foil]"),
+    ("Lightning Bolt", "Lightning Bolt (Retro) [Judge Gift Cards 2005] [Foil]"),
+])
+def test_set_name_fallback_still_takes_the_cards_own_suffixed_promo(name, title):
+    def get_json(url):
+        if "/search/suggest.json" in url:
+            return {"resources": {"results": {"products": [{"title": title, "handle": "own-promo"}]}}}
+        return {"product": {"handle": "own-promo", "variants": [
+            {"option1": "NM", "price": "9.99", "sku": "M-G05-Own-NM-F"}]}}
+
+    p = FaceToFaceClient(get_json=get_json).get_price(
+        name, "g05", "", foil=True, set_name="Judge Gift Cards 2005")
+    assert p is not None and p.handle == "own-promo"
