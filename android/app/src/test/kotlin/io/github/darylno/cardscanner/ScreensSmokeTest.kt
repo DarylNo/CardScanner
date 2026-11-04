@@ -1501,6 +1501,48 @@ class ScreensSmokeTest {
     }
 
     /**
+     * The same rule for the update lock (found by the 1.1.17 review): lifting it (only a
+     * rolled-back release does, on a running build) ran applyMode() with the default
+     * pushAuto = true, so camera.setAuto(true) → AutoScanner.setAuto(true) put a card that
+     * had already scanned (AWAIT_NEXT) back to WATCHING, and it was filed a second time two
+     * steady ticks later. The lift must un-pause the scanner and clear "Update required"
+     * without handing the unchanged mode over again.
+     */
+    @Test
+    fun updateLock_liftingItNeverReArmsTray() {
+        app.settings.roi = io.github.darylno.cardscanner.core.RoiFrac(0.25, 0.25, 0.75, 0.75)
+        app.settings.auto = true
+        app.settings.zoomFit = false
+        val prefs = app.getSharedPreferences("update_lock", android.content.Context.MODE_PRIVATE)
+        prefs.edit()
+            .putString("version", "v99.0.0")
+            .putString("apk_url", "https://github.com/DarylNo/CardScanner/releases/download/v99.0.0/mtg-card-scanner-android.apk")
+            .putLong("checked_at", System.currentTimeMillis()).commit()
+        try {
+            val cam = RecordingCamera()
+            app.cameraFactory = { _, _ -> cam }
+            grantCamera(true)
+            val a = launch(MainActivity::class.java)
+            assertTrue("locked at start", app.updates.locked)
+            assertEquals("the scan screen starts its camera in Tray: ${cam.calls}", listOf("setAuto(true)"), cam.autos)
+            assertTrue("scanning paused under the lock: ${cam.calls}", "pause(true)" in cam.calls)
+            assertEquals(a.getString(R.string.update_required_status), a.statusForTest)
+            // A rolled-back release: the latest seen is older than this build again.
+            prefs.edit().putString("version", "v0.0.1").commit()
+            assertFalse(app.updates.locked)
+            cam.calls.clear()
+            a.updateLockChangedForTest(); ShadowLooper.idleMainLooper()
+            assertEquals("lifting the lock never re-arms Tray: ${cam.calls}", emptyList<String>(), cam.autos)
+            assertEquals("…but it does resume scanning: ${cam.calls}", "pause(false)", cam.calls.lastOrNull { it.startsWith("pause(") })
+            assertEquals("…and the mode's own line replaces \"Update required\"",
+                io.github.darylno.cardscanner.ui.StatusText.WAITING, a.statusForTest)
+            assertFalse("the lock is gone", findText(a.window.decorView, a.getString(R.string.update_download))?.isShown == true)
+        } finally {
+            prefs.edit().clear().commit()
+        }
+    }
+
+    /**
      * Review of the fix above: the status line must keep saying what the scanner last said.
      * A PATCH that keeps the mode still rewrote it to "Tray: waiting for a steady view…" —
      * and the scanner, now rightly left in AWAIT_NEXT with the scanned card still there,

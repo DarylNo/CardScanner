@@ -1024,7 +1024,11 @@ class MainActivity : AppCompatActivity() {
         if (was != locked) dlog.w("update", if (locked) "a newer release (${latest?.version}) is out — scanning stopped" else "update lock lifted")
         lockView.visibility = if (locked) View.VISIBLE else View.GONE
         syncPause()
-        if (was && !locked) applyMode()   // (only a rolled-back release unlocks a running build)
+        // Only a rolled-back release unlocks a running build. The lock only paused detection:
+        // hand the camera the mode only if it changed meanwhile (as a PATCH does — handing Tray
+        // over again puts a card that already scanned back to WATCHING, filed twice), and
+        // restate the mode's line over "Update required".
+        if (was && !locked) applyMode(pushAuto = settings.auto != appliedAuto, restate = true)
     }
 
     private fun downloadUpdate() {
@@ -1449,6 +1453,9 @@ class MainActivity : AppCompatActivity() {
 
     /** Tests read what the status line says now. */
     internal val statusForTest: String get() = statusView.text.toString()
+
+    /** Tests deliver UpdateLock's "the lock state changed" (Robolectric never asks GitHub). */
+    internal fun updateLockChangedForTest() = lockListener()
 
     private fun handleOutcome(jobId: String, manual: Boolean, openScan: Boolean, replaceScanId: Long?, outcome: Outcome) {
         val scene = sceneByJob.remove(jobId)
