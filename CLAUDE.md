@@ -278,10 +278,27 @@ work, all measured — don't loosen any of it:
   plst = MB1 / FMB1 / PLIST / PLST by release wave (titles "Name [A25-141]
   [The List] [Non-Foil]"), ulst = UPLIST, cmb2 = CMB1 + NOPW (and cmb1 refuses
   NOPW) — before, every List card priced None or ANOTHER card's price.
-- **Titles:** the collector is the FIRST bracket (when it looks like one) —
-  a third of titles carry variant brackets ("[401] [Rulebook Showcase] [Set]"),
-  which brackets[-3] read as the collector; zero padding is ignored per
-  hyphen segment (PZ2-038 = PZ2-38). The set-name fallback takes only
+- **Titles:** the collector is the first bracket BEFORE the set name that
+  looks like one (`_COLLECTOR_RE`) — a third of titles carry variant brackets
+  ("[401] [Rulebook Showcase] [Set]"), which brackets[-3] read as the collector,
+  and some put a label first ("[Prerelease] [59s]", "[Autumn] [80c]": read from
+  brackets[0] only, 1.1.17 took whichever version F2F listed first); zero
+  padding is ignored per hyphen segment (PZ2-038 = PZ2-38). **Meld halves**
+  (1.1.18, owner: "price checks failing — Midnight Scavengers EMN 96, Graf Rats
+  EMN 91"): F2F titles them "Midnight Scavengers // Chittering Host [96a] [B]
+  [Eldritch Moon]" — a side letter Scryfall's "96" lacks — so 1.1.17 priced
+  every EMN half and BRO 163/238 None (1.1.16 found them by luck through its
+  name-blind fallback). Only when no title carries the exact collector, ONE
+  title may match whose collector is the card's + "a" (every measured half;
+  a "[225s]" prerelease is a promo, not a half) and whose name part is "<this
+  card> // <another face>" (the card single-faced); two such titles → none;
+  the SKU still confirms the set. Measured live on 86 printings (meld,
+  transform, MDFC, split, adventure, flip, promos, Secret Lair, variants, old
+  sets, UB, controls), old vs new on the same answers, plus every answer
+  reversed: 1.1.16 76 right / 5 wrong / 8 order-dependent, 1.1.17 71 / 0 / 6,
+  now 80 / 0 / 0 (the 6 still None were None before too: Chittering Host has
+  no product; Etched / Halo / Surge Foil labels; PNEO 266p's SKU says NEO).
+  The set-name fallback takes only
   collector-LESS titles of the card's own name: the title's name part EQUALS
   the front face (accents folded), whole or cut at a title-side suffix (" //",
   " -", " —", " (") — name-blind, it filed Buried Alive's $4.99 for a
@@ -318,7 +335,11 @@ drops EVERY stored F2F answer and the sweep prices them all again (owner,
 name-blind in every set and variant-bracket titles never matched their own
 collector, so any stored price may be another card's or printing's — a
 one-time catch-up from the phone's own connection at the usual pacing; new
-scans still jump the queue).
+scans still jump the queue). 1.1.18's v2 (1 → 2, its own transaction and
+stamp; a v0 store runs v1, commits, then v2) re-asks what 1.1.17's matcher may
+have got wrong: every EMPTY answer ("no F2F listing" — the meld halves) and
+every answer of a printing whose collector ends in an ASCII letter (59s, 38a,
+80c, 266P — picked by F2F's listing order); every other price is kept.
 
 **Concurrency:** `select_lock` serializes every selection read-modify-write —
 picks vs PATCH edits vs retro auto-picks (born when repeat copies merged into
