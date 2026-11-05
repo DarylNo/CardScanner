@@ -1,0 +1,23 @@
+{
+ "url": "https://facetofacegames.com/products/hanweir-garrison-hanweir-the-writhing-township-130a-b-eldritch-moon-non-foil.json",
+ "body": {
+  "product": {
+   "title": "Hanweir Garrison // Hanweir, the Writhing Township [130a] [B] [Eldritch Moon] [Non-Foil]",
+   "handle": "hanweir-garrison-hanweir-the-writhing-township-130a-b-eldritch-moon-non-foil",
+   "variants": [
+    {
+     "sku": "M-EMN-Hanweir_Ga-130a-NM-NF",
+     "title": "NM",
+     "option1": "NM",
+     "price": "3.49"
+    },
+    {
+     "sku": "M-EMN-Hanweir_Ga-130a-PL-NF",
+     "title": "PL",
+     "option1": "PL",
+     "price": "2.79"
+    }
+   ]
+  }
+ }
+}

@@ -1,0 +1,61 @@
+{
+ "url": "https://facetofacegames.com/search/suggest.json?q=Phyrexian%20Dragon%20Engine%20163%20The%20Brothers%27%20War&resources%5Btype%5D=product&resources%5Blimit%5D=20&resources%5Boptions%5D%5Bunavailable_products%5D=show",
+ "body": {
+  "resources": {
+   "results": {
+    "products": [
+     {
+      "title": "Phyrexian Dragon Engine // Mishra, Lost to Phyrexia [163a] [The Brothers' War] [Non-Foil]",
+      "handle": "phyrexian-dragon-engine-mishra-lost-to-phyrexia-163a-the-brothers-war-non-foil",
+      "available": true
+     },
+     {
+      "title": "Phyrexian Dragon Engine // Mishra, Lost to Phyrexia [163a] [The Brothers' War] [Foil]",
+      "handle": "phyrexian-dragon-engine-mishra-lost-to-phyrexia-163a-the-brothers-war-foil",
+      "available": true
+     },
+     {
+      "title": "Phyrexian Dragon Engine // Mishra, Lost to Phyrexia [163as] [Prerelease] [The Brothers' War: Promos] [Foil]",
+      "handle": "phyrexian-dragon-engine-mishra-lost-to-phyrexia-163as-prerelease-the-brothers-war-promos-foil",
+      "available": true
+     },
+     {
+      "title": "Fallaji Dragon Engine [159] [The Brothers' War] [Non-Foil]",
+      "handle": "fallaji-dragon-engine-159-the-brothers-war-non-foil",
+      "available": true
+     },
+     {
+      "title": "Wurmcoil Engine [63] [Retro Frame] [The Brothers' War Retro Artifacts] [Non-Foil]",
+      "handle": "wurmcoil-engine-63-retro-frame-the-brothers-war-retro-artifacts-non-foil",
+      "available": true
+     },
+     {
+      "title": "Wurmcoil Engine - Serial Numbered [126z] [Retro Frame] [Schematic] [The Brothers' War Retro Artifacts] [Foil]",
+      "handle": "wurmcoil-engine-serial-numbered-126z-retro-frame-schematic-the-brothers-war-retro-artifacts-foil",
+      "available": false
+     },
+     {
+      "title": "Wurmcoil Engine [126] [Retro Frame] [Schematic] [The Brothers' War Retro Artifacts] [Non-Foil]",
+      "handle": "wurmcoil-engine-126-retro-frame-schematic-the-brothers-war-retro-artifacts-non-foil",
+      "available": true
+     },
+     {
+      "title": "Thran Dynamo [168] [Retro Frame] [The Brothers' War: Commander] [Non-Foil]",
+      "handle": "thran-dynamo-168-retro-frame-the-brothers-war-commander-non-foil",
+      "available": true
+     },
+     {
+      "title": "Phyrexian Processor - Serial Numbered [102z] [Retro Frame] [Schematic] [The Brothers' War Retro Artifacts] [Foil]",
+      "handle": "phyrexian-processor-serial-numbered-102z-retro-frame-schematic-the-brothers-war-retro-artifacts-foil",
+      "available": false
+     },
+     {
+      "title": "Portal to Phyrexia [365] [Extended Art] [The Brothers' War] [Non-Foil]",
+      "handle": "portal-to-phyrexia-365-extended-art-the-brothers-war-non-foil",
+      "available": true
+     }
+    ]
+   }
+  }
+ }
+}

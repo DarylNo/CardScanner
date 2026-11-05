@@ -119,7 +119,7 @@ class MeasureSessionTest {
         m.next()
         assertEquals("zoom-b", m.step.id)
         assertTrue("B pins it on", settings.zoomFit); assertFalse(settings.aeLock)
-        assertTrue(lines().any { it.contains(" START zoom-b: ") && it.endsWith("[AE lock false, zoom to fit on]") })
+        assertTrue(lines().any { it.contains(" START zoom-b: ") && it.endsWith("[AE lock false, zoom to fit on, refocus never]") })
         m.back()
         assertEquals("zoom-probe", m.step.id)
         assertFalse("Back to the probe step: off again", settings.zoomFit)
@@ -148,6 +148,91 @@ class MeasureSessionTest {
         assertFalse(settings.zoomFit)
         f.next()
         assertFalse(f.active); assertTrue(settings.zoomFit)
+    }
+
+    /**
+     * Review of 1.1.18 (F5): the zoom steps (A1, the probe step, B, A2) pin "Refocus on a card" to
+     * Never — a periodic pass in one arm and not another, or Every card's hold on each card, would
+     * confound the A/B and the probe — exactly as Zoom to fit and AE lock are pinned; the owner's
+     * own is restored at Stop / Finish (the original's 5th field). The steps before keep the owner's.
+     */
+    @Test
+    fun theZoomStepsPinRefocusToNeverAndTheOwnersIsRestored_F5() {
+        settings.refocusMin = 10
+        val m = session()
+        m.start()
+        assertEquals("the original carries it", "${settings.aeLock},${settings.vibration},${settings.checkMs},${settings.zoomFit},10",
+            settings.measureOriginal)
+        assertTrue(lines().any { it.startsWith("session START") && it.endsWith("refocus on a card every 10 min)") })
+        assertEquals("the set-up step leaves the owner's", 10, settings.refocusMin)
+        m.goTo("zoom-a1")
+        assertEquals(-1, settings.refocusMin)
+        assertTrue(lines().any { it.contains(" START zoom-a1: ") && it.endsWith("refocus never]") })
+        m.next(); assertEquals("zoom-probe", m.step.id); assertEquals(-1, settings.refocusMin)
+        settings.refocusMin = 0                                      // changed from the computer mid-step…
+        m.next(); assertEquals("zoom-b", m.step.id); assertEquals("…B pins it again", -1, settings.refocusMin)
+        m.back(); assertEquals(-1, settings.refocusMin)
+        m.next(); m.next(); assertEquals("zoom-a2", m.step.id); assertEquals(-1, settings.refocusMin)
+        m.finish(abandoned = true)
+        assertEquals("the owner's own is back after Stop", 10, settings.refocusMin)
+        // "Run the zoom steps", finished: the owner's Every card is back.
+        settings.refocusMin = 0
+        val z = session()
+        z.start(MeasureSession.Plan.ZOOM)
+        assertEquals("A1 pins it from the first step", -1, settings.refocusMin)
+        while (z.active && !z.isLast) z.next()
+        assertEquals("zoom-done", z.step.id)
+        z.next()
+        assertFalse(z.active)
+        assertEquals(0, settings.refocusMin)
+        assertTrue(MeasureSession.ZOOM_STEPS.last().instruction.contains("Refocus on a card"))
+    }
+
+    /**
+     * A session saved by 1.1.17 kept four fields, one by 1.1.16 three: neither saved "Refocus on a
+     * card", so the first zoom step about to pin it saves the owner's own first (5th field, after a
+     * 1.1.16 original gets its Zoom to fit as the 4th) and Stop / Finish put it back; an older
+     * original stopped before any pin leaves it alone.
+     */
+    @Test
+    fun anOlderSessionKeepsTheOwnersRefocus_F5() {
+        val prefs = app.getSharedPreferences("ui_settings", android.content.Context.MODE_PRIVATE)
+        // 1.1.17: four fields, on "foil" by id.
+        settings.measurePlan = null
+        settings.zoomFit = true; settings.refocusMin = 2
+        settings.measureStep = 7
+        prefs.edit().putString("measure_step_id", "foil").apply()
+        settings.measureOriginal = "false,true,2500,true"
+        val m = session()
+        assertEquals("foil", m.step.id)
+        m.next()
+        assertEquals("zoom-a1", m.step.id); assertEquals(-1, settings.refocusMin)
+        assertEquals("false,true,2500,true,2", settings.measureOriginal)
+        assertTrue(lines().any { it == "a session started on an older build: your Refocus on a card (every 2 min) is kept now, before this step sets it" })
+        m.finish(abandoned = true)
+        assertEquals(2, settings.refocusMin); assertTrue(settings.zoomFit)
+        // 1.1.16: three fields, its own index for "foil", no id.
+        settings.zoomFit = true; settings.refocusMin = 30
+        settings.measureStep = 7
+        prefs.edit().remove("measure_step_id").apply()
+        settings.measureOriginal = "false,true,2500"
+        val old = session()
+        assertEquals("foil", old.step.id)
+        old.next()
+        assertEquals("zoom-a1", old.step.id); assertEquals(-1, settings.refocusMin)
+        assertEquals("Zoom to fit 4th, Refocus 5th", "false,true,2500,true,30", settings.measureOriginal)
+        old.next(); old.next(); old.next(); old.next()                     // probe, B, A2, AE lock
+        assertEquals("ae-lock", old.step.id)
+        old.next(); old.next()                                            // done → Finish
+        assertFalse(old.active)
+        assertEquals(30, settings.refocusMin); assertTrue(settings.zoomFit)
+        // A 4-field original stopped before any pin: Refocus on a card is left as it is.
+        settings.refocusMin = 10
+        settings.measureStep = 3
+        prefs.edit().putString("measure_step_id", "lift").apply()
+        settings.measureOriginal = "false,true,2500,false"
+        session().finish(abandoned = true)
+        assertEquals(10, settings.refocusMin)
     }
 
     /**

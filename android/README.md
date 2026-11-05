@@ -171,10 +171,16 @@ sampling and capture to the tray; double-tap the preview to re-learn the empty
 tray. Focus: when the camera starts it locks on the centre of the scan Area
 (the screen centre with no Area) so the lens stops hunting; then the FIRST
 card is focused on properly — its capture waits (≤1.5 s, once) until the
-lens has focused on the card's own centre — and every card
-after shoots instantly with focus held. It focuses again only when the Area
-changes, the camera reopens, you tap the preview (locks where you tapped), or
-a capture comes out far softer than the session's usual (bumped mount).
+lens has focused on the card's own centre — and the cards after shoot
+instantly with focus held. It focuses again when the Area changes, the camera
+reopens, you tap the preview (locks where you tapped), a capture comes out far
+softer than the session's usual (bumped mount), and — Settings → Camera →
+**Refocus on a card**, every 5 min by default (provisional; every card, 2, 5,
+10, 30 min or never) — on the next card once that long has passed since the
+last focus on a card (that card waits for the camera's answer, ≤5.5 s; a tap
+pauses this until a new Area or a camera re-open — leaving the scan screen and
+coming back; the Tray ↔ Tap to scan switch does not lift it; setting it to
+Never drops a pass already armed).
 Every focus pass, its result (focused / not / timed out) and the lens
 position go in the debug log under `focus`, and each capture line carries its
 three frames' sharpness and the chosen frame's AF state.

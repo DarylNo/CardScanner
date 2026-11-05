@@ -4,6 +4,7 @@ import android.os.Build
 import io.github.darylno.cardscanner.App
 import io.github.darylno.cardscanner.BuildConfig
 import io.github.darylno.cardscanner.core.MiniJson
+import io.github.darylno.cardscanner.core.RefocusPolicy
 import io.github.darylno.cardscanner.core.ScreenDim
 import java.util.Locale
 
@@ -20,7 +21,8 @@ object DiagnosticsText {
         append("mode ").append(if (app.settings.auto) "Tray" else "Tap to scan")
             .append(" · area ").append(app.settings.roi?.encode() ?: "full frame")
             .append(" · check ").append(app.settings.checkMs).append(" ms")
-            .append(" · zoom to fit ").append(if (app.settings.zoomFit) "on" else "off").append('\n')
+            .append(" · zoom to fit ").append(if (app.settings.zoomFit) "on" else "off")
+            .append(" · refocus on a card ").append(RefocusPolicy.label(app.settings.refocusMin).lowercase(Locale.ROOT)).append('\n')
         append("card list ").append(app.cardList.summary()).append('\n')
         append(zoomProbeLine(app.settings.zoomProbeLast)).append('\n')
         append("screen kept on · ").append(app.settings.dimAfterS.let { if (it <= 0) "never dims" else "dims after ${ScreenDim.label(it)} idle" })

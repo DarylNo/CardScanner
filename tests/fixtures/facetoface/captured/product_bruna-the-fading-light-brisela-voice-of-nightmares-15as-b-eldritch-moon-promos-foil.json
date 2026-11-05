@@ -1,0 +1,23 @@
+{
+ "url": "https://facetofacegames.com/products/bruna-the-fading-light-brisela-voice-of-nightmares-15as-b-eldritch-moon-promos-foil.json",
+ "body": {
+  "product": {
+   "title": "Bruna, the Fading Light // Brisela, Voice of Nightmares [15as] [B] [Eldritch Moon Promos] [Foil]",
+   "handle": "bruna-the-fading-light-brisela-voice-of-nightmares-15as-b-eldritch-moon-promos-foil",
+   "variants": [
+    {
+     "sku": "MP-Bruna_t-PEMN-15as-NM-F",
+     "title": "NM",
+     "option1": "NM",
+     "price": "10.99"
+    },
+    {
+     "sku": "MP-Bruna_t-PEMN-15as-PL-F",
+     "title": "PL",
+     "option1": "PL",
+     "price": "8.79"
+    }
+   ]
+  }
+ }
+}

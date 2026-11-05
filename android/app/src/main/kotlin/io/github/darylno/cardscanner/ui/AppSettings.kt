@@ -3,6 +3,7 @@ package io.github.darylno.cardscanner.ui
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.core.content.edit
+import io.github.darylno.cardscanner.core.RefocusPolicy
 import io.github.darylno.cardscanner.core.RoiFrac
 import io.github.darylno.cardscanner.core.ScreenDim
 import io.github.darylno.cardscanner.core.server.DeviceApi
@@ -62,6 +63,16 @@ class AppSettings(context: Context) {
     var zoomFit: Boolean
         get() = prefs.getBoolean(K_ZOOM_FIT, false)
         set(v) = prefs.edit().putBoolean(K_ZOOM_FIT, v).apply()
+
+    /**
+     * Settings → Camera → "Refocus on a card" (1.1.18, owner: "Need it to focus every once in
+     * a while"; core RefocusPolicy): in Tray, once this many minutes have passed since the last
+     * focus on a card, the next card waits (≤ 1.5 s) for autofocus on it. 0 = every card,
+     * −1 = never; default 5 (provisional). A stored value that is not offered reads as the default.
+     */
+    var refocusMin: Int
+        get() = RefocusPolicy.normalize(prefs.getInt(K_REFOCUS_MIN, RefocusPolicy.DEFAULT))
+        set(v) = prefs.edit().putInt(K_REFOCUS_MIN, RefocusPolicy.normalize(v)).apply()
 
     /**
      * The external card list's URL (Settings → External card list; "" = off). Kept here
@@ -183,6 +194,7 @@ class AppSettings(context: Context) {
         const val K_HIGH_RES = "high_res"
         const val K_CAMERA = "camera_id"
         const val K_ZOOM_FIT = "zoom_fit"
+        const val K_REFOCUS_MIN = "refocus_min"
         const val K_CARD_LIST_URL = "card_list_url"
         const val K_FOCUS_LOCK = "focus_lock"
         const val K_AE_LOCK = "ae_lock"

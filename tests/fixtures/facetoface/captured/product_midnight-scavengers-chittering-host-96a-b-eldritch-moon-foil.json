@@ -1,0 +1,23 @@
+{
+ "url": "https://facetofacegames.com/products/midnight-scavengers-chittering-host-96a-b-eldritch-moon-foil.json",
+ "body": {
+  "product": {
+   "title": "Midnight Scavengers // Chittering Host [96a] [B] [Eldritch Moon] [Foil]",
+   "handle": "midnight-scavengers-chittering-host-96a-b-eldritch-moon-foil",
+   "variants": [
+    {
+     "sku": "M-EMN-Midnight_S-96a-NM-F",
+     "title": "NM",
+     "option1": "NM",
+     "price": "0.75"
+    },
+    {
+     "sku": "M-EMN-Midnight_S-96a-PL-F",
+     "title": "PL",
+     "option1": "PL",
+     "price": "0.60"
+    }
+   ]
+  }
+ }
+}

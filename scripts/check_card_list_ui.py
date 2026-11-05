@@ -162,7 +162,7 @@ with sync_playwright() as pw:
     pg = ctx.new_page(); errs = []
     pg.on("pageerror", lambda e: errs.append(str(e)))
     pg.goto(BASE + "/"); pg.wait_for_selector(".row[data-id='5']")
-    check(pg.evaluate("UI_VERSION") == "d51", "banner d51")
+    check(pg.evaluate("UI_VERSION") == "d53", "banner d53")
     check(pg.locator(".ltag").count() == 0, "feature off: no list chips")
     check(not pg.locator("#tagged").is_visible(), "feature off: no Tagged only")
     STATE["scans"] = tagged_scans()

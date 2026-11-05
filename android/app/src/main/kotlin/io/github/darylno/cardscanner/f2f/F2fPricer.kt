@@ -88,6 +88,17 @@ class F2fPricer(
         //    set name filed another List card's price: Mortuary → Buried Alive;
         //    a name that merely started with it, Fireball's on a Fire // Ice)
         var candidates = foilMatches.filter { it.second.collector.isNotEmpty() && normCollector(it.second.collector) == wantCollector }
+        // 2b) a meld half: "Midnight Scavengers // Chittering Host [96a] [B] [Eldritch Moon]" for Scryfall's
+        //     one-faced #96 — with no exact title, ONE title whose collector is the card's plus the side letter
+        //     "a" and whose name part is "<this card> // <another face>" (two such are ambiguous: none). Meld-shaped
+        //     on purpose: "one letter more" alone took Tymaret's "- Serial Numbered [148z]". SKU still confirms.
+        if (candidates.isEmpty()) {
+            val halves = foilMatches.filter {
+                it.second.collector.isNotEmpty() && sideLetterOf(it.second.collector, wantCollector) &&
+                    titleIsMeldHalf(it.first.optString("title", ""), name)
+            }
+            if (halves.size == 1) candidates = halves
+        }
         if (candidates.isEmpty() && wantSetName.isNotEmpty()) {
             candidates = foilMatches.filter {
                 it.second.collector.isEmpty() && norm(it.second.setName) == wantSetName &&
@@ -198,12 +209,44 @@ class F2fPricer(
             return want == normName(part) || want == normName(part.split(NAME_END, limit = 2)[0])
         }
 
-        /** facetoface._parse_title_brackets: foil = last, set = second-last, collector = FIRST (≥ 3, if it looks like one). */
+        /**
+         * facetoface._title_is_meld_half: the title's text before "[" is "<the card's name> // <another face>"
+         * (front equal under normName, the other face not normalising to nothing) and the card's own name holds
+         * no " // " — how F2F titles a meld half ("Midnight Scavengers // Chittering Host [96a] [B] …").
+         */
+        fun titleIsMeldHalf(title: String, name: String): Boolean {
+            if (" // " in name) return false
+            val want = normName(name)
+            val part = title.substringBefore('[')
+            if (want.isEmpty() || " // " !in part) return false
+            val front = part.substringBefore(" // ")
+            val other = part.substringAfter(" // ")
+            return normName(front) == want && normName(other).isNotEmpty()
+        }
+
+        /**
+         * facetoface._side_letter_of: the title's collector is the card's plus the side letter "a" ("96a" for
+         * "96"), both through normCollector (so "91A" reads "91a"); the card's ends in an ASCII digit. Only "a":
+         * every meld half F2F letters uses it, while its meld PROMOS are meld-shaped too with another letter
+         * ("Urza, Lord Protector // Urza, Planeswalker [225s] [Prerelease] …") and may carry the main set's SKU.
+         */
+        fun sideLetterOf(titleCollector: String, collector: String): Boolean {
+            val t = normCollector(titleCollector)
+            val want = normCollector(collector)
+            return want.isNotEmpty() && want.last() in '0'..'9' &&
+                t.length == want.length + 1 && t.startsWith(want) && t.last() == 'a'
+        }
+
+        /**
+         * facetoface._parse_title_brackets: foil = last, set = second-last, collector = the first bracket BEFORE
+         * the set name that looks like one (≥ 3 brackets) — "[401] [Rulebook Showcase] …", but also
+         * "[Prerelease] [59s] …", "[Susan Van Camp] [38a] …", "[Autumn] [80c] …".
+         */
         fun parseTitleBrackets(title: String): TitleParts {
             val b = BRACKETS.findAll(title).map { it.groupValues[1].trim() }.toList()
             if (b.isEmpty()) return TitleParts("", "", "")
             return TitleParts(
-                collector = if (b.size >= 3 && COLLECTOR.matches(b[0])) b[0] else "",
+                collector = if (b.size >= 3) b.subList(0, b.size - 2).firstOrNull { COLLECTOR.matches(it) } ?: "" else "",
                 setName = if (b.size >= 2) b[b.size - 2] else "",
                 foilLabel = b.last(),
             )

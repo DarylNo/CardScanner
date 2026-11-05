@@ -150,6 +150,11 @@ interface CameraPort {
     fun setHighRes(high: Boolean)
     /** The Camera setting (a Camera2 id, null = Automatic); rebinds — and re-learns the tray — when it changes. */
     fun setCamera(id: String?) {}
+    /**
+     * "Refocus on a card" in minutes (core RefocusPolicy: 0 = every card, −1 = never): in Tray, the
+     * next card after that long since the last focus on a card waits for a focus pass on it. No rebind.
+     */
+    fun setRefocusMin(minutes: Int) {}
     /** The zoom A/B's arm steps: each capture also measures its identification raster's detail (CapturePipeline.measureDetail). */
     fun setMeasureDetail(on: Boolean) {}
     fun diagnostics(): String

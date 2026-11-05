@@ -37,11 +37,13 @@ import androidx.lifecycle.LifecycleOwner
 import io.github.darylno.cardscanner.capture.CapturePipeline
 import io.github.darylno.cardscanner.capture.CaptureResult
 import io.github.darylno.cardscanner.core.CameraChoice
+import io.github.darylno.cardscanner.core.CardFocusState
 import io.github.darylno.cardscanner.core.DebugLog
 import io.github.darylno.cardscanner.core.FocusPoint
 import io.github.darylno.cardscanner.core.Gray
 import io.github.darylno.cardscanner.core.Nv21Bgr
 import io.github.darylno.cardscanner.core.Nv21Frame
+import io.github.darylno.cardscanner.core.RefocusPolicy
 import io.github.darylno.cardscanner.core.RoiFrac
 import io.github.darylno.cardscanner.core.Rotation
 import io.github.darylno.cardscanner.core.ZoomCoordinator
@@ -87,8 +89,6 @@ internal object SnapshotPicture {
 
 /** A Mount capture this much softer than the session's median re-arms the card-focus pass. */
 private const val SOFT_CAPTURE_RATIO = 0.5
-/** A card focus that fails is retried on the next card, this many passes in all. */
-private const val CARD_FOCUS_TRIES = 3
 /**
  * A finished capture: [result] on success, else [error]. [scene] is for [CameraController.onNoCard].
  * [lens] = the camera's own report for the frame the pipeline chose (AF state, lens
@@ -129,18 +129,29 @@ class CaptureOutcome(
  * so the FIRST card is focused on properly: [ScanAnalyzer] holds that card's
  * capture (≤ FOCUS_WAIT_NS) while AF runs ON THE CARD — the Trigger box's
  * centre ([FocusPoint]; the Area centre before 1.1.14) — then shoots from
- * post-focus frames. Later cards shoot instantly. A sharpness watchdog (a
- * capture far softer than the session median) re-arms that one-card focus
- * pass. A tap still overrides. Handheld = continuous AF with tap-to-focus.
+ * post-focus frames. Later cards shoot instantly — until "Refocus on a card"
+ * (1.1.18, Settings → Camera, core [RefocusPolicy], default every 5 min,
+ * provisional): once that long has passed since the last focus on a card (or
+ * the end of the last card-focus chain), the next Tray card is held for a pass
+ * — until the camera answers, ≤ 5.5 s ([ScanAnalyzer.PERIODIC_FOCUS_WAIT_NS]),
+ * never shot mid-sweep (a lens that drifts — heat, a nudged mount — stayed soft
+ * for the whole session before). A sharpness watchdog (a capture far softer
+ * than the session median) re-arms that one-card focus pass too. A tap still
+ * overrides: it locks where tapped and PAUSES the periodic pass until a new
+ * Area or a camera re-open (leaving the scan screen and coming back) — not the
+ * Tray ↔ Tap to scan switch, which is [setAuto] and arms nothing. The arming
+ * state is core [CardFocusState]. The shutter (Tap to scan) never holds for a pass.
+ * Handheld = continuous AF with tap-to-focus.
  * Torch / AE+AWB lock / focus are re-applied after every bind AND every
  * camera re-open (CameraControl state dies with the session).
  *
  * "Is it focusing?" (owner on 1.1.10): every pass is logged under `focus`
  * — why, where (Area / card centre → sensor point), the result (focused / NOT
  * focused / timed out / cancelled) with its ms, and the camera's own AF state
- * and lens position ([FocusLog]); so are the watchdog's re-arms and the
- * card pass giving up. Each capture carries its chosen frame's AF state and
- * lens position ([FrameMetaRing], by sensor timestamp).
+ * and lens position ([FocusLog]); so are the watchdog's re-arms, each
+ * periodic pass armed, and the card pass giving up. Each capture carries its
+ * chosen frame's AF state and lens position ([FrameMetaRing], by sensor
+ * timestamp).
  *
  * "Zoom to fit the Area" (1.1.14, Settings → Camera, OFF by default in this
  * build): [ZoomCoordinator] decides, this class is its CameraX glue. The Area it
@@ -261,7 +272,8 @@ class CameraController(
 
     var resolution = Resolution.STANDARD
         private set
-    var scanMode = ScanMode.MOUNT
+    /** Read by the analysis thread too (the Tray trigger's [ScanAnalyzer.focusHold]). */
+    @Volatile var scanMode = ScanMode.MOUNT
         private set
     var torchOn = false
         private set
@@ -275,18 +287,22 @@ class CameraController(
     /** The sensor's active array (the read-back's crop region is relative to it). */
     @Volatile private var activeArray: android.graphics.Rect? = null
     /**
-     * Mount: focus on the NEXT card before shooting it. Set after a bind, a
-     * switch to Mount, an area change, or a sharpness drop; cleared once that
-     * card has been focused on (or by a tap). Read by the analysis thread
-     * through [ScanAnalyzer.focusFirst].
+     * Mount: focus on the NEXT card before shooting it (core [CardFocusState]). Armed after a
+     * bind, a switch to Mount, an area change, a zoom change or a sharpness drop — and, at a
+     * Tray trigger, by "Refocus on a card" once its interval has passed since the last focus
+     * on a card (or the last chain's end); disarmed once that card has been focused on, when
+     * its chain gives up, or by a tap (which also pauses the periodic pass). The analysis
+     * thread asks it at every Tray trigger ([ScanAnalyzer.focusHold]), the main thread arms,
+     * starts and ends passes, the capture thread's watchdog arms it: every call takes its
+     * monitor, so the analysis thread's check-then-arm is one step (see [CardFocusState]).
      */
-    @Volatile private var cardFocusDue = false
-    /** Why the next card pass runs (the focus log's words): first card after a bind, the watchdog, a retry… */
-    @Volatile private var cardFocusWhy = "first card"
-    private var cardFocusSeq = 0
-    @Volatile private var cardFocusFails = 0
+    private val cardFocus = CardFocusState(log = { DebugLog.global.i("focus", it) })
+    /** The card-focus clock: monotonic, sleep included (what "every N min" counts on). Any thread. */
+    private val clockNs: () -> Long = SystemClock::elapsedRealtimeNanos
+    /** "Refocus on a card" as last handed over ([setRefocusMin]); null = not yet — the first value is not logged as a change. */
+    private var refocusApplied: Int? = null
     private val recentSharpness = ArrayDeque<Double>()
-    /** Why the pending Area-centre lock runs (camera bind / camera re-open / new Area / mode switch). */
+    /** Why the pending Area-centre lock runs (camera bind / camera re-open / new Area; [setScanMode]'s "mode switch" — Mount ↔ Handheld — never runs, Mount is the only mode). */
     private var pendingLockWhy = "camera bind"
     /** Every focus pass's result this session (the Diagnostics focus line). */
     private val focusStats = FocusStats()
@@ -298,7 +314,10 @@ class CameraController(
     private var staticDiagnostics: String? = null
 
     init {
-        analyzer.focusFirst = { cardFocusDue && scanMode == ScanMode.MOUNT }
+        // The analysis thread, at every Tray trigger: an armed pass holds the card (1.5 s for the
+        // first card / watchdog, until the answer for a periodic chain); else, when "Refocus on a
+        // card" says it is time (and no tap paused it), a periodic pass is armed and holds it.
+        analyzer.focusHold = { if (scanMode == ScanMode.MOUNT) cardFocus.holdFor(clockNs()) else null }
     }
     /** Mount: lock at the area centre as soon as a frame gives us the geometry. */
     private var pendingAreaLock = false
@@ -380,7 +399,7 @@ class CameraController(
                 if (scanMode == ScanMode.MOUNT) {
                     pendingAreaLock = true
                     pendingLockWhy = "zoom change"
-                    armCardFocus("first card after the zoom change")
+                    armCardFocus("first card after the zoom change", resumesRefocus = true)
                 }
                 synchronized(recentSharpness) { recentSharpness.clear() }
             }
@@ -619,6 +638,7 @@ class CameraController(
         zoom.cameraBound(lossless, lensMax)
         if (!lifecycleWatched) { owner.lifecycle.addObserver(lifecycleWatch); lifecycleWatched = true }
         pendingLockWhy = "camera bind"
+        cardFocus.bound()                 // a fresh bind: "Refocus on a card" counts from this bind's first card
         applySettings()
         listener.onCameraReady(
             "camera ${boundCameraId ?: "?"} · analysis ${an.resolutionInfo?.resolution ?: "?"} · " +
@@ -689,7 +709,7 @@ class CameraController(
         } else {
             focusNote = "locking on the scan-area centre…"
             pendingAreaLock = true
-            armCardFocus("first card after the $pendingLockWhy")
+            armCardFocus("first card after the $pendingLockWhy", resumesRefocus = true)
         }
     }
 
@@ -722,14 +742,33 @@ class CameraController(
         focusNote = if (m == ScanMode.HANDHELD) "continuous (handheld)" else "locking on the scan-area centre…"
         pendingAreaLock = m == ScanMode.MOUNT
         pendingLockWhy = "mode switch"
-        if (m == ScanMode.MOUNT) armCardFocus("first card after the mode switch") else cardFocusDue = false
+        if (m == ScanMode.MOUNT) armCardFocus("first card after the mode switch", resumesRefocus = true) else cardFocus.disarm()
     }
 
-    /** The next card gets a focus pass ([why] goes in the focus log); the failure count starts again. */
-    private fun armCardFocus(why: String) {
-        cardFocusWhy = why
-        cardFocusFails = 0
-        cardFocusDue = true
+    /**
+     * The next card gets a focus pass ([why] goes in the focus log); the failure count starts again.
+     * [resumesRefocus]: an arm that re-locks elsewhere (bind / re-open / new Area / zoom change / the
+     * probe; [setScanMode]'s too, but the app never leaves Mount — the Tray ↔ Tap to scan switch is
+     * [setAuto], which arms nothing) lifts a tap's pause on "Refocus on a card"; the watchdog's does
+     * not. Any thread.
+     */
+    private fun armCardFocus(why: String, resumesRefocus: Boolean = false) = cardFocus.arm(why, resumesRefocus)
+
+    /**
+     * "Refocus on a card" (Settings → Camera, `/api/device` `refocus_min`): minutes since the last
+     * focus on a card after which the next Tray card waits for a pass on it ([RefocusPolicy]:
+     * 0 = every card, −1 = never). Live — no rebind, nothing re-armed; a change is logged. Never
+     * drops a periodic chain already armed (its hold, its retries — [CardFocusState.minutes], its
+     * own line after the change's).
+     */
+    fun setRefocusMin(minutes: Int) {
+        val m = RefocusPolicy.normalize(minutes)
+        val before = refocusApplied
+        refocusApplied = m
+        if (before != null && before != m) {
+            DebugLog.global.i("focus", "refocus on a card: ${RefocusPolicy.label(before)} → ${RefocusPolicy.label(m)}")
+        }
+        cardFocus.minutes = m
     }
 
     fun setAuto(enabled: Boolean) = analyzer.setAuto(enabled)
@@ -744,7 +783,7 @@ class CameraController(
         // New area: re-lock on ITS centre, and focus on its first card.
         pendingAreaLock = scanMode == ScanMode.MOUNT
         pendingLockWhy = "new Area"
-        if (scanMode == ScanMode.MOUNT) armCardFocus("first card in the new Area") else cardFocusDue = false
+        if (scanMode == ScanMode.MOUNT) armCardFocus("first card in the new Area", resumesRefocus = true) else cardFocus.disarm()
         synchronized(recentSharpness) { recentSharpness.clear() }
     }
 
@@ -780,12 +819,18 @@ class CameraController(
         if (lock) {
             b.disableAutoCancel()
             // The user chose this point: the next auto trigger must not re-lock
-            // on the area centre and throw the tap away.
+            // on the area centre and throw the tap away — nor may "Refocus on a card"
+            // (review of 1.1.18): no card pass (a request already on its way starts none —
+            // focusOnCard's guard), and the periodic pass pauses until a new Area or a
+            // camera re-open (logged once, Diagnostics says so).
             pendingAreaLock = false
-            cardFocusDue = false   // the user chose the focus point
+            cardFocus.tapped()
         }
         val where = "tap at %.0f,%.0f of the %d×%d preview".format(x, y, view.width, view.height)
-        runFocus(cam, b.build(), if (lock) "locked at tap" else "tap AF", why = "tap", where = where)
+        runFocus(cam, b.build(), if (lock) "locked at tap" else "tap AF", why = "tap", where = where) { ok ->
+            // An answered tap lock is the last focus "Refocus on a card" counts from (a cancelled one is not).
+            if (lock && ok != null) cardFocus.tapAnswered(clockNs())
+        }
     }
 
     /** Mount: lock AF at the scan-area centre (frame centre without an area) — no card to aim at yet. */
@@ -806,36 +851,54 @@ class CameraController(
     }
 
     /**
-     * The analyzer is holding the first card's capture: focus ON THE CARD — the
+     * The analyzer is holding a Tray card's capture: focus ON THE CARD — the
      * Trigger box's centre ([FocusPoint.choose]; a plain empty tray gives AF
      * nothing to grip) — then release the capture. Any outcome releases it; the
-     * analyzer also gives up after FOCUS_WAIT_NS.
+     * analyzer also gives up after the hold's wait ([FocusRequest.waitNs]).
      */
     private fun focusOnCard(request: FocusRequest) {
-        val seq = ++cardFocusSeq
         val p = FocusPoint.choose(request.roi, request.box, request.sampleW, request.sampleH)
         val c = sensorPoint(p)
         if (c == null || scanMode != ScanMode.MOUNT) { analyzer.focusDone(); return }
+        // A pass still out (its hold gave up at 1.5 s, CameraX answers a pass that never converges
+        // only after 5 s) is cut off by this one: it counts as ended with no answer — a failure toward
+        // the 3-tries give-up (review of 1.1.18: dropped uncounted, the chain never ended and every
+        // card was held). Counted now, so this pass's why already says "retry …" — or, when that
+        // cut-off gave the chain up, that this pass still runs on its card for no chain. No pass due
+        // any more (a tap since the request was sent, or an older pass's answer ended the chain:
+        // re-review L4) → null: start nothing — never replace the tapped point — and release the hold.
+        val started = cardFocus.passStarted(clockNs()) ?: run { analyzer.focusDone(); return }
         pendingAreaLock = false
-        val why = cardFocusWhy
+        started.cutOff?.let { cardPassEnded(it, cutOff = true) }
+        val pass = started.pass
+        val why = pass.why
         focusAtSensor(c, lock = true, what = "focused on card at ${if (p.onCard) "card" else "area"} centre",
             why = why, where = p.describe()) { ok ->
-            // A superseded pass (a newer hold asked again) must not release the
-            // NEWER hold mid-sweep: that burst would shoot, and rebase, a blur.
-            if (seq != cardFocusSeq) return@focusAtSensor
-            if (ok == true) {
-                cardFocusDue = false   // one pass per session/area; the watchdog re-arms it
-            } else if (++cardFocusFails >= CARD_FOCUS_TRIES) {
-                cardFocusDue = false
-                focusStats.gaveUp()
-                DebugLog.global.w("focus", FocusLog.givenUpLine(CARD_FOCUS_TRIES))
-            } else {
-                // Failed: try again on the next card (capped) — the soft-capture
-                // watchdog can't catch it, its median is soft too.
-                cardFocusWhy = "retry ${cardFocusFails + 1} of $CARD_FOCUS_TRIES (the last card pass failed)"
-                focusNote += " — focus failed, retrying on the next card"
-            }
+            // An answer (focused or NOT) restarts "Refocus on a card"'s clock; no answer does not.
+            val end = cardFocus.passEnded(pass, ok, clockNs())
+            // Cut off by a newer pass (counted when that one started): it must not release the
+            // NEWER hold mid-sweep — that burst would shoot, and rebase, a blur.
+            if (end == CardFocusState.End.CUT_OFF) return@focusAtSensor
+            cardPassEnded(end)
             analyzer.focusDone()
+        }
+    }
+
+    /**
+     * What a card pass's end means here: the give-up's log line, a retry's note. [cutOff]: the end was
+     * counted as the next card's pass started (its give-up line says that pass still runs). Main thread.
+     */
+    private fun cardPassEnded(end: CardFocusState.End, cutOff: Boolean = false) {
+        when (end) {
+            // One pass per bind / Area / zoom; the watchdog and "Refocus on a card" arm the next.
+            CardFocusState.End.FOCUSED, CardFocusState.End.OUTSIDE, CardFocusState.End.CUT_OFF -> Unit
+            CardFocusState.End.GAVE_UP -> {
+                focusStats.gaveUp()
+                DebugLog.global.w("focus", FocusLog.givenUpLine(CardFocusState.TRIES, cardFocus.minutes, cardFocus.isPaused, cutOff))
+            }
+            // Failed: try again on the next card (capped) — the soft-capture
+            // watchdog can't catch it, its median is soft too.
+            CardFocusState.End.RETRY -> focusNote += " — focus failed, retrying on the next card"
         }
     }
 
@@ -967,7 +1030,7 @@ class CameraController(
             return ZoomProbe.Facts(boundCameraId ?: "?", w, h, resolution == Resolution.HIGH, act?.width(), act?.height(),
                 boundLossless, boundLensMax, restoreZ)
         }
-        override fun armCardFocus(why: String) { if (scanMode == ScanMode.MOUNT) this@CameraController.armCardFocus(why) }
+        override fun armCardFocus(why: String) { if (scanMode == ScanMode.MOUNT) this@CameraController.armCardFocus(why, resumesRefocus = true) }
         override fun worker(): java.util.concurrent.Executor = probeWorker.value
     })
 
@@ -1025,10 +1088,17 @@ class CameraController(
      */
     fun diagnostics(): String = (staticDiagnostics ?: readStaticDiagnostics().also { staticDiagnostics = it }) + liveDiagnostics()
 
-    /** The "focus" line: this session's passes, the last result, the lens now. */
+    /**
+     * The "focus" line: this session's passes, the last result, the lens now, whether the next card
+     * gets a pass, and "Refocus on a card" ("refocus every 5 min · last card focus 3 min ago").
+     */
     fun focusSummary(): String =
         "focus: ${focusStats.summary()} · now ${FocusLog.afAndLens(metaAfState, metaFocusDist, focusCalibrated)}" +
-            (if (scanMode == ScanMode.MOUNT) " · next card pass: " + (if (cardFocusDue) "due ($cardFocusWhy)" else "not due") else "")
+            (if (scanMode == ScanMode.MOUNT) {
+                " · next card pass: " + (if (cardFocus.isDue) "due (${cardFocus.why})" else "not due") +
+                    " · " + cardFocus.describe(clockNs()) +
+                    cardFocus.periodic.takeIf { it > 0 }?.let { " · periodic passes $it" }.orEmpty()
+            } else "")
 
     private fun readStaticDiagnostics(): String = buildString {
         appendLine("device: ${Build.MANUFACTURER} ${Build.MODEL} (API ${Build.VERSION.SDK_INT})")

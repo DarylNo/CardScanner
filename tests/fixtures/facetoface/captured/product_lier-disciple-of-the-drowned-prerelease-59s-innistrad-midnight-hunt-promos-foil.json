@@ -1,0 +1,23 @@
+{
+ "url": "https://facetofacegames.com/products/lier-disciple-of-the-drowned-prerelease-59s-innistrad-midnight-hunt-promos-foil.json",
+ "body": {
+  "product": {
+   "title": "Lier, Disciple of the Drowned [Prerelease] [59s] [Innistrad: Midnight Hunt Promos] [Foil]",
+   "handle": "lier-disciple-of-the-drowned-prerelease-59s-innistrad-midnight-hunt-promos-foil",
+   "variants": [
+    {
+     "sku": "SIN-MTG-PMID-59s-ENG-NM-F",
+     "title": "NM",
+     "option1": "NM",
+     "price": "14.99"
+    },
+    {
+     "sku": "SIN-MTG-PMID-59s-ENG-PL-F",
+     "title": "PL",
+     "option1": "PL",
+     "price": "11.99"
+    }
+   ]
+  }
+ }
+}

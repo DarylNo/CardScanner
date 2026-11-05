@@ -72,6 +72,17 @@ tells it apart (megapixels, autofocus or fixed focus, focal length).
 **Automatic** (the default) uses the main back camera. Changing it re-learns
 the empty tray. A paired computer can change it too, from 📱 Scanner.
 
+**Refocus on a card** (Settings → Camera) — in Tray mode the camera focuses on
+the first card and then holds its focus. Every 5 minutes by default (a first
+guess, to be tuned from real sessions) the next card waits while the camera
+focuses on it again — usually well under a second, never more than about 5 s —
+so a lens that drifts (warmth, a nudged mount, a thicker sleeve) gets sharp
+again. Choose every card, 2, 5, 10 or 30 minutes, or never. Tapping the live
+view still focuses where you tap — and keeps it there: after a tap the camera
+stops refocusing on its own until you draw a new Area or leave the scan screen
+(Scans, Settings) and come back — switching between Tray and Tap to scan does
+not lift it. A paired computer can change it too, from 📱 Scanner.
+
 **Zoom to fit the Area** (Settings → Camera, off for now while it's being
 tried) zooms the camera in so your Area fills the view: more pixels on each
 card. The camera zooms about the middle of its picture, so an Area drawn off to
@@ -182,7 +193,7 @@ On the same Wi-Fi, or the phone's hotspot:
   column builder, or TXT in Mana Exchange's mass-entry format) and change the
   phone's scanner settings (**📱 Scanner**: mode, scan Area drawn on a live
   picture of the tray, camera, torch, resolution, exposure lock, vibration, check
-  mark time, Zoom to fit). Above the picture, **Whole frame** is where you draw
+  mark time, Zoom to fit, Refocus on a card). Above the picture, **Whole frame** is where you draw
   the Area; **Camera view** shows what the camera really sees, zoomed and at
   full detail — the place to judge focus.
 - **Guests:** the **Share** screen shows a 6-digit code. Guests can review,

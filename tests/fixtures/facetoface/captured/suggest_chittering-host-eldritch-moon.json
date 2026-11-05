@@ -1,0 +1,61 @@
+{
+ "url": "https://facetofacegames.com/search/suggest.json?q=Chittering%20Host%20Eldritch%20Moon&resources%5Btype%5D=product&resources%5Blimit%5D=20&resources%5Boptions%5D%5Bunavailable_products%5D=show",
+ "body": {
+  "resources": {
+   "results": {
+    "products": [
+     {
+      "title": "Midnight Scavengers // Chittering Host [96a] [B] [Eldritch Moon] [Foil]",
+      "handle": "midnight-scavengers-chittering-host-96a-b-eldritch-moon-foil",
+      "available": true
+     },
+     {
+      "title": "Graf Rats // Chittering Host [91a] [A] [Eldritch Moon] [Non-Foil]",
+      "handle": "graf-rats-chittering-host-91a-a-eldritch-moon-non-foil",
+      "available": true
+     },
+     {
+      "title": "Graf Rats // Chittering Host [91a] [A] [Eldritch Moon] [Foil]",
+      "handle": "graf-rats-chittering-host-91a-a-eldritch-moon-foil",
+      "available": true
+     },
+     {
+      "title": "Midnight Scavengers // Chittering Host [96a] [B] [Eldritch Moon] [Non-Foil]",
+      "handle": "midnight-scavengers-chittering-host-96a-b-eldritch-moon-non-foil",
+      "available": true
+     },
+     {
+      "title": "Eldritch Moon Booster Box",
+      "handle": "eldritch-moon-booster-box",
+      "available": true
+     },
+     {
+      "title": "Graf Harvest [90] [Eldritch Moon] [Foil]",
+      "handle": "graf-harvest-90-eldritch-moon-foil",
+      "available": false
+     },
+     {
+      "title": "Cemetery Recruitment [83] [Eldritch Moon] [Non-Foil]",
+      "handle": "cemetery-recruitment-83-eldritch-moon-non-foil",
+      "available": false
+     },
+     {
+      "title": "Graf Harvest [90] [Eldritch Moon] [Non-Foil]",
+      "handle": "graf-harvest-90-eldritch-moon-non-foil",
+      "available": true
+     },
+     {
+      "title": "Cemetery Recruitment [83] [Eldritch Moon] [Foil]",
+      "handle": "cemetery-recruitment-83-eldritch-moon-foil",
+      "available": true
+     },
+     {
+      "title": "Vampire Cutthroat [110] [Eldritch Moon] [Non-Foil]",
+      "handle": "vampire-cutthroat-110-eldritch-moon-non-foil",
+      "available": true
+     }
+    ]
+   }
+  }
+ }
+}

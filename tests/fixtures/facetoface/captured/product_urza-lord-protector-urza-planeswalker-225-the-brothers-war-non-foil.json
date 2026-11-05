@@ -1,0 +1,23 @@
+{
+ "url": "https://facetofacegames.com/products/urza-lord-protector-urza-planeswalker-225-the-brothers-war-non-foil.json",
+ "body": {
+  "product": {
+   "title": "Urza, Lord Protector // Urza, Planeswalker [225] [The Brothers' War] [Non-Foil]",
+   "handle": "urza-lord-protector-urza-planeswalker-225-the-brothers-war-non-foil",
+   "variants": [
+    {
+     "sku": "SIN-MTG-BRO-225-ENG-NM-NF",
+     "title": "NM",
+     "option1": "NM",
+     "price": "15.99"
+    },
+    {
+     "sku": "SIN-MTG-BRO-225-ENG-PL-NF",
+     "title": "PL",
+     "option1": "PL",
+     "price": "13.59"
+    }
+   ]
+  }
+ }
+}

@@ -15,10 +15,16 @@ import org.junit.Test
  *      MB1 / FMB1 / PLIST / PLST, ulst's UPLIST, cmb2's CMB1-NOPW, variant
  *      titles like "[401] [Rulebook Showcase] [CLB] [Non-Foil]");
  *  (b) get_price sessions over those answers — every URL requested, in order,
- *      and the product it resolved to (or none). A few shapes no capture shows
- *      (a collector-less promo's product, a decoy whose name merely STARTS WITH
- *      the card's — Fireball vs Fire // Ice) are declared SYNTHETIC bodies,
- *      listed under the fixture's "synthetic".
+ *      and the product it resolved to (or none) — and over answers captured
+ *      2026-11-05 for the owner's 1.1.17 report: meld halves F2F numbers with a
+ *      side letter ("Midnight Scavengers // Chittering Host [96a] [B] [Eldritch
+ *      Moon]" for Scryfall's #96), and promo / variant versions whose collector
+ *      follows a label ("[Prerelease] [59s]", "[Autumn] [80c]"), each also on
+ *      the other version's answer. A few shapes no capture shows (a
+ *      collector-less promo's product, a decoy whose name merely STARTS WITH
+ *      the card's — Fireball vs Fire // Ice —, decoys one letter past a meld
+ *      half's number) are declared SYNTHETIC bodies, listed under the fixture's
+ *      "synthetic".
  * Regenerate the fixture, never hand-edit it; change facetoface.py first.
  */
 class F2fMatchParityTest {
@@ -71,9 +77,28 @@ class F2fMatchParityTest {
     }
 
     @Test
-    fun titleNamesCard_matchesTheReference() = table("title_names_card", 3000) { r ->
+    fun titleNamesCard_matchesTheReference() = table("title_name", 3000) { r ->
         val got = F2fPricer.titleNamesCard(r.getString(0), r.getString(1))
         if (got == r.getBoolean(2)) null else "'${r.getString(0)}' names '${r.getString(1)}': want ${r.getBoolean(2)} got $got"
+    }
+
+    @Test
+    fun titleIsMeldHalf_matchesTheReference() = table("title_name", 3000) { r ->
+        val got = F2fPricer.titleIsMeldHalf(r.getString(0), r.getString(1))
+        if (got == r.getBoolean(3)) null else "'${r.getString(0)}' a half of '${r.getString(1)}': want ${r.getBoolean(3)} got $got"
+    }
+
+    @Test
+    fun titleName_holdsMeldHalves() {
+        // the table must actually exercise both answers, not only "false"
+        val halves = rows("title_name").count { it.getBoolean(3) }
+        assertTrue("title_name has $halves meld-half rows", halves >= 10)
+    }
+
+    @Test
+    fun sideLetterOf_matchesTheReference() = table("side_letter_of", 500) { r ->
+        val got = F2fPricer.sideLetterOf(r.getString(0), r.getString(1))
+        if (got == r.getBoolean(2)) null else "'${r.getString(0)}' vs '${r.getString(1)}': want ${r.getBoolean(2)} got $got"
     }
 
     /** Each session through F2fPricer over a fake transport answering from the same bodies. */
@@ -81,7 +106,7 @@ class F2fMatchParityTest {
     fun getPriceSessions_requestTheSameUrlsAndResolveTheSameProduct() {
         val bodies = fixture.getJSONObject("bodies")
         val sessions = fixture.getJSONArray("sessions")
-        assertTrue("fixture has sessions", sessions.length() >= 20)
+        assertTrue("fixture has sessions", sessions.length() >= 50)
         val bad = mutableListOf<String>()
         for (i in 0 until sessions.length()) {
             val s = sessions.getJSONObject(i)

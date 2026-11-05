@@ -3,6 +3,7 @@ package io.github.darylno.cardscanner.phoneserver
 import io.github.darylno.cardscanner.core.CameraChoice
 import io.github.darylno.cardscanner.core.DebugLog
 import io.github.darylno.cardscanner.core.MiniJson
+import io.github.darylno.cardscanner.core.RefocusPolicy
 import io.github.darylno.cardscanner.core.server.DeviceApi
 import io.github.darylno.cardscanner.ui.AppSettings
 import java.util.concurrent.TimeUnit
@@ -42,7 +43,7 @@ class DeviceBridge(
         auto = settings.auto, roi = settings.roi,
         torch = settings.torch, vibration = settings.vibration, highRes = settings.highRes,
         aeLock = settings.aeLock, checkMs = settings.checkMs, cameraId = settings.cameraId,
-        zoomFit = settings.zoomFit,
+        zoomFit = settings.zoomFit, refocusMin = settings.refocusMin,
     )
 
     override fun cameras(): List<Pair<String, String>> =
@@ -61,6 +62,7 @@ class DeviceBridge(
                 "check → ${s.checkMs} ms".takeIf { before.checkMs != s.checkMs },
                 "camera → ${s.cameraId?.let { "camera $it" } ?: "Automatic"}".takeIf { before.cameraId != s.cameraId },
                 "zoom to fit the Area → ${s.zoomFit}".takeIf { before.zoomFit != s.zoomFit },
+                "refocus on a card → ${RefocusPolicy.label(s.refocusMin)}".takeIf { before.refocusMin != s.refocusMin },
             ).joinToString(", "))
         settings.auto = s.auto
         settings.roi = s.roi
@@ -71,6 +73,7 @@ class DeviceBridge(
         settings.checkMs = s.checkMs
         settings.cameraId = s.cameraId
         settings.zoomFit = s.zoomFit
+        settings.refocusMin = s.refocusMin
         val applying = screen?.applyRemoteSettings() ?: return
         // DeviceApi answers the PATCH with state() right after this returns, and the zoom in it
         // is the camera's: wait for the scan screen's UI thread to have applied the change, or

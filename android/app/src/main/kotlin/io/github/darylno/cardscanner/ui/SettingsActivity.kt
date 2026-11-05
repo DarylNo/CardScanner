@@ -21,6 +21,7 @@ import io.github.darylno.cardscanner.R
 import io.github.darylno.cardscanner.camera.CameraCatalog
 import io.github.darylno.cardscanner.core.CameraChoice
 import io.github.darylno.cardscanner.core.DebugLog
+import io.github.darylno.cardscanner.core.RefocusPolicy
 import io.github.darylno.cardscanner.core.ScreenDim
 import io.github.darylno.cardscanner.core.server.DeviceApi
 import java.util.concurrent.Executors
@@ -105,6 +106,34 @@ class SettingsActivity : AppCompatActivity() {
                 if (id != s.cameraId) {
                     DebugLog.global.i("device", "camera setting → " + (id?.let { "camera $it" } ?: "Automatic"))
                     s.cameraId = id
+                }
+                d.dismiss(); render()
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    /** "Every card" / "Every 5 min" / "Never" — the same words as core RefocusPolicy.label (the desktop's dropdown). */
+    private fun refocusLabel(m: Int): String = when {
+        m < 0 -> getString(R.string.settings_refocus_never)
+        m == RefocusPolicy.EVERY_CARD -> getString(R.string.settings_refocus_every_card)
+        else -> getString(R.string.settings_refocus_every, m)
+    }
+
+    /**
+     * Settings → Camera → "Refocus on a card" (1.1.18): one of [RefocusPolicy.CHOICES]. Reaches the
+     * camera when the scan screen comes back (its resume catch-up), like the other camera settings.
+     */
+    private fun chooseRefocus() {
+        val s = app.settings
+        val choices = RefocusPolicy.CHOICES
+        AlertDialog.Builder(this)
+            .setTitle(R.string.settings_refocus)
+            .setSingleChoiceItems(choices.map(::refocusLabel).toTypedArray(), choices.indexOf(s.refocusMin).coerceAtLeast(0)) { d, which ->
+                val v = choices[which]
+                if (v != s.refocusMin) {
+                    DebugLog.global.i("device", "refocus on a card → ${RefocusPolicy.label(v)}")
+                    s.refocusMin = v
                 }
                 d.dismiss(); render()
             }
@@ -212,10 +241,14 @@ class SettingsActivity : AppCompatActivity() {
             s.zoomFit = it
         })
         cam.addView(chrome.divider(), chrome.dividerParams())
+        // "Refocus on a card" (owner, 2026-11-05: "Need it to focus every once in a while"; 1.1.18).
+        cam.addView(chrome.valueRow(getString(R.string.settings_refocus), getString(R.string.settings_refocus_desc),
+            refocusLabel(s.refocusMin)) { chooseRefocus() })
+        cam.addView(chrome.divider(), chrome.dividerParams())
         cam.addView(chrome.switchRow(getString(R.string.settings_highres), getString(R.string.settings_highres_desc), s.highRes) { s.highRes = it })
         // No focus-lock switch: Mount always locks focus on the first card after
-        // each bind (CameraController) — a switch that couldn't turn it off
-        // was removed rather than shipped. Tap the preview to refocus.
+        // each bind (CameraController), and "Refocus on a card" above sets how
+        // often a later card is focused on again. Tap the preview to refocus.
         cam.addView(chrome.divider(), chrome.dividerParams())
         cam.addView(chrome.switchRow(getString(R.string.settings_aelock), getString(R.string.settings_aelock_desc), s.aeLock) { s.aeLock = it })
         cam.addView(chrome.divider(), chrome.dividerParams())

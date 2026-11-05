@@ -7,15 +7,18 @@ pacing has its own fixture (export_f2f_pacing_fixture.py); this one pins the
 MATCHING — which product a printing resolves to — so the two cannot drift:
 
   * function tables: the REAL _parse_title_brackets / _norm_collector /
-    _sku_matches_set / _norm_name / _title_names_card over every product title
-    and SKU in the captured storefront answers and the declared synthetic
-    bodies (plus a few hand-written edge shapes, listed in EXTRA_* below —
-    inputs only, the answers are the reference's). _title_names_card runs on
-    FULL titles (brackets and all: the port's cut at "[" is part of what is
+    _sku_matches_set / _norm_name / _title_names_card / _title_is_meld_half /
+    _side_letter_of over every product title, collector and SKU in the captured
+    storefront answers and the declared synthetic bodies (plus a few
+    hand-written edge shapes, listed in EXTRA_* below — inputs only, the
+    answers are the reference's). _title_names_card and _title_is_meld_half run
+    on FULL titles (brackets and all: the port's cut at "[" is part of what is
     pinned), one per distinct name part, against every name;
   * sessions: the REAL get_price replayed over storefront answers captured live
-    on 2026-11-04 (tests/fixtures/facetoface/captured/, one file per URL, trimmed
-    to the fields the client reads) and the older m10/m11 Bolt fixture — every
+    on 2026-11-04 and 2026-11-05 (tests/fixtures/facetoface/captured/, one file
+    per URL, trimmed to the fields the client reads: the List investigation, then
+    the meld halves and lettered promos of the owner's 1.1.17 report — Midnight
+    Scavengers EMN 96, Graf Rats EMN 91) and the older m10/m11 Bolt fixture — every
     URL requested, in order, which body answered it, and the result (handle +
     conditions, or null). Where a ladder rung was never captured, the session
     DECLARES a stand-in (another captured answer) and the fixture lists the URL
@@ -101,6 +104,22 @@ EXTRA_TITLES = [
     " (Retro) [Promo] [Foil]",
     "// [Promo] [Foil]",
     "Fire // Ice // Extra [Promo] [Foil]",
+    # The collector is the first collector-shaped bracket BEFORE the set name
+    # (never the set name or the foil label; the first of two wins).
+    "Card [Promo] [123] [Foil]",
+    "Card [Promo] [Set] [123]",
+    "Card [Label] [96a] [97b] [Set] [Foil]",
+    "Card [Label] [Other Label] [12★] [Set] [Foil]",
+    "Card [Label] [١٢] [Set] [Foil]",
+    # _title_is_meld_half: "<the card> // <another face>" before the first "[".
+    "Midnight Scavengers //  [96a] [B] [Eldritch Moon] [Non-Foil]",
+    "Midnight Scavengers//Chittering Host [96a] [Set] [Foil]",
+    "Midnight Scavengers // Chittering Host // x [96a] [Set] [Foil]",
+    "Chittering Host [96b] // Midnight Scavengers [Set] [Foil]",
+    "Lorien Revealed // x [60a] [Set] [Foil]",
+    "_____ // x [1a] [Set] [Foil]",
+    " // Midnight Scavengers [96a] [Set] [Foil]",
+    "Delver of Secrets // Insectile Aberration [51a] [Innistrad] [Non-Foil]",
 ]
 EXTRA_COLLECTORS = [
     "PZ2-38", "pz2-038", "CLB-187", "STH-66", "JUD-78†", "M19-185j", "0", "00", "000", "",
@@ -118,10 +137,44 @@ EXTRA_NAMES = ["Fire // Ice", "Lim-Dûl's Vault", "Æther Vial", "Aether Vial", 
                "Fire", "Fireball", "Shock", "Shockwave", "Mountain", "Mountain Goat", "Fog", "Fog Bank",
                "Erase", "Erase (Not the Urza's Legacy One)", "B.F.M. (Big Furry Monster)", "Lim",
                "Lightning", "Lightning Axe", "Ancient Tomb", "Minamo, School at Water's Edge",
-               "Academy on the Bay", "Counterspell // x", ""]
+               "Academy on the Bay", "Counterspell // x", "Lórien Revealed",
+               "Delver of Secrets // Insectile Aberration", "Delver of Secrets", ""]
+# _side_letter_of beyond the generated pairs (every collector seen against
+# itself, itself minus its last character, and itself plus "a" / "A" / "★").
+EXTRA_SIDE_LETTER = [
+    ("96a", "96"), ("91A", "91"), ("096a", "96"), ("163a", "0163"), ("A25-141a", "A25-141"),
+    ("96ab", "96"), ("96★", "96"), ("96†", "96"), ("9a", "96"), ("196a", "96"), ("96a", "96a"),
+    ("96b", "96a"), ("96a", ""), ("a", ""), ("", ""), ("96a", "9٦"), ("96ä", "96"), ("96ı", "96"),
+    ("0a", "0"), (" 96a ", "96"), ("96-a", "96"), ("96İ", "96"),
+    # only "a": F2F's meld PROMOS ("[225s] [Prerelease]", "[216s]"), promo packs
+    # ("[115p]"), the meld result's own side ("96b"), a serial-numbered twin
+    ("225s", "225"), ("216S", "216"), ("115p", "115"), ("96b", "96"), ("96B", "96"), ("148z", "148"),
+    ("96ª", "96"), ("96ａ", "96"), ("96à", "96"),
+]
 
 _JGP_BOLT = "lightning-bolt-judge-gift-cards-1998-foil"   # a real handle (the "Lightning Bolt" capture)
 _G05_FIREBALL = "fireball-judge-gift-cards-2005-foil"
+_MS_96A = "midnight-scavengers-chittering-host-96a-b-eldritch-moon-non-foil"   # real handles
+_MS_96A_FOIL = "midnight-scavengers-chittering-host-96a-b-eldritch-moon-foil"
+_MS_96_EXACT = "midnight-scavengers-96-eldritch-moon-non-foil"                 # made up
+_MS_96A_SOI = "midnight-scavengers-chittering-host-96a-b-eldritch-moon-non-foil-soi"
+_URZA_SUGGEST = ("https://facetofacegames.com/search/suggest.json?q=Urza%2C%20Lord%20Protector%20225%20"
+                 "The%20Brothers%27%20War&resources%5Btype%5D=product&resources%5Blimit%5D=20"
+                 "&resources%5Boptions%5D%5Bunavailable_products%5D=show")
+_URZA_225_FOIL = "urza-lord-protector-urza-planeswalker-225-the-brothers-war-foil"          # real handles
+_URZA_225S = "urza-lord-protector-urza-planeswalker-225s-prerelease-the-brothers-war-promos-foil"
+
+
+def _without_product(url: str, handle: str) -> dict:
+    """The captured suggest answer at *url*, with the product *handle* taken out."""
+    path = next(p for p in sorted(CAPTURED.glob("suggest_*.json"))
+                if json.loads(p.read_text(encoding="utf-8"))["url"] == url)
+    body = copy.deepcopy(json.loads(path.read_text(encoding="utf-8"))["body"])
+    prods = body["resources"]["results"]["products"]
+    assert any(p["handle"] == handle for p in prods), handle
+    body["resources"]["results"]["products"] = [p for p in prods if p["handle"] != handle]
+    return body
+
 
 # Hand-written bodies for shapes no capture shows (see the docstring). Ids are
 # never URLs, so an uncaptured URL can only reach one through a declaration.
@@ -152,6 +205,86 @@ SYNTHETIC: dict[str, dict] = {
                              "variants": [
                                  {"sku": "M-G05-Fireball-NM-F", "title": "NM", "option1": "NM",
                                   "price": "19.99"}]}},
+    },
+    # The meld side letter (_side_letter_of + _title_is_meld_half): shapes no
+    # capture shows, every one beside Midnight Scavengers' real number.
+    "synthetic:suggest/Midnight Scavengers decoys": {
+        "note": "one more letter than 96 but never Midnight Scavengers' half: ANOTHER card's half "
+                "at its number, a serial-numbered and a single-faced title, another number, a half "
+                "with no other face — and the real half in the other finish",
+        "body": {"resources": {"results": {"products": [
+            {"title": f"{t} [Eldritch Moon] [{f}]", "handle": h} for t, f, h in [
+                ("Graf Rats // Chittering Host [96a] [A]", "Non-Foil", "decoy-graf-rats-96a"),
+                ("Midnight Scavengers - Serial Numbered [96z]", "Non-Foil", "decoy-serial-96z"),
+                ("Midnight Scavengers [96a]", "Non-Foil", "decoy-single-faced-96a"),
+                ("Midnight Scavengers // Chittering Host [196a] [B]", "Non-Foil", "decoy-196a"),
+                ("Midnight Scavengers //  [96a] [B]", "Non-Foil", "decoy-no-other-face-96a"),
+                ("Midnight Scavengers // Chittering Host [96a] [B]", "Foil", _MS_96A_FOIL)]]}}},
+    },
+    "synthetic:suggest/Midnight Scavengers two halves": {
+        "note": "two side-lettered halves of the card's number (96a [B], 96a [A]): ambiguous — none is taken",
+        "body": {"resources": {"results": {"products": [
+            {"title": "Midnight Scavengers // Chittering Host [96a] [B] [Eldritch Moon] [Non-Foil]",
+             "handle": _MS_96A},
+            {"title": "Midnight Scavengers // Chittering Host [96a] [A] [Eldritch Moon] [Non-Foil]",
+             "handle": "midnight-scavengers-chittering-host-96a-a-eldritch-moon-non-foil"}]}}},
+    },
+    "synthetic:suggest/Midnight Scavengers half beside other letters": {
+        "note": "meld-shaped [96b] and [96s] titles listed BEFORE the real [96a] half: only 'a' is a "
+                "side letter, so they never make it ambiguous",
+        "body": {"resources": {"results": {"products": [
+            {"title": "Midnight Scavengers // Chittering Host [96b] [B] [Eldritch Moon] [Non-Foil]",
+             "handle": "midnight-scavengers-chittering-host-96b-b-eldritch-moon-non-foil"},
+            {"title": "Midnight Scavengers // Chittering Host [96s] [B] [Eldritch Moon] [Non-Foil]",
+             "handle": "midnight-scavengers-chittering-host-96s-b-eldritch-moon-non-foil"},
+            {"title": "Midnight Scavengers // Chittering Host [96a] [B] [Eldritch Moon] [Non-Foil]",
+             "handle": _MS_96A}]}}},
+    },
+    "synthetic:suggest/Midnight Scavengers half and exact": {
+        "note": "the real half AFTER a title carrying the exact 96: the exact collector wins",
+        "body": {"resources": {"results": {"products": [
+            {"title": "Midnight Scavengers // Chittering Host [96a] [B] [Eldritch Moon] [Non-Foil]",
+             "handle": _MS_96A},
+            {"title": "Midnight Scavengers [96] [Eldritch Moon] [Non-Foil]", "handle": _MS_96_EXACT}]}}},
+    },
+    f"synthetic:product/{_MS_96_EXACT}": {
+        "note": "the exact-collector product beside the half (EMN SKU, prices made up)",
+        "body": {"product": {"title": "Midnight Scavengers [96] [Eldritch Moon] [Non-Foil]",
+                             "handle": _MS_96_EXACT, "variants": [
+                                 {"sku": "M-EMN-Midnight_S-96-NM-NF", "title": "NM", "option1": "NM",
+                                  "price": "1.11"}]}},
+    },
+    "synthetic:suggest/Midnight Scavengers half of another set": {
+        "note": "the half's title, its product filed under another set's SKU: the SKU still refuses it",
+        "body": {"resources": {"results": {"products": [
+            {"title": "Midnight Scavengers // Chittering Host [96a] [B] [Eldritch Moon] [Non-Foil]",
+             "handle": _MS_96A_SOI}]}}},
+    },
+    f"synthetic:product/{_MS_96A_SOI}": {
+        "note": "a half product whose SKU names SOI, not EMN (prices made up)",
+        "body": {"product": {"title": "Midnight Scavengers // Chittering Host [96a] [B] [Eldritch Moon] "
+                                      "[Non-Foil]", "handle": _MS_96A_SOI, "variants": [
+                                 {"sku": "M-SOI-Midnight_S-96a-NM-NF", "title": "NM", "option1": "NM",
+                                  "price": "2.22"}]}},
+    },
+    # Only "a" is a side letter: F2F's meld PROMOS are meld-shaped too ("Urza,
+    # Lord Protector // Urza, Planeswalker [225s] [Prerelease] [The Brothers'
+    # War: Promos] [Foil]", captured) and F2F files some promos under the MAIN
+    # set's SKU code (SIN-MTG-NEO-266p-ENG-NM-NF, pneo's Boseiju 266p).
+    "synthetic:suggest/Urza 225 foil missing": {
+        "note": "the captured 'Urza, Lord Protector 225 The Brothers' War' answer with the main 225 foil "
+                "taken out: the meld-shaped [225s] Prerelease promo is the only foil title one letter "
+                "past 225",
+        "body": _without_product(_URZA_SUGGEST, _URZA_225_FOIL),
+    },
+    f"synthetic:product/{_URZA_225S}": {
+        "note": "the [225s] promo's product filed under the MAIN set's SKU code BRO (how F2F files "
+                "pneo's 266p: SIN-MTG-NEO-266p), so only the side-letter rule can refuse it (prices "
+                "made up)",
+        "body": {"product": {"title": "Urza, Lord Protector // Urza, Planeswalker [225s] [Prerelease] "
+                                      "[The Brothers' War: Promos] [Foil]", "handle": _URZA_225S, "variants": [
+                                 {"sku": "SIN-MTG-BRO-225s-ENG-NM-F", "title": "NM", "option1": "NM",
+                                  "price": "33.33"}]}},
     },
 }
 
@@ -229,6 +362,110 @@ SESSIONS: list[dict] = [
                    "Fire // Ice foil": "synthetic:suggest/Fire // Ice",
                    "Fire // Ice": "synthetic:suggest/Fire // Ice"},
      "products": {_G05_FIREBALL: f"synthetic:product/{_G05_FIREBALL}"}},
+    # Meld halves (captured 2026-11-05, the owner's report): F2F's collector
+    # carries a side letter Scryfall's doesn't — 1.1.17 priced none of them.
+    {"id": "midnight_scavengers_emn_96", "note": "the owner's report: 'Midnight Scavengers // "
+     "Chittering Host [96a] [B] [Eldritch Moon] [Non-Foil]' for Scryfall's #96",
+     "card": ["Midnight Scavengers", "emn", "96", False, "Eldritch Moon"]},
+    {"id": "graf_rats_emn_91", "note": "the owner's report: '[91a] [A]'",
+     "card": ["Graf Rats", "emn", "91", False, "Eldritch Moon"]},
+    {"id": "midnight_scavengers_emn_96_foil", "note": "the same half in foil (the answer holds both "
+     "finishes: one per finish)",
+     "card": ["Midnight Scavengers", "emn", "96", True, "Eldritch Moon"]},
+    {"id": "bruna_emn_15", "note": "meld half '[15a] [B]'",
+     "card": ["Bruna, the Fading Light", "emn", "15", False, "Eldritch Moon"]},
+    {"id": "gisela_emn_28", "note": "meld half '[28a] [A]' ($49.99)",
+     "card": ["Gisela, the Broken Blade", "emn", "28", False, "Eldritch Moon"]},
+    {"id": "hanweir_garrison_emn_130", "note": "meld half '[130a] [B]'",
+     "card": ["Hanweir Garrison", "emn", "130", False, "Eldritch Moon"]},
+    {"id": "hanweir_battlements_emn_204", "note": "meld half '[204a] [A]'",
+     "card": ["Hanweir Battlements", "emn", "204", False, "Eldritch Moon"]},
+    {"id": "phyrexian_dragon_engine_bro_163", "note": "BRO's shape '[163a] [The Brothers' War]' — "
+     "an SKU with no letter (SIN-MTG-BRO-163)",
+     "card": ["Phyrexian Dragon Engine", "bro", "163", False, "The Brothers' War"]},
+    {"id": "mightstone_bro_238", "note": "BRO meld half '[238a]'",
+     "card": ["The Mightstone and Weakstone", "bro", "238", False, "The Brothers' War"]},
+    {"id": "urza_bro_225_no_letter", "note": "a BRO meld half F2F files with no letter: exact",
+     "card": ["Urza, Lord Protector", "bro", "225", False, "The Brothers' War"]},
+    {"id": "bruna_pemn_15s_foil", "note": "'[15as] [B] [Eldritch Moon Promos]' is no collector: the "
+     "set-name fallback still takes the card's own title",
+     "card": ["Bruna, the Fading Light", "pemn", "15s", True, "Eldritch Moon Promos"]},
+    {"id": "chittering_host_emn_96b", "note": "the meld RESULT has no product of its own: its 96b "
+     "ends in a letter, so no half is taken (1.1.16 filed Midnight Scavengers' [96a])",
+     "card": ["Chittering Host", "emn", "96b", False, "Eldritch Moon"]},
+    {"id": "tymaret_mul_148_foil", "note": "'- Serial Numbered [148z]' is one letter more but no meld "
+     "half (the real foil is labelled [Halo Foil]): none",
+     "card": ["Tymaret, Chosen from Death", "mul", "148", True, "Multiverse Legends"]},
+    {"id": "wurmcoil_brr_126_foil", "note": "'- Serial Numbered [126z]' first in order; the exact "
+     "[126] is the card",
+     "card": ["Wurmcoil Engine", "brr", "126", True, "The Brothers' War Retro Artifacts"]},
+    {"id": "midnight_scavengers_decoys", "note": "decoys one letter past 96 (another card's half, "
+     "serial-numbered, single-faced, another number, no other face, the other finish): none fetched",
+     "card": ["Midnight Scavengers", "emn", "96", False, "Eldritch Moon"],
+     "stand_ins": {q: "synthetic:suggest/Midnight Scavengers decoys" for q in (
+         "Midnight Scavengers 96 Eldritch Moon", "Midnight Scavengers Eldritch Moon", "Midnight Scavengers")}},
+    {"id": "midnight_scavengers_two_halves", "note": "two 96a halves: ambiguous, none fetched",
+     "card": ["Midnight Scavengers", "emn", "96", False, "Eldritch Moon"],
+     "stand_ins": {q: "synthetic:suggest/Midnight Scavengers two halves" for q in (
+         "Midnight Scavengers 96 Eldritch Moon", "Midnight Scavengers Eldritch Moon", "Midnight Scavengers")}},
+    {"id": "midnight_scavengers_half_beside_other_letters", "note": "meld-shaped 96b and 96s before the "
+     "96a half: only 'a' is a side letter — the 96a is the card",
+     "card": ["Midnight Scavengers", "emn", "96", False, "Eldritch Moon"],
+     "stand_ins": {"Midnight Scavengers 96 Eldritch Moon":
+                   "synthetic:suggest/Midnight Scavengers half beside other letters"}},
+    {"id": "midnight_scavengers_exact_beats_half", "note": "a title with the exact 96 wins over the "
+     "half listed before it",
+     "card": ["Midnight Scavengers", "emn", "96", False, "Eldritch Moon"],
+     "stand_ins": {"Midnight Scavengers 96 Eldritch Moon": "synthetic:suggest/Midnight Scavengers half and exact"},
+     "products": {_MS_96_EXACT: f"synthetic:product/{_MS_96_EXACT}"}},
+    {"id": "midnight_scavengers_half_of_another_set", "note": "the half's product under an SOI SKU: "
+     "fetched on every rung, refused every time",
+     "card": ["Midnight Scavengers", "emn", "96", False, "Eldritch Moon"],
+     "stand_ins": {q: "synthetic:suggest/Midnight Scavengers half of another set" for q in (
+         "Midnight Scavengers 96 Eldritch Moon", "Midnight Scavengers Eldritch Moon", "Midnight Scavengers")},
+     "products": {_MS_96A_SOI: f"synthetic:product/{_MS_96A_SOI}"}},
+    {"id": "urza_bro_225_foil_promo_decoy", "note": "the main 225 foil absent: the meld-shaped "
+     "'[225s] [Prerelease]' promo, its product under a BRO SKU, is never the card ('s' is no side "
+     "letter) — none, nothing fetched",
+     "card": ["Urza, Lord Protector", "bro", "225", True, "The Brothers' War"],
+     "stand_ins": {q: "synthetic:suggest/Urza 225 foil missing" for q in (
+         "Urza, Lord Protector 225 The Brothers' War foil", "Urza, Lord Protector The Brothers' War foil",
+         "Urza, Lord Protector foil", "Urza, Lord Protector")},
+     "products": {_URZA_225S: f"synthetic:product/{_URZA_225S}"}},
+    # The collector after a variant bracket: same name, same set, one SKU code
+    # — only the collector tells the versions apart, whatever F2F's order.
+    {"id": "lier_pmid_59s_foil", "note": "'[Prerelease] [59s] [Innistrad: Midnight Hunt Promos]'",
+     "card": ["Lier, Disciple of the Drowned", "pmid", "59s", True, "Innistrad: Midnight Hunt Promos"]},
+    {"id": "lier_pmid_59p_foil", "note": "'[Promo Pack] [59p] [Innistrad: Midnight Hunt Promos]'",
+     "card": ["Lier, Disciple of the Drowned", "pmid", "59p", True, "Innistrad: Midnight Hunt Promos"]},
+    {"id": "lier_59p_on_the_59s_answer", "note": "59s first in order — 1.1.17 filed its $14.99 on the 59p",
+     "card": ["Lier, Disciple of the Drowned", "pmid", "59p", True, "Innistrad: Midnight Hunt Promos"],
+     "stand_ins": {"Lier, Disciple of the Drowned 59p Innistrad: Midnight Hunt Promos foil":
+                   "Lier, Disciple of the Drowned 59s Innistrad: Midnight Hunt Promos foil"}},
+    {"id": "lier_59s_on_the_59p_answer", "note": "59p first in order",
+     "card": ["Lier, Disciple of the Drowned", "pmid", "59s", True, "Innistrad: Midnight Hunt Promos"],
+     "stand_ins": {"Lier, Disciple of the Drowned 59s Innistrad: Midnight Hunt Promos foil":
+                   "Lier, Disciple of the Drowned 59p Innistrad: Midnight Hunt Promos foil"}},
+    {"id": "hymn_fem_38a", "note": "'[Susan Van Camp] [38a] [Fallen Empires]'",
+     "card": ["Hymn to Tourach", "fem", "38a", False, "Fallen Empires"]},
+    {"id": "hymn_fem_38c", "note": "'[Quinton Hoover] [38c] [Fallen Empires]'",
+     "card": ["Hymn to Tourach", "fem", "38c", False, "Fallen Empires"]},
+    {"id": "hymn_38c_on_the_38a_answer", "note": "38a first in order",
+     "card": ["Hymn to Tourach", "fem", "38c", False, "Fallen Empires"],
+     "stand_ins": {"Hymn to Tourach 38c Fallen Empires": "Hymn to Tourach 38a Fallen Empires"}},
+    {"id": "hymn_38a_on_the_38c_answer", "note": "38c first in order",
+     "card": ["Hymn to Tourach", "fem", "38a", False, "Fallen Empires"],
+     "stand_ins": {"Hymn to Tourach 38a Fallen Empires": "Hymn to Tourach 38c Fallen Empires"}},
+    {"id": "factory_atq_80c", "note": "'[Autumn] [80c] [Antiquities]' ($449.99)",
+     "card": ["Mishra's Factory", "atq", "80c", False, "Antiquities"]},
+    {"id": "factory_atq_80b", "note": "'[Summer] [80b] [Antiquities]' ($349.99)",
+     "card": ["Mishra's Factory", "atq", "80b", False, "Antiquities"]},
+    {"id": "factory_80b_on_the_80c_answer", "note": "80c first in order — 1.1.17 filed its $449.99 on the 80b",
+     "card": ["Mishra's Factory", "atq", "80b", False, "Antiquities"],
+     "stand_ins": {"Mishra's Factory 80b Antiquities": "Mishra's Factory 80c Antiquities"}},
+    {"id": "factory_80c_on_the_80b_answer", "note": "80b first in order",
+     "card": ["Mishra's Factory", "atq", "80c", False, "Antiquities"],
+     "stand_ins": {"Mishra's Factory 80c Antiquities": "Mishra's Factory 80b Antiquities"}},
 ]
 
 
@@ -333,6 +570,16 @@ def _skus(bodies: dict) -> list[str]:
     return sorted(out) + [s for s in EXTRA_SKUS if s not in out]
 
 
+def _side_letter_pairs(collectors: list[str]) -> list[tuple[str, str]]:
+    """Every collector seen (titles, sessions, EXTRA_COLLECTORS) against itself,
+    itself minus its last character, and itself plus "a" / "A" / "★" — then
+    EXTRA_SIDE_LETTER. De-duplicated, in order."""
+    pairs: list[tuple[str, str]] = []
+    for c in collectors:
+        pairs += [(c, c), (c, c[:-1]), (c + "a", c), (c + "A", c), (c + "★", c)]
+    return list(dict.fromkeys(pairs + EXTRA_SIDE_LETTER))
+
+
 def _table(columns: list[str], rows: list[list]) -> dict:
     return {"columns": columns, "rows": rows}
 
@@ -363,9 +610,13 @@ def build() -> bytes:
                                   [[sku, code, m._sku_matches_set(sku, code)]
                                    for sku in _skus(bodies) for code in SET_CODES]),
         "norm_name": _table(["in", "out"], [[n, m._norm_name(n)] for n in names + name_parts]),
-        "title_names_card": _table(["title", "name", "match"],
-                                   [[t, n, m._title_names_card(t, n)]
-                                    for t in first_title.values() for n in names]),
+        # Both read only the text before the first "[": one table, one row per
+        # (name part, name), an answer column each.
+        "title_name": _table(["title", "name", "names_card", "meld_half"],
+                             [[t, n, m._title_names_card(t, n), m._title_is_meld_half(t, n)]
+                              for t in first_title.values() for n in names]),
+        "side_letter_of": _table(["title_collector", "collector", "match"],
+                                 [[t, c, m._side_letter_of(t, c)] for t, c in _side_letter_pairs(collectors)]),
     }
     doc = {
         "about": "Generated by scripts/export_f2f_match_fixtures.py from the real facetoface.py over "

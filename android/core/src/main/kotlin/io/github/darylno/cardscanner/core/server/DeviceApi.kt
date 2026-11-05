@@ -1,6 +1,7 @@
 package io.github.darylno.cardscanner.core.server
 
 import io.github.darylno.cardscanner.core.MiniJson
+import io.github.darylno.cardscanner.core.RefocusPolicy
 import io.github.darylno.cardscanner.core.RoiFrac
 import io.github.darylno.cardscanner.core.ZoomCoordinator
 import io.github.darylno.cardscanner.core.ZoomFit
@@ -60,6 +61,11 @@ import io.github.darylno.cardscanner.core.ZoomFit
  * 7/15 · 1.60× · …"), null otherwise; top-level `zoom_probe` = the last probe's
  * verdict as the phone keeps it (`{at, camera, stream, words, …}`, null = never
  * run) — with the scan screen closed too. PATCH has no key for either.
+ *
+ * "Refocus on a card" (1.1.18): `refocus_min` = the minutes since the last focus on a card
+ * after which the next Tray card waits for a focus pass on it ([RefocusPolicy]: 0 = every
+ * card, -1 = never), PATCHed with one of `refocus_choices` = `[{min, label}]` — the phone's
+ * own list and words, which the desktop's dropdown shows; anything else is a 400.
  */
 class DeviceApi(private val device: DeviceControl) {
 
@@ -97,6 +103,8 @@ class DeviceApi(private val device: DeviceControl) {
         val cameraId: String? = null,
         /** "Zoom to fit the Area" (off by default). */
         val zoomFit: Boolean = false,
+        /** "Refocus on a card" in minutes ([RefocusPolicy]: 0 = every card, -1 = never; default 5, provisional). */
+        val refocusMin: Int = RefocusPolicy.DEFAULT,
     )
 
     /** A camera-view picture: the JPEG, the zoom its frame was taken at (1.0 = none), its size in px. */
@@ -109,6 +117,15 @@ class DeviceApi(private val device: DeviceControl) {
         const val CHECK_MS_DEFAULT = 2_500
         const val CHECK_MS_MIN = 250
         const val CHECK_MS_MAX = 10_000
+        /** The refused `refocus_min`: the choices, in minutes, as the phone offers them. */
+        private val REFOCUS_BAD = "refocus_min must be one of " + RefocusPolicy.CHOICES.let { c ->
+            c.dropLast(1).joinToString(", ") { refocusWord(it) } + " or " + refocusWord(c.last())
+        } + " — minutes"
+        private fun refocusWord(m: Int) = when (m) {
+            RefocusPolicy.EVERY_CARD -> "$m (every card)"
+            RefocusPolicy.NEVER -> "$m (never)"
+            else -> "$m"
+        }
         /** `snapshot.jpg?view=`: the base-space picture (the default) or the camera's own view. */
         const val VIEW_BASE = "base"
         const val VIEW_CAMERA = "camera"
@@ -165,6 +182,9 @@ class DeviceApi(private val device: DeviceControl) {
             "zoom" to device.zoom()?.let(::zoomJson),
             // The zoom probe's last verdict (1.1.17): read-only, also with the scan screen closed.
             "zoom_probe" to device.zoomProbe(),
+            // "Refocus on a card" (1.1.18) and the phone's own choices for it.
+            "refocus_min" to s.refocusMin,
+            "refocus_choices" to RefocusPolicy.CHOICES.map { linkedMapOf("min" to it, "label" to RefocusPolicy.label(it)) },
         )
     }
 
@@ -223,6 +243,9 @@ class DeviceApi(private val device: DeviceControl) {
                 "check_ms" -> s.copy(checkMs = (v as? Number)?.toDouble()
                     ?.takeIf { it == Math.floor(it) && it >= CHECK_MS_MIN && it <= CHECK_MS_MAX }?.toInt()
                     ?: return bad("check_ms must be a whole number of ms from $CHECK_MS_MIN to $CHECK_MS_MAX"))
+                "refocus_min" -> s.copy(refocusMin = (v as? Number)?.toDouble()
+                    ?.let { d -> RefocusPolicy.CHOICES.firstOrNull { it.toDouble() == d } }
+                    ?: return bad(REFOCUS_BAD))
                 "camera" -> s.copy(cameraId = when {
                     v == CAMERA_AUTO -> null
                     v is String && device.cameras().any { it.first == v } -> v

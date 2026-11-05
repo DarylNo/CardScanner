@@ -1,0 +1,61 @@
+{
+ "url": "https://facetofacegames.com/search/suggest.json?q=Lier%2C%20Disciple%20of%20the%20Drowned%2059s%20Innistrad%3A%20Midnight%20Hunt%20Promos%20foil&resources%5Btype%5D=product&resources%5Blimit%5D=20&resources%5Boptions%5D%5Bunavailable_products%5D=show",
+ "body": {
+  "resources": {
+   "results": {
+    "products": [
+     {
+      "title": "Lier, Disciple of the Drowned [Prerelease] [59s] [Innistrad: Midnight Hunt Promos] [Foil]",
+      "handle": "lier-disciple-of-the-drowned-prerelease-59s-innistrad-midnight-hunt-promos-foil",
+      "available": true
+     },
+     {
+      "title": "Lier, Disciple of the Drowned [59] [Innistrad: Midnight Hunt] [Foil]",
+      "handle": "lier-disciple-of-the-drowned-59-innistrad-midnight-hunt-foil",
+      "available": true
+     },
+     {
+      "title": "Lier, Disciple of the Drowned [Promo Pack] [59p] [Innistrad: Midnight Hunt Promos] [Non-Foil]",
+      "handle": "lier-disciple-of-the-drowned-promo-pack-59p-innistrad-midnight-hunt-promos-non-foil",
+      "available": true
+     },
+     {
+      "title": "Lier, Disciple of the Drowned [Promo Pack] [59p] [Innistrad: Midnight Hunt Promos] [Foil]",
+      "handle": "lier-disciple-of-the-drowned-promo-pack-59p-innistrad-midnight-hunt-promos-foil",
+      "available": true
+     },
+     {
+      "title": "Lier, Disciple of the Drowned [59] [Innistrad: Midnight Hunt] [Non-Foil]",
+      "handle": "lier-disciple-of-the-drowned-59-innistrad-midnight-hunt-non-foil",
+      "available": true
+     },
+     {
+      "title": "Lier, Disciple of the Drowned [313] [Eternal Night Showcase] [Innistrad: Midnight Hunt] [Foil]",
+      "handle": "lier-disciple-of-the-drowned-313-eternal-night-showcase-innistrad-midnight-hunt-foil",
+      "available": true
+     },
+     {
+      "title": "Lier, Disciple of the Drowned [59] [Innistrad: Double Feature] [Foil]",
+      "handle": "lier-disciple-of-the-drowned-59-innistrad-double-feature-foil",
+      "available": true
+     },
+     {
+      "title": "Lier, Disciple of the Drowned [59] [Innistrad: Double Feature] [Non-Foil]",
+      "handle": "lier-disciple-of-the-drowned-59-innistrad-double-feature-non-foil",
+      "available": false
+     },
+     {
+      "title": "Lier, Disciple of the Drowned [313] [Eternal Night Showcase] [Innistrad: Midnight Hunt] [Non-Foil]",
+      "handle": "lier-disciple-of-the-drowned-313-eternal-night-showcase-innistrad-midnight-hunt-non-foil",
+      "available": true
+     },
+     {
+      "title": "Lier, Disciple of the Drowned [2350] [Borderless] [Notebook Genius] [Secret Lair Drop] [Non-Foil]",
+      "handle": "lier-disciple-of-the-drowned-2350-borderless-notebook-genius-secret-lair-drop-non-foil",
+      "available": true
+     }
+    ]
+   }
+  }
+ }
+}

@@ -1,0 +1,61 @@
+{
+ "url": "https://facetofacegames.com/search/suggest.json?q=Gisela%2C%20the%20Broken%20Blade%2028%20Eldritch%20Moon&resources%5Btype%5D=product&resources%5Blimit%5D=20&resources%5Boptions%5D%5Bunavailable_products%5D=show",
+ "body": {
+  "resources": {
+   "results": {
+    "products": [
+     {
+      "title": "Gisela, the Broken Blade // Brisela, Voice of Nightmares [28a] [A] [Eldritch Moon] [Foil]",
+      "handle": "gisela-the-broken-blade-brisela-voice-of-nightmares-28a-a-eldritch-moon-foil",
+      "available": true
+     },
+     {
+      "title": "Gisela, the Broken Blade // Brisela, Voice of Nightmares [28as] [A] [Eldritch Moon Promos] [Foil]",
+      "handle": "gisela-the-broken-blade-brisela-voice-of-nightmares-28as-a-eldritch-moon-promos-foil",
+      "available": true
+     },
+     {
+      "title": "Gisela, the Broken Blade // Brisela, Voice of Nightmares [28a] [A] [Eldritch Moon] [Non-Foil]",
+      "handle": "gisela-the-broken-blade-brisela-voice-of-nightmares-28a-a-eldritch-moon-non-foil",
+      "available": true
+     },
+     {
+      "title": "Bruna, the Fading Light // Brisela, Voice of Nightmares [15a] [B] [Eldritch Moon] [Non-Foil]",
+      "handle": "bruna-the-fading-light-brisela-voice-of-nightmares-15a-b-eldritch-moon-non-foil",
+      "available": true
+     },
+     {
+      "title": "Gisela, the Broken Blade // Brisela, Voice of Nightmares [24] [Innistrad Remastered] [Foil]",
+      "handle": "gisela-the-broken-blade-brisela-voice-of-nightmares-24-innistrad-remastered-foil",
+      "available": true
+     },
+     {
+      "title": "Gisela, the Broken Blade // Brisela, Voice of Nightmares [1335] [Borderless] [Angels: They're Just Like Us] [Secret Lair Drop] [Foil]",
+      "handle": "gisela-the-broken-blade-brisela-voice-of-nightmares-1335-borderless-angels-theyre-just-like-us-secret-lair-drop-foil",
+      "available": false
+     },
+     {
+      "title": "Bruna, the Fading Light // Brisela, Voice of Nightmares [15a] [B] [Eldritch Moon] [Foil]",
+      "handle": "bruna-the-fading-light-brisela-voice-of-nightmares-15a-b-eldritch-moon-foil",
+      "available": true
+     },
+     {
+      "title": "Gisela, the Broken Blade // Brisela, Voice of Nightmares [10] [A] [From the Vault: Transform] [Foil]",
+      "handle": "gisela-the-broken-blade-brisela-voice-of-nightmares-10-a-from-the-vault-transform-foil",
+      "available": true
+     },
+     {
+      "title": "Bruna, the Fading Light // Brisela, Voice of Nightmares [15as] [B] [Eldritch Moon Promos] [Foil]",
+      "handle": "bruna-the-fading-light-brisela-voice-of-nightmares-15as-b-eldritch-moon-promos-foil",
+      "available": true
+     },
+     {
+      "title": "Gisela, the Broken Blade // Brisela, Voice of Nightmares [24] [Innistrad Remastered] [Non-Foil]",
+      "handle": "gisela-the-broken-blade-brisela-voice-of-nightmares-24-innistrad-remastered-non-foil",
+      "available": true
+     }
+    ]
+   }
+  }
+ }
+}

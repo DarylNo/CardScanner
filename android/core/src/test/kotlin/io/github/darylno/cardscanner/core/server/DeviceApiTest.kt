@@ -44,7 +44,40 @@ class DeviceApiTest {
             "cameras" to listOf(mapOf("id" to "0", "label" to "Camera 0 · back · 13 MP · autofocus"),
                 mapOf("id" to "2", "label" to "Camera 2 · back · 2.0 MP · fixed focus")),
             "camera_live" to true, "snapshot_views" to listOf("base", "camera"),
-            "zoom_fit" to false, "zoom" to null, "zoom_probe" to null), s)
+            "zoom_fit" to false, "zoom" to null, "zoom_probe" to null,
+            "refocus_min" to 5L,
+            "refocus_choices" to listOf(mapOf("min" to 0L, "label" to "Every card"), mapOf("min" to 2L, "label" to "Every 2 min"),
+                mapOf("min" to 5L, "label" to "Every 5 min"), mapOf("min" to 10L, "label" to "Every 10 min"),
+                mapOf("min" to 30L, "label" to "Every 30 min"), mapOf("min" to -1L, "label" to "Never"))), s)
+    }
+
+    /**
+     * "Refocus on a card" (1.1.18): `refocus_min` is read and PATCHed in minutes — only the
+     * phone's own choices (0 = every card, -1 = never), listed with their words in
+     * `refocus_choices` so the desktop's dropdown shows the phone's list; anything else is a
+     * clear 400 and nothing is written.
+     */
+    @Test fun refocusOnACard() {
+        for ((body, want) in listOf("""{"refocus_min":0}""" to 0, """{"refocus_min":-1}""" to -1,
+                """{"refocus_min":30}""" to 30, """{"refocus_min":2.0}""" to 2, """{"refocus_min":5}""" to 5)) {
+            val r = patch(body)
+            assertEquals(body, 200, r.status)
+            assertEquals(body, want, st.refocusMin)
+            assertEquals(body, want.toLong(), json(r)["refocus_min"])
+        }
+        assertEquals(5, writes)
+        for (b in listOf("""{"refocus_min":7}""", """{"refocus_min":2.5}""", """{"refocus_min":"5"}""",
+                """{"refocus_min":null}""", """{"refocus_min":true}""", """{"refocus_min":-2}""", """{"refocus_min":1e12}""")) {
+            val r = patch(b)
+            assertEquals(b, 400, r.status)
+            assertEquals(b, "refocus_min must be one of 0 (every card), 2, 5, 10, 30 or -1 (never) — minutes", json(r)["error"])
+        }
+        assertEquals("a refused value writes nothing", 5, writes)
+        assertEquals(5, st.refocusMin)
+        // A PATCH of other keys keeps it.
+        st = st.copy(refocusMin = 30)
+        patch("""{"torch":true}""")
+        assertEquals(30, st.refocusMin)
     }
 
     /**

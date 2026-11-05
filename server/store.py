@@ -98,6 +98,89 @@ def _reprice_all(conn: sqlite3.Connection) -> tuple[int, int, int]:
     return n_sel, n_top, n_cand
 
 
+# The one-time re-ask (PRAGMA user_version 1 → 2, release 1.1.18): every "no F2F
+# listing" answer recorded is dropped once, so the sweep asks again with the
+# fixed matcher; every PRICE recorded stays, except a lettered printing's
+# (below). 1.1.17's matcher (and its
+# re-price, above) priced no meld half: F2F titles one "Midnight Scavengers //
+# Chittering Host [96a] [B] [Eldritch Moon] [Non-Foil]" — a side letter
+# Scryfall's #96 doesn't carry — so the owner's Midnight Scavengers EMN 96 and
+# Graf Rats EMN 91 were recorded as "no listing" (owner, 2026-11-05: "my price
+# checks of cards are failing"), and the sweep never re-asks a recorded miss.
+# The same migration also drops every answer recorded for a LETTERED printing
+# (a Scryfall collector number ending in a letter: "59s", "59p", "38a", "80c",
+# "266p", "15s" — promo and art-variant versions), price or not. Those share
+# their name, set and F2F SKU code with their siblings, and 1.1.17 read a title
+# whose collector follows a label ("[Prerelease] [59s]", "[Autumn] [80c]") as
+# collector-less, so its set-name fallback took whichever same-name version
+# F2F listed first — a price it recorded may be the sibling's (measured: Lier
+# 59p filed 59s's $14.99, Mishra's Factory 80b 80c's $449.99). 1.1.18 reads
+# the collector after the label, so the sweep asks them again. Every other
+# price stays.
+
+_ASCII_LETTERS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
+
+def _lettered(collector_number: Any) -> bool:
+    """True if a collector number ends in an ASCII letter, either case ("59s",
+    "80c", "266P", "M19-185j"). Only a–z / A–Z: "12★", "1†" and a non-ASCII
+    letter ("9ä") are no such suffix; a non-string is never one."""
+    return (isinstance(collector_number, str) and collector_number != ""
+            and collector_number[-1] in _ASCII_LETTERS)
+
+
+def _reask_misses(conn: sqlite3.Connection) -> tuple[int, int, int]:
+    """Drop every recorded F2F MISS and every answer recorded for a LETTERED
+    printing (``_lettered``), in place: a scan's ``f2f`` → NULL when it is the
+    sweep's "no listing" marker (a dict whose ``conditions`` is empty —
+    ``{"conditions": {}, "searched": true}``) or belongs to a lettered printing
+    — a selected scan's to its selection's ``collector_number`` (owed again),
+    an unpicked scan's own top-match price to its own ``collector_number``
+    (owed nowhere: the sweep asks the candidates); and every candidate's
+    ``f2f_conditions`` → the key removed when it is ``{}`` or the candidate's
+    ``collector_number`` is lettered (the sweep reads a missing key exactly
+    like None — owed on an unpicked scan; a picked scan prices only its
+    selection). Every other price stays. Writes only those two columns, only
+    on rows that change: updated_at, status, the selection and everything else
+    stay as they were. A row whose JSON does not decode is left alone. Returns
+    (selections, unpicked scans' own answers, candidate prints) reset. The
+    caller holds the transaction."""
+    n_sel = n_top = n_cand = 0
+    rows = conn.execute("SELECT id, selection, f2f, candidates FROM scans").fetchall()
+    for sid, sel_raw, f2f_raw, cands_raw in rows:
+        try:
+            sel = json.loads(sel_raw) if sel_raw not in (None, "") else None
+            f2f = json.loads(f2f_raw) if f2f_raw not in (None, "") else None
+            cands = json.loads(cands_raw) if cands_raw not in (None, "") else None
+        except ValueError:
+            continue
+        picked = isinstance(sel, dict) and bool(sel)
+        if picked:
+            lettered = _lettered(sel.get("collector_number"))
+        else:
+            lettered = isinstance(f2f, dict) and _lettered(f2f.get("collector_number"))
+        miss = isinstance(f2f, dict) and f2f.get("conditions") == {}
+        if f2f is not None and (miss or lettered):
+            conn.execute("UPDATE scans SET f2f = NULL WHERE id = ?", (sid,))
+            if picked:
+                n_sel += 1
+            else:
+                n_top += 1
+        if isinstance(cands, list):
+            dropped = 0
+            for c in cands:
+                if not isinstance(c, dict) or c.get("f2f_conditions") is None:
+                    continue
+                if c["f2f_conditions"] == {} or _lettered(c.get("collector_number")):
+                    del c["f2f_conditions"]
+                    dropped += 1
+            if dropped:
+                conn.execute("UPDATE scans SET candidates = ? WHERE id = ?",
+                             (json.dumps(cands), sid))
+                n_cand += dropped
+    return n_sel, n_top, n_cand
+
+
 class ScanStore:
     def __init__(self, db_path: str | Path = "scans.db") -> None:
         self.db_path = str(db_path)
@@ -120,31 +203,42 @@ class ScanStore:
     def _migrate(self) -> None:
         """Data migrations by ``PRAGMA user_version``, each in ONE transaction
         with its stamp, so each runs exactly once (a fresh file runs them on an
-        empty table and is stamped too). A failure rolls back and leaves the
-        version as it was — retried on the next open; the store still opens."""
+        empty table and is stamped too), in order: a 1.1.16 store runs the
+        re-price, commits, then the re-ask. A failure rolls back that one and
+        leaves the version as it was — the later ones wait, all retried on the
+        next open; the store still opens."""
         def version() -> int:
             return self._conn.execute("PRAGMA user_version").fetchone()[0]
 
-        if version() >= 1:
-            return
-        try:
-            # IMMEDIATE + re-read: a second process opening the same file
-            # waits, then sees the stamp and does nothing.
-            self._conn.execute("BEGIN IMMEDIATE")
-            n_sel = n_top = n_cand = 0
-            if version() < 1:
-                n_sel, n_top, n_cand = _reprice_all(self._conn)
-                self._conn.execute("PRAGMA user_version = 1")
-            self._conn.commit()
-        except sqlite3.Error as exc:
-            if self._conn.in_transaction:
-                self._conn.rollback()
-            print(f"  [store] re-price failed, retried on the next open: {exc}")
-            return
-        if n_sel or n_top or n_cand:
-            print(f"  [store] re-price: {n_sel} selection(s) and {n_cand} candidate "
-                  f"print(s) dropped their F2F answer, {n_top} unpicked scan(s) their "
-                  f"top-match price")
+        # Looked up at each open (module globals), never bound at import.
+        steps = (
+            (1, "re-price", _reprice_all,
+             "{0} selection(s) and {2} candidate print(s) dropped their F2F answer, "
+             "{1} unpicked scan(s) their top-match price"),
+            (2, "re-ask", _reask_misses,
+             "{0} selection(s) and {2} candidate print(s) dropped their \"no F2F listing\" "
+             "answer or a lettered printing's (\"59s\", \"80c\" …), {1} unpicked scan(s) "
+             "their own — asked again"),
+        )
+        for stamp, what, run, done in steps:
+            if version() >= stamp:
+                continue
+            try:
+                # IMMEDIATE + re-read: a second process opening the same file
+                # waits, then sees the stamp and does nothing.
+                self._conn.execute("BEGIN IMMEDIATE")
+                counts = (0, 0, 0)
+                if version() < stamp:
+                    counts = run(self._conn)
+                    self._conn.execute(f"PRAGMA user_version = {stamp}")
+                self._conn.commit()
+            except sqlite3.Error as exc:
+                if self._conn.in_transaction:
+                    self._conn.rollback()
+                print(f"  [store] {what} failed, retried on the next open: {exc}")
+                return
+            if any(counts):
+                print(f"  [store] {what}: " + done.format(*counts))
 
     # ── serialization helpers ──────────────────────────────────────────────────
 

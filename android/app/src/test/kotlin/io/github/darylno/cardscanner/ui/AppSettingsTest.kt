@@ -34,6 +34,18 @@ class AppSettingsTest {
         assertEquals(true, AppSettings(ctx).auto)       // …and a later start leaves it on
     }
 
+    /** "Refocus on a card" (1.1.18): every 5 min by default (provisional); only the offered choices are kept. */
+    @Test fun refocusOnACardDefaultsTo5MinAndKeepsOnlyItsChoices() {
+        prefs().edit().clear().commit()
+        val s = AppSettings(ctx)
+        assertEquals(5, s.refocusMin)
+        for (m in listOf(0, 2, 10, 30, -1)) { s.refocusMin = m; assertEquals(m, AppSettings(ctx).refocusMin) }
+        s.refocusMin = 7
+        assertEquals("not offered → the default", 5, s.refocusMin)
+        prefs().edit().putInt("refocus_min", 99).commit()
+        assertEquals("a stored value that is not offered reads as the default", 5, AppSettings(ctx).refocusMin)
+    }
+
     /** "Zoom to fit the Area" (1.1.14) ships OFF; it persists; a stored Area is untouched by it (base fractions, no migration). */
     @Test fun zoomToFitIsOffByDefaultAndTheAreaStaysAsStored() {
         prefs().edit().clear().putString("roi", "0.2,0.25,0.8,0.75").commit()

@@ -1,0 +1,36 @@
+{
+ "url": "https://facetofacegames.com/search/suggest.json?q=Hanweir%20Garrison%20130%20Eldritch%20Moon&resources%5Btype%5D=product&resources%5Blimit%5D=20&resources%5Boptions%5D%5Bunavailable_products%5D=show",
+ "body": {
+  "resources": {
+   "results": {
+    "products": [
+     {
+      "title": "Hanweir Garrison // Hanweir, the Writhing Township [130a] [B] [Eldritch Moon] [Non-Foil]",
+      "handle": "hanweir-garrison-hanweir-the-writhing-township-130a-b-eldritch-moon-non-foil",
+      "available": true
+     },
+     {
+      "title": "Hanweir Garrison // Hanweir, the Writhing Township [130a] [B] [Eldritch Moon] [Foil]",
+      "handle": "hanweir-garrison-hanweir-the-writhing-township-130a-b-eldritch-moon-foil",
+      "available": true
+     },
+     {
+      "title": "Hanweir Garrison // Hanweir, the Writhing Township [130as] [B] [Eldritch Moon Promos] [Foil]",
+      "handle": "hanweir-garrison-hanweir-the-writhing-township-130as-b-eldritch-moon-promos-foil",
+      "available": true
+     },
+     {
+      "title": "Hanweir Battlements // Hanweir, the Writhing Township [204a] [A] [Eldritch Moon] [Foil]",
+      "handle": "hanweir-battlements-hanweir-the-writhing-township-204a-a-eldritch-moon-foil",
+      "available": true
+     },
+     {
+      "title": "Hanweir Battlements // Hanweir, the Writhing Township [204as] [A] [Eldritch Moon Promos] [Foil]",
+      "handle": "hanweir-battlements-hanweir-the-writhing-township-204as-a-eldritch-moon-promos-foil",
+      "available": true
+     }
+    ]
+   }
+  }
+ }
+}
