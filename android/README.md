@@ -177,7 +177,8 @@ reopens, you tap the preview (locks where you tapped), a capture comes out far
 softer than the session's usual (bumped mount), and — Settings → Camera →
 **Refocus on a card**, every 5 min by default (provisional; every card, 2, 5,
 10, 30 min or never) — on the next card once that long has passed since the
-last focus on a card (that card waits ≤1.5 s, like the first).
+last focus on a card (that card waits for the camera's answer, ≤5.5 s; a tap
+pauses this until a new Area, a mode switch or a camera restart).
 Every focus pass, its result (focused / not / timed out) and the lens
 position go in the debug log under `focus`, and each capture line carries its
 three frames' sharpness and the chosen frame's AF state.

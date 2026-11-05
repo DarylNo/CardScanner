@@ -74,11 +74,13 @@ the empty tray. A paired computer can change it too, from 📱 Scanner.
 
 **Refocus on a card** (Settings → Camera) — in Tray mode the camera focuses on
 the first card and then holds its focus. Every 5 minutes by default (a first
-guess, to be tuned from real sessions) the next card waits up to 1.5 s while the
-camera focuses on it again, so a lens that drifts (warmth, a nudged mount, a
-thicker sleeve) gets sharp again. Choose every card, 2, 5, 10 or 30 minutes, or
-never. Tapping the live view still focuses where you tap. A paired computer can
-change it too, from 📱 Scanner.
+guess, to be tuned from real sessions) the next card waits while the camera
+focuses on it again — usually well under a second, never more than about 5 s —
+so a lens that drifts (warmth, a nudged mount, a thicker sleeve) gets sharp
+again. Choose every card, 2, 5, 10 or 30 minutes, or never. Tapping the live
+view still focuses where you tap — and keeps it there: after a tap the camera
+stops refocusing on its own until you draw a new Area, switch modes or the
+camera restarts. A paired computer can change it too, from 📱 Scanner.
 
 **Zoom to fit the Area** (Settings → Camera, off for now while it's being
 tried) zooms the camera in so your Area fills the view: more pixels on each
