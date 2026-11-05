@@ -80,6 +80,34 @@ class FocusLogTest {
             "starts a fresh one; the lens stays where it is", FocusLog.givenUpLine(3, 0))
     }
 
+    /**
+     * Re-review of 1.1.18 (L3), the owner's debug report must read true. (b) A tap paused "Refocus on a
+     * card": no periodic refocus is coming, whatever the setting — the line says paused, not "the next
+     * periodic refocus in 5 min" / "the next card starts a fresh one" (Never has nothing to pause).
+     * (a) The give-up came from this card's pass cutting off the chain's last try: that pass still runs
+     * (starting it is what cancels the one still sweeping) — the line says so before its start line,
+     * instead of "no more card passes" followed by a pass.
+     */
+    @Test fun theGiveUpLineTellsTheTruth_L3() {
+        val paused5 = "card focus failed 3 times in a row — no more card passes until a new Area, a camera re-open or the " +
+            "soft-capture watchdog — Refocus on a card (Every 5 min) is paused: you tapped to focus; the lens stays where it is"
+        assertEquals(paused5, FocusLog.givenUpLine(3, 5, paused = true))
+        assertEquals("card focus failed 3 times in a row — no more card passes until a new Area, a camera re-open or the " +
+            "soft-capture watchdog — Refocus on a card (Every card) is paused: you tapped to focus; the lens stays where it is",
+            FocusLog.givenUpLine(3, 0, paused = true))
+        assertEquals("Never: nothing to pause", FocusLog.givenUpLine(3, -1), FocusLog.givenUpLine(3, -1, paused = true))
+        val cut = "card focus failed 3 times in a row — the last try was cut off by this card's pass, which still runs " +
+            "(counted for no chain); after it, "
+        assertEquals(cut + "no more card passes until a tap, a new Area, a camera re-open, the soft-capture watchdog or the " +
+            "next periodic refocus in 5 min (Refocus on a card); the lens stays where it is", FocusLog.givenUpLine(3, 5, cutOff = true))
+        assertEquals(cut + "no more card passes until a tap, a new Area, a camera re-open or the soft-capture watchdog; the lens " +
+            "stays where it is", FocusLog.givenUpLine(3, -1, cutOff = true))
+        assertEquals(cut + "the next card starts a fresh chain (Refocus on a card is Every card)", FocusLog.givenUpLine(3, 0, cutOff = true))
+        assertEquals(cut + "no more card passes until a new Area, a camera re-open or the soft-capture watchdog — Refocus on a " +
+            "card (Every 5 min) is paused: you tapped to focus; the lens stays where it is",
+            FocusLog.givenUpLine(3, 5, paused = true, cutOff = true))
+    }
+
     @Test fun agesReadNaturally() {
         assertEquals("0.4 s", FocusLog.age(400))
         assertEquals("12 s", FocusLog.age(12_900))

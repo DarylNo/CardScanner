@@ -54,7 +54,7 @@
     <string name="settings_zoomfit">Zoom to fit the Area</string>
     <string name="settings_zoomfit_desc">Zooms the camera in so your scan Area fills the view (up to 2×, never past what the sensor resolves): more pixels on each card. Changing the zoom re-learns the empty tray. Off by default while it is tried on the rig.</string>
     <string name="settings_refocus">Refocus on a card</string>
-    <string name="settings_refocus_desc">Tray: once this long has passed since the last focus on a card, the next card waits for autofocus on it (until the camera answers, at most 5.5 s) — catches a lens that drifts (heat, a nudged mount, a thicker sleeve). Tapping the live view to focus pauses it until a new Area, a mode switch or a camera restart.</string>
+    <string name="settings_refocus_desc">Tray: once this long has passed since the last focus on a card, the next card waits for autofocus on it (until the camera answers, at most 5.5 s) — catches a lens that drifts (heat, a nudged mount, a thicker sleeve). Tapping the live view to focus pauses it until you draw a new Area or leave the scan screen (Scans, Settings) and come back.</string>
     <string name="settings_refocus_every_card">Every card</string>
     <string name="settings_refocus_every">Every %1$d min</string>
     <string name="settings_refocus_never">Never</string>

@@ -656,7 +656,19 @@ lens on testers' phones), minSdk 29, arm64-v8a.
   releases the newer hold); before, its answer was dropped uncounted, the chain
   never ended and every card was held. The pass that cut off the last try still
   runs on its card, counting for no chain (`OUTSIDE`, like a pass whose chain a
-  new Area replaced). **A periodic hold waits for the camera's answer**
+  new Area replaced) — starting it is what cancels the one still sweeping, so not
+  starting it would shoot that card mid-sweep; its log says so (re-review L3a:
+  the give-up line read "no more card passes" and the pass then logged the stale
+  "retry 3 of 3 …"): the give-up is "card focus failed 3 times in a row — the
+  last try was cut off by this card's pass, which still runs (counted for no
+  chain); after it, no more card passes until …", the pass's why (`Pass.why`,
+  fixed at its start) "the pass that cut off try 3 of 3 — the chain gave up; it
+  still focuses this card, counted for no chain". **No pass starts when none is
+  due any more** (re-review L4, a pre-existing race): the analyzer's request
+  reaches the main thread after the hold began, so a tap in between (or an older
+  pass's answer ending the chain) left `focusOnCard` to start a card pass that
+  replaced the tapped point; now `passStarted` answers null and the controller
+  releases the hold and starts nothing. **A periodic hold waits for the camera's answer**
   (`CardFocusState.Hold.PERIODIC`, the chain's retries and Every card too, via
   `ScanAnalyzer.focusHold` and `FocusRequest.hold`): ≤ `PERIODIC_FOCUS_WAIT_NS`
   5.5 s — just above CameraX's 5 s AF timeout, + the answer's hop and 3 frames —
@@ -667,14 +679,29 @@ lens on testers' phones), minSdk 29, arm64-v8a.
   their retries stay 1.5 s with the rebase, exactly as 1.1.14 (`Hold.CARD`).
   **A tap pauses it** (review of 1.1.18: a periodic pass threw the owner's tap
   lock away 5 min later): `CardFocusState.tapped` disarms the card pass and
-  pauses the periodic one until a new Area, a camera re-open or a mode switch
-  (also a zoom change or the zoom probe — they re-lock elsewhere:
-  `arm(…, resumesRefocus = true)`); the watchdog still arms its one pass on a
+  pauses the periodic one until a new Area or a camera re-open — leaving the
+  scan screen and coming back (Scans, Settings) — also a zoom change or the zoom
+  probe (they re-lock elsewhere: `arm(…, resumesRefocus = true)`). NOT a Tray ↔
+  Tap to scan switch (re-review L1: the words promised "a mode switch", but that
+  switch is `CameraController.setAuto`, which arms nothing — `setScanMode`'s arm
+  is Mount ↔ Handheld and never runs; switching to Tray on the phone asks for an
+  Area, and a drawn one is a new Area). The watchdog still arms its one pass on a
   soft capture but does not lift the pause. Logged once ("refocus paused — you
-  tapped to focus; no periodic pass until a new Area, a camera re-open or a
-  mode switch (Refocus on a card: Every 5 min)", "refocus on a card resumed —
-  first card in the new Area"); Diagnostics' `focus:` line reads "refocus
-  paused — you tapped to focus (every 5 min)". The arming state is
+  tapped to focus; no periodic pass until a new Area or a camera re-open
+  (leaving the scan screen and coming back) — Refocus on a card: Every 5 min",
+  "refocus on a card resumed — first card in the new Area"); Diagnostics'
+  `focus:` line reads "refocus paused — you tapped to focus (every 5 min)", and
+  a give-up during the pause says "… — Refocus on a card (Every 5 min) is
+  paused: you tapped to focus" instead of naming a periodic refocus that will
+  not come (re-review L3b). **Never drops an armed periodic chain** (re-review
+  L2): before, the setter only changed the interval and `holdFor` kept
+  answering PERIODIC for the chain already armed, so a pinned Never (the zoom
+  steps), a PATCH or Settings still held the next card ≤ 5.5 s, retries
+  included; now `minutes = Never` clears it (a pass of it still out ends
+  `OUTSIDE`), logged once ("periodic refocus dropped — Refocus on a card is
+  Never now: the next card shoots at once (no hold, no retry)", after the
+  change's own line); a first-card / watchdog chain and their retries are left
+  alone. The arming state is
   `core/CardFocusState` (moved out of CameraController): every call under its
   monitor, so the analysis thread's check-then-arm in `holdFor` (asked through
   `ScanAnalyzer.focusHold`, once per trigger — it may ARM) is one step against
@@ -695,8 +722,8 @@ lens on testers' phones), minSdk 29, arm64-v8a.
   said "first card:" for every hold); a change of the setting on the camera
   ("refocus on a card: Every 5 min → Every card"); the give-up names the next
   periodic refocus only when there is one (`FocusLog.givenUpLine(tries,
-  refocusMin)`: Never has none, Every card starts a fresh chain on the next
-  card). Diagnostics' `focus:` line ends "… · refocus every 5 min · last card
+  refocusMin, paused, cutOff)`: Never has none, Every card starts a fresh chain
+  on the next card, a tap's pause has none). Diagnostics' `focus:` line ends "… · refocus every 5 min · last card
   focus 3 min ago" ("none yet"; "periodic passes N"), the header line "refocus
   on a card every 5 min". Applied live like the other camera settings (the
   resume catch-up, a PATCH from the computer, deferred past a zoom probe);
@@ -704,10 +731,13 @@ lens on testers' phones), minSdk 29, arm64-v8a.
   d52's dropdown shows the phone's own list; d53's hint says a card waits for the
   camera's answer and a tap pauses it). `RefocusPolicyTest`,
   `CardFocusStateTest` (the give-up waits an interval, cut-off passes end the
-  chain, the tap's pause), `ScanAnalyzerTest` (a Tray trigger 4 min 59 s after
-  the last card focus shoots at once, at 5 min it is held; no double arm on top
-  of a new Area's pass; a periodic hold waits 4.5 s for its answer, and one
-  timing out at 5.5 s owes no rebase — a swapped card scans), `FocusLogTest`,
+  chain and the last one's why, the tap's pause, Never drops an armed periodic
+  chain only, no pass after a tap / an ended chain), `ScanAnalyzerTest` (a Tray
+  trigger 4 min 59 s after the last card focus shoots at once, at 5 min it is
+  held; no double arm on top of a new Area's pass; a periodic hold waits 4.5 s
+  for its answer, and one timing out at 5.5 s owes no rebase — a swapped card
+  scans; a tap while the request is on its way starts no pass and the card
+  shoots), `FocusLogTest` (every give-up line),
   `MeasureSessionTest` + `ScreensSmokeTest` (the zoom steps' pin, 3/4/5-field
   originals; the Settings row at the N200's size; live + on return),
   `DeviceApiTest`, `check_device_ui.py`. Tested in code, not on the phone.

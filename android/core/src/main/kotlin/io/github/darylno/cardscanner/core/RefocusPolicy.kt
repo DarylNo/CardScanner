@@ -4,7 +4,7 @@ package io.github.darylno.cardscanner.core
  * "Refocus on a card" (1.1.18, owner 2026-11-05: "Need it to focus every once in a while").
  *
  * The Tray locks the lens: a card-metered AF pass runs only for the FIRST card after a
- * bind / camera re-open / new Area / mode switch / zoom change, after the soft-capture
+ * bind / camera re-open / new Area / zoom change, after the soft-capture
  * watchdog (which a slow drift never trips — the median it compares against drifts too),
  * or on a tap. A lens that drifts (heat, a nudged mount, a thicker sleeve) stayed soft for
  * the whole session. This policy adds a pass on the next card once [minutes] have passed
@@ -16,7 +16,9 @@ package io.github.darylno.cardscanner.core
  * for its own pass), 2 / 5 / 10 / 30 minutes, [NEVER] (the first-card pass only, as before).
  * [DEFAULT] 5 min is PROVISIONAL — a judgement, not a measurement: the rig's `focus` lines
  * (how often a periodic pass moves the lens, and by how much) decide it. A tap lock pauses
- * it ([CardFocusState.tapped]) until a new Area, a camera re-open or a mode switch.
+ * it ([CardFocusState.tapped]) until a new Area or a camera re-open (leaving the scan screen and
+ * coming back) — not the Tray ↔ Tap to scan switch, which arms nothing. Setting it to Never drops
+ * a periodic pass already armed ([CardFocusState.minutes]).
  *
  * Pure (JVM-tested); [CardFocusState] holds the state the camera code asks it about.
  */
@@ -44,7 +46,7 @@ object RefocusPolicy {
      * up), on the same monotonic clock — null when neither has happened since the bind. In this
      * order: [NEVER] (any negative) → false; [EVERY_CARD] → true, whatever came before (every
      * card — a bind's first card is armed anyway, so it never asks); an interval with nothing
-     * since the bind → false (the bind / re-open / new Area / mode switch / zoom change arms the
+     * since the bind → false (the bind / re-open / new Area / zoom change arms the
      * first-card pass itself, so a periodic arm there would arm twice — it waits for that chain
      * to end); else at least [minutes] since [sinceNs]. A clock that went back is not due either.
      */

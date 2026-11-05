@@ -1176,6 +1176,11 @@ class ScreensSmokeTest {
         while (!row.isClickable) row = row.parent as View
         assertNotNull("reads Every 5 min", findText(row, "Every 5 min"))
         assertNotNull("says what it does", findText(row, a.getString(R.string.settings_refocus_desc)))
+        // Re-review of 1.1.18 (L1): the Tray ↔ Tap to scan switch never lifts a tap's pause (setAuto arms
+        // nothing) — the row must not promise it; a new Area or a camera re-open does.
+        val desc = a.getString(R.string.settings_refocus_desc)
+        assertFalse(desc, desc.contains("mode switch"))
+        assertTrue(desc, desc.contains("until you draw a new Area or leave the scan screen (Scans, Settings) and come back"))
         val scroll = generateSequence(row.parent) { it.parent }.filterIsInstance<android.widget.ScrollView>().first()
         val loc = IntArray(2); row.getLocationInWindow(loc)
         val sloc = IntArray(2); scroll.getLocationInWindow(sloc)

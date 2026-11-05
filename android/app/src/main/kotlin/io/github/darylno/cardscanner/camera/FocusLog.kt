@@ -94,16 +94,25 @@ object FocusLog {
     /**
      * The card pass failed [tries] times in a row and stops trying (until something arms a fresh
      * chain). [refocusMin] = "Refocus on a card" (core RefocusPolicy): the periodic pass is named
-     * only when there is one — Never has none, Every card starts a fresh chain on the next card.
+     * only when there is one — Never has none, Every card starts a fresh chain on the next card, and
+     * while a tap has [paused] it there is none either (re-review of 1.1.18, L3b: it promised "the
+     * next periodic refocus in 5 min" during the pause). [cutOff]: the give-up came from this card's
+     * pass cutting off the last try — that pass still runs on its card (counted for no chain; its own
+     * start line follows), so the line says "after it", never "no more card passes" before a pass (L3a).
      */
-    fun givenUpLine(tries: Int, refocusMin: Int = RefocusPolicy.NEVER): String {
-        val head = "card focus failed $tries times in a row — "
+    fun givenUpLine(tries: Int, refocusMin: Int = RefocusPolicy.NEVER, paused: Boolean = false, cutOff: Boolean = false): String {
+        val head = "card focus failed $tries times in a row — " +
+            (if (cutOff) "the last try was cut off by this card's pass, which still runs (counted for no chain); after it, " else "")
         val tail = "; the lens stays where it is"
-        return when {
-            refocusMin < 0 -> head + "no more card passes until a tap, a new Area, a camera re-open or the soft-capture watchdog" + tail
-            refocusMin == RefocusPolicy.EVERY_CARD -> head + "this chain ends; Refocus on a card is Every card, so the next card starts a fresh one" + tail
-            else -> head + "no more card passes until a tap, a new Area, a camera re-open, the soft-capture watchdog " +
-                "or the next periodic refocus in $refocusMin min (Refocus on a card)" + tail
+        return head + when {
+            refocusMin < 0 -> "no more card passes until a tap, a new Area, a camera re-open or the soft-capture watchdog$tail"
+            paused -> "no more card passes until a new Area, a camera re-open or the soft-capture watchdog — Refocus on a card " +
+                "(${RefocusPolicy.label(refocusMin)}) is paused: you tapped to focus$tail"
+            refocusMin == RefocusPolicy.EVERY_CARD ->
+                if (cutOff) "the next card starts a fresh chain (Refocus on a card is Every card)"
+                else "this chain ends; Refocus on a card is Every card, so the next card starts a fresh one$tail"
+            else -> "no more card passes until a tap, a new Area, a camera re-open, the soft-capture watchdog " +
+                "or the next periodic refocus in $refocusMin min (Refocus on a card)$tail"
         }
     }
 

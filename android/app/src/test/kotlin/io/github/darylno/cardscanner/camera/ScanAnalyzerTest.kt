@@ -193,7 +193,7 @@ class ScanAnalyzerTest {
         var now = 0L
         val focus = CardFocusState(log = { log.i("focus", it) }).apply { minutes = 5 }
         a.focusHold = { focus.holdFor(now) }
-        fun answer(ok: Boolean?) { focus.passEnded(focus.passStarted(now).pass, ok, now); a.focusDone() }   // the controller's half
+        fun answer(ok: Boolean?) { focus.passEnded(focus.passStarted(now)!!.pass, ok, now); a.focusDone() }   // the controller's half
         focus.arm("first card after the camera bind", resumesRefocus = true)   // what every bind does
         feedTo(a, tray, 12); feedTo(a, card, 12)
         assertEquals("the first card is held for its pass", 1, rec.focusRequests)
@@ -237,7 +237,7 @@ class ScanAnalyzerTest {
         var now = 0L
         val focus = CardFocusState(log = { log.i("focus", it) }).apply { minutes = 2 }
         a.focusHold = { focus.holdFor(now) }
-        fun answer(ok: Boolean?) { focus.passEnded(focus.passStarted(now).pass, ok, now); a.focusDone() }
+        fun answer(ok: Boolean?) { focus.passEnded(focus.passStarted(now)!!.pass, ok, now); a.focusDone() }
         focus.arm("first card after the camera bind", resumesRefocus = true)
         feedTo(a, tray, 12); feedTo(a, card, 12)
         answer(true); feedTo(a, card, 3)
@@ -261,7 +261,7 @@ class ScanAnalyzerTest {
         var now = 0L
         var pass: CardFocusState.Pass? = null
         /** The controller's half: a pass starts at each focus request, and ends with [ok] (a late answer too). */
-        fun start() { pass = focus.passStarted(now).pass }
+        fun start() { pass = focus.passStarted(now)!!.pass }
         fun answer(ok: Boolean?) { focus.passEnded(pass!!, ok, now); a.focusDone() }
         fun focusLines() = log.all().filter { it.tag == "focus" }.map { it.msg }
     }
@@ -337,6 +337,32 @@ class ScanAnalyzerTest {
         p.start(); p.answer(true); feedTo(p.a, printed, 3)
         assertEquals("…and scanned", 3, p.rec.bursts.size)
         assertTrue(p.rec.errors.isEmpty())
+    }
+
+    /**
+     * Re-review of 1.1.18 (L4, pre-existing race): the focus request reaches the main thread after the
+     * hold began, and the owner's tap can land in between — it disarms the card pass (the owner chose
+     * the point). The controller's half, guard included (CameraController.focusOnCard): no pass is due
+     * any more → start nothing and release the hold. Before, the pass started anyway and re-locked the
+     * lens on the card centre, throwing the tapped point away (and held the card for it).
+     */
+    @Test fun aTapWhileTheFocusRequestIsOnItsWayStartsNoCardPass_L4() {
+        val rec = Recorder()
+        val log = DebugLog(200, clock = { 0L })
+        val a = ScanAnalyzer(direct, rec, outlineFinder = boxFinder, shadowMode = false, log = log)
+        val focus = CardFocusState(log = { log.i("focus", it) }).apply { minutes = 5 }
+        a.focusHold = { focus.holdFor(0L) }
+        var passes = 0
+        fun focusOnCard() { focus.passStarted(0L)?.let { passes++ } ?: a.focusDone() }   // the controller's half
+        focus.arm("first card after the camera bind", resumesRefocus = true)
+        feedTo(a, tray, 12); feedTo(a, card, 12)
+        assertEquals("the first card is held for its pass", 1, rec.focusRequests)
+        focus.tapped()                                                // the tap lands before the request is handled
+        focusOnCard()
+        assertEquals("no card pass replaces the tapped point", 0, passes)
+        feedTo(a, card, 3)
+        assertEquals("the hold is released: the card shoots at once", 1, rec.bursts.size)
+        assertTrue(rec.errors.isEmpty())
     }
 
     // ── "is it focusing?" (1.1.14): the hold says what happened, and asks to meter the CARD ──

@@ -79,8 +79,9 @@ focuses on it again — usually well under a second, never more than about 5 s �
 so a lens that drifts (warmth, a nudged mount, a thicker sleeve) gets sharp
 again. Choose every card, 2, 5, 10 or 30 minutes, or never. Tapping the live
 view still focuses where you tap — and keeps it there: after a tap the camera
-stops refocusing on its own until you draw a new Area, switch modes or the
-camera restarts. A paired computer can change it too, from 📱 Scanner.
+stops refocusing on its own until you draw a new Area or leave the scan screen
+(Scans, Settings) and come back — switching between Tray and Tap to scan does
+not lift it. A paired computer can change it too, from 📱 Scanner.
 
 **Zoom to fit the Area** (Settings → Camera, off for now while it's being
 tried) zooms the camera in so your Area fills the view: more pixels on each

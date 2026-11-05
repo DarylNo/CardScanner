@@ -47,7 +47,7 @@ class RefocusPolicyTest {
 
     /**
      * An interval with nothing since the bind (no answer, no chain end) is NOT due: every bind /
-     * re-open / new Area / mode switch / zoom change already arms the first-card pass, so a
+     * re-open / new Area / zoom change already arms the first-card pass, so a
      * periodic arm there would arm twice — the interval waits for that chain to end (CardFocusState
      * then counts from its end, answered or not). Every card is due whatever came before.
      */

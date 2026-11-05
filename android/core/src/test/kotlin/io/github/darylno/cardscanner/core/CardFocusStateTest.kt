@@ -21,9 +21,16 @@ class CardFocusStateTest {
     private val lines = mutableListOf<String>()
     private fun state(minutes: Int = 5) = CardFocusState(log = { lines += it }).also { it.minutes = minutes }
 
+    private companion object {
+        /** L3a: the why of the pass that cut off a chain's last try. */
+        const val LAST_PASS_WHY = "the pass that cut off try 3 of 3 — the chain gave up; it still focuses this card, counted for no chain"
+        /** L2: the line when Never drops an armed periodic chain. */
+        const val NEVER_DROPPED = "periodic refocus dropped — Refocus on a card is Never now: the next card shoots at once (no hold, no retry)"
+    }
+
     /** One card pass, as the controller runs it: started at [at], ended with [ok] at [endAt]. */
     private fun CardFocusState.pass(ok: Boolean?, at: Long, endAt: Long = at): CardFocusState.End =
-        passEnded(passStarted(at).pass, ok, endAt)
+        passEnded(passStarted(at)!!.pass, ok, endAt)
 
     @Test fun nothingArmedNothingAnswered_noHold() {
         val f = state()
@@ -154,28 +161,34 @@ class CardFocusStateTest {
      * cancels it). Each cut-off pass counts as ended with no answer — a failure toward the give-up —
      * so the chain ends after three, not never (before: every card was held, forever). The cut-off
      * pass's own late end is CUT_OFF: nothing counted twice, and it must not release the newer hold.
-     * The pass that cut off the last try still runs on its card; its end counts for no chain.
+     * The pass that cut off the last try still runs on its card; its end counts for no chain, and its
+     * why says so (L3a).
      */
     @Test fun passesCutOffByTheNextCardEndTheChain_F2() {
         val f = state(5)
         f.arm("first card after the camera bind")
         assertTrue(f.holdForCard(0))
-        val p1 = f.passStarted(0)
+        val p1 = f.passStarted(0)!!
         assertNull("nothing was out", p1.cutOff)
         // 1.5 s: the hold shoots; the pass sweeps on. 3 s: the next card.
         assertTrue("the next card is held: the chain is still due", f.holdForCard(3 * s))
-        val p2 = f.passStarted(3 * s)
+        val p2 = f.passStarted(3 * s)!!
         assertEquals("pass 1 is cut off by pass 2: a failure", CardFocusState.End.RETRY, p2.cutOff)
         assertEquals("retry 2 of 3 (the last card pass was cut off by the next card)", f.why)
         assertEquals("pass 1's own (cancelled) end comes later: already counted", CardFocusState.End.CUT_OFF,
             f.passEnded(p1.pass, null, 3 * s + 1))
         assertTrue(f.holdForCard(6 * s))
-        val p3 = f.passStarted(6 * s)
+        val p3 = f.passStarted(6 * s)!!
         assertEquals(CardFocusState.End.RETRY, p3.cutOff)
         assertTrue(f.holdForCard(9 * s))
-        val p4 = f.passStarted(9 * s)
+        val p4 = f.passStarted(9 * s)!!
         assertEquals("the third cut-off gives up", CardFocusState.End.GAVE_UP, p4.cutOff)
         assertFalse(f.isDue)
+        // Re-review of 1.1.18 (L3a): pass 4 still runs on its card (starting it is what cancels pass 3, still
+        // sweeping) — its why says what it is, not the stale "retry 3 of 3 …" of the chain it ended.
+        assertEquals(LAST_PASS_WHY, f.why)
+        assertEquals("the pass carries its own why (the controller logs it)", LAST_PASS_WHY, p4.pass.why)
+        assertEquals("retry 2 of 3 (the last card pass was cut off by the next card)", p2.pass.why)
         assertFalse("the chain is over: the next card shoots at once", f.holdForCard(12 * s))
         assertEquals(CardFocusState.End.CUT_OFF, f.passEnded(p3.pass, null, 9 * s + 1))
         // Pass 4 (it cut off the last try) answers at last — NOT focused after CameraX's 5 s: a plain answer.
@@ -189,7 +202,7 @@ class CardFocusStateTest {
     @Test fun aPassOfAnOlderChainCountsForNoChain() {
         val f = state(5)
         f.arm("first card after the camera bind")
-        val p = f.passStarted(0).pass
+        val p = f.passStarted(0)!!.pass
         f.arm("first card in the new Area", resumesRefocus = true)
         assertEquals(CardFocusState.End.OUTSIDE, f.passEnded(p, false, 2 * s))
         assertTrue("the new Area's pass is still due", f.isDue)
@@ -200,11 +213,13 @@ class CardFocusStateTest {
     /**
      * Review of 1.1.18 (F4): a tap lock is the owner's focus point. It disarms the card pass AND pauses
      * "Refocus on a card" — before, it only restarted the interval, so 5 min later a periodic pass threw
-     * the tap away. The pause holds until a new Area, a camera re-open or a mode switch (the arms that
-     * re-lock elsewhere, `resumesRefocus`); the watchdog still arms its one pass on a soft capture but
+     * the tap away. The pause holds until a new Area or a camera re-open — leaving the scan screen and
+     * coming back (the arms that re-lock elsewhere, `resumesRefocus`; a zoom change and the probe too).
+     * NOT a Tray ↔ Tap to scan switch (re-review L1: that is CameraController.setAuto, which arms
+     * nothing — the words promised it). The watchdog still arms its one pass on a soft capture but
      * does not lift it. Logged once per pause; Diagnostics says so.
      */
-    @Test fun aTapPausesRefocusUntilANewAreaAReOpenOrAModeSwitch_F4() {
+    @Test fun aTapPausesRefocusUntilANewAreaOrACameraReOpen_F4() {
         val f = state(5)
         f.arm("first card after the camera bind", resumesRefocus = true)
         f.pass(true, 0)
@@ -217,7 +232,8 @@ class CardFocusStateTest {
         assertFalse("a second tap: no second line", f.tapped())
         val paused = lines.filter { it.startsWith("refocus paused — you tapped to focus") }
         assertEquals("logged once: $lines", 1, paused.size)
-        assertTrue(paused[0], paused[0].contains("until a new Area, a camera re-open or a mode switch (Refocus on a card: Every 5 min)"))
+        assertEquals("refocus paused — you tapped to focus; no periodic pass until a new Area or a camera re-open " +
+            "(leaving the scan screen and coming back) — Refocus on a card: Every 5 min", paused[0])
         assertEquals("refocus paused — you tapped to focus (every 5 min) · last card focus 9 min ago", f.describe(10 * min))
         // The watchdog's one pass still runs on a soft capture — and the pause stays.
         f.arm("watchdog: a soft capture")
@@ -238,6 +254,86 @@ class CardFocusStateTest {
         assertFalse(f.holdForCard(706 * min))
         assertEquals(CardFocusState.Hold.PERIODIC, f.holdFor(707 * min))
         assertEquals("refocus every 5 min · last card focus 5 min ago", f.describe(707 * min))
+    }
+
+    /**
+     * Re-review of 1.1.18 (L2): switching "Refocus on a card" to Never drops a PERIODIC chain already
+     * armed — before, the setter only changed the interval and holdFor kept answering PERIODIC for the
+     * armed chain, so a pinned Never (the zoom steps), a PATCH or Settings still held the next card up
+     * to 5.5 s, retries included. Logged once.
+     */
+    @Test fun settingNeverDropsAnArmedPeriodicChain_L2() {
+        val f = state(5)
+        f.arm("first card after the camera bind")
+        f.pass(true, 0)
+        assertEquals(CardFocusState.Hold.PERIODIC, f.holdFor(6 * min))
+        assertEquals("the periodic pass fails: a retry is owed", CardFocusState.End.RETRY, f.pass(false, 6 * min, 6 * min + 5 * s))
+        assertEquals(CardFocusState.Hold.PERIODIC, f.holdFor(6 * min + 10 * s))
+        lines.clear()
+        f.minutes = RefocusPolicy.NEVER
+        assertFalse("Never: the armed periodic chain is dropped", f.isDue)
+        assertNull("the next card shoots at once", f.holdFor(6 * min + 11 * s))
+        assertNull(f.holdFor(600 * min))
+        assertEquals(listOf(NEVER_DROPPED), lines)
+        f.minutes = RefocusPolicy.NEVER
+        assertEquals("nothing armed: no second line", 1, lines.size)
+    }
+
+    /** L2: a pass of the dropped chain still out ends OUTSIDE — counted for no chain; its answer still moves the clock. */
+    @Test fun settingNeverMidPassCountsThatPassForNoChain_L2() {
+        val f = state(RefocusPolicy.EVERY_CARD)
+        f.arm("first card after the camera bind")
+        f.pass(true, 0)
+        assertEquals(CardFocusState.Hold.PERIODIC, f.holdFor(10 * s))
+        val p = f.passStarted(10 * s)!!.pass
+        f.minutes = RefocusPolicy.NEVER
+        assertFalse("Never: the chain is dropped mid-pass", f.isDue)
+        assertEquals("its chain is over", CardFocusState.End.OUTSIDE, f.passEnded(p, false, 15 * s))
+        assertEquals("an answer still moves the clock", 15 * s, f.lastCardFocusNs)
+        assertNull(f.holdFor(20 * s))
+    }
+
+    /** L2: Never leaves a chain of another kind alone — the first card after a bind / new Area, the watchdog, their retries. */
+    @Test fun settingNeverLeavesAFirstCardOrWatchdogChainAlone_L2() {
+        val f = state(5)
+        f.arm("first card in the new Area", resumesRefocus = true)
+        f.minutes = RefocusPolicy.NEVER
+        assertTrue("Never still focuses the first card", f.isDue)
+        assertEquals(CardFocusState.Hold.CARD, f.holdFor(0))
+        assertEquals(CardFocusState.End.RETRY, f.pass(false, 0))
+        f.minutes = 5
+        f.minutes = RefocusPolicy.NEVER
+        assertTrue("…and its retry", f.isDue)
+        assertEquals(CardFocusState.End.FOCUSED, f.pass(true, 1 * s))
+        f.arm("watchdog: a soft capture")
+        f.minutes = 10
+        f.minutes = RefocusPolicy.NEVER
+        assertEquals(CardFocusState.Hold.CARD, f.holdFor(2 * s))
+        assertTrue(lines.toString(), lines.none { it == NEVER_DROPPED })
+    }
+
+    /**
+     * Re-review of 1.1.18 (L4, pre-existing): the analyzer's focus request reaches the main thread
+     * after the hold began. A tap in between disarms the pass (the owner's lock) — and the request
+     * must then start NO card pass, or it would replace the tapped point; nor after an older pass's
+     * answer ended the chain meanwhile. passStarted says so (null: none due); the controller then
+     * releases the hold and starts nothing.
+     */
+    @Test fun aPassAskedForAfterATapOrAnEndedChainStartsNothing_L4() {
+        val f = state(5)
+        f.arm("first card after the camera bind", resumesRefocus = true)
+        assertEquals(CardFocusState.Hold.CARD, f.holdFor(0))
+        f.tapped()                                                    // the owner taps before the request is handled
+        assertNull("no card pass after a tap", f.passStarted(1 * s))
+        assertFalse(f.isDue)
+        // An older pass answers while the next card's request is on its way.
+        f.arm("first card in the new Area", resumesRefocus = true)
+        assertEquals(CardFocusState.Hold.CARD, f.holdFor(2 * s))
+        val p1 = f.passStarted(2 * s)!!.pass                          // card 1's pass; its 1.5 s hold shoots without it
+        assertEquals(CardFocusState.Hold.CARD, f.holdFor(5 * s))       // card 2: still due, held
+        assertEquals(CardFocusState.End.FOCUSED, f.passEnded(p1, true, 5 * s + 1))   // pass 1 answers first
+        assertNull("the chain is over: card 2's request starts nothing", f.passStarted(5 * s + 2))
+        assertEquals("nothing was cut off: pass 1 already ended", 5 * s + 1, f.lastCardFocusNs)
     }
 
     @Test fun aFreshBindForgetsTheLastCardFocus() {

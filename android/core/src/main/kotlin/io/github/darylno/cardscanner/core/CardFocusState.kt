@@ -9,19 +9,26 @@ package io.github.darylno.cardscanner.core
  * a tap — that ANSWERED ([lastCardFocusNs]) and the end of the last chain.
  *
  * Who calls what:
- * - [arm] — the camera code, for the first card after a bind / camera re-open / new Area /
- *   mode switch / zoom change / the zoom probe (`resumesRefocus`: each also lifts a tap's
- *   pause), and the soft-capture watchdog (it does not) — each starts a fresh chain;
- *   [disarm] — leaving Mount; [tapped] — a tap lock in Tray: the owner chose the focus point,
- *   so no card pass and no periodic refocus until one of the resuming arms (logged once).
+ * - [arm] — the camera code, for the first card after a bind / camera re-open (leaving the scan
+ *   screen and coming back) / new Area / zoom change / the zoom probe (`resumesRefocus`: each also
+ *   lifts a tap's pause), and the soft-capture watchdog (it does not) — each starts a fresh chain.
+ *   The Tray ↔ Tap to scan switch arms nothing (CameraController.setAuto); switching to Tray on
+ *   the phone asks for an Area, and a drawn one is a new Area. [disarm] — leaving Mount;
+ *   [tapped] — a tap lock: the owner chose the focus point, so no card pass and no periodic
+ *   refocus until one of the resuming arms (logged once); [minutes] = Never drops a periodic chain
+ *   already armed (logged once).
  * - [holdFor] — the ANALYSIS thread at every Tray trigger: hold this capture for a pass, and
  *   how ([Hold])? An armed pass → its chain's kind. Else, when the policy says a periodic pass
  *   is due (and no tap paused it), it arms one (logging ONE line) → [Hold.PERIODIC]. Never
  *   arms on top of an armed pass.
- * - [passStarted] / [passEnded] — the main thread, around each card pass. A pass still out
+ * - [passStarted] / [passEnded] — the main thread, around each card pass. No pass due any more
+ *   when the analyzer's request arrives (a tap since, an older pass's answer ended the chain) →
+ *   null: nothing starts, the caller releases the hold. A pass still out
  *   when the next one starts is CUT OFF by it (CameraX cancels it): it counts as ended with
  *   no answer — a failure toward the chain's give-up — and its own late end is [End.CUT_OFF]
- *   (nothing counted twice; it must not release the newer pass's hold). An answer (focused or
+ *   (nothing counted twice; it must not release the newer pass's hold). The pass whose start
+ *   cut off a chain's LAST try still runs on its card (starting it is what cancels the one still
+ *   sweeping), counted for no chain, and its [Pass.why] says so. An answer (focused or
  *   NOT focused — a lens that will not converge is then not asked again on every card) moves
  *   [lastCardFocusNs]; no answer (cancelled, cut off, an error) does not. A chain END (focused
  *   or given up) restarts the interval too, so a chain that never answers waits an interval
@@ -46,15 +53,15 @@ class CardFocusState(private val tries: Int = TRIES, private val log: (String) -
 
     /**
      * How long a held Tray trigger waits for its pass. [CARD]: the first card after a bind /
-     * re-open / new Area / mode switch / zoom change / the probe, the watchdog's pass and their
+     * re-open / new Area / zoom change / the probe, the watchdog's pass and their
      * retries — the 1.1.14 hold, unchanged. [PERIODIC]: a "Refocus on a card" chain (Every
      * card included), its retries too — it waits for the camera's answer (the analyzer's cap is
      * just above CameraX's own 5 s AF timeout), so a periodic pass never shoots mid-sweep.
      */
     enum class Hold { CARD, PERIODIC }
 
-    /** A card pass under way: handed out by [passStarted], given back to [passEnded]. */
-    class Pass internal constructor(val number: Int, internal val chain: Int)
+    /** A card pass under way: handed out by [passStarted], given back to [passEnded]. [why] = the focus log's words for it, fixed at its start. */
+    class Pass internal constructor(val number: Int, internal val chain: Int, val why: String)
 
     /** [passStarted]'s answer: the new [pass], and how the pass it cut off ended ([cutOff]; null = none was out). */
     class Started(val pass: Pass, val cutOff: End?)
@@ -74,10 +81,24 @@ class CardFocusState(private val tries: Int = TRIES, private val log: (String) -
     private var interval = RefocusPolicy.DEFAULT
     private var periodicArms = 0
 
-    /** "Refocus on a card" in minutes ([RefocusPolicy]; normalized: a value not offered reads as the default). */
+    /**
+     * "Refocus on a card" in minutes ([RefocusPolicy]; normalized: a value not offered reads as the default).
+     * Never drops a PERIODIC chain already armed — its hold and its retries (re-review of 1.1.18: the
+     * setter only changed the interval, so a pinned Never, a PATCH or Settings still held the next card
+     * up to 5.5 s); a pass of it still out then ends [End.OUTSIDE]. A chain of another kind (first card,
+     * watchdog, their retries) is left alone. Logged once, after the monitor is released.
+     */
     var minutes: Int
         @Synchronized get() = interval
-        @Synchronized set(v) { interval = RefocusPolicy.normalize(v) }
+        set(v) {
+            val dropped: Boolean
+            synchronized(this) {
+                interval = RefocusPolicy.normalize(v)
+                dropped = interval == RefocusPolicy.NEVER && due && chainPeriodic
+                if (dropped) due = false
+            }
+            if (dropped) runCatching { log(NEVER_DROPPED_LINE) }
+        }
 
     /** The next card waits for a pass on it. */
     val isDue: Boolean @Synchronized get() = due
@@ -87,7 +108,7 @@ class CardFocusState(private val tries: Int = TRIES, private val log: (String) -
     val lastCardFocusNs: Long? @Synchronized get() = lastAnsweredNs
     /** When the last chain ended (focused or gave up); null = none since the bind. */
     val lastChainEndNs: Long? @Synchronized get() = chainEndedNs
-    /** A tap paused "Refocus on a card" (until a new Area, a camera re-open or a mode switch). */
+    /** A tap paused "Refocus on a card" (until a new Area or a camera re-open). */
     val isPaused: Boolean @Synchronized get() = paused
     /** Periodic passes armed since this object was made (Diagnostics). */
     val periodic: Int @Synchronized get() = periodicArms
@@ -95,8 +116,8 @@ class CardFocusState(private val tries: Int = TRIES, private val log: (String) -
     /**
      * The next card gets a pass ([why] goes in the focus log): a fresh chain — the failure count
      * starts again — held as [Hold.CARD]. [resumesRefocus]: the first-card arms (bind / re-open /
-     * new Area / mode switch / zoom change / the probe — each re-locks somewhere else, so the
-     * tap's point is gone) lift a tap's pause, logged once; the watchdog's arm does not. Any thread.
+     * new Area / zoom change / the probe — each re-locks somewhere else, so the tap's point is
+     * gone) lift a tap's pause, logged once; the watchdog's arm does not. Any thread.
      */
     fun arm(why: String, resumesRefocus: Boolean = false) {
         val resumed: Boolean
@@ -112,9 +133,10 @@ class CardFocusState(private val tries: Int = TRIES, private val log: (String) -
     @Synchronized fun disarm() { due = false }
 
     /**
-     * A tap lock in Tray: the owner chose the focus point — no card pass, and "Refocus on a card"
-     * pauses until a new Area, a camera re-open, a mode switch (or a zoom change / the zoom probe,
-     * which re-lock elsewhere anyway). The watchdog still arms its one pass on a soft capture.
+     * A tap lock: the owner chose the focus point — no card pass, and "Refocus on a card" pauses
+     * until a new Area or a camera re-open — leaving the scan screen and coming back (or a zoom
+     * change / the zoom probe, which re-lock elsewhere anyway). Not the Tray ↔ Tap to scan switch:
+     * that arms nothing. The watchdog still arms its one pass on a soft capture.
      * Logged once per pause; true when this tap began it.
      */
     fun tapped(): Boolean {
@@ -127,8 +149,8 @@ class CardFocusState(private val tries: Int = TRIES, private val log: (String) -
             label = RefocusPolicy.label(interval)
         }
         if (began) runCatching {
-            log("refocus paused — you tapped to focus; no periodic pass until a new Area, a camera re-open or a mode switch " +
-                "(Refocus on a card: $label)")
+            log("refocus paused — you tapped to focus; no periodic pass until a new Area or a camera re-open " +
+                "(leaving the scan screen and coming back) — Refocus on a card: $label")
         }
         return began
     }
@@ -165,14 +187,22 @@ class CardFocusState(private val tries: Int = TRIES, private val log: (String) -
     fun holdForCard(nowNs: Long): Boolean = holdFor(nowNs) != null
 
     /**
-     * The main thread, as a card pass starts at [nowNs]: its [Pass]. A pass still out is CUT
+     * The main thread, as a card pass starts at [nowNs]: its [Pass] — or null when no pass is due
+     * any more (re-review of 1.1.18, L4: a tap disarmed it, or an older pass's answer ended the
+     * chain, while the analyzer's request was on its way): the caller starts nothing — a card pass
+     * must never replace the tapped point — and releases the hold. A pass still out is CUT
      * OFF by this one (CameraX cancels it): it ends here with no answer — a failure toward the
      * give-up ([Started.cutOff] says how its chain took it) — so passes cut off card after card
-     * (a lens slower than the hold) still end their chain.
+     * (a lens slower than the hold) still end their chain. When that cut-off GAVE UP the chain,
+     * this pass still runs on its card (starting it is what cancels the one still sweeping; not
+     * starting it would shoot this card mid-sweep), counts for no chain ([End.OUTSIDE]), and its
+     * [Pass.why] says so (L3a: it logged the stale "retry 3 of 3 …").
      */
-    @Synchronized fun passStarted(nowNs: Long): Started {
+    @Synchronized fun passStarted(nowNs: Long): Started? {
+        if (!due) return null
         val cut = out?.let { endLocked(it, null, nowNs, cutOff = true) }
-        val p = Pass(++passes, chain)
+        if (cut == End.GAVE_UP) whyNow = "the pass that cut off try $tries of $tries — the chain gave up; it still focuses this card, counted for no chain"
+        val p = Pass(++passes, chain, whyNow)
         out = p
         return Started(p, cut)
     }
@@ -217,5 +247,8 @@ class CardFocusState(private val tries: Int = TRIES, private val log: (String) -
     companion object {
         /** A card focus that fails is retried on the next card, this many passes in all. */
         const val TRIES = 3
+        /** [minutes] set to Never with a periodic chain armed. */
+        const val NEVER_DROPPED_LINE =
+            "periodic refocus dropped — Refocus on a card is Never now: the next card shoots at once (no hold, no retry)"
     }
 }
