@@ -189,16 +189,26 @@ On the same Wi-Fi, or the phone's hotspot:
 - **Admin:** Settings → *This phone's server* → **Pair a computer as admin**
   shows a QR and a one-time 8-digit code (10 minutes). Open the link on the
   computer. That browser is remembered as admin until **Forget paired
-  computers**: it can review, pick, delete, clear, **export** (the CSV
+  computers**: it can review, pick, delete (a 🗑 on each row of the list —
+  the row goes at once and **Undo** brings it back for 5 seconds), clear, **export** (the CSV
   column builder, or TXT in Mana Exchange's mass-entry format) and change the
   phone's scanner settings (**📱 Scanner**: mode, scan Area drawn on a live
   picture of the tray, camera, torch, resolution, exposure lock, vibration, check
   mark time, Zoom to fit, Refocus on a card). Above the picture, **Whole frame** is where you draw
   the Area; **Camera view** shows what the camera really sees, zoomed and at
   full detail — the place to judge focus.
-- **Guests:** the **Share** screen shows a 6-digit code. Guests can review,
-  pick, edit and **flag** cards for deletion; the admin sees "Delete flagged".
-  **New guest code** ends every guest session.
+- **Guests:** the **Share** screen shows a 6-digit code. Settings → *This
+  phone's server* → **Guests get full access** (on by default) decides what
+  that code gives:
+  - **on** — a guest can do everything the admin can: delete scans for good
+    (the phone holds the only copy — there is no backup), clear, export, run
+    pricing and change the scanner's settings. Share the code only with people
+    you trust.
+  - **off** — a guest can review, pick, edit and **flag** cards for deletion;
+    the admin sees "Delete flagged".
+
+  The switch applies at once, to guests already connected too. **New guest
+  code** ends every guest session.
 
 The connection on your network is plain HTTP — pair on a network you trust.
 The phone's server stops by itself after 30 minutes with the app in the

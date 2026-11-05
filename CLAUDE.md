@@ -965,6 +965,25 @@ lens on testers' phones), minSdk 29, arm64-v8a.
   the page reports its pending ids to `CardScannerApp.pendingDeletes` and
   `PanelActivity.onPause` deletes them itself (`PhoneServer.deleteScansAsOwner`)
   — without that, swiped scans came back.
+- **The desktop list deletes per row too, with the same 5 s Undo (owner,
+  2026-11-05: "I want delete options here in the list"; desktop d54).** A 🗑
+  on each scan row (`.rdel`, `admin-only` and rendered for `role === "admin"`
+  only — a restricted guest never sees it): shown on hover or keyboard focus
+  (opacity, so it stays in the tab order), always on a touch screen
+  (`hover: none`); its click stops propagation and the row handler ignores
+  `[data-del]`, so it never opens the row. phone.html's swipe, ported: the row
+  leaves the list at once (`liveScans()` — `visibleScans`, the stats and the
+  clear counts all read it, so the row signature drops it with no new field),
+  an Undo bar over the list column ("Scan deleted" / "N scans deleted") holds
+  the DELETE for `UNDO_MS` 5000; several can wait, Undo restores every one
+  still waiting; `pagehide` / a hidden tab send what waits (`keepalive`);
+  "Clear …" sends it first. Deleting the card open on the right clears the
+  pane. A SENT id stays hidden until a poll STARTED after its DELETE answered
+  is applied (`settleDeletes`; `poll` now drops an answer older than the newest
+  applied), so no in-flight poll flashes it back; a refused DELETE (403 — full
+  access turned off meanwhile) shows the row again with a toast.
+  `scripts/check_row_delete_ui.py` drives it in Chromium (admin, touch, a
+  refused delete, a restricted guest); `test_static_pages.py` guards it in CI.
 - **The live log** (`core/DebugLog.global`, a 3000-line ring, mirrored to
   logcat as `CardScanner`): triggers (box, mask %), captures (`done #k`:
   flattened or not, card px, the three frames' sharpness, the chosen frame's
@@ -1233,17 +1252,37 @@ lens on testers' phones), minSdk 29, arm64-v8a.
 - **Roles.** A computer pairs as ADMIN with a one-time 8-digit code (10 min,
   single use, its own budget of 10 wrong tries, retired by a guest-code
   rotation) → a long-lived `cs_admin` cookie (only its SHA-256 on disk;
-  "Forget paired computers" revokes). The 6-digit Share code makes a GUEST:
-  review/pick/edit/flag — no delete, clear, export, PATCH `included`, sweep
-  controls or `/api/device` (`ScanServer.adminOnly`, 403). The gateway sets
+  "Forget paired computers" revokes). The phone's own review screen is admin
+  via `AdminPairing.ownerToken` (in memory, never persisted or counted,
+  untouched by Forget). The 6-digit Share code's role is a SETTING —
+  **"Guests get full access"** (Settings → This phone's server,
+  `AppSettings.guestsFullAccess`, **ON by default**; owner, 2026-11-05, a
+  screenshot of the desktop page with the "guest" pill and no delete: "I want
+  delete options here in the list. Any guest to the web site to pick cards has
+  full admin access"; 1.1.19): ON, a Share-code session is proxied as ADMIN —
+  delete, clear, export, PATCH `included`, the sweep, `/api/device`, the app
+  log; OFF, it is a GUEST: review/pick/edit/flag, refused (403) the rest
+  (`ScanServer.adminOnly`). `GatewayServer.roleOf` asks the setting on EVERY
+  request (a provider from `PhoneServer.newServer`; a throwing one = off), so
+  a flip reaches sessions already open at once — no re-join; a page loaded
+  under the old answer keeps its controls until reloaded, and the server
+  refuses what it may no longer do (the desktop row delete puts the row back
+  with a toast). A flip is logged once under `server` (never a code); Settings
+  says plainly what ON gives away (delete is for good — the phone holds the
+  only copy), the Share screen's amber card follows the setting, and
+  Diagnostics has a `guests (Share code):` line. The setting never opens the
+  door: no session = the code page, as before. The gateway sets
   `x-cardscanner-role` on every proxied request and DROPS a client's own (no
-  header = guest, fail closed). The phone's own review screen is admin via
-  `AdminPairing.ownerToken` (in memory, never persisted or counted, untouched
-  by Forget). Pages start as guest (`<body class="guest">`) until `/api/me`
-  answers; a guest's swipe flags, the admin gets "Delete flagged (n)" (only
-  the ids it confirmed). The gateway answers LAN/hotspot peers only (socket
-  address, not headers), locks an IP after 7 bad codes, and rotates the code
-  after 20 bad codes from anywhere in 5 min.
+  header = guest, fail closed). Pages start as guest (`<body class="guest">`)
+  until `/api/me` answers; a guest's swipe flags, the admin gets "Delete
+  flagged (n)" (only the ids it confirmed). The gateway answers LAN/hotspot
+  peers only (socket address, not headers), locks an IP at its 8th bad code in
+  5 min (for 5 min), and rotates the code after 20 bad codes from anywhere in
+  5 min. Tested: `GatewayServerTest` (the role header per request, flipped
+  live, a client's own dropped, no cookie refused), `PhoneServerTest` (end to
+  end on the real API), `AppSettingsTest`, `ScreensSmokeTest` (the switch row
+  at the N200's size, the log line, the live provider, Diagnostics, the Share
+  card) — not on the phone.
 - **Scanner settings from the browser** (`core/server/DeviceApi`, admin only):
   GET/PATCH `/api/device` (mode, roi, torch, vibration, high_res, ae_lock,
   check_ms, camera — with the phone's `cameras` listed — zoom_fit, with the
@@ -1305,7 +1344,7 @@ lens on testers' phones), minSdk 29, arm64-v8a.
   verify each finding before fixing, add a test that fails without the fix.
 - Decisions that stand: export is "Export to CSV" (column builder) +
   "Download TXT" — no Mana Exchange branding in the UI; swipe a scan row to
-  delete (5 s Undo); cards/min + battery estimate on the scan screen. The
+  delete (5 s Undo; on the desktop the row's 🗑, same Undo); cards/min + battery estimate on the scan screen. The
   ManaExchange store is the owner's own project (`DarylNo/v0-ManaExchange`);
   an MX-inventory integration was built and REVERTED — ask before rebuilding.
 

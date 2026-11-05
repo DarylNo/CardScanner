@@ -62,7 +62,7 @@ Modules and packages (`io.github.darylno.cardscanner`):
 | `app/phoneserver` | `PhoneServer` (the phone's server: `SqliteScanStore`, `PhotoDir`, `PhoneBackend` over `:core`'s `PhoneApi`/`PriceSweep`/`Export`/`DeviceApi`), `LocalScanUploader`, `LocalUpstream`, `PhoneF2f`, `DeviceBridge`. |
 | `app/gateway` | `GatewayServer` (NanoHTTPD, roles: `AdminPairing`), `JoinCode`, `LocalAddresses`, `GatewayService` (foreground service that keeps the phone serving), `QrBitmap`. |
 | `app/f2f` | `F2fFetcher` (port of `facetoface._default_get_json` pacing/retry, parity-tested against `app/src/test/resources/f2f/pacing.json`), `F2fPricer` (query ladder + SKU confirmation), `F2fCache`, `OkHttpTransport` / `CronetTransport`, `F2fProbe` (the network test). |
-| `app/ui` | `MainActivity`, `OverlayView`, `PanelActivity` (review WebView of the phone's own pages), `ShareActivity` (guest code), `SettingsActivity` + `ServerSection` (this phone's server: pair a computer, card database, storage), `AppSettings`. |
+| `app/ui` | `MainActivity`, `OverlayView`, `PanelActivity` (review WebView of the phone's own pages), `ShareActivity` (guest code), `SettingsActivity` + `ServerSection` (this phone's server: pair a computer, Guests get full access, card database, storage), `AppSettings`. |
 
 Rules the app keeps (see also CLAUDE.md → "Android app"):
 
@@ -239,12 +239,20 @@ the same network could copy the admin cookie.
 ## Guests (Share)
 
 **Share** shows the **6-digit guest code**, a QR and the phone's addresses.
-Guests on the same Wi-Fi (or your hotspot) open the link and enter the code:
-they can review, pick and edit, and a swipe **flags** a scan for deletion — the
-admin confirms with **Delete flagged (n)**. They can't delete, clear, export
-or run pricing (the phone refuses them, not just the page). **New guest code**
-ends every guest session; the server keeps running. 8 wrong codes from one
-device within 5 minutes lock it out for 5 minutes.
+Guests on the same Wi-Fi (or your hotspot) open the link and enter the code.
+What they may do is Settings → *This phone's server* → **Guests get full
+access** (on by default; it applies at once, to guests already connected too):
+
+- **On:** a guest is treated like the paired computer — delete (a swipe on the
+  phone page, the 🗑 on a row of the computer page, both with a 5 s Undo),
+  clear, export, run pricing and change the scanner's settings. Deleting is for
+  good: the phone holds the only copy of the scans. The Share screen says so.
+- **Off:** a guest can review, pick and edit, and a swipe **flags** a scan for
+  deletion — the admin confirms with **Delete flagged (n)**. They can't delete,
+  clear, export or run pricing (the phone refuses them, not just the page).
+
+**New guest code** ends every guest session; the server keeps running. 8 wrong
+codes from one device within 5 minutes lock it out for 5 minutes.
 
 ## Signing setup
 
@@ -358,9 +366,14 @@ Run on the Nord N200 after installing a new build:
 - [ ] Force-stop the app with jobs queued → relaunch → they are identified.
 - [ ] Settings → Pair a computer as admin → the computer opens the list and
       can export CSV; 📱 Scanner changes the phone's torch/mode live.
-- [ ] Share: a second phone joins via QR and via typed code as a guest (can
-      flag, can't delete); wrong code 8× → locked out; New guest code → the
-      guest is signed out and the old code fails, the computer stays in.
+- [ ] Share: a second phone joins via QR and via typed code as a guest — with
+      Guests get full access on it can delete (swipe, 5 s Undo); turned off in
+      Settings, its next delete is refused with no re-join (a reload shows the
+      guest page, where a swipe flags); wrong code 8×
+      → locked out; New guest code → the guest is signed out and the old code
+      fails, the computer stays in.
+- [ ] The computer's list: 🗑 on a row (hover) → the row goes, Undo brings it
+      back; left alone 5 s the scan is gone from the phone too.
 - [ ] Screen off for 10 minutes: the computer and guests still get through.
 - [ ] Settings → Diagnostics shows the camera setting, every offered lens,
       the bound camera, hardware level, analysis size and capture timings;
@@ -389,4 +402,5 @@ Run on the Nord N200 after installing a new build:
   to Face): offline captures wait in the queue and are identified when the
   phone is back online.
 - The local network leg (a computer, guests) is plain HTTP: pair a computer only
-  on a network you trust. Guests can review and flag, not delete (see above).
+  on a network you trust. With Guests get full access on (the default) the
+  Share code can delete and export too (see above).
