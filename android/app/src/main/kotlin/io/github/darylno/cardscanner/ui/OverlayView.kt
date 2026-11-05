@@ -47,6 +47,17 @@ import kotlin.math.min
  * dropped) — and only without one is the card-shaped WATCH window drawn as a
  * grey dashed outline (the mask rectangle without either). [plan] is the pure
  * decision of what to draw, so a test can assert it without a Canvas.
+ *
+ * The aimer (owner, 2026-11-05: "if in zoom mode I want a aimer for card
+ * centre"; 1.1.19): with [aimer] on (MainActivity: Zoom to fit on and not
+ * drawing an Area) a white crosshair over a dark halo marks the centre of the
+ * Area drawn here — the VIEW Area, so the zoomed one — or the frame centre
+ * with no Area: CameraX zooms about the frame centre, so a card centred in the
+ * Area is what the zoom is built around. A small dot in the shape's colour
+ * marks the drawn card's own centre (the mean of its corners; solid shapes
+ * only, never the dashed watch window) so the two can be lined up. Both hide
+ * while an Area is drawn and under any capture ✓ (it sits at the card's
+ * centre). Display only: nothing reaches detection, focus or the logs.
  */
 class OverlayView @JvmOverloads constructor(
     context: Context, attrs: AttributeSet? = null,
@@ -58,8 +69,13 @@ class OverlayView @JvmOverloads constructor(
      * What the card layer shows: [shape] = 8 frame fractions TL,TR,BR,BL (null =
      * no shape), in [state]'s colour, [dashed] for the watch window, [check] = the
      * ✓ and fill, [badge] = the centre ✓ badge (a capture with no shape at all).
+     * [aim] = the aimer's crosshair, [cardCentre] = its dot on the drawn card, both
+     * [x, y] frame fractions or null (see [aimer]).
      */
-    class Plan(val shape: FloatArray?, val state: BoxState, val dashed: Boolean, val check: Boolean, val badge: Boolean)
+    class Plan(
+        val shape: FloatArray?, val state: BoxState, val dashed: Boolean, val check: Boolean, val badge: Boolean,
+        val aim: FloatArray? = null, val cardCentre: FloatArray? = null,
+    )
 
     /** Upright analysis frame size (aspect drives the letterbox); 3:4 portrait until known. */
     var frameW = 1200
@@ -83,6 +99,11 @@ class OverlayView @JvmOverloads constructor(
     var settingArea = false
         set(v) {
             field = v; dragA = null; dragB = null; invalidate()
+        }
+    /** The card-centre aimer (Zoom to fit on, not drawing — MainActivity decides): see the class doc. */
+    var aimer = false
+        set(v) {
+            if (field != v) { field = v; invalidate() }
         }
     private var dragA: Pair<Float, Float>? = null
     private var dragB: Pair<Float, Float>? = null
@@ -115,6 +136,18 @@ class OverlayView @JvmOverloads constructor(
     private val path = Path()
     private val checkPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.WHITE; textSize = 40 * density; textAlign = Paint.Align.CENTER
+    }
+    /** The aimer: white 2 dp arms over a dark 4 dp halo (reads on a white or a dark tray). */
+    private val aimPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE; strokeWidth = 2 * density; strokeCap = Paint.Cap.ROUND; color = Color.WHITE
+    }
+    private val aimHaloPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE; strokeWidth = 4 * density; strokeCap = Paint.Cap.ROUND
+        color = Color.argb(110, 0, 0, 0)
+    }
+    private val dotPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+    private val dotHaloPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.FILL; color = Color.argb(110, 0, 0, 0)
     }
     private val debugPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.WHITE; textSize = 12 * density; setShadowLayer(3f, 0f, 0f, Color.BLACK)
@@ -233,9 +266,23 @@ class OverlayView @JvmOverloads constructor(
     /** What the card layer draws right now (pure; see the class doc). */
     fun plan(): Plan {
         if (holding) {
+            // The ✓ sits at the card's centre: no aimer on top of it.
             val s = holdShape
             return Plan(s?.copyOf(), BoxState.CAPTURED, dashed = false, check = s != null, badge = s == null)
         }
+        val card = cardPlan()
+        val aim = if (aimer && !settingArea && !card.check) roi.let { r ->
+            if (r == null) floatArrayOf(0.5f, 0.5f)
+            else floatArrayOf(((r.x0 + r.x1) / 2).toFloat(), ((r.y0 + r.y1) / 2).toFloat())
+        } else null
+        val q = card.shape
+        val centre = if (aim != null && q != null && !card.dashed)
+            floatArrayOf((q[0] + q[2] + q[4] + q[6]) / 4, (q[1] + q[3] + q[5] + q[7]) / 4) else null
+        return Plan(q, card.state, card.dashed, card.check, card.badge, aim, centre)
+    }
+
+    /** The card layer outside a hold (see [plan]). */
+    private fun cardPlan(): Plan {
         if (boxState == BoxState.AWAIT_NEXT) {
             // The card is always highlighted: its live outline (grey) while it sits there
             // after a capture; the dashed watch window only when there is no outline.
@@ -290,12 +337,7 @@ class OverlayView @JvmOverloads constructor(
             if (plan.dashed) {
                 canvas.drawPath(path, watchPaint)
             } else {
-                boxPaint.color = when (plan.state) {
-                    BoxState.OCCUPIED -> Color.parseColor("#6ee7a0")
-                    BoxState.SETTLING -> Color.parseColor("#fbbf24")
-                    BoxState.AWAIT_NEXT -> Color.parseColor("#8b93a1")
-                    BoxState.CAPTURED -> Color.parseColor("#60a5fa")
-                }
+                boxPaint.color = stateColor(plan.state)
                 boxPaint.style = Paint.Style.STROKE
                 canvas.drawPath(path, boxPaint)
                 if (plan.check) {
@@ -304,6 +346,21 @@ class OverlayView @JvmOverloads constructor(
                     canvas.drawPath(path, boxPaint)
                     canvas.drawText("✓", cx, cy + checkPaint.textSize / 3, checkPaint)
                 }
+            }
+        }
+
+        plan.aim?.let { a ->
+            val c = contain()
+            val s = c[0]; val ox = c[1]; val oy = c[2]
+            val x = ox + a[0] * frameW * s; val y = oy + a[1] * frameH * s
+            drawAimArms(canvas, x, y, aimHaloPaint)
+            drawAimArms(canvas, x, y, aimPaint)
+            plan.cardCentre?.let { d ->
+                val dx = ox + d[0] * frameW * s; val dy = oy + d[1] * frameH * s
+                val r = AIM_DOT_DP * density
+                canvas.drawCircle(dx, dy, r + density, dotHaloPaint)
+                dotPaint.color = stateColor(plan.state)
+                canvas.drawCircle(dx, dy, r, dotPaint)
             }
         }
 
@@ -324,9 +381,32 @@ class OverlayView @JvmOverloads constructor(
         }
     }
 
+    /** The crosshair's four arms around ([x], [y]) view px, a clear gap at the centre. */
+    private fun drawAimArms(canvas: Canvas, x: Float, y: Float, p: Paint) {
+        val gap = AIM_GAP_DP * density; val arm = gap + AIM_ARM_DP * density
+        canvas.drawLine(x - arm, y, x - gap, y, p); canvas.drawLine(x + gap, y, x + arm, y, p)
+        canvas.drawLine(x, y - arm, x, y - gap, p); canvas.drawLine(x, y + gap, x, y + arm, p)
+    }
+
     companion object {
         /** How much longer than check_ms a hold begun at the trigger may wait for the pipeline's answer. */
         const val PIPELINE_HOLD_MS = 5000L
+        /** The aimer: each arm's length, the clear gap at its centre, the card-centre dot's radius (dp). */
+        const val AIM_ARM_DP = 12f
+        const val AIM_GAP_DP = 5f
+        const val AIM_DOT_DP = 3.5f
+
+        private val COLOR_OCCUPIED = Color.parseColor("#6ee7a0")
+        private val COLOR_SETTLING = Color.parseColor("#fbbf24")
+        private val COLOR_AWAIT = Color.parseColor("#8b93a1")
+        private val COLOR_CAPTURED = Color.parseColor("#60a5fa")
+
+        private fun stateColor(s: BoxState): Int = when (s) {
+            BoxState.OCCUPIED -> COLOR_OCCUPIED
+            BoxState.SETTLING -> COLOR_SETTLING
+            BoxState.AWAIT_NEXT -> COLOR_AWAIT
+            BoxState.CAPTURED -> COLOR_CAPTURED
+        }
     }
 
     @SuppressLint("ClickableViewAccessibility")

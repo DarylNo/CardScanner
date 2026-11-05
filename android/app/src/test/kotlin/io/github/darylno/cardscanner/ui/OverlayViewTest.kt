@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Canvas
 import androidx.test.core.app.ApplicationProvider
 import io.github.darylno.cardscanner.core.Box
+import io.github.darylno.cardscanner.core.RoiFrac
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -207,5 +208,55 @@ class OverlayViewTest {
         val none = Captured(ByteArray(0), emptyList(), false, "t", null)
         assertNull(none.quadFractions())
         assertEquals(0, none.cardHeightPx())
+    }
+
+    /**
+     * The aimer (owner, 2026-11-05: "if in zoom mode I want a aimer for card centre"):
+     * a crosshair at the centre of the Area the overlay draws (the frame centre without
+     * one) — hidden while an Area is drawn and under the capture ✓.
+     */
+    @Test fun theAimerSitsAtTheAreaCentreAndHidesWhileDrawingOrHolding() {
+        val v = view()
+        assertNull("off by default", v.plan().aim)
+        v.aimer = true
+        assertArrayEquals("no Area: the frame centre", floatArrayOf(0.5f, 0.5f), v.plan().aim!!, 1e-6f)
+        v.setRoi(RoiFrac(0.1, 0.2, 0.5, 0.6))
+        assertArrayEquals("an off-centre Area: ITS centre", floatArrayOf(0.3f, 0.4f), v.plan().aim!!, 1e-6f)
+        v.settingArea = true
+        assertNull("hidden while an Area is drawn", v.plan().aim)
+        v.settingArea = false
+        assertNotNull(v.plan().aim)
+        v.setBox(box, 176, 235, OverlayView.BoxState.OCCUPIED, outline, null)
+        v.beginHold(2500)
+        assertTrue(v.holding)
+        assertNull("hidden under the capture ✓", v.plan().aim)
+        assertNull(v.plan().cardCentre)
+        now += 2500 + OverlayView.PIPELINE_HOLD_MS + 1
+        assertFalse(v.holding)
+        assertArrayEquals("back once the hold lapsed", floatArrayOf(0.3f, 0.4f), v.plan().aim!!, 1e-6f)
+        v.aimer = false
+        assertNull(v.plan().aim)
+    }
+
+    /** The dot: the drawn card shape's centre (mean of its corners), on a SOLID shape only. */
+    @Test fun theAimerMarksTheDrawnCardCentreOnlyOnASolidShape() {
+        val v = view()
+        v.aimer = true
+        v.setBox(box, 176, 235, OverlayView.BoxState.OCCUPIED, outline, null)
+        val cx = (outline[0] + outline[2] + outline[4] + outline[6]) / 4
+        val cy = (outline[1] + outline[3] + outline[5] + outline[7]) / 4
+        assertArrayEquals("the outline's centre", floatArrayOf(cx, cy), v.plan().cardCentre!!, 1e-6f)
+        v.draw(Canvas())                                    // crosshair + dot, everything on
+        v.setBox(null, 176, 235, OverlayView.BoxState.AWAIT_NEXT, null, watch)
+        val p = v.plan()
+        assertTrue(p.dashed)
+        assertNotNull("the crosshair stays", p.aim)
+        assertNull("no dot on the dashed watch window", p.cardCentre)
+        v.setBox(null, 176, 235, OverlayView.BoxState.SETTLING, null, null)
+        assertNull("no shape, no dot", v.plan().cardCentre)
+        v.setBox(box, 176, 235, OverlayView.BoxState.OCCUPIED, outline, null)
+        v.aimer = false
+        assertNull("aimer off: no dot either", v.plan().cardCentre)
+        v.draw(Canvas())
     }
 }

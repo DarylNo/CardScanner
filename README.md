@@ -89,7 +89,9 @@ card. The camera zooms about the middle of its picture, so an Area drawn off to
 one side can hardly zoom. When moving it to the middle would help, the app says
 so after you draw it ("centred, Zoom to fit would zoom 1.90× (here 1.00×)"),
 and on a paired computer 📱 Scanner shows a dashed box where the centred Area
-would sit — move the tray (or the Area) toward it.
+would sit — move the tray (or the Area) toward it. While Zoom to fit is on, a
+white crosshair on the scan screen marks the middle of the Area — put the card's
+centre there (a small dot marks the card's own centre once the app sees it).
 
 ## Reviewing
 

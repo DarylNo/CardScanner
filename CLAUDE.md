@@ -821,7 +821,23 @@ lens on testers' phones), minSdk 29, arm64-v8a.
   for the whole drawing). **With the switch off none of
   this runs** — no zoom call, no gate, no settle: the Area reaches the analyzer
   as `zoomMapped(1.0, Area, settle = false)`, the pre-zoom setRoi path event for
-  event (`zoomOffIsTheOldPathEventForEvent`). **What shows it:** the Area chip
+  event (`zoomOffIsTheOldPathEventForEvent`). **The aimer (owner, 2026-11-05:
+  "if in zoom mode I want a aimer for card centre"; 1.1.19):** with the switch on
+  (`overlay.aimer = zoomFit && !drawing`, `MainActivity.updateAimer` — on every
+  Area change, onZoom, drawing start / Cancel and wherever `setZoomFit` is
+  pushed), Tray and Tap to scan alike, `OverlayView` draws a crosshair at the
+  centre of the Area it draws — the VIEW Area, the frame centre with none (four
+  12 dp arms, a 5 dp gap, white 2 dp over a black-α110 4 dp halo, so it reads on
+  a white or a dark tray) — and a 3.5 dp dot in the shape's state colour at the
+  drawn card's centre (the mean of its 4 corners; a SOLID shape only, never the
+  dashed watch window), so the card is lined up by eye. Hidden while an Area is
+  drawn (from the request, also while zooming out) and under ANY capture ✓ (the
+  hold, and the plain CAPTURED state — the ✓ sits at the card's centre).
+  `Plan.aim` / `Plan.cardCentre` are the pure decision (`OverlayViewTest`;
+  `ScreensSmokeTest` at the N200's size: the view Area's centre after
+  `onZoom(1.55…)`, on screen, gone while drawing, back on Cancel, none with the
+  switch off). Display only — nothing reaches the analyzer, detection, focus,
+  the logs or `/api/device`. Tested in code, not on the phone. **What shows it:** the Area chip
   reads "Area ✓ · 1.55×" while zoomed; the capture line ends "… @ 1.55×"; tag
   `zoom` logs each request ("→ 1.55× requested (why) · 1.55× (limited by the
   Area fit)"), what the camera reports (CONTROL_ZOOM_RATIO, the crop region and

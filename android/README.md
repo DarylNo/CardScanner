@@ -194,6 +194,10 @@ yet…", and after a couple of seconds the app adopts it as the empty tray.
 shows the lens in use; swipe or tap it to step through Automatic and each back
 camera. Settings → Camera picks from a list, and a paired computer's
 📱 Scanner panel has the same choice. Automatic is camera 0 facing back.
+With Settings → Camera → **Zoom to fit the Area** on, a white crosshair on the
+preview marks the centre of the Area (the screen centre with none) — aim the
+card's centre there; a dot in the outline's colour marks the card's own centre.
+It hides while you draw an Area and under the capture ✓.
 
 **Tap to scan** — tap the shutter. It always scans inside a scan Area: if
 none is set, the app draws one for you — a card-shaped box in the middle of
@@ -351,6 +355,10 @@ Run on the Nord N200 after installing a new build:
       reads "no card shape yet", then the view is adopted as the empty tray.
 - [ ] The outline sits on the card, turns blue with the ✓ on capture, and stays
       (grey) on the card until it is lifted.
+- [ ] Zoom to fit on: the white crosshair sits at the Area's centre on the
+      zoomed preview and reads on the tray; a card's dot lines up with it when
+      the card is centred; it goes away while drawing an Area and under the ✓.
+      Zoom to fit off: no crosshair.
 - [ ] Every control is visible at the bottom: Tray|Tap · ⚙, then Share over
       Scans · shutter · Area.
 - [ ] Camera pill (if shown): swiping steps the lens and re-learns the tray;

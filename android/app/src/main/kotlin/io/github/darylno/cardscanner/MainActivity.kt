@@ -323,6 +323,7 @@ class MainActivity : AppCompatActivity() {
             camera?.setHighRes(settings.highRes)
             camera?.setCamera(settings.cameraId)
             camera?.setZoomFit(settings.zoomFit)
+            updateAimer()
             camera?.setRefocusMin(settings.refocusMin)
             camera?.setMeasureDetail(measureArmOn())          // a session started (or stopped) from Settings
             refreshCameraPill()
@@ -403,6 +404,7 @@ class MainActivity : AppCompatActivity() {
         camera?.setHighRes(settings.highRes)
         camera?.setCamera(settings.cameraId)
         camera?.setZoomFit(settings.zoomFit)
+        updateAimer()
         camera?.setRefocusMin(settings.refocusMin)
         refreshCameraPill()
     }
@@ -826,6 +828,7 @@ class MainActivity : AppCompatActivity() {
         camera?.pause(true)
         drawRequested = true
         drawPrompt = prompt
+        updateAimer()            // hidden from the moment a drawing is asked for (also while zooming out)
         updateAreaBtn()
         setStatus(prompt)
         if (camera?.setDrawing(true) != true) armDrawing()
@@ -845,6 +848,15 @@ class MainActivity : AppCompatActivity() {
     /** The stored (base) Area in the fractions of what the preview shows now — 1× while drawing. */
     private fun showArea() {
         overlay.setRoi(if (drawing) settings.roi else ZoomFit.toView(settings.roi, zoomShown))
+        updateAimer()
+    }
+
+    /**
+     * The card-centre aimer (owner, 2026-11-05: "if in zoom mode I want a aimer for card
+     * centre"; 1.1.19): on with Zoom to fit, off while an Area is drawn. Display only.
+     */
+    private fun updateAimer() {
+        overlay.aimer = settings.zoomFit && !drawing
     }
 
     private fun updateAreaBtn() {
@@ -1000,6 +1012,7 @@ class MainActivity : AppCompatActivity() {
         val cam = app.newCamera()
         camera = cam
         cam.setZoomFit(settings.zoomFit)
+        updateAimer()
         cam.setRefocusMin(settings.refocusMin)
         cam.setRoi(settings.roi)
         appliedRoi = settings.roi
@@ -1203,6 +1216,7 @@ class MainActivity : AppCompatActivity() {
                 } else {
                     zoomShown = ratio
                     if (!drawing) overlay.setRoi(viewRoi)
+                    updateAimer()
                 }
                 updateAreaBtn()
                 refreshMeasure()         // the zoom A/B's B line says the zoom it runs at
@@ -1344,6 +1358,7 @@ class MainActivity : AppCompatActivity() {
         probeWords = null
         camera?.setAeLock(settings.aeLock)
         camera?.setZoomFit(settings.zoomFit)
+        updateAimer()
         camera?.setRefocusMin(settings.refocusMin)
         camera?.setMeasureDetail(measureArmOn())
         val m = app.measure

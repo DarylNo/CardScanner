@@ -22,6 +22,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -1409,6 +1410,70 @@ class ScreensSmokeTest {
         a.cameraListenerForTest.onZoom(1.55, view, false)        // the camera is back at the Area's zoom
         ShadowLooper.idleMainLooper()
         assertNotNull(findText(bottom, label))
+    }
+
+    /**
+     * The aimer (owner, 2026-11-05: "if in zoom mode I want a aimer for card centre";
+     * 1.1.19): with Zoom to fit on, the overlay aims at the centre of the VIEW Area and
+     * the mark sits on screen at the N200's size; drawing an Area hides it, Cancel brings
+     * it back. Zoom to fit off: no aimer.
+     */
+    @Test
+    @Config(qualifiers = "w411dp-h914dp-xxhdpi")
+    fun mainActivity_zoomAimer_isAtTheViewAreaCentreAndOnScreen() {
+        val roi = io.github.darylno.cardscanner.core.RoiFrac(0.1, 0.2, 0.6, 0.7)
+        app.settings.roi = roi
+        app.settings.auto = false
+        app.settings.zoomFit = true
+        grantCamera(true)
+        val a = launch(MainActivity::class.java)
+        val root = a.window.decorView
+        val bottom = root.findViewWithTag<View>(TAG_BOTTOM_BAR)
+        val overlay = findOverlay(root)!!
+        val view = io.github.darylno.cardscanner.core.ZoomFit.toView(roi, 1.55)!!
+        a.cameraListenerForTest.onZoom(1.55, view, false)
+        ShadowLooper.idleMainLooper()
+        root.measure(View.MeasureSpec.makeMeasureSpec(root.width, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(root.height, View.MeasureSpec.EXACTLY))
+        root.layout(0, 0, root.width, root.height)
+        val aim = overlay.plan().aim
+        assertNotNull("Zoom to fit on: the aimer shows", aim)
+        assertEquals("the VIEW Area's centre (x)", ((view.x0 + view.x1) / 2).toFloat(), aim!![0], 1e-5f)
+        assertEquals("the VIEW Area's centre (y)", ((view.y0 + view.y1) / 2).toFloat(), aim[1], 1e-5f)
+        // Where it lands on screen: the overlay's letterbox (FIT_CENTER, as onDraw maps it).
+        val s = minOf(overlay.width.toFloat() / overlay.frameW, overlay.height.toFloat() / overlay.frameH)
+        val px = (overlay.width - overlay.frameW * s) / 2f + aim[0] * overlay.frameW * s
+        val py = (overlay.height - overlay.frameH * s) / 2f + aim[1] * overlay.frameH * s
+        val o = IntArray(2); overlay.getLocationInWindow(o)
+        assertTrue("the overlay has a size (${overlay.width}×${overlay.height})", overlay.width > 0 && overlay.height > 0)
+        assertTrue("the aimer is on screen (${o[0] + px}, ${o[1] + py} in ${root.width}×${root.height})",
+            o[0] + px in 0f..root.width.toFloat() && o[1] + py in 0f..root.height.toFloat() &&
+                px in 0f..overlay.width.toFloat() && py in 0f..overlay.height.toFloat())
+        // Drawing a new Area (Tap to scan: the chip draws) hides it; Cancel brings it back.
+        findText(bottom, a.getString(R.string.area_zoomed, "1.55"))!!.performClick()
+        ShadowLooper.idleMainLooper()
+        assertNotNull("drawing", findText(bottom, a.getString(R.string.cancel)))
+        assertNull("hidden while drawing", overlay.plan().aim)
+        findText(bottom, a.getString(R.string.cancel))!!.performClick()
+        ShadowLooper.idleMainLooper()
+        a.cameraListenerForTest.onZoom(1.55, view, false)
+        ShadowLooper.idleMainLooper()
+        assertNotNull("back after Cancel", overlay.plan().aim)
+        assertEquals(((view.x0 + view.x1) / 2).toFloat(), overlay.plan().aim!![0], 1e-5f)
+    }
+
+    @Test
+    @Config(qualifiers = "w411dp-h914dp-xxhdpi")
+    fun mainActivity_zoomAimer_isOffWithZoomToFitOff() {
+        app.settings.roi = io.github.darylno.cardscanner.core.RoiFrac(0.1, 0.2, 0.6, 0.7)
+        app.settings.auto = false
+        app.settings.zoomFit = false
+        grantCamera(true)
+        val a = launch(MainActivity::class.java)
+        ShadowLooper.idleMainLooper()
+        val overlay = findOverlay(a.window.decorView)!!
+        assertNull("Zoom to fit off: no aimer", overlay.plan().aim)
+        assertFalse(overlay.aimer)
     }
 
     /**
