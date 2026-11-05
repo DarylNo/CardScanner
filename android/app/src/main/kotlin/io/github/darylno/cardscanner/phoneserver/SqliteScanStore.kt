@@ -15,7 +15,8 @@ import java.io.File
  * column for column (server/store.py), so a row reads back exactly as the
  * Python store's `dict(row)`. JSON fields are TEXT, decoded on every read.
  * The golden API replay runs against this class too (PhoneServerTest); the
- * one-time re-price on open ([repriceAll]) is SqliteScanStoreTest.
+ * one-time migrations on open (the re-price, [repriceAll]; the re-ask of the misses,
+ * [reaskMisses]) are SqliteScanStoreTest.
  */
 class SqliteScanStore(file: File, private val clock: () -> String = ::isoNow) : ScanStore {
     private val db: SQLiteDatabase
@@ -41,31 +42,44 @@ class SqliteScanStore(file: File, private val clock: () -> String = ::isoNow) : 
     /**
      * store.py's `_migrate`: data migrations by PRAGMA user_version, each in ONE
      * transaction with its stamp, so each runs exactly once (a fresh file runs them
-     * on an empty table and is stamped too). A failure rolls back and leaves the
-     * version as it was — retried on the next open; the store still opens (it holds
-     * the only copy of the scans).
+     * on an empty table and is stamped too), in order: a 1.1.16 store runs the
+     * re-price, commits, then the re-ask. A failure rolls back that one and leaves
+     * the version as it was — the later ones wait, all retried on the next open; the
+     * store still opens (it holds the only copy of the scans).
      */
     private fun migrate() {
-        if (db.version >= 1) return
-        try {
-            var reset = Triple(0, 0, 0)
-            db.beginTransaction()                    // EXCLUSIVE; re-read the stamp inside it
+        val steps = listOf<Triple<Int, String, (SQLiteDatabase) -> Triple<Int, Int, Int>>>(
+            Triple(1, "re-price", ::repriceAll),
+            Triple(2, "re-ask", ::reaskMisses),
+        )
+        for ((stamp, what, run) in steps) {
+            if (db.version >= stamp) continue
             try {
-                if (db.version < 1) {
-                    reset = repriceAll(db)
-                    db.version = 1
+                var reset = Triple(0, 0, 0)
+                db.beginTransaction()                    // EXCLUSIVE; re-read the stamp inside it
+                try {
+                    if (db.version < stamp) {
+                        reset = run(db)
+                        db.version = stamp
+                    }
+                    db.setTransactionSuccessful()
+                } finally {
+                    db.endTransaction()
                 }
-                db.setTransactionSuccessful()
-            } finally {
-                db.endTransaction()
+                val (nSel, nTop, nCand) = reset
+                if (nSel > 0 || nTop > 0 || nCand > 0) {
+                    DebugLog.global.i("store", if (stamp == 1) {
+                        "re-price: $nSel selection(s) and $nCand candidate print(s) dropped their F2F answer, " +
+                            "$nTop unpicked scan(s) their top-match price"
+                    } else {
+                        "re-ask: $nSel selection(s) and $nCand candidate print(s) dropped their \"no F2F listing\" " +
+                            "answer, $nTop unpicked scan(s) their own — asked again"
+                    })
+                }
+            } catch (e: Exception) {
+                DebugLog.global.w("store", "$what failed, retried on the next open: $e")
+                return
             }
-            val (nSel, nTop, nCand) = reset
-            if (nSel > 0 || nTop > 0 || nCand > 0) {
-                DebugLog.global.i("store", "re-price: $nSel selection(s) and $nCand candidate print(s) " +
-                    "dropped their F2F answer, $nTop unpicked scan(s) their top-match price")
-            }
-        } catch (e: Exception) {
-            DebugLog.global.w("store", "re-price failed, retried on the next open: $e")
         }
     }
 
@@ -194,6 +208,73 @@ class SqliteScanStore(file: File, private val clock: () -> String = ::isoNow) : 
                     var dropped = 0
                     for (c in cands) {
                         if (c is Map<*, *> && c.containsKey("f2f_conditions")) {
+                            @Suppress("UNCHECKED_CAST")
+                            (c as MutableMap<String, Any?>).remove("f2f_conditions")   // MiniJson: LinkedHashMap
+                            dropped++
+                        }
+                    }
+                    if (dropped > 0) {
+                        db.execSQL("UPDATE scans SET candidates = ? WHERE id = ?",
+                            arrayOf<Any?>(MiniJson.stringify(cands), r.id))
+                        nCand += dropped
+                    }
+                }
+            }
+            return Triple(nSel, nTop, nCand)
+        }
+
+        /**
+         * store.py's `_reask_misses` — the one-time re-ask (PRAGMA user_version 1 → 2, release
+         * 1.1.18): every "no F2F listing" answer recorded is dropped once, so PriceWorker asks
+         * again with the fixed matcher; every PRICE recorded stays. 1.1.17's matcher (and its
+         * re-price, [repriceAll]) priced no meld half: F2F titles one "Midnight Scavengers //
+         * Chittering Host [96a] [B] [Eldritch Moon] [Non-Foil]" — a side letter Scryfall's #96
+         * doesn't carry — so the owner's Midnight Scavengers EMN 96 and Graf Rats EMN 91 were
+         * recorded as "no listing" (owner, 2026-11-05: "my price checks of cards are failing"),
+         * and the sweep never re-asks a recorded miss.
+         *
+         * In place: a scan's `f2f` that is the sweep's "no listing" marker (a map whose
+         * `conditions` is empty — {"conditions": {}, "searched": true}) → NULL (a selection's:
+         * owed again), and every candidate's `f2f_conditions` that is {} → the key removed
+         * (PriceSweep reads a missing key exactly like null — owed on an unpicked scan; a picked
+         * scan prices only its selection). Every price (non-empty conditions) stays. Writes only
+         * those two columns, only on rows that change: updated_at, status, the selection and
+         * everything else stay as they were. A row whose JSON does not decode is left alone.
+         * Returns (selections, unpicked scans' own answers, candidate prints) reset. The caller
+         * holds the transaction.
+         */
+        internal fun reaskMisses(db: SQLiteDatabase): Triple<Int, Int, Int> {
+            var nSel = 0
+            var nTop = 0
+            var nCand = 0
+            data class Raw(val id: Long, val sel: String?, val f2f: String?, val cands: String?)
+            val rows = db.rawQuery("SELECT id, selection, f2f, candidates FROM scans", null).use { c ->
+                val out = ArrayList<Raw>()
+                while (c.moveToNext()) out += Raw(c.getLong(0), if (c.isNull(1)) null else c.getString(1),
+                    if (c.isNull(2)) null else c.getString(2), if (c.isNull(3)) null else c.getString(3))
+                out
+            }
+            for (r in rows) {
+                val sel: Any?
+                val f2f: Any?
+                val cands: Any?
+                try {
+                    sel = if (r.sel.isNullOrEmpty()) null else MiniJson.parse(r.sel)
+                    f2f = if (r.f2f.isNullOrEmpty()) null else MiniJson.parse(r.f2f)
+                    cands = if (r.cands.isNullOrEmpty()) null else MiniJson.parse(r.cands)
+                } catch (e: IllegalArgumentException) {
+                    continue
+                }
+                val conditions = (f2f as? Map<*, *>)?.get("conditions")
+                if (f2f is Map<*, *> && conditions is Map<*, *> && conditions.isEmpty()) {
+                    db.execSQL("UPDATE scans SET f2f = NULL WHERE id = ?", arrayOf<Any?>(r.id))
+                    if (sel is Map<*, *> && sel.isNotEmpty()) nSel++ else nTop++
+                }
+                if (cands is List<*>) {
+                    var dropped = 0
+                    for (c in cands) {
+                        val answer = (c as? Map<*, *>)?.get("f2f_conditions")
+                        if (c is Map<*, *> && answer is Map<*, *> && answer.isEmpty()) {
                             @Suppress("UNCHECKED_CAST")
                             (c as MutableMap<String, Any?>).remove("f2f_conditions")   // MiniJson: LinkedHashMap
                             dropped++
