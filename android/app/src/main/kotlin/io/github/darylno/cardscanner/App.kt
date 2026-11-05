@@ -63,7 +63,8 @@ class App : Application() {
                 else io.github.darylno.cardscanner.phoneserver.ExternalCardList::httpGet)
         cardList.start()
         phoneServer = PhoneServer(this, identify, DeviceBridge(settings) { io.github.darylno.cardscanner.camera.CameraCatalog.lenses(this) }, updates,
-            debugHeader = { debugHeader() }, cardList = { cardList.current() })
+            debugHeader = { debugHeader() }, cardList = { cardList.current() },
+            guestsFullAccess = { settings.guestsFullAccess })
         GatewayService.hostProvider = { phoneServer }
         uploads = Adapters.uploads(this, phoneServer)
         gateway = Adapters.gateway(this)

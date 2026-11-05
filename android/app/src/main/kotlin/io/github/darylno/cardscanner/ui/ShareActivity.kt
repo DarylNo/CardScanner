@@ -74,12 +74,15 @@ class ShareActivity : AppCompatActivity() {
         awake.focus(hasFocus)
     }
 
-    /** Amber card: guests get FULL access. Shown in every state — never hide it. */
+    /**
+     * Amber card: what a guest may do — with Settings → "Guests get full access" on (the default)
+     * that is EVERYTHING, delete and export included. Shown in every state — never hide it.
+     */
     private fun warningCard() = chrome.card(ScanChrome.Palette.WARN_BG, ScanChrome.Palette.WARN_STROKE).apply {
         orientation = LinearLayout.HORIZONTAL
         isBaselineAligned = false   // else the multi-line text is shifted down and its last line clipped
         addView(chrome.text("⚠", 18f, ScanChrome.Palette.WARN), LinearLayout.LayoutParams(wrap(), wrap()).apply { marginEnd = dp(12) })
-        addView(chrome.text(getString(R.string.share_warning), 14f, ScanChrome.Palette.WARN), LinearLayout.LayoutParams(0, wrap(), 1f))
+        addView(chrome.text(getString(if (app.settings.guestsFullAccess) R.string.share_warning_full else R.string.share_warning), 14f, ScanChrome.Palette.WARN), LinearLayout.LayoutParams(0, wrap(), 1f))
     }
 
     private fun errorCard(msg: String) = chrome.card(ScanChrome.Palette.ERR_BG, ScanChrome.Palette.ERR_STROKE).apply {

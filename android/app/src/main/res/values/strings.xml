@@ -125,6 +125,7 @@
     <string name="share_hero_title">Let others review your scans</string>
     <string name="share_hero_body">Guests on the same Wi-Fi (or on this phone\'s hotspot) open a link and enter a 6-digit code to see your scans.</string>
     <string name="share_warning">Guests can review, pick and flag cards for deletion. Only a paired computer (Settings → This phone\'s server) can delete, clear or export. Share the code only with people you trust.</string>
+    <string name="share_warning_full">Guests get FULL access (Settings → This phone\'s server → Guests get full access): anyone with the code can delete scans for good — this phone holds the only copy — clear the list, export, and change the scanner\'s settings. Share the code only with people you trust.</string>
     <string name="share_start">Start the server</string>
     <string name="share_start_failed">Couldn\'t start the server: %1$s</string>
     <string name="share_on">Your scans are being served</string>
@@ -168,18 +169,20 @@
     <string name="diag_title">Diagnostics</string>
     <!-- Diagnostics → Phone server (preview), Stage 3 -->
     <string name="pv_header">This phone\'s server</string>
-    <string name="pv_intro">The phone is your scanner\'s server: it identifies and prices every card and keeps the scans. A computer on the same Wi-Fi (or the phone\'s hotspot) can open them at the address below — pair it once as admin to delete, clear and export there. Anyone using the 6-digit code is a guest who can review and flag cards for deletion.</string>
+    <string name="pv_intro">The phone is your scanner\'s server: it identifies and prices every card and keeps the scans. A computer on the same Wi-Fi (or the phone\'s hotspot) can open them at the address below — pair it once as admin to delete, clear and export there. Anyone using the 6-digit code is a guest: with “Guests get full access” on (below) a guest can do all of that too; off, a guest can only review, pick and flag cards for deletion.</string>
     <string name="pv_off">Not serving right now — it starts again when you open the app.</string>
     <string name="pv_open">Open on a computer: %1$s\nGuest code: %2$s</string>
     <string name="pv_no_wifi">Serving, but the phone has no Wi-Fi address — join Wi-Fi or turn on the hotspot.</string>
     <string name="pv_pair">Pair a computer as admin</string>
     <string name="pv_pair_title">Pair this computer</string>
-    <string name="pv_pair_msg">On the computer, open this address (or scan the code with its camera):\n\n%1$s\n\nor type this one-time code on the join page: %2$s\n\nIt works once, for 10 minutes. The computer is then remembered as the admin: it can delete, clear, export and run pricing. Anyone using the 6-digit code is a guest: they can review, pick and flag cards for deletion.\n\nPair on a network you trust (your home Wi-Fi or the phone\'s own hotspot): the connection is plain HTTP, so someone else on the same network could copy the admin cookie.</string>
+    <string name="pv_pair_msg">On the computer, open this address (or scan the code with its camera):\n\n%1$s\n\nor type this one-time code on the join page: %2$s\n\nIt works once, for 10 minutes. The computer is then remembered as the admin: it can delete, clear, export and run pricing. Anyone using the 6-digit code is a guest: with “Guests get full access” on (Settings → This phone\'s server) they can do the same; off, they can only review, pick and flag cards for deletion.\n\nPair on a network you trust (your home Wi-Fi or the phone\'s own hotspot): the connection is plain HTTP, so someone else on the same network could copy the admin cookie.</string>
     <string name="pv_pair_off">The server isn\'t reachable on a network yet — join Wi-Fi or turn on the hotspot, then try again.</string>
     <string name="pv_paired">Paired computers (admin): %1$d</string>
     <string name="pv_forget">Forget paired computers</string>
     <string name="pv_forget_confirm">Stop treating every paired computer as admin? They will need a new one-time code.</string>
     <string name="pv_done">Done</string>
+    <string name="settings_guests_full">Guests get full access</string>
+    <string name="settings_guests_full_desc">On: anyone with the 6-digit Share code can do everything the paired computer can — delete scans for good (this phone holds the only copy; there is no backup), clear the list, export, run pricing, read the app log and change the scanner\'s settings. Off: guests can only review, pick, edit and flag cards for deletion. Applies at once, to guests already connected too.</string>
     <string name="pv_pack">Card database: %1$,d artworks (built %2$s)</string>
     <string name="pv_pack_none">No card database yet — it downloads when the phone has internet. Scans wait until it\'s in.</string>
     <string name="pv_pack_checking">Checking for the card database…</string>

@@ -83,6 +83,18 @@ class AppSettings(context: Context) {
         get() = prefs.getString(K_CARD_LIST_URL, "") ?: ""
         set(v) = prefs.edit().putString(K_CARD_LIST_URL, v.trim()).apply()
 
+    /**
+     * Settings → This phone's server → "Guests get full access" (owner, 2026-11-05: "Any guest to
+     * the web site to pick cards has full admin access"; 1.1.19). ON by default: anyone who joins
+     * with the 6-digit Share code gets what the paired computer gets — delete scans (the phone holds
+     * the only copy), clear, export, the pricing sweep, the scanner's own settings and the app log.
+     * Off = 1.1.18's guest: review, pick, edit and flag only. The phone's gateway asks this on every
+     * request (GatewayServer.guestsFullAccess), so a flip reaches sessions already open at once.
+     */
+    var guestsFullAccess: Boolean
+        get() = prefs.getBoolean(K_GUESTS_FULL, true)
+        set(v) = prefs.edit().putBoolean(K_GUESTS_FULL, v).apply()
+
     /** Mount mode: lock focus once a card is present (default on — the tray never moves). */
     var focusLock: Boolean
         get() = prefs.getBoolean(K_FOCUS_LOCK, true)
@@ -196,6 +208,7 @@ class AppSettings(context: Context) {
         const val K_ZOOM_FIT = "zoom_fit"
         const val K_REFOCUS_MIN = "refocus_min"
         const val K_CARD_LIST_URL = "card_list_url"
+        const val K_GUESTS_FULL = "guests_full_access"
         const val K_FOCUS_LOCK = "focus_lock"
         const val K_AE_LOCK = "ae_lock"
         const val K_TORCH = "torch"

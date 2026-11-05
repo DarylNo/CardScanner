@@ -13,40 +13,56 @@ import java.util.logging.Level
 import java.util.logging.Logger
 
 /**
- * The guest gateway: serves the home server's review pages to people on the phone's local
- * network (shop Wi-Fi or the phone's own hotspot) who have no Tailscale.
+ * The phone server's front door: serves the review pages and the API (through [upstream]) to the
+ * phone's own review screen and to devices on its local network (shop Wi-Fi or the phone's own
+ * hotspot).
  *
- * **Security model — FULL ACCESS, deliberately.** The owner decided that guests may do
- * everything the owner can (review, pick, delete, export, price sweeps, even the server's
- * update/setup endpoints): nothing is filtered by path or method. The ONLY gate is the
- * 6-digit [JoinCode] shown on the phone:
- *  - `GET /join?code=NNNNNN` with the right code sets `cs_guest=<128-bit random hex>`
- *    (HttpOnly, SameSite=Lax, Path=/) and 302s to `/phone?panel=1` (mobile UA) or `/`.
+ * **Who may do what — roles.** Nothing is served without a session. With [admins] set (the phone
+ * server), every proxied request carries the session's role in [ROLE_HEADER] (a client's own is
+ * dropped), and core `ScanServer.adminOnly` refuses a [ROLE_GUEST] (403): deleting a scan,
+ * clearing, exporting, PATCH `included`, the pricing sweep's controls, the phone's own settings
+ * (`/api/device`) and the app log (`/api/debug/`).
+ *  - A paired computer (the one-time 8-digit [AdminPairing] code → a long-lived [ADMIN_COOKIE])
+ *    and the owner's own review screen (`AdminPairing.ownerToken`) are always [ROLE_ADMIN].
+ *  - A Share-code session (the 6-digit [JoinCode] → [COOKIE]) is [ROLE_ADMIN] while
+ *    [guestsFullAccess] answers true — Settings → "Guests get full access", ON by default (owner,
+ *    2026-11-05: "Any guest to the web site to pick cards has full admin access") — else
+ *    [ROLE_GUEST]: review, pick, edit condition/finish/quantity, price one scan, flag for deletion.
+ *    It is asked on EVERY request, so flipping it reaches sessions already open at once; a
+ *    provider that throws counts as off (fail closed).
+ * Without [admins] there is one role and no header (the upstream decides) — tests only today.
+ *
+ * The gates:
+ *  - `GET /join?code=…` with the 6-digit code sets `cs_guest=<128-bit random hex>`, with the
+ *    waiting 8-digit admin code `cs_admin=<token>` (≈10 years) — both HttpOnly, SameSite=Lax,
+ *    Path=/ — and 302s to `/phone?panel=1` (mobile UA) or `/`.
  *  - every other request without a live session cookie gets a small "enter the code" page.
  *  - 8 wrong codes from one IP within 5 minutes lock that IP out (429) for 5 minutes. The
  *    lockout check, the comparison and the failure record happen in ONE critical section,
  *    so parallel connections from one IP can never get more than 8 guesses evaluated.
  *  - 20 wrong codes within 5 minutes from ALL addresses combined rotate the code (existing
- *    sessions stay valid; [onCodeRotated] fires so the phone can show the new one) and
- *    reset the failure counters: a search spread over many source addresses (IPv6 privacy
- *    addresses, spare IPv4s) restarts against a new unknown code. Active lockouts stay.
+ *    sessions stay valid; [onCodeRotated] fires so the phone can show the new one), retire a
+ *    waiting admin code, and reset the failure counters: a search spread over many source
+ *    addresses (IPv6 privacy addresses, spare IPv4s) restarts against a new unknown code.
+ *    Active lockouts stay.
  *  - LAN only: clients whose address is not private/link-local ([isLocalClient]) get a 403
  *    before anything else — the listener binds every interface, so without this the join
  *    page would be reachable over Tailscale (100.64/10) and over cellular public IPv6.
- *  - [stopSharing] rotates the code and forgets every session.
- * Risks the owner accepted: anyone who reads the code (shoulder-surfing, a photo of the
- * QR) gets full control until sharing stops; the LAN leg is plain HTTP, so on an open
- * shop Wi-Fi the cookie and all traffic can be sniffed by other clients of that network.
- * SameSite=Lax keeps other websites from riding the cookie on POST/DELETE, and a DNS-
- * rebinding page never has the cookie (it is scoped to the phone's IP host).
+ *  - [stopSharing] rotates the code and forgets every guest session (paired computers stay).
+ * Risks the owner accepted: anyone who reads the Share code (shoulder-surfing, a photo of the
+ * QR) gets — with full access on — the paired computer's powers until sharing stops: deleting
+ * scans for good (the phone holds the only copy), exporting, changing the scanner's settings; the
+ * LAN leg is plain HTTP, so on an open shop Wi-Fi the cookies and all traffic can be sniffed by
+ * other clients of that network. SameSite=Lax keeps other websites from riding a cookie on
+ * POST/DELETE, and a DNS-rebinding page never has one (they are scoped to the phone's IP host).
  *
- * With a session, EVERYTHING is proxied through [upstream]: any method, path and raw query
+ * With a session, the request is proxied through [upstream]: any method, path and raw query
  * intact, request body relayed, status + end-to-end headers passed through (hop-by-hop
- * headers dropped both ways, our cookie dropped on the way up), response body streamed.
+ * headers dropped both ways, our cookies dropped on the way up), response body streamed.
  * Upstream failure → 502 page.
  *
  * @param hostname interface to bind; null = all interfaces (0.0.0.0).
- * @param port 8080 by default; 0 picks a free port (see [getListeningPort]).
+ * @param port [DEFAULT_PORT] by default; 0 picks a free port (see [getListeningPort]).
  */
 class GatewayServer(
     private val upstream: Upstream,
@@ -59,9 +75,16 @@ class GatewayServer(
      * Roles (the phone server): when set, the one-time admin code pairs a computer as
      * ADMIN (a long-lived [ADMIN_COOKIE]); the 6-digit code makes a GUEST; and every
      * proxied request carries [ROLE_HEADER] = admin|guest (a client's own is dropped).
-     * Null (the Share gateway to the computer): one role, today's behaviour.
+     * Null: one role and no header — the upstream decides (tests).
      */
     val admins: AdminPairing? = null,
+    /**
+     * Settings → "Guests get full access" (AppSettings.guestsFullAccess, owner 2026-11-05; on by
+     * default): asked on EVERY request, so a flip reaches sessions already open at once. True =
+     * a live guest session is proxied as [ROLE_ADMIN]; false = [ROLE_GUEST]. Only matters with
+     * [admins] (the role header); never lets a request without a session through.
+     */
+    val guestsFullAccess: () -> Boolean = { false },
 ) : NanoHTTPD(hostname, port) {
 
     private val sessions: MutableSet<String> = ConcurrentHashMap.newKeySet()
@@ -166,7 +189,12 @@ class GatewayServer(
             is JoinResult.Locked -> io.github.darylno.cardscanner.core.DebugLog.global.w("server", "join from $ip refused — locked out")
             JoinResult.Wrong -> io.github.darylno.cardscanner.core.DebugLog.global.w("server", "wrong join code from $ip")
             is JoinResult.JoinedAdmin -> io.github.darylno.cardscanner.core.DebugLog.global.i("server", "computer at $ip paired as admin")
-            JoinResult.Joined -> io.github.darylno.cardscanner.core.DebugLog.global.i("server", "guest joined from $ip")
+            JoinResult.Joined -> io.github.darylno.cardscanner.core.DebugLog.global.i("server", "guest joined from $ip" +
+                when {
+                    admins == null -> ""
+                    guestsAreAdmin() -> " — full access (Settings → Guests get full access is on)"
+                    else -> " — review, pick and flag only"
+                })
         }
         when (result) {
             is JoinResult.Locked -> return tooMany(result.remainingMs)
@@ -251,11 +279,21 @@ class GatewayServer(
         return r
     }
 
-    /** [ROLE_ADMIN] for a paired computer's cookie, [ROLE_GUEST] for a live guest session, else null. */
+    /**
+     * [ROLE_ADMIN] for a paired computer's cookie; for a live Share-code session [ROLE_ADMIN] while
+     * [guestsFullAccess] says so, else [ROLE_GUEST] (asked per request); null = no session.
+     */
     private fun roleOf(cookieHeader: String?): String? {
         val a = admins
         if (a != null && cookieValues(cookieHeader, ADMIN_COOKIE).any { a.isAdmin(it) }) return ROLE_ADMIN
-        return if (cookieValues(cookieHeader).any { it in sessions }) ROLE_GUEST else null
+        if (cookieValues(cookieHeader).none { it in sessions }) return null
+        return if (guestsAreAdmin()) ROLE_ADMIN else ROLE_GUEST
+    }
+
+    /** Settings → "Guests get full access" now; a provider that throws counts as off (fail closed). */
+    private fun guestsAreAdmin(): Boolean = try { guestsFullAccess() } catch (e: Exception) {
+        LOG.log(Level.WARNING, "guestsFullAccess failed — guests stay guests", e)
+        false
     }
 
     private fun newToken(): String {

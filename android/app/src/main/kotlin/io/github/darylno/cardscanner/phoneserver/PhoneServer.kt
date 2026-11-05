@@ -54,6 +54,12 @@ class PhoneServer(
      * task itself only queues the retry on [lifecycle]). Tests pass one they run by hand.
      */
     private val later: (Long, Runnable) -> Unit = { ms, r -> RETRY_TIMER.schedule(r, ms, TimeUnit.MILLISECONDS) },
+    /**
+     * Settings → "Guests get full access" now (AppSettings.guestsFullAccess): handed to the gateway,
+     * which asks it per request. Off by default HERE (tests build a PhoneServer without settings);
+     * the app passes the setting, which is on by default.
+     */
+    private val guestsFullAccess: () -> Boolean = { false },
 ) :
     GatewayService.Host {
     private val root = File(ctx.filesDir, "phoneserver")
@@ -156,7 +162,8 @@ class PhoneServer(
     // gateway asks for the backend per request (a server thread waits for the open), and the
     // worker is started / stopped on [lifecycle], in call order.
 
-    override fun newServer(port: Int) = GatewayServer(LocalUpstream { backend }, port, admins = admins)
+    override fun newServer(port: Int) =
+        GatewayServer(LocalUpstream { backend }, port, admins = admins, guestsFullAccess = guestsFullAccess)
 
     /**
      * Bumped by every [onServing] and [onStopped] (on the caller's thread, before their task is

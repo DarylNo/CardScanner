@@ -552,6 +552,57 @@ class GatewayServerTest {
         assertEquals(1, upstreamServer.requestCount)
     }
 
+    /**
+     * Settings → "Guests get full access" (owner, 2026-11-05: "Any guest to the web site to pick
+     * cards has full admin access"): the gateway asks the setting on EVERY request, so a guest
+     * session already open is admin while it is on and a guest the moment it goes off (and back);
+     * a client's own role header is dropped either way; no cookie is still the code page.
+     */
+    @Test
+    fun guestsFullAccess_isAskedPerRequest_andNeverOpensTheDoor() {
+        var full = true
+        val admins = AdminPairing(null)
+        val base = upstreamServer.url("/")
+        val g = GatewayServer(OkUpstream({ base }, upClient), port = 0, hostname = "127.0.0.1", clock = { now },
+            admins = admins, guestsFullAccess = { full })
+        g.startServing()
+        try {
+            fun at(p: String) = "http://127.0.0.1:${g.listeningPort}$p"
+            fun roleSent(cookie: String?, claim: String? = null): String? {
+                upstreamServer.enqueue(MockResponse().setBody("ok"))
+                val b = Request.Builder().url(at("/api/scans/1")).delete()
+                cookie?.let { b.header("Cookie", it) }
+                claim?.let { b.header(GatewayServer.ROLE_HEADER, it) }
+                client.newCall(b.build()).execute().use { r -> assertEquals(200, r.code) }
+                return upstreamServer.takeRequest(5, TimeUnit.SECONDS)!!.getHeader(GatewayServer.ROLE_HEADER)
+            }
+            // no cookie: the code page (401 for a DELETE), nothing proxied — the setting never opens the door
+            val before = upstreamServer.requestCount
+            client.newCall(Request.Builder().url(at("/api/scans/1")).delete().build()).execute().use { r ->
+                assertEquals(401, r.code)
+                assertTrue(r.body!!.string().contains("Enter the code"))
+            }
+            client.newCall(Request.Builder().url(at("/api/scans/1")).delete()
+                .header(GatewayServer.ROLE_HEADER, "admin").build()).execute().use { r -> assertEquals(401, r.code) }
+            assertEquals(before, upstreamServer.requestCount)
+            val guest = client.newCall(Request.Builder().url(at("/join?code=${g.code}")).build()).execute()
+                .use { it.header("Set-Cookie")!!.substringBefore(';') }
+            assertEquals("on: a Share-code session is admin", GatewayServer.ROLE_ADMIN, roleSent(guest))
+            full = false
+            assertEquals("flipped off: the SAME session is a guest on its next request", GatewayServer.ROLE_GUEST, roleSent(guest))
+            assertEquals("off: a client's own role header is dropped", GatewayServer.ROLE_GUEST, roleSent(guest, claim = "admin"))
+            full = true
+            assertEquals("back on: admin again at once", GatewayServer.ROLE_ADMIN, roleSent(guest, claim = "guest"))
+            // the paired computer is admin whatever the setting says
+            val admin = client.newCall(Request.Builder().url(at("/join?code=${admins.newCode()}")).build()).execute()
+                .use { r -> r.headers("Set-Cookie").first { it.startsWith(GatewayServer.ADMIN_COOKIE) }.substringBefore(';') }
+            full = false
+            assertEquals(GatewayServer.ROLE_ADMIN, roleSent(admin))
+        } finally {
+            g.stop()
+        }
+    }
+
     @Test
     fun cookieHelpers() {
         assertEquals(listOf("abc"), GatewayServer.cookieValues("x=1; cs_guest=abc; y=2"))

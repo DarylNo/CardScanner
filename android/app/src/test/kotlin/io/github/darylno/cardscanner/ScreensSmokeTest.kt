@@ -971,6 +971,18 @@ class ScreensSmokeTest {
         assertResumed(a)
     }
 
+    /** The Share screen's amber card says what the code gives: everything with "Guests get full access" on (1.1.19). */
+    @Test
+    fun shareActivity_warningFollowsGuestsFullAccess() {
+        app.settings.guestsFullAccess = true
+        val a = launch(ShareActivity::class.java)
+        assertNotNull(findText(a.window.decorView, a.getString(R.string.share_warning_full)))
+        app.settings.guestsFullAccess = false
+        val b = launch(ShareActivity::class.java)
+        assertNotNull(findText(b.window.decorView, b.getString(R.string.share_warning)))
+        app.settings.guestsFullAccess = true
+    }
+
     /**
      * Settings → Camera (owner, 2026-10-02: testers bring other phones): the chooser
      * lists Automatic plus this phone's back cameras with what tells them apart; a pick
@@ -1107,6 +1119,62 @@ class ScreensSmokeTest {
         assertEquals(true, app.settings.zoomFit)
         row.performClick()
         assertEquals(false, app.settings.zoomFit)
+    }
+
+    /**
+     * Settings → This phone's server → "Guests get full access" (owner, 2026-11-05: "Any guest to the
+     * web site to pick cards has full admin access"; 1.1.19): the switch row is sized and on screen at
+     * the N200's size (scrolled to), ON by default, and toggles the setting; each change is logged once
+     * under `server` (never a code); the phone's gateway asks it per request — a server built BEFORE
+     * the flip reads the new value — and Diagnostics shows it.
+     */
+    @Test
+    @Config(qualifiers = "w411dp-h914dp-xxhdpi")
+    fun settings_guestsFullAccessSwitch_isOnScreenTogglesAndIsAskedLive() {
+        app.getSharedPreferences("ui_settings", android.content.Context.MODE_PRIVATE).edit().remove("guests_full_access").commit()
+        val a = launch(SettingsActivity::class.java)
+        val root = a.window.decorView
+        val title = findText(root, a.getString(R.string.settings_guests_full))
+        assertNotNull("the switch row", title)
+        var row: View = title!!
+        while (!row.isClickable) row = row.parent as View
+        val sw = findSwitch(row)
+        assertNotNull("a switch in the row", sw)
+        assertTrue("on by default (the owner's request)", sw!!.isChecked)
+        assertNotNull("the row says what it means", findText(row, a.getString(R.string.settings_guests_full_desc)))
+        val scroll = generateSequence(row.parent) { it.parent }.filterIsInstance<android.widget.ScrollView>().first()
+        val loc = IntArray(2); row.getLocationInWindow(loc)
+        val sloc = IntArray(2); scroll.getLocationInWindow(sloc)
+        scroll.scrollTo(0, loc[1] - sloc[1] - 100)
+        ShadowLooper.idleMainLooper()
+        val screenH = root.height; val screenW = root.width
+        for ((name, v) in listOf("row" to row, "switch" to sw)) {
+            val l = IntArray(2); v.getLocationInWindow(l)
+            assertTrue("$name has a size (${v.width}×${v.height})", v.width > 0 && v.height > 0)
+            assertTrue("$name is inside the screen (y ${l[1]}..${l[1] + v.height} of $screenH, x ${l[0]}..${l[0] + v.width} of $screenW)",
+                l[1] >= 0 && l[1] + v.height <= screenH && l[0] >= 0 && l[0] + v.width <= screenW)
+        }
+        val gateway = app.phoneServer.newServer(0)          // built (not started) before the flip
+        assertTrue(gateway.guestsFullAccess())
+        val log = io.github.darylno.cardscanner.core.DebugLog.global
+        val from = log.lastSeq
+        row.performClick()
+        assertEquals(false, app.settings.guestsFullAccess)
+        assertFalse("asked live: the running gateway sees it at once", gateway.guestsFullAccess())
+        assertFalse("and a new one", app.phoneServer.newServer(0).guestsFullAccess())
+        val off = log.since(from).filter { it.tag == "server" && it.msg.contains("guests") }.map { it.msg }
+        assertEquals(off.toString(), 1, off.size)
+        assertTrue(off[0], off[0].contains("off"))
+        assertTrue("never a code in the line", off.none { it.contains(app.phoneServer.code ?: "\u0000") })
+        val diagOff = io.github.darylno.cardscanner.ui.DiagnosticsText.build(app)
+        assertTrue(diagOff, diagOff.lines().any { it.startsWith("guests (Share code): review, pick and flag only") })
+        val mid = log.lastSeq
+        row.performClick()
+        assertEquals(true, app.settings.guestsFullAccess)
+        assertTrue(gateway.guestsFullAccess())
+        assertEquals(1, log.since(mid).count { it.tag == "server" && it.msg.contains("guests") })
+        val diagOn = io.github.darylno.cardscanner.ui.DiagnosticsText.build(app)
+        assertTrue(diagOn, diagOn.lines().any { it.startsWith("guests (Share code): FULL ACCESS") })
     }
 
     /**

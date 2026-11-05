@@ -46,6 +46,22 @@ class AppSettingsTest {
         assertEquals("a stored value that is not offered reads as the default", 5, AppSettings(ctx).refocusMin)
     }
 
+    /**
+     * Settings → "Guests get full access" (owner, 2026-11-05: "Any guest to the web site to pick
+     * cards has full admin access"): ON by default — an install that never touched it reads on —
+     * and an off persists.
+     */
+    @Test fun guestsGetFullAccessIsOnByDefaultAndPersists() {
+        prefs().edit().clear().commit()
+        val s = AppSettings(ctx)
+        assertEquals(true, s.guestsFullAccess)
+        s.guestsFullAccess = false
+        assertEquals(false, AppSettings(ctx).guestsFullAccess)
+        assertEquals(false, prefs().getBoolean("guests_full_access", true))
+        s.guestsFullAccess = true
+        assertEquals(true, AppSettings(ctx).guestsFullAccess)
+    }
+
     /** "Zoom to fit the Area" (1.1.14) ships OFF; it persists; a stored Area is untouched by it (base fractions, no migration). */
     @Test fun zoomToFitIsOffByDefaultAndTheAreaStaysAsStored() {
         prefs().edit().clear().putString("roi", "0.2,0.25,0.8,0.75").commit()
