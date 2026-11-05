@@ -15,8 +15,8 @@ import java.io.File
  * column for column (server/store.py), so a row reads back exactly as the
  * Python store's `dict(row)`. JSON fields are TEXT, decoded on every read.
  * The golden API replay runs against this class too (PhoneServerTest); the
- * one-time migrations on open (the re-price, [repriceAll]; the re-ask of the misses,
- * [reaskMisses]) are SqliteScanStoreTest.
+ * one-time migrations on open (the re-price, [repriceAll]; the re-ask of the misses and
+ * the lettered printings' answers, [reaskMisses]) are SqliteScanStoreTest.
  */
 class SqliteScanStore(file: File, private val clock: () -> String = ::isoNow) : ScanStore {
     private val db: SQLiteDatabase
@@ -73,7 +73,8 @@ class SqliteScanStore(file: File, private val clock: () -> String = ::isoNow) : 
                             "$nTop unpicked scan(s) their top-match price"
                     } else {
                         "re-ask: $nSel selection(s) and $nCand candidate print(s) dropped their \"no F2F listing\" " +
-                            "answer, $nTop unpicked scan(s) their own — asked again"
+                            "answer or a lettered printing's (\"59s\", \"80c\" …), $nTop unpicked scan(s) their own " +
+                            "— asked again"
                     })
                 }
             } catch (e: Exception) {
@@ -231,17 +232,23 @@ class SqliteScanStore(file: File, private val clock: () -> String = ::isoNow) : 
          * Chittering Host [96a] [B] [Eldritch Moon] [Non-Foil]" — a side letter Scryfall's #96
          * doesn't carry — so the owner's Midnight Scavengers EMN 96 and Graf Rats EMN 91 were
          * recorded as "no listing" (owner, 2026-11-05: "my price checks of cards are failing"),
-         * and the sweep never re-asks a recorded miss.
+         * and the sweep never re-asks a recorded miss. The same migration also drops every
+         * answer recorded for a LETTERED printing ([lettered]: "59s", "59p", "38a", "80c", "266p")
+         * — those share name, set and F2F SKU code with their siblings, and 1.1.17 read
+         * "[Prerelease] [59s]" as collector-less, so its set-name fallback took whichever version
+         * F2F listed first (Lier 59p filed 59s's $14.99, Mishra's Factory 80b 80c's $449.99).
          *
-         * In place: a scan's `f2f` that is the sweep's "no listing" marker (a map whose
-         * `conditions` is empty — {"conditions": {}, "searched": true}) → NULL (a selection's:
-         * owed again), and every candidate's `f2f_conditions` that is {} → the key removed
-         * (PriceSweep reads a missing key exactly like null — owed on an unpicked scan; a picked
-         * scan prices only its selection). Every price (non-empty conditions) stays. Writes only
-         * those two columns, only on rows that change: updated_at, status, the selection and
-         * everything else stay as they were. A row whose JSON does not decode is left alone.
-         * Returns (selections, unpicked scans' own answers, candidate prints) reset. The caller
-         * holds the transaction.
+         * In place: a scan's `f2f` → NULL when it is the sweep's "no listing" marker (a map whose
+         * `conditions` is empty — {"conditions": {}, "searched": true}) or belongs to a lettered
+         * printing — a selected scan's to its selection's `collector_number` (owed again), an
+         * unpicked scan's own top-match price to its own `collector_number` (owed nowhere: the
+         * sweep asks the candidates); and every candidate's `f2f_conditions` → the key removed when
+         * it is {} or the candidate's `collector_number` is lettered (PriceSweep reads a missing key
+         * exactly like null — owed on an unpicked scan; a picked scan prices only its selection).
+         * Every other price stays. Writes only those two columns, only on rows that change:
+         * updated_at, status, the selection and everything else stay as they were. A row whose
+         * JSON does not decode is left alone. Returns (selections, unpicked scans' own answers,
+         * candidate prints) reset. The caller holds the transaction.
          */
         internal fun reaskMisses(db: SQLiteDatabase): Triple<Int, Int, Int> {
             var nSel = 0
@@ -265,16 +272,21 @@ class SqliteScanStore(file: File, private val clock: () -> String = ::isoNow) : 
                 } catch (e: IllegalArgumentException) {
                     continue
                 }
+                val picked = sel is Map<*, *> && sel.isNotEmpty()
+                val lettered = if (picked) lettered((sel as Map<*, *>)["collector_number"])
+                    else f2f is Map<*, *> && lettered(f2f["collector_number"])
                 val conditions = (f2f as? Map<*, *>)?.get("conditions")
-                if (f2f is Map<*, *> && conditions is Map<*, *> && conditions.isEmpty()) {
+                val miss = f2f is Map<*, *> && conditions is Map<*, *> && conditions.isEmpty()
+                if (f2f != null && (miss || lettered)) {
                     db.execSQL("UPDATE scans SET f2f = NULL WHERE id = ?", arrayOf<Any?>(r.id))
-                    if (sel is Map<*, *> && sel.isNotEmpty()) nSel++ else nTop++
+                    if (picked) nSel++ else nTop++
                 }
                 if (cands is List<*>) {
                     var dropped = 0
                     for (c in cands) {
-                        val answer = (c as? Map<*, *>)?.get("f2f_conditions")
-                        if (c is Map<*, *> && answer is Map<*, *> && answer.isEmpty()) {
+                        if (c !is Map<*, *>) continue
+                        val answer = c["f2f_conditions"] ?: continue
+                        if ((answer is Map<*, *> && answer.isEmpty()) || lettered(c["collector_number"])) {
                             @Suppress("UNCHECKED_CAST")
                             (c as MutableMap<String, Any?>).remove("f2f_conditions")   // MiniJson: LinkedHashMap
                             dropped++
@@ -288,6 +300,16 @@ class SqliteScanStore(file: File, private val clock: () -> String = ::isoNow) : 
                 }
             }
             return Triple(nSel, nTop, nCand)
+        }
+
+        /**
+         * store.py's `_lettered`: a collector number ending in an ASCII letter, either case ("59s", "80c",
+         * "266P", "M19-185j"). Only a–z / A–Z: "12★", "1†" and a non-ASCII letter ("9ä") are no such suffix;
+         * a non-string is never one.
+         */
+        internal fun lettered(collectorNumber: Any?): Boolean {
+            val last = (collectorNumber as? String)?.lastOrNull() ?: return false
+            return last in 'a'..'z' || last in 'A'..'Z'
         }
 
         /** server/store.py's `_SCHEMA`, verbatim. */

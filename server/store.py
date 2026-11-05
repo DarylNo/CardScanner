@@ -100,28 +100,49 @@ def _reprice_all(conn: sqlite3.Connection) -> tuple[int, int, int]:
 
 # The one-time re-ask (PRAGMA user_version 1 → 2, release 1.1.18): every "no F2F
 # listing" answer recorded is dropped once, so the sweep asks again with the
-# fixed matcher; every PRICE recorded stays. 1.1.17's matcher (and its
+# fixed matcher; every PRICE recorded stays, except a lettered printing's
+# (below). 1.1.17's matcher (and its
 # re-price, above) priced no meld half: F2F titles one "Midnight Scavengers //
 # Chittering Host [96a] [B] [Eldritch Moon] [Non-Foil]" — a side letter
 # Scryfall's #96 doesn't carry — so the owner's Midnight Scavengers EMN 96 and
 # Graf Rats EMN 91 were recorded as "no listing" (owner, 2026-11-05: "my price
 # checks of cards are failing"), and the sweep never re-asks a recorded miss.
-# A promo whose collector follows a label ("[Prerelease] [59s]") was found
-# before 1.1.18 too, but by F2F's order, so a price it recorded may be another
-# version's — those are not touched here (a price is never dropped by this
-# migration; the owner asked for the misses).
+# The same migration also drops every answer recorded for a LETTERED printing
+# (a Scryfall collector number ending in a letter: "59s", "59p", "38a", "80c",
+# "266p", "15s" — promo and art-variant versions), price or not. Those share
+# their name, set and F2F SKU code with their siblings, and 1.1.17 read a title
+# whose collector follows a label ("[Prerelease] [59s]", "[Autumn] [80c]") as
+# collector-less, so its set-name fallback took whichever same-name version
+# F2F listed first — a price it recorded may be the sibling's (measured: Lier
+# 59p filed 59s's $14.99, Mishra's Factory 80b 80c's $449.99). 1.1.18 reads
+# the collector after the label, so the sweep asks them again. Every other
+# price stays.
+
+_ASCII_LETTERS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
+
+def _lettered(collector_number: Any) -> bool:
+    """True if a collector number ends in an ASCII letter, either case ("59s",
+    "80c", "266P", "M19-185j"). Only a–z / A–Z: "12★", "1†" and a non-ASCII
+    letter ("9ä") are no such suffix; a non-string is never one."""
+    return (isinstance(collector_number, str) and collector_number != ""
+            and collector_number[-1] in _ASCII_LETTERS)
 
 
 def _reask_misses(conn: sqlite3.Connection) -> tuple[int, int, int]:
-    """Drop every recorded F2F MISS, in place: a scan's ``f2f`` that is the
+    """Drop every recorded F2F MISS and every answer recorded for a LETTERED
+    printing (``_lettered``), in place: a scan's ``f2f`` → NULL when it is the
     sweep's "no listing" marker (a dict whose ``conditions`` is empty —
-    ``{"conditions": {}, "searched": true}``) → NULL (a selection's: owed
-    again), and every candidate's ``f2f_conditions`` that is ``{}`` → the key
-    removed (the sweep reads a missing key exactly like None — owed on an
-    unpicked scan; a picked scan prices only its selection). Every price
-    (non-empty conditions) stays. Writes only those two columns, only on rows
-    that change: updated_at, status, the selection and everything else stay
-    as they were. A row whose JSON does not decode is left alone. Returns
+    ``{"conditions": {}, "searched": true}``) or belongs to a lettered printing
+    — a selected scan's to its selection's ``collector_number`` (owed again),
+    an unpicked scan's own top-match price to its own ``collector_number``
+    (owed nowhere: the sweep asks the candidates); and every candidate's
+    ``f2f_conditions`` → the key removed when it is ``{}`` or the candidate's
+    ``collector_number`` is lettered (the sweep reads a missing key exactly
+    like None — owed on an unpicked scan; a picked scan prices only its
+    selection). Every other price stays. Writes only those two columns, only
+    on rows that change: updated_at, status, the selection and everything else
+    stay as they were. A row whose JSON does not decode is left alone. Returns
     (selections, unpicked scans' own answers, candidate prints) reset. The
     caller holds the transaction."""
     n_sel = n_top = n_cand = 0
@@ -133,16 +154,24 @@ def _reask_misses(conn: sqlite3.Connection) -> tuple[int, int, int]:
             cands = json.loads(cands_raw) if cands_raw not in (None, "") else None
         except ValueError:
             continue
-        if isinstance(f2f, dict) and f2f.get("conditions") == {}:
+        picked = isinstance(sel, dict) and bool(sel)
+        if picked:
+            lettered = _lettered(sel.get("collector_number"))
+        else:
+            lettered = isinstance(f2f, dict) and _lettered(f2f.get("collector_number"))
+        miss = isinstance(f2f, dict) and f2f.get("conditions") == {}
+        if f2f is not None and (miss or lettered):
             conn.execute("UPDATE scans SET f2f = NULL WHERE id = ?", (sid,))
-            if isinstance(sel, dict) and sel:
+            if picked:
                 n_sel += 1
             else:
                 n_top += 1
         if isinstance(cands, list):
             dropped = 0
             for c in cands:
-                if isinstance(c, dict) and c.get("f2f_conditions", None) == {}:
+                if not isinstance(c, dict) or c.get("f2f_conditions") is None:
+                    continue
+                if c["f2f_conditions"] == {} or _lettered(c.get("collector_number")):
                     del c["f2f_conditions"]
                     dropped += 1
             if dropped:
@@ -188,7 +217,8 @@ class ScanStore:
              "{1} unpicked scan(s) their top-match price"),
             (2, "re-ask", _reask_misses,
              "{0} selection(s) and {2} candidate print(s) dropped their \"no F2F listing\" "
-             "answer, {1} unpicked scan(s) their own — asked again"),
+             "answer or a lettered printing's (\"59s\", \"80c\" …), {1} unpicked scan(s) "
+             "their own — asked again"),
         )
         for stamp, what, run, done in steps:
             if version() >= stamp:

@@ -23,7 +23,8 @@ import java.io.File
  * a store from before drops every F2F answer ONCE (PRAGMA user_version 0 → 1) and
  * the sweep prices them again (the owner's call). Then the one-time re-ask
  * (`_reask_misses`, 1 → 2, 1.1.18): 1.1.17 recorded every meld half as "no F2F
- * listing", so a 1.1.17 store drops every recorded MISS once — never a price.
+ * listing", so a 1.1.17 store drops every recorded MISS once — and every LETTERED
+ * printing's answer ("59s", "80c": 1.1.17 priced those by F2F's order); no other price.
  */
 @RunWith(RobolectricTestRunner::class)
 class SqliteScanStoreTest {
@@ -422,6 +423,154 @@ class SqliteScanStoreTest {
             assertEquals(m10Price, s.get(3)!!["f2f"])                                       // prices kept
             assertEquals(mapOf("NM" to 1.49, "PL" to 1.19), cands(s.get(4))[1]["f2f_conditions"])
             assertEquals(mapOf("NM" to 3.49, "PL" to 2.79), conditions(s.get(1)!!["f2f"]))  // priced again
+        } finally {
+            s.close()
+        }
+    }
+
+    // ── … and every LETTERED printing's answer (the same re-ask, 1 → 2) — store.py's `_reask_misses` /
+    // `_lettered`, tests/test_store.py's `_V1_LETTERED_ROWS`. A printing whose Scryfall collector ends in a letter
+    // ("59s", "59p", "38a", "80c", "266p") shares name, set and F2F SKU code with its siblings, and 1.1.17 read
+    // "[Prerelease] [59s]" as collector-less, so the set-name fallback took whichever version F2F listed first
+    // (Lier 59p filed 59s's $14.99, Mishra's Factory 80b 80c's $449.99). ASCII a–z either case only.
+
+    private val lierMid = mapOf("id" to "mid-59", "name" to "Lier, Disciple of the Drowned", "set" to "mid",
+        "set_name" to "Innistrad: Midnight Hunt", "collector_number" to "59")
+    private val lier59s = mapOf("id" to "pmid-59s", "name" to "Lier, Disciple of the Drowned", "set" to "pmid",
+        "set_name" to "Innistrad: Midnight Hunt Promos", "collector_number" to "59s")
+    private val lier59p = mapOf("id" to "pmid-59p", "name" to "Lier, Disciple of the Drowned", "set" to "pmid",
+        "set_name" to "Innistrad: Midnight Hunt Promos", "collector_number" to "59p")
+    private val hymn = mapOf("name" to "Hymn to Tourach", "set" to "fem", "set_name" to "Fallen Empires")
+    private val lier59sPrice = mapOf("name" to "Lier, Disciple of the Drowned", "set_code" to "pmid",
+        "collector_number" to "59p", "foil" to true, "handle" to "lier-prerelease-59s", "url" to "https://f2f/l",
+        "conditions" to mapOf("NM" to 14.99))
+    private val factory80cPrice = mapOf("name" to "Mishra's Factory", "set_code" to "atq", "collector_number" to "80b",
+        "foil" to false, "handle" to "factory-autumn-80c", "url" to "https://f2f/f", "conditions" to mapOf("NM" to 449.99))
+    private val hymnTopPrice = mapOf("name" to "Hymn to Tourach", "set_code" to "fem", "collector_number" to "38a",
+        "foil" to false, "handle" to "hymn-38c", "url" to "https://f2f/h", "conditions" to mapOf("NM" to 1.99))
+    private val boltTopPrice = mapOf("name" to "Lightning Bolt", "set_code" to "a25", "collector_number" to "141",
+        "foil" to false, "handle" to "bolt-a25", "url" to "https://f2f/a", "conditions" to mapOf("NM" to 3.49))
+
+    private val v1LetteredRows = listOf(
+        // 1: a picked lettered promo filed its sibling's price → NULL; its candidates' lettered answers go too
+        //    (owed nothing: picked), the regular printing's price stays
+        Old("selected", mapOf("scryfall_id" to "pmid-59p") + lier59p + sel + mapOf("foil" to true, "finish" to "Foil"),
+            lier59sPrice,
+            listOf(lierMid + ("f2f_conditions" to mapOf("NM" to 0.49)), lier59s + ("f2f_conditions" to mapOf("NM" to 14.99)),
+                lier59p + ("f2f_conditions" to mapOf("NM" to 14.99)))),
+        // 2: a picked art variant (80b) with 80c's $449.99 → NULL
+        Old("selected", mapOf("scryfall_id" to "atq-80b", "name" to "Mishra's Factory", "set" to "atq",
+            "set_name" to "Antiquities", "collector_number" to "80b") + sel, factory80cPrice, emptyList()),
+        // 3: an upper-case letter (a hand-edited collector) is a letter all the same
+        Old("selected", mapOf("scryfall_id" to "pneo-266p", "name" to "Boseiju, Who Endures", "set" to "pneo",
+            "set_name" to "Kamigawa: Neon Dynasty Promos", "collector_number" to "266P") + sel,
+            mapOf("conditions" to mapOf("NM" to 99.99)), emptyList()),
+        // 4: a picked ordinary printing — untouched, byte for byte
+        Old("selected",
+            mapOf("scryfall_id" to "m10-bolt", "name" to "Lightning Bolt", "set" to "m10",
+                "set_name" to "Magic 2010", "collector_number" to "146") + sel,
+            m10Price,
+            listOf(mapOf("id" to "m10-bolt", "name" to "Lightning Bolt", "set" to "m10",
+                "collector_number" to "146", "f2f_conditions" to mapOf("NM" to 2.99)))),
+        // 5: unpicked — the lettered prints' answers go, and the scan's own top-match price of the 38a; an
+        //    ordinary print's price stays; a miss goes as before
+        Old("candidates", null, hymnTopPrice, listOf(
+            mapOf("id" to "fem-38a") + hymn + mapOf("collector_number" to "38a", "f2f_conditions" to mapOf("NM" to 1.99)),
+            mapOf("id" to "fem-38c") + hymn + mapOf("collector_number" to "38c", "f2f_conditions" to mapOf("NM" to 1.99)),
+            mapOf("id" to "ema-92", "name" to "Hymn to Tourach", "set" to "ema", "collector_number" to "92",
+                "f2f_conditions" to mapOf("NM" to 2.49)),
+            mapOf("id" to "sld-1180", "name" to "Hymn to Tourach", "set" to "sld", "collector_number" to "1180",
+                "f2f_conditions" to none))),
+        // 6: unpicked — only an ASCII letter counts: "★", "†" and a non-ASCII letter are kept, a List compound
+        //    "M19-185j" goes; the scan's own top-match price (an ordinary printing) stays
+        Old("candidates", null, boltTopPrice, listOf(
+            mapOf("id" to "a25-141", "name" to "Lightning Bolt", "set" to "a25", "collector_number" to "141",
+                "f2f_conditions" to mapOf("NM" to 3.49)),
+            mapOf("id" to "x-12s", "name" to "Lightning Bolt", "set" to "pxx", "collector_number" to "12★",
+                "f2f_conditions" to mapOf("NM" to 5.99)),
+            mapOf("id" to "x-1d", "name" to "Lightning Bolt", "set" to "pxy", "collector_number" to "1†",
+                "f2f_conditions" to mapOf("NM" to 6.99)),
+            mapOf("id" to "x-9a", "name" to "Lightning Bolt", "set" to "pxz", "collector_number" to "9ä",
+                "f2f_conditions" to mapOf("NM" to 7.99)),
+            mapOf("id" to "plst-185j", "name" to "Lightning Bolt", "set" to "plst", "collector_number" to "M19-185j",
+                "f2f_conditions" to mapOf("NM" to 8.99)))),
+        // 7: a scan with no answer anywhere — untouched, byte for byte
+        Old("candidates", null, null, emptyList()),
+    )
+
+    @Test fun openingA117StoreAlsoDropsEveryLetteredPrintingsAnswer() {
+        val file = File(tmp.root, "v1.db")
+        writeOldDb(file, v1LetteredRows, version = 1)
+        val before = rawRows(file)
+        val s = SqliteScanStore(file)
+        try {
+            val rows = s.list().associateBy { it["id"] as Long }
+            assertEquals(mapOf(1L to null, 2L to null, 3L to null, 4L to m10Price, 5L to null, 6L to boltTopPrice, 7L to null),
+                rows.mapValues { it.value["f2f"] })
+            assertEquals(listOf(listOf(mapOf("NM" to 0.49), "-", "-"), emptyList(), emptyList(), listOf(mapOf("NM" to 2.99)),
+                listOf("-", "-", mapOf("NM" to 2.49), "-"),
+                listOf(mapOf("NM" to 3.49), mapOf("NM" to 5.99), mapOf("NM" to 6.99), mapOf("NM" to 7.99), "-"), emptyList()),
+                (1L..7L).map { sid -> cands(rows[sid]).map { it["f2f_conditions"] ?: "-" } })
+            val after = rawRows(file)
+            assertEquals(MiniJson.stringify(listOf(lierMid + ("f2f_conditions" to mapOf("NM" to 0.49)), lier59s, lier59p)),
+                after[1]!!["candidates"])                                                  // only that key gone
+            for ((sid, row) in before) for ((col, v) in row) {
+                if (col == "f2f" || col == "candidates") continue
+                assertEquals("$sid.$col", v, after[sid]!![col])
+            }
+            for (sid in listOf(4L, 7L)) assertEquals("$sid", before[sid], after[sid])     // byte for byte
+            assertEquals(before[6]!!["f2f"], after[6]!!["f2f"])
+            assertEquals(2, userVersion(file))
+            // a lettered printing's price recorded after the open (the fixed matcher's) is never dropped again
+            s.update(1, mapOf("f2f" to mapOf("conditions" to mapOf("NM" to 4.99))))
+        } finally {
+            s.close()
+        }
+        val s2 = SqliteScanStore(file)
+        try {
+            assertEquals(mapOf("conditions" to mapOf("NM" to 4.99)), s2.get(1)!!["f2f"])
+            assertEquals(2, userVersion(file))
+        } finally {
+            s2.close()
+        }
+    }
+
+    /** End to end on the phone's backend: after the open the sweep owes exactly what was dropped and is its to
+     *  price — the 3 lettered selections, and on the unpicked scans the lettered prints (38a, 38c, M19-185j) and
+     *  the one miss; a picked scan's candidates and an unpicked scan's own top-match price owe nothing. */
+    @Test fun theSweepReasksExactlyTheLetteredAnswersTheReaskDropped() {
+        val file = File(tmp.root, "v1.db")
+        writeOldDb(file, v1LetteredRows, version = 1)
+        val s = SqliteScanStore(file)
+        data class Call(val name: String, val set: String, val cn: String, val foil: Boolean)
+        val calls = ArrayList<Call>()
+        val b = PhoneBackend(s, PhotoDir(tmp.newFolder("photos")), pages = { null }, version = "t",
+            search = { emptyList() }, lanIp = { null }, packRows = { 0 },
+            f2f = { name, set, cn, foil, _ ->
+                calls += Call(name, set, cn, foil)
+                F2fAnswer.Found(linkedMapOf("name" to name, "set_code" to set, "collector_number" to cn, "foil" to foil,
+                    "handle" to "h", "url" to "http://f2f/h", "conditions" to linkedMapOf("NM" to 3.49, "PL" to 2.79)))
+            },
+            launch = { it.run() }, now = { 0.0 })
+        try {
+            fun priceMissing() = MiniJson.parse(String(b.handle(ApiRequest("POST", "/api/scans/price-missing")).body)) as Map<*, *>
+            assertEquals(7L, priceMissing()["queued"])
+            val order = compareBy<Call>({ it.name }, { it.set }, { it.cn })
+            assertEquals(listOf(
+                Call("Lier, Disciple of the Drowned", "pmid", "59p", true),                  // the selections
+                Call("Mishra's Factory", "atq", "80b", false),
+                Call("Boseiju, Who Endures", "pneo", "266P", false),
+                Call("Hymn to Tourach", "fem", "38a", false), Call("Hymn to Tourach", "fem", "38c", false),
+                Call("Hymn to Tourach", "sld", "1180", false),                               // row 5's prints
+                Call("Lightning Bolt", "plst", "M19-185j", false)).sortedWith(order),       // row 6's
+                calls.sortedWith(order))
+            assertEquals(0L, priceMissing()["queued"])
+            assertEquals(m10Price, s.get(4)!!["f2f"])                                       // prices kept
+            assertEquals(boltTopPrice, s.get(6)!!["f2f"])
+            assertEquals(listOf(mapOf("NM" to 3.49), mapOf("NM" to 5.99), mapOf("NM" to 6.99), mapOf("NM" to 7.99)),
+                cands(s.get(6)).take(4).map { it["f2f_conditions"] })
+            assertEquals(mapOf("NM" to 3.49, "PL" to 2.79), conditions(s.get(1)!!["f2f"]))  // priced again
+            assertNull(s.get(5)!!["f2f"])                                                   // owed nowhere
         } finally {
             s.close()
         }

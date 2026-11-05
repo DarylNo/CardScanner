@@ -411,7 +411,8 @@ def test_a_row_that_does_not_decode_is_left_alone(tmp_path):
 # Host [96a] [B]" for Scryfall's #96), and its re-price ran BEFORE the fix, so
 # the owner's meld halves were all recorded as "no F2F listing" — and the sweep
 # never re-asks a recorded miss. 1.1.18 drops every recorded MISS once (every
-# price stays) and the sweep asks those again with the fixed matcher.
+# price stays — but a lettered printing's, below) and the sweep asks those
+# again with the fixed matcher.
 
 _MARKER = {"conditions": {}, "searched": True}
 _MS = {"id": "emn-96", "name": "Midnight Scavengers", "set": "emn",
@@ -598,3 +599,171 @@ def test_the_sweep_reasks_exactly_the_misses_the_reask_dropped(tmp_path):
     assert store.get_scan(3)["f2f"] == _V1_ROWS[2]["f2f"]                         # prices kept
     assert store.get_scan(4)["candidates"][1]["f2f_conditions"] == {"NM": 1.49, "PL": 1.19}
     assert store.get_scan(1)["f2f"]["conditions"] == {"NM": 3.49, "PL": 2.79}    # priced again
+
+
+# ── … and every LETTERED printing's answer (the same re-ask, 1 → 2) ────────────
+# A printing whose Scryfall collector number ends in a letter ("59s", "59p",
+# "38a", "80c", "266p", "15s" — promo and art-variant versions) shares its
+# name, set and F2F SKU code with its siblings ("Lier, Disciple of the Drowned
+# [Prerelease] [59s] [Innistrad: Midnight Hunt Promos]" beside "[Promo Pack]
+# [59p]"). 1.1.17 read their titles as collector-less, so the set-name fallback
+# took whichever same-name version F2F listed first: a price it recorded for
+# one may be its sibling's (Lier 59p filed 59s's $14.99, Mishra's Factory 80b
+# 80c's $449.99). 1.1.18 reads the collector after the label, so the re-ask
+# drops those answers too — ASCII a–z either case; "★", "†" and non-ASCII
+# letters are no such suffix — and the sweep asks again. Every other price stays.
+
+_LIER_MID = {"id": "mid-59", "name": "Lier, Disciple of the Drowned", "set": "mid",
+             "set_name": "Innistrad: Midnight Hunt", "collector_number": "59"}
+_LIER_59S = {"id": "pmid-59s", "name": "Lier, Disciple of the Drowned", "set": "pmid",
+             "set_name": "Innistrad: Midnight Hunt Promos", "collector_number": "59s"}
+_LIER_59P = {"id": "pmid-59p", "name": "Lier, Disciple of the Drowned", "set": "pmid",
+             "set_name": "Innistrad: Midnight Hunt Promos", "collector_number": "59p"}
+_HYMN = {"name": "Hymn to Tourach", "set": "fem", "set_name": "Fallen Empires"}
+_LIER_59S_PRICE = {"name": "Lier, Disciple of the Drowned", "set_code": "pmid", "collector_number": "59p",
+                   "foil": True, "handle": "lier-prerelease-59s", "url": "https://f2f/l",
+                   "conditions": {"NM": 14.99}}
+_FACTORY_80C_PRICE = {"name": "Mishra's Factory", "set_code": "atq", "collector_number": "80b",
+                      "foil": False, "handle": "factory-autumn-80c", "url": "https://f2f/f",
+                      "conditions": {"NM": 449.99}}
+_HYMN_TOP_PRICE = {"name": "Hymn to Tourach", "set_code": "fem", "collector_number": "38a",
+                   "foil": False, "handle": "hymn-38c", "url": "https://f2f/h", "conditions": {"NM": 1.99}}
+_BOLT_TOP_PRICE = {"name": "Lightning Bolt", "set_code": "a25", "collector_number": "141",
+                   "foil": False, "handle": "bolt-a25", "url": "https://f2f/a", "conditions": {"NM": 3.49}}
+_V1_LETTERED_ROWS = [
+    # 1: a picked lettered promo filed its sibling's price (59s's $14.99 on the 59p)
+    #    → NULL; its candidates' lettered answers go too (owed nothing: picked),
+    #    the regular printing's price stays
+    dict(status="selected",
+         selection={"scryfall_id": "pmid-59p", **_LIER_59P, **_SEL, "foil": True, "finish": "Foil"},
+         f2f=_LIER_59S_PRICE,
+         candidates=[{**_LIER_MID, "f2f_conditions": {"NM": 0.49}},
+                     {**_LIER_59S, "f2f_conditions": {"NM": 14.99}},
+                     {**_LIER_59P, "f2f_conditions": {"NM": 14.99}}]),
+    # 2: a picked art variant (80b) with 80c's $449.99 → NULL
+    dict(status="selected",
+         selection={"scryfall_id": "atq-80b", "name": "Mishra's Factory", "set": "atq",
+                    "set_name": "Antiquities", "collector_number": "80b", **_SEL},
+         f2f=_FACTORY_80C_PRICE, candidates=[]),
+    # 3: an upper-case letter (a hand-edited collector) is a letter all the same
+    dict(status="selected",
+         selection={"scryfall_id": "pneo-266p", "name": "Boseiju, Who Endures", "set": "pneo",
+                    "set_name": "Kamigawa: Neon Dynasty Promos", "collector_number": "266P", **_SEL},
+         f2f={"conditions": {"NM": 99.99}}, candidates=[]),
+    # 4: a picked ordinary printing — untouched, byte for byte
+    dict(status="selected",
+         selection={"scryfall_id": "m10-bolt", "name": "Lightning Bolt", "set": "m10",
+                    "set_name": "Magic 2010", "collector_number": "146", **_SEL},
+         f2f={"name": "Lightning Bolt", "set_code": "m10", "collector_number": "146",
+              "foil": False, "handle": "bolt-m10", "url": "https://f2f/m",
+              "conditions": {"NM": 2.99}},
+         candidates=[{"id": "m10-bolt", "name": "Lightning Bolt", "set": "m10",
+                      "collector_number": "146", "f2f_conditions": {"NM": 2.99}}]),
+    # 5: unpicked — the lettered prints' answers go (both read 38c's $1.99 by
+    #    F2F's order), and so does the scan's own top-match price of the 38a; an
+    #    ordinary print's price stays; a miss goes as before
+    dict(status="candidates", selection=None, f2f=_HYMN_TOP_PRICE,
+         candidates=[{"id": "fem-38a", **_HYMN, "collector_number": "38a", "f2f_conditions": {"NM": 1.99}},
+                     {"id": "fem-38c", **_HYMN, "collector_number": "38c", "f2f_conditions": {"NM": 1.99}},
+                     {"id": "ema-92", "name": "Hymn to Tourach", "set": "ema",
+                      "collector_number": "92", "f2f_conditions": {"NM": 2.49}},
+                     {"id": "sld-1180", "name": "Hymn to Tourach", "set": "sld",
+                      "collector_number": "1180", "f2f_conditions": {}}]),
+    # 6: unpicked — only a collector ending in an ASCII letter counts: "★", "†"
+    #    and a non-ASCII letter are kept, a List compound "M19-185j" goes; the
+    #    scan's own top-match price (an ordinary printing) stays
+    dict(status="candidates", selection=None, f2f=_BOLT_TOP_PRICE,
+         candidates=[{"id": "a25-141", "name": "Lightning Bolt", "set": "a25",
+                      "collector_number": "141", "f2f_conditions": {"NM": 3.49}},
+                     {"id": "x-12s", "name": "Lightning Bolt", "set": "pxx",
+                      "collector_number": "12★", "f2f_conditions": {"NM": 5.99}},
+                     {"id": "x-1d", "name": "Lightning Bolt", "set": "pxy",
+                      "collector_number": "1†", "f2f_conditions": {"NM": 6.99}},
+                     {"id": "x-9a", "name": "Lightning Bolt", "set": "pxz",
+                      "collector_number": "9ä", "f2f_conditions": {"NM": 7.99}},
+                     {"id": "plst-185j", "name": "Lightning Bolt", "set": "plst",
+                      "collector_number": "M19-185j", "f2f_conditions": {"NM": 8.99}}]),
+    # 7: a scan with no answer anywhere — untouched, byte for byte
+    dict(status="candidates", selection=None, f2f=None, candidates=[]),
+]
+
+
+def test_opening_a_1_1_17_store_also_drops_every_lettered_printings_answer(tmp_path):
+    import json
+    path = tmp_path / "v1.db"
+    _write_old_db(path, _V1_LETTERED_ROWS, version=1)
+    before = _raw_rows(path)
+    s = ScanStore(path)
+    try:
+        rows = {r["id"]: r for r in s.list_scans()}
+        assert {sid: r["f2f"] for sid, r in rows.items()} == {
+            1: None, 2: None, 3: None, 4: _V1_LETTERED_ROWS[3]["f2f"], 5: None,
+            6: _BOLT_TOP_PRICE, 7: None}
+        assert [[c.get("f2f_conditions", "-") for c in rows[sid]["candidates"]] for sid in range(1, 8)] == [
+            [{"NM": 0.49}, "-", "-"], [], [], [{"NM": 2.99}],
+            ["-", "-", {"NM": 2.49}, "-"],
+            [{"NM": 3.49}, {"NM": 5.99}, {"NM": 6.99}, {"NM": 7.99}, "-"], []]
+        after = _raw_rows(path)
+        assert after[1]["candidates"] == json.dumps(
+            [{**_LIER_MID, "f2f_conditions": {"NM": 0.49}}, _LIER_59S, _LIER_59P])   # only that key gone
+        for sid, row in before.items():
+            for col in row:
+                if col not in ("f2f", "candidates"):
+                    assert after[sid][col] == row[col], (sid, col)
+        for sid in (4, 7):
+            assert after[sid] == before[sid], sid                         # untouched, byte for byte
+        assert after[6]["f2f"] == before[6]["f2f"]
+        assert _user_version(path) == 2
+        # a lettered printing's price recorded after the open (the fixed matcher's)
+        # is never dropped again
+        s.update_scan(1, f2f={"conditions": {"NM": 4.99}})
+    finally:
+        s.close()
+    s2 = ScanStore(path)
+    try:
+        assert s2.get_scan(1)["f2f"] == {"conditions": {"NM": 4.99}}
+        assert _user_version(path) == 2
+    finally:
+        s2.close()
+
+
+def test_the_sweep_reasks_exactly_the_lettered_answers_the_reask_dropped(tmp_path):
+    """The real app: after the open the sweep owes exactly what was dropped and
+    is its to price — the 3 lettered selections, and on the unpicked scans the
+    lettered prints (38a, 38c, M19-185j) and the one miss; a picked scan's
+    candidates and an unpicked scan's own top-match price owe nothing, and no
+    other price is asked again."""
+    from fastapi.testclient import TestClient
+    from server.app import create_app
+    from tests.test_server import FakeF2F, FakePipeline
+
+    class Recording(FakeF2F):
+        def __init__(self):
+            self.calls = []
+
+        def get_price(self, name, set_code, cn, foil=False, set_name=""):
+            self.calls.append((name, set_code, cn, foil))
+            return super().get_price(name, set_code, cn, foil, set_name)
+
+    path = tmp_path / "v1.db"
+    _write_old_db(path, _V1_LETTERED_ROWS, version=1)
+    f2f = Recording()
+    store = ScanStore(path)
+    app = create_app(pipeline_factory=lambda: FakePipeline(), store=store, f2f=f2f,
+                     scan_images_dir=tmp_path / "imgs", auto_sweep_interval=None)
+    c = TestClient(app)
+    assert c.post("/api/scans/price-missing").json()["queued"] == 7
+    assert sorted(f2f.calls) == sorted([
+        ("Lier, Disciple of the Drowned", "pmid", "59p", True),                    # the selections
+        ("Mishra's Factory", "atq", "80b", False),
+        ("Boseiju, Who Endures", "pneo", "266P", False),
+        ("Hymn to Tourach", "fem", "38a", False), ("Hymn to Tourach", "fem", "38c", False),
+        ("Hymn to Tourach", "sld", "1180", False),                                 # row 5's prints
+        ("Lightning Bolt", "plst", "M19-185j", False)])                            # row 6's
+    assert c.post("/api/scans/price-missing").json()["queued"] == 0
+    assert store.get_scan(4)["f2f"] == _V1_LETTERED_ROWS[3]["f2f"]                 # prices kept
+    assert store.get_scan(6)["f2f"] == _BOLT_TOP_PRICE
+    assert [cc["f2f_conditions"] for cc in store.get_scan(6)["candidates"][:4]] == [
+        {"NM": 3.49}, {"NM": 5.99}, {"NM": 6.99}, {"NM": 7.99}]
+    assert store.get_scan(1)["f2f"]["conditions"] == {"NM": 3.49, "PL": 2.79}     # priced again
+    assert store.get_scan(5)["f2f"] is None                                        # owed nowhere
