@@ -317,12 +317,13 @@ class MainActivity : AppCompatActivity() {
                 if (drawing) cancelArea()
                 applyStoredModeAndArea()
             }
-            // Settings may have changed torch / AE / focus lock while we were away.
+            // Settings may have changed torch / AE / the camera / zoom / refocus while we were away.
             camera?.setTorch(settings.torch)
             camera?.setAeLock(settings.aeLock)
             camera?.setHighRes(settings.highRes)
             camera?.setCamera(settings.cameraId)
             camera?.setZoomFit(settings.zoomFit)
+            camera?.setRefocusMin(settings.refocusMin)
             camera?.setMeasureDetail(measureArmOn())          // a session started (or stopped) from Settings
             refreshCameraPill()
             // Belt-and-braces: another screen may have unbound the shared CameraProvider
@@ -402,6 +403,7 @@ class MainActivity : AppCompatActivity() {
         camera?.setHighRes(settings.highRes)
         camera?.setCamera(settings.cameraId)
         camera?.setZoomFit(settings.zoomFit)
+        camera?.setRefocusMin(settings.refocusMin)
         refreshCameraPill()
     }
     private var appliedRoi: io.github.darylno.cardscanner.core.RoiFrac? = null
@@ -998,6 +1000,7 @@ class MainActivity : AppCompatActivity() {
         val cam = app.newCamera()
         camera = cam
         cam.setZoomFit(settings.zoomFit)
+        cam.setRefocusMin(settings.refocusMin)
         cam.setRoi(settings.roi)
         appliedRoi = settings.roi
         cam.setAuto(settings.auto)

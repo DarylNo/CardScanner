@@ -28,6 +28,7 @@ class CameraAdapter(private val context: Context, private val settings: AppSetti
     private var auto = true
     private var roi: RoiFrac? = null
     private var zoomFit = false
+    private var refocusMin = io.github.darylno.cardscanner.core.RefocusPolicy.DEFAULT
     private var drawing = false
     private var measureDetail = false
     private var preview: PreviewView? = null
@@ -93,6 +94,7 @@ class CameraAdapter(private val context: Context, private val settings: AppSetti
         this.preview = preview
         c.setScanMode(ScanMode.MOUNT)   // the app's only mode since 1.1.2 (Auto off = tap to scan)
         c.setZoomFit(zoomFit)
+        c.setRefocusMin(refocusMin)
         c.setDrawing(drawing)
         c.setRoi(roi)
         c.setAuto(auto)
@@ -164,6 +166,11 @@ class CameraAdapter(private val context: Context, private val settings: AppSetti
     }
 
     override fun setCamera(id: String?) { controller?.setCamera(id) }
+
+    override fun setRefocusMin(minutes: Int) {
+        refocusMin = minutes
+        controller?.setRefocusMin(minutes)
+    }
 
     override fun setMeasureDetail(on: Boolean) {
         measureDetail = on

@@ -53,6 +53,11 @@
     <string name="camera_pill_changed_tap">Camera: %1$s</string>
     <string name="settings_zoomfit">Zoom to fit the Area</string>
     <string name="settings_zoomfit_desc">Zooms the camera in so your scan Area fills the view (up to 2×, never past what the sensor resolves): more pixels on each card. Changing the zoom re-learns the empty tray. Off by default while it is tried on the rig.</string>
+    <string name="settings_refocus">Refocus on a card</string>
+    <string name="settings_refocus_desc">Tray: once this long has passed since the last focus on a card, the next card waits up to 1.5 s for autofocus on it — catches a lens that drifts (heat, a nudged mount, a thicker sleeve).</string>
+    <string name="settings_refocus_every_card">Every card</string>
+    <string name="settings_refocus_every">Every %1$d min</string>
+    <string name="settings_refocus_never">Never</string>
     <string name="settings_highres">High resolution</string>
     <string name="settings_highres_desc">2048×1536 (Standard is 1600×1200)</string>
     <string name="settings_aelock">Lock exposure + white balance</string>

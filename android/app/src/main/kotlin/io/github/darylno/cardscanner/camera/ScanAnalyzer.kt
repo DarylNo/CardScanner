@@ -237,10 +237,13 @@ class ScanAnalyzer(
     /**
      * Asked on every AUTO trigger (analysis thread): hold this capture until the
      * lens has focused on the card? (Mount: the first card after a bind / area
-     * change / sharpness drop — see CameraController.) Every hold is logged
-     * under `focus` (1.1.14): held, answered after N ms → capture #k from the
-     * frames after it, TIMED OUT after [FOCUS_WAIT_NS] → shot from the last
-     * frames, a late answer, or cancelled — the controller logs the pass itself.
+     * change / sharpness drop, and — "Refocus on a card", 1.1.18 — the next card
+     * once its interval has passed since the last focus on a card; the answer may
+     * ARM that pass, so it must be asked once per trigger — see CameraController /
+     * core CardFocusState.) Every hold is logged under `focus` as "card focus: …"
+     * (1.1.14; "first card: …" before 1.1.18): held, answered after N ms → capture
+     * #k from the frames after it, TIMED OUT after [FOCUS_WAIT_NS] → shot from the
+     * last frames, a late answer, or cancelled — the controller logs the pass itself.
      */
     @Volatile var focusFirst: () -> Boolean = { false }
     private var deferring = false
@@ -574,8 +577,9 @@ class ScanAnalyzer(
 
         if (trigger != null) {
             if (mode == ScanMode.MOUNT && runCatching { focusFirst() }.getOrDefault(false)) {
-                // Focus on THIS card before shooting it (once per session / area):
-                // the capture is held, and taken from frames newer than the focus.
+                // Focus on THIS card before shooting it (the first card per bind / Area /
+                // zoom, or a periodic refocus): the capture is held, and taken from frames
+                // newer than the focus.
                 deferring = true
                 deferredBox = trigger.box
                 deferStartTs = timestampNs
@@ -584,7 +588,7 @@ class ScanAnalyzer(
                 val sw0 = g0?.w ?: lastGrayDims?.get(0) ?: 0
                 val sh0 = g0?.h ?: lastGrayDims?.get(1) ?: 0
                 safeLog("focus") {
-                    "first card: Trigger held (≤ %.1f s) for a focus pass on the card — box %d,%d %d×%d of %d×%d"
+                    "card focus: Trigger held (≤ %.1f s) for a focus pass on the card — box %d,%d %d×%d of %d×%d"
                         .format(FOCUS_WAIT_NS / 1e9, b.x, b.y, b.w, b.h, sw0, sh0)
                 }
                 runCatching { sink.onFocusRequest(FocusRequest(b, roi, sw0, sh0)) }
@@ -611,11 +615,11 @@ class ScanAnalyzer(
                 val shot = if (nextId > id) "capture #$id" else "no capture (no frames)"
                 safeLog("focus") {
                     when {
-                        focused -> "first card: focus answered $answeredMs ms after the Trigger — $shot shot from the $BURST frames after it ($heldMs ms after the Trigger)"
-                        clockReset -> "first card: focus hold ended — the camera's clock restarted; $shot shot from the last frames"
-                        answeredMs >= 0 -> "first card: focus hold timed out after %.1f s — focus answered after $answeredMs ms but fewer than $BURST frames came after it; $shot shot from the last frames"
+                        focused -> "card focus: focus answered $answeredMs ms after the Trigger — $shot shot from the $BURST frames after it ($heldMs ms after the Trigger)"
+                        clockReset -> "card focus: focus hold ended — the camera's clock restarted; $shot shot from the last frames"
+                        answeredMs >= 0 -> "card focus: focus hold timed out after %.1f s — focus answered after $answeredMs ms but fewer than $BURST frames came after it; $shot shot from the last frames"
                             .format(FOCUS_WAIT_NS / 1e9)
-                        else -> "first card: focus hold timed out after %.1f s — no focus answer; $shot shot from the last frames (the lens may still have been moving)"
+                        else -> "card focus: focus hold timed out after %.1f s — no focus answer; $shot shot from the last frames (the lens may still have been moving)"
                             .format(FOCUS_WAIT_NS / 1e9)
                     }
                 }
@@ -882,7 +886,7 @@ class ScanAnalyzer(
     private fun cancelHold(why: String) {
         if (!deferring) return
         deferring = false
-        safeLog("focus") { "first card: focus hold cancelled ($why) — nothing shot" }
+        safeLog("focus") { "card focus: focus hold cancelled ($why) — nothing shot" }
     }
 
     /** Which of the fallback's three tests failed, in words. */
@@ -1008,7 +1012,7 @@ class ScanAnalyzer(
         // scene it kept is a blur. Now the lens has settled, re-take it.
         else if (!deferring && heldTimedOut) {
             heldTimedOut = false; rebaseNext = true
-            safeLog("focus") { "first card: focus answered after the hold gave up — the scanned scene is re-taken from the next sample" }
+            safeLog("focus") { "card focus: focus answered after the hold gave up — the scanned scene is re-taken from the next sample" }
         }
     }
 
@@ -1154,7 +1158,7 @@ class ScanAnalyzer(
         if (!rebaseNext && !heldTimedOut) return
         val owed = if (rebaseNext) "owed" else "still due (its focus pass had not answered)"
         rebaseNext = false; heldTimedOut = false
-        safeLog("focus") { "first card: the late-focus rebase is dropped before any sample took it ($owed) — $why (a card swapped meanwhile will scan)" }
+        safeLog("focus") { "card focus: the late-focus rebase is dropped before any sample took it ($owed) — $why (a card swapped meanwhile will scan)" }
     }
 
     private fun dropProbeRebase(why: String) {

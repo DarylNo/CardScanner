@@ -176,6 +176,80 @@ class ScanAnalyzerTest {
         assertEquals(3, rec.bursts[0].frames.size)
     }
 
+    // ── "Refocus on a card" (1.1.18, owner: "Need it to focus every once in a while") ──
+
+    /**
+     * Wired as CameraController wires it: the analyzer asks core [io.github.darylno.cardscanner.core.CardFocusState]
+     * at every Tray trigger, with the controller's clock. The first card after the bind is held for its pass;
+     * a card 4 min after that pass shoots at once; a card 5 min after it is held for a periodic pass — once,
+     * logged once — and shoots from the frames after that focus.
+     */
+    @Test fun aTrayTriggerAfterTheRefocusIntervalIsHeldForACardPass() {
+        val rec = Recorder()
+        val log = DebugLog(200, clock = { 0L })
+        val a = ScanAnalyzer(direct, rec, outlineFinder = boxFinder, shadowMode = false, log = log)
+        val minNs = 60_000_000_000L
+        var now = 0L
+        val focus = io.github.darylno.cardscanner.core.CardFocusState(log = { log.i("focus", it) }).apply { minutes = 5 }
+        a.focusFirst = { focus.holdForCard(now) }
+        focus.arm("first card after the camera bind")             // what every bind does
+        feedTo(a, tray, 12); feedTo(a, card, 12)
+        assertEquals("the first card is held for its pass", 1, rec.focusRequests)
+        assertTrue(rec.bursts.isEmpty())
+        focus.passEnded(true, now); a.focusDone()                 // the controller's answer
+        feedTo(a, card, 3)
+        assertEquals(1, rec.bursts.size)
+        fun nextCard() { feedTo(a, tray, 4); feedTo(a, card, 12) }
+        now = 4 * minNs + 59_000_000_000L
+        nextCard()
+        assertEquals("4 min 59 s after the last card focus: not held", 1, rec.focusRequests)
+        assertEquals(2, rec.bursts.size)
+        assertTrue(log.all().none { it.msg.startsWith("periodic") })
+        now = 5 * minNs
+        nextCard()
+        assertEquals("5 min after the last card focus: held for a periodic pass", 2, rec.focusRequests)
+        assertEquals("…nothing shot before it answers", 2, rec.bursts.size)
+        assertEquals("periodic: every 5 min — 5 min since the last focus on a card", focus.why)
+        val armed = log.all().filter { it.tag == "focus" && it.msg.startsWith("periodic refocus:") }
+        assertEquals("one line for the periodic pass: ${log.all().map { it.msg }}", 1, armed.size)
+        val focusAt = ts
+        focus.passEnded(true, now); a.focusDone()
+        feedTo(a, card, 3)
+        assertEquals(3, rec.bursts.size)
+        assertTrue("shot from frames after the periodic focus", rec.bursts[2].frames.all { it.timestampNs >= focusAt })
+        now += 1 * minNs
+        nextCard()
+        assertEquals("…and the clock started again at that answer", 2, rec.focusRequests)
+        assertEquals(4, rec.bursts.size)
+        assertTrue(log.all().filter { it.tag == "focus" }.none { it.msg.startsWith("first card:") })
+    }
+
+    /** A periodic pass never double-arms on top of a pass already armed (here a new Area's first card): ONE hold, its own why. */
+    @Test fun aPeriodicRefocusNeverDoubleArmsOnTopOfAnArmedFirstCardPass() {
+        val rec = Recorder()
+        val log = DebugLog(200, clock = { 0L })
+        val a = ScanAnalyzer(direct, rec, outlineFinder = boxFinder, shadowMode = false, log = log)
+        val minNs = 60_000_000_000L
+        var now = 0L
+        val focus = io.github.darylno.cardscanner.core.CardFocusState(log = { log.i("focus", it) }).apply { minutes = 2 }
+        a.focusFirst = { focus.holdForCard(now) }
+        focus.arm("first card after the camera bind")
+        feedTo(a, tray, 12); feedTo(a, card, 12)
+        focus.passEnded(true, now); a.focusDone(); feedTo(a, card, 3)
+        assertEquals(1, rec.bursts.size)
+        now = 30 * minNs                                          // the interval is long past…
+        focus.arm("first card in the new Area")                   // …and a new Area armed its own pass
+        feedTo(a, tray, 4); feedTo(a, card, 12)
+        assertEquals(2, rec.focusRequests)
+        assertEquals("the armed pass's own why", "first card in the new Area", focus.why)
+        assertTrue("no periodic arm on top of it: ${log.all().map { it.msg }}", log.all().none { it.msg.startsWith("periodic refocus:") })
+        focus.passEnded(true, now); a.focusDone(); feedTo(a, card, 3)
+        assertEquals(2, rec.bursts.size)
+        feedTo(a, tray, 4); feedTo(a, card, 12)
+        assertEquals("the next card shoots at once", 2, rec.focusRequests)
+        assertEquals(3, rec.bursts.size)
+    }
+
     // ── "is it focusing?" (1.1.14): the hold says what happened, and asks to meter the CARD ──
 
     /** The focus pass is asked for the TRIGGER's card (its box, in the sample of the Area), and the answered hold is logged with its timing. */
@@ -205,9 +279,9 @@ class ScanAnalyzerTest {
         feedTo(a, card, 3)
         assertEquals(1, rec.bursts.size)
         val focus = log.all().filter { it.tag == "focus" }.map { it.msg }
-        assertTrue(focus.joinToString("\n"), focus.any { it.startsWith("first card: Trigger held (≤ 1.5 s)") })
+        assertTrue(focus.joinToString("\n"), focus.any { it.startsWith("card focus: Trigger held (≤ 1.5 s)") })
         assertTrue(focus.joinToString("\n"), focus.any {
-            it.startsWith("first card: focus answered ") && it.contains("capture #${rec.bursts[0].id} shot from the 3 frames after it")
+            it.startsWith("card focus: focus answered ") && it.contains("capture #${rec.bursts[0].id} shot from the 3 frames after it")
         })
         assertTrue(focus.none { it.contains("timed out") })
     }
@@ -223,7 +297,7 @@ class ScanAnalyzerTest {
         assertEquals(1, rec.bursts.size)
         val focus = { log.all().filter { it.tag == "focus" }.map { it.msg } }
         assertTrue(focus().joinToString("\n"), focus().any {
-            it.startsWith("first card: focus hold timed out after 1.5 s — no focus answer; capture #${rec.bursts[0].id} shot from the last frames")
+            it.startsWith("card focus: focus hold timed out after 1.5 s — no focus answer; capture #${rec.bursts[0].id} shot from the last frames")
         })
         a.focusDone()                                       // the lens settles later
         assertTrue(focus().joinToString("\n"), focus().any { it.contains("answered after the hold gave up") })
@@ -259,7 +333,7 @@ class ScanAnalyzerTest {
             assertTrue("$answered: no re-learn", after.none { it.event is AutoScanner.Event.Learning })
             assertEquals("$answered: the swapped card IS scanned — ${after.map { describe(it.event) }}", 2, rec.bursts.size)
             assertTrue("$answered: ${log.all().map { it.msg }}", log.all().any {
-                it.tag == "focus" && it.msg.startsWith("first card: the late-focus rebase is dropped")
+                it.tag == "focus" && it.msg.startsWith("card focus: the late-focus rebase is dropped")
             })
             assertTrue(answered, rec.errors.isEmpty())
         }
@@ -275,7 +349,7 @@ class ScanAnalyzerTest {
         assertEquals(1, rec.focusRequests)
         a.cameraRestarted()
         assertTrue(rec.bursts.isEmpty())
-        assertTrue(log.all().any { it.tag == "focus" && it.msg == "first card: focus hold cancelled (camera restarted) — nothing shot" })
+        assertTrue(log.all().any { it.tag == "focus" && it.msg == "card focus: focus hold cancelled (camera restarted) — nothing shot" })
         a.reset()                                           // nothing held any more: no second line
         assertEquals(1, log.all().count { it.tag == "focus" && it.msg.contains("cancelled") })
     }

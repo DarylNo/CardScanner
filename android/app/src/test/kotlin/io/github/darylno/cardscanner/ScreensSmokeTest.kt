@@ -1158,6 +1158,107 @@ class ScreensSmokeTest {
     }
 
     /**
+     * Settings → Camera → "Refocus on a card" (1.1.18, owner: "Need it to focus every once in a
+     * while"): the row is sized and on screen at the N200's size (scrolled to), reads "Every 5 min"
+     * by default (core RefocusPolicy.DEFAULT, provisional), and the chooser offers the policy's
+     * choices in its own words — the same words the desktop's dropdown shows — and saves the pick.
+     */
+    @Test
+    @Config(qualifiers = "w411dp-h914dp-xxhdpi")
+    fun settings_refocusOnACard_isOnScreenAndSaves() {
+        app.getSharedPreferences("ui_settings", android.content.Context.MODE_PRIVATE).edit().remove("refocus_min").commit()
+        assertEquals(5, app.settings.refocusMin)
+        val a = launch(SettingsActivity::class.java)
+        val root = a.window.decorView
+        val title = findText(root, a.getString(R.string.settings_refocus))
+        assertNotNull("the Refocus on a card row", title)
+        var row: View = title!!
+        while (!row.isClickable) row = row.parent as View
+        assertNotNull("reads Every 5 min", findText(row, "Every 5 min"))
+        assertNotNull("says what it does", findText(row, a.getString(R.string.settings_refocus_desc)))
+        val scroll = generateSequence(row.parent) { it.parent }.filterIsInstance<android.widget.ScrollView>().first()
+        val loc = IntArray(2); row.getLocationInWindow(loc)
+        val sloc = IntArray(2); scroll.getLocationInWindow(sloc)
+        scroll.scrollTo(0, loc[1] - sloc[1] - 100)
+        ShadowLooper.idleMainLooper()
+        val l = IntArray(2); row.getLocationInWindow(l)
+        assertTrue("the row has a size (${row.width}×${row.height})", row.width > 0 && row.height > 0)
+        assertTrue("the row is inside the screen (y ${l[1]}..${l[1] + row.height} of ${root.height}, x ${l[0]}..${l[0] + row.width} of ${root.width})",
+            l[1] >= 0 && l[1] + row.height <= root.height && l[0] >= 0 && l[0] + row.width <= root.width)
+        fun refocusRow(): View {
+            var r: View = findText(a.window.decorView, a.getString(R.string.settings_refocus))!!
+            while (!r.isClickable) r = r.parent as View
+            return r
+        }
+        fun choose(index: Int) {
+            refocusRow().performClick()
+            ShadowLooper.idleMainLooper()
+            val d = org.robolectric.shadows.ShadowDialog.getLatestDialog() as androidx.appcompat.app.AlertDialog
+            val list = d.listView
+            val items = (0 until list.adapter.count).map { list.adapter.getItem(it).toString() }
+            assertEquals(listOf("Every card", "Every 2 min", "Every 5 min", "Every 10 min", "Every 30 min", "Never"), items)
+            assertEquals("the phone's words are the policy's (the desktop shows those)",
+                io.github.darylno.cardscanner.core.RefocusPolicy.CHOICES.map(io.github.darylno.cardscanner.core.RefocusPolicy::label), items)
+            list.performItemClick(list.getChildAt(index) ?: list, index, list.adapter.getItemId(index))
+            ShadowLooper.idleMainLooper()
+        }
+        choose(0)
+        assertEquals(0, app.settings.refocusMin)
+        assertNotNull("the row reads Every card", findText(refocusRow(), "Every card"))
+        choose(5)
+        assertEquals(-1, app.settings.refocusMin)
+        assertNotNull("the row reads Never", findText(refocusRow(), a.getString(R.string.settings_refocus_never)))
+        choose(4)
+        assertEquals(30, app.settings.refocusMin)
+        assertNotNull(findText(refocusRow(), "Every 30 min"))
+    }
+
+    /**
+     * "Refocus on a card" reaches the camera like the other camera settings: at start, at once
+     * from the computer (a PATCH, with no mode re-arm), and on return after it changed while the
+     * scan screen was away (Settings, or a PATCH while stopped) — the resume catch-up.
+     */
+    @Test
+    fun deviceApi_refocusReachesTheCameraLiveAndOnReturn() {
+        app.settings.roi = io.github.darylno.cardscanner.core.RoiFrac(0.25, 0.25, 0.75, 0.75)
+        app.settings.auto = true
+        app.settings.zoomFit = false
+        app.settings.refocusMin = 10
+        val cam = RecordingCamera()
+        app.cameraFactory = { _, _ -> cam }
+        grantCamera(true)
+        val c = Robolectric.buildActivity(MainActivity::class.java)
+        controllers += c
+        c.setup()
+        ShadowLooper.idleMainLooper()
+        fun refocus() = cam.calls.filter { it.startsWith("setRefocusMin(") }
+        assertEquals("the camera starts with the stored interval: ${cam.calls}", "setRefocusMin(10)", refocus().lastOrNull())
+        cam.calls.clear()
+        val answer = patchFromTheServerThread("""{"refocus_min":0}""")
+        assertEquals(0L, answer["refocus_min"])
+        assertEquals(0, app.settings.refocusMin)
+        assertEquals("a PATCH reaches the camera at once: ${cam.calls}", "setRefocusMin(0)", refocus().lastOrNull())
+        assertEquals("…without re-arming Tray: ${cam.calls}", emptyList<String>(), cam.autos)
+        // Away (Settings, Scans…): a change made meanwhile is caught up on return.
+        c.pause().stop()
+        ShadowLooper.idleMainLooper()
+        app.settings.refocusMin = -1
+        cam.calls.clear()
+        c.restart().start().resume()
+        ShadowLooper.idleMainLooper()
+        assertEquals("the return catches up: ${cam.calls}", "setRefocusMin(-1)", refocus().lastOrNull())
+        assertEquals(emptyList<String>(), cam.autos)
+        c.pause().stop()
+        ShadowLooper.idleMainLooper()
+        cam.calls.clear()
+        patchFromTheServerThread("""{"refocus_min":30}""")
+        assertEquals("nothing reaches a stopped screen's camera: ${cam.calls}", emptyList<String>(), cam.calls)
+        c.restart().start().resume()
+        ShadowLooper.idleMainLooper()
+        assertEquals("a PATCH while away is caught up on return: ${cam.calls}", "setRefocusMin(30)", refocus().lastOrNull())
+    }
+
+    /**
      * The Area chip says when the camera is zoomed ("Area ✓ · 1.55×", the longest label)
      * and still fits on screen at the N200's size; drawing a new Area reads Cancel, and
      * Cancel comes back to the zoomed label.
@@ -1264,6 +1365,7 @@ class ScreensSmokeTest {
         override fun setAeLock(on: Boolean) { calls += "setAeLock($on)" }
         override fun setHighRes(high: Boolean) { calls += "setHighRes($high)" }
         override fun setCamera(id: String?) { calls += "setCamera($id)" }
+        override fun setRefocusMin(minutes: Int) { calls += "setRefocusMin($minutes)" }
         override fun diagnostics(): String = "recording camera"
     }
 
