@@ -51,7 +51,14 @@ server and check the 📱 Scanner panel's "Zoom to fit the Area" controls
   is over, top-level `zoom_probe` shows "Last zoom probe (31 Oct 14:03,
   1600×1200): <its words>", with the scan screen closed too; `zoom_probe`
   null or absent (an older phone app) shows no probe line at all;
-- the banner reads d51 and the page throws nothing.
+- "Refocus on a card" (1.1.18, `refocus_min`): an older phone app (no
+  `refocus_min`) shows no dropdown; else the dropdown lists the PHONE's
+  choices in its words (`refocus_choices`), shows the phone's value, PATCHes
+  {"refocus_min": <minutes>} as a number when changed, reflects the answer and
+  later polls (another computer's change too, unless the dropdown has focus),
+  and on a refused PATCH shows the phone's error and goes back to the phone's
+  value;
+- the banner reads d52 and the page throws nothing.
 
     pip install playwright        # the browser: Chromium, see EXE below
     python scripts/check_device_ui.py
@@ -67,7 +74,7 @@ from PIL import Image, ImageDraw
 from playwright.sync_api import sync_playwright
 
 STATIC = Path(__file__).resolve().parents[1] / "server" / "static"
-VERSION = "d51"
+VERSION = "d52"
 
 ZOOMED = {"ratio": 1.9, "target": 1.9, "limit": "the Area fit", "fit": 2.0, "lossless": 2.6, "max": 10.0, "settling": False}
 UNZOOMED = {"ratio": 1.0, "target": 1.0, "limit": "Zoom to fit is off", "fit": 2.0, "lossless": 2.6, "max": 10.0, "settling": False}
@@ -100,10 +107,19 @@ NO_PICTURE = "no picture within 2 s — the camera's zoom is changing; try again
 NO_CAMERA = "the camera isn't running — open the scan screen on the phone"
 
 
-def device(zoom_fit=False, with_zoom=True, with_views=True):
+# "Refocus on a card" (1.1.18), as the phone sends it (DeviceApiTest.readsTheSettings).
+REFOCUS_CHOICES = [{"min": 0, "label": "Every card"}, {"min": 2, "label": "Every 2 min"}, {"min": 5, "label": "Every 5 min"},
+                   {"min": 10, "label": "Every 10 min"}, {"min": 30, "label": "Every 30 min"}, {"min": -1, "label": "Never"}]
+REFOCUS_BAD = "refocus_min must be one of 0 (every card), 2, 5, 10, 30 or -1 (never) — minutes"
+
+
+def device(zoom_fit=False, with_zoom=True, with_views=True, with_refocus=True):
     d = {"mode": "tray", "roi": {"x0": 0.25, "y0": 0.25, "x1": 0.75, "y1": 0.75}, "torch": False,
          "vibration": True, "high_res": False, "ae_lock": False, "check_ms": 2500, "camera": "auto",
          "cameras": [{"id": "0", "label": "Camera 0 · back · 13 MP · autofocus"}], "camera_live": True}
+    if with_refocus:
+        d["refocus_min"] = 5
+        d["refocus_choices"] = json.loads(json.dumps(REFOCUS_CHOICES))
     if with_views:
         d["snapshot_views"] = ["base", "camera"]
     if with_zoom:
@@ -184,6 +200,12 @@ class H(BaseHTTPRequestHandler):
                     d["zoom"] = dict(EDGE_ON if v else EDGE_OFF, settling=True)
                 else:
                     d["zoom"] = dict(ZOOMED if v else UNZOOMED, settling=True)
+            elif k == "refocus_min":
+                # The phone's rule (DeviceApi): one of its choices, a number; the stub can refuse on purpose.
+                if STATE.get("refuse_refocus") or isinstance(v, bool) or not isinstance(v, (int, float)) \
+                        or v not in [c["min"] for c in REFOCUS_CHOICES]:
+                    return self.send(400, {"error": REFOCUS_BAD})
+                d["refocus_min"] = int(v)
             elif k == "roi":
                 d["roi"] = v
                 # What /api/device reads once the phone has applied the new Area (its own hint).
@@ -231,17 +253,52 @@ with sync_playwright() as pw:
     pg = ctx.new_page()
     errs = []
     pg.on("pageerror", lambda e: errs.append(str(e)))
-    # The network's own console line for an answered 404 / the camera view's deliberate 503 is not a page error.
-    pg.on("console", lambda m: m.type == "error" and "404" not in m.text and "status of 503" not in m.text and errs.append(m.text))
+    # The network's own console line for an answered 404 / the camera view's deliberate 503 / the refused
+    # refocus_min's deliberate 400 is not a page error.
+    pg.on("console", lambda m: m.type == "error" and "404" not in m.text and "status of 503" not in m.text
+          and "status of 400" not in m.text and errs.append(m.text))
 
-    print("an older phone app (no zoom_fit)")
-    STATE["dev"] = device(with_zoom=False, with_views=False)
+    print("an older phone app (no zoom_fit, no refocus_min)")
+    STATE["dev"] = device(with_zoom=False, with_views=False, with_refocus=False)
     open_panel(pg)
     check(pg.locator("#dver").text_content().startswith(VERSION), f"banner reads {VERSION}")
+    check(not pg.locator("#devRefocusRow").is_visible(), "no Refocus on a card dropdown")
     check(not pg.locator("#devZoomRow").is_visible(), "no zoom checkbox")
     check(not pg.locator("#devZoom").is_visible(), "no zoom line")
     check(not pg.locator("#devViewSeg").is_visible(), "no Whole frame | Camera view toggle")
     check(not pg.locator("#devProbe").is_visible(), "no zoom probe line")
+    pg.click("#devClose")
+
+    print("Refocus on a card (1.1.18)")
+    STATE["dev"] = device(with_zoom=False, with_views=False)
+    open_panel(pg)
+    rf = pg.locator("#devRefocus")
+    check(pg.locator("#devRefocusRow").is_visible(), "the Refocus on a card dropdown shows")
+    opts = pg.evaluate("[...document.querySelectorAll('#devRefocus option')].map(o => [o.value, o.textContent])")
+    check(opts == [[str(c["min"]), c["label"]] for c in REFOCUS_CHOICES], f"…with the phone's choices in its words: {opts}")
+    check(rf.input_value() == "5", f"…on the phone's value, Every 5 min ({rf.input_value()!r})")
+    n0 = len(STATE["patches"])
+    rf.select_option("0")
+    pg.wait_for_function("document.querySelector('#devMsg').textContent.startsWith('Saved')", timeout=4000)
+    check(STATE["patches"][n0:] == [{"refocus_min": 0}], f"PATCH {{refocus_min: 0}}, a number (got {STATE['patches'][n0:]})")
+    check(STATE["dev"]["refocus_min"] == 0 and rf.input_value() == "0", f"…reflected: Every card ({rf.input_value()!r})")
+    rf.select_option("-1")
+    pg.wait_for_function("document.querySelector('#devMsg').textContent.startsWith('Saved')", timeout=4000)
+    check(STATE["patches"][-1] == {"refocus_min": -1} and rf.input_value() == "-1", f"Never → PATCH {{refocus_min: -1}} ({STATE['patches'][-1]})")
+    print("…a change from elsewhere (the phone's own Settings) shows on the next poll")
+    pg.evaluate("document.activeElement && document.activeElement.blur()")
+    STATE["dev"]["refocus_min"] = 30
+    pg.wait_for_function("document.querySelector('#devRefocus').value === '30'", timeout=8000)
+    check(rf.input_value() == "30", "the poll moved it to Every 30 min")
+    print("…a refused PATCH shows the phone's words and goes back to its value")
+    STATE["refuse_refocus"] = True
+    n0 = len(STATE["patches"])
+    rf.select_option("2")
+    pg.wait_for_function("document.querySelector('#devMsg').classList.contains('err')", timeout=4000)
+    check(pg.locator("#devMsg").inner_text() == REFOCUS_BAD, f"the phone's error: {pg.locator('#devMsg').inner_text()!r}")
+    check(STATE["patches"][n0:] == [{"refocus_min": 2}], f"the PATCH it refused ({STATE['patches'][n0:]})")
+    check(rf.input_value() == "30" and STATE["dev"]["refocus_min"] == 30, f"back to the phone's value ({rf.input_value()!r})")
+    STATE["refuse_refocus"] = False
     pg.click("#devClose")
 
     print("a 1.1.16 phone app (zoom, no snapshot_views), zoomed")

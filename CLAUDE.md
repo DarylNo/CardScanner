@@ -586,8 +586,8 @@ lens on testers' phones), minSdk 29, arm64-v8a.
   Area button draws, it never clears. Mount focus: locks on the Area centre,
   then on the first card's own centre (below); tap the preview to lock elsewhere.
 - **Focus — "is it focusing?" (owner on 1.1.10: "No zoom? Focus working?";
-  1.1.14).** What the code does: every bind / camera re-open / new Area / mode
-  switch locks AF (CameraX AUTO + one trigger, the lens then stays put) at the
+  1.1.14; periodic refocus 1.1.18, below).** What the code does: every bind /
+  camera re-open / new Area / mode switch locks AF (CameraX AUTO + one trigger, the lens then stays put) at the
   AREA CENTRE on the first frame — there is no card yet; Tray then holds the
   FIRST card's capture (≤ `FOCUS_WAIT_NS` 1.5 s) for a pass metered ON THE
   CARD: the Trigger box's centre mapped out of the sample (`core/FocusPoint`,
@@ -628,6 +628,44 @@ lens on testers' phones), minSdk 29, arm64-v8a.
   characteristics lines are read once per bind. Tested in code, not on the
   phone; dioptres → cm only when LENS_INFO_FOCUS_DISTANCE_CALIBRATION is not
   UNCALIBRATED.
+  **Refocus on a card (owner, 2026-11-05: "Need it to focus every once in a
+  while"; 1.1.18).** Before it the card pass ran only as above, so a lens that
+  drifts (heat, a nudged mount, a thicker sleeve) stayed soft all session — a
+  slow drift moves the watchdog's median too, so it never fires. Now, at a Tray
+  trigger with no pass armed, `core/RefocusPolicy` arms one ("periodic: every
+  N min — M min since the last focus on a card") once Settings → Camera →
+  **Refocus on a card** (`AppSettings.refocusMin`; Every card 0 / 2 / 5 / 10 /
+  30 min / Never −1; **default 5 min, PROVISIONAL** — a judgement until the
+  rig's `focus` lines say how often a periodic pass moves the lens) has passed
+  since the last focus on a card, and the same hold → pass → retry / give-up
+  runs. The last card focus = the end of the last card pass that ANSWERED
+  (focused or NOT focused — a lens that will not converge is not re-asked on
+  every card; the 3-tries give-up still ends a failing chain, and the next
+  chain comes one interval after its last answer) or an answered tap lock; a
+  cancelled / superseded pass does not count; a fresh bind forgets it, and no
+  answer since the bind is never due (the bind arms the first card itself —
+  a periodic arm there would arm twice). The arming state is
+  `core/CardFocusState` (moved out of CameraController): every call under its
+  monitor, so the analysis thread's check-then-arm in `holdForCard` (asked
+  through `ScanAnalyzer.focusFirst`, once per trigger — it may ARM) is one step
+  against the main thread's answers and arms and the capture thread's
+  watchdog. The shutter (Tap to scan) never consults it — a manual capture is
+  never held for focus; the zoom probe's own AF never counts. Log (tag
+  `focus`, one line per periodic pass): "periodic refocus: every 5 min — 7 min
+  since the last focus on a card — this card is held for a focus pass on it";
+  the analyzer's hold lines now start "card focus:" (they said "first card:"
+  for every hold); a change of the setting on the camera ("refocus on a card:
+  Every 5 min → Every card"). Diagnostics' `focus:` line ends "… · refocus
+  every 5 min · last card focus 3 min ago" ("none yet"; "periodic passes N"),
+  the header line "refocus on a card every 5 min". Applied live like the other
+  camera settings (the resume catch-up, a PATCH from the computer, deferred
+  past a zoom probe); `/api/device` `refocus_min` + `refocus_choices`
+  [{min, label}] (the desktop d52's dropdown shows the phone's own list).
+  `RefocusPolicyTest`, `CardFocusStateTest`, `ScanAnalyzerTest` (a Tray
+  trigger 4 min 59 s after the last card focus shoots at once, at 5 min it is
+  held; no double arm on top of a new Area's pass), `DeviceApiTest`,
+  `ScreensSmokeTest` (the Settings row at the N200's size; live + on return),
+  `check_device_ui.py`. Tested in code, not on the phone.
 - **Zoom to fit the Area (owner on 1.1.10: "No zoom?" → "Go"; 1.1.14).**
   Settings → Camera → "Zoom to fit the Area", **OFF by default in this build**
   (the owner turns it on to try it), both Tray and Tap to scan, also from the
@@ -1110,8 +1148,9 @@ lens on testers' phones), minSdk 29, arm64-v8a.
   after 20 bad codes from anywhere in 5 min.
 - **Scanner settings from the browser** (`core/server/DeviceApi`, admin only):
   GET/PATCH `/api/device` (mode, roi, torch, vibration, high_res, ae_lock,
-  check_ms, camera — with the phone's `cameras` listed — and zoom_fit, with the
-  live `zoom`) + `/api/device/snapshot.jpg` (the current UPRIGHT analysis frame —
+  check_ms, camera — with the phone's `cameras` listed — zoom_fit, with the
+  live `zoom`, and refocus_min — with the phone's `refocus_choices`, 1.1.18,
+  desktop d52) + `/api/device/snapshot.jpg` (the current UPRIGHT analysis frame —
   the space the Area fractions live in; while zoomed, the zoomed frame placed
   on a grey base-size picture, so it is still base space; `?view=camera` and the
   read-only `zoom_probe`: Zoom to fit, above). `DeviceBridge` writes `AppSettings`
@@ -1213,7 +1252,11 @@ Open threads:
   move — the dpt before vs after?), the `done #k` lines' three sharpness values
   and AF state (a soft burst, a burst shot mid-sweep in ACTIVE_SCAN), and that
   Diagnostics' camera block now says "live" with a `focus:` line. That data
-  decides the Phase-3 focus work (a periodic Tray re-lock, a better watchdog).
+  decides the Phase-3 focus work (a better watchdog). The periodic Tray re-lock
+  shipped in 1.1.18 ("Refocus on a card", default 5 min PROVISIONAL): from a
+  long Tray session's report, read each "periodic refocus" pass — did it move
+  the lens (dpt before vs after), did the next captures get sharper — and set
+  the default by that (also whether 1.5 s per periodic card is worth it).
 - Owner to run the zoom steps on the rig (1.1.17, all tested in code, not on
   the phone): Settings → Diagnostics → **Run the zoom steps** (about 10 min) —
   A1 (Tray, the Area drawn tight round where the cards land; 10 cards with 2+

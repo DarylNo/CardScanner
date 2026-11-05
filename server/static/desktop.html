@@ -332,6 +332,7 @@
         <label id="devZoomRow" style="display:none"><input type="checkbox" data-k="zoom_fit"><span>Zoom to fit the Area<small>Zooms the camera in so the scan area fills its view (up to 2×) · a zoom change re-learns the empty tray</small></span></label>
         <div id="devZoom" style="display:none"></div>
         <div id="devProbe" style="display:none"></div>
+        <label class="sel" id="devRefocusRow" style="display:none"><span>Refocus on a card<small>Tray: once this long has passed since the last focus on a card, the next card waits up to 1.5 s for autofocus on it — catches a lens that drifts</small></span><select id="devRefocus"></select></label>
         <label><input type="checkbox" data-k="torch"><span>Torch</span></label>
         <label><input type="checkbox" data-k="high_res"><span>High resolution<small>2048×1536 instead of 1600×1200</small></span></label>
         <label><input type="checkbox" data-k="ae_lock"><span>Exposure lock<small>Hold exposure + white balance</small></span></label>
@@ -2200,7 +2201,7 @@ function sigOf(scan){
 
 // Version banner — page version · server git hash. Same rationale as the
 // phone: without it, "is this the old page?" is undebuggable.
-const UI_VERSION = "d51";
+const UI_VERSION = "d52";
 
 // Who is asking: the phone server says "guest" for the 6-digit code (admin =
 // the paired computer); the computer's own server always says admin. Guests
@@ -2787,6 +2788,19 @@ function devRender(){
   if (!views && devView !== "base") { devView = "base"; devSnapshot(); }
   $("#devViewSeg").querySelectorAll("[data-view]").forEach(b => b.classList.toggle("ghost", b.dataset.view !== devView));
   devNote();
+  // "Refocus on a card" (1.1.18): the phone's own choices and words. Hidden for an older phone app (no refocus_min).
+  const rf = $("#devRefocus"), hasRefocus = "refocus_min" in dev && Array.isArray(dev.refocus_choices);
+  $("#devRefocusRow").style.display = hasRefocus ? "" : "none";
+  if (hasRefocus && document.activeElement !== rf) {
+    const opts = dev.refocus_choices.map(c => [String(c.min), c.label]);
+    const sig = JSON.stringify(opts);
+    if (rf.dataset.sig !== sig) {
+      rf.innerHTML = "";
+      for (const [v, t] of opts) { const o = document.createElement("option"); o.value = v; o.textContent = t; rf.appendChild(o); }
+      rf.dataset.sig = sig;
+    }
+    rf.value = String(dev.refocus_min);
+  }
   const cm = $("#devCheckMs");
   cm.closest("label").style.display = dev.check_ms == null ? "none" : "";   // an older phone app has no setting
   if (document.activeElement !== cm && dev.check_ms != null) cm.value = dev.check_ms;
@@ -2999,6 +3013,9 @@ $("#devCtl").querySelectorAll("input[data-k]").forEach(cb =>
   cb.addEventListener("change", () => devPatch({ [cb.dataset.k]: cb.checked })));
 $("#devCam").addEventListener("change", async e => {
   if (!(await devPatch({ camera: e.target.value }))) e.target.value = dev?.camera || "auto";
+});
+$("#devRefocus").addEventListener("change", async e => {
+  if (!(await devPatch({ refocus_min: Number(e.target.value) }))) e.target.value = String(dev?.refocus_min ?? "");
 });
 $("#devCheckMs").addEventListener("change", async e => {
   const v = Number(e.target.value);
