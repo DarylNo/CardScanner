@@ -1,0 +1,23 @@
+{
+ "url": "https://facetofacegames.com/products/graf-rats-chittering-host-91a-a-eldritch-moon-non-foil.json",
+ "body": {
+  "product": {
+   "title": "Graf Rats // Chittering Host [91a] [A] [Eldritch Moon] [Non-Foil]",
+   "handle": "graf-rats-chittering-host-91a-a-eldritch-moon-non-foil",
+   "variants": [
+    {
+     "sku": "M-EMN-Graf_Rats-91a-NM-NF",
+     "title": "NM",
+     "option1": "NM",
+     "price": "0.49"
+    },
+    {
+     "sku": "M-EMN-Graf_Rats-91a-PL-NF",
+     "title": "PL",
+     "option1": "PL",
+     "price": "0.39"
+    }
+   ]
+  }
+ }
+}

@@ -1,0 +1,61 @@
+{
+ "url": "https://facetofacegames.com/search/suggest.json?q=Tymaret%2C%20Chosen%20from%20Death%20Multiverse%20Legends%20foil&resources%5Btype%5D=product&resources%5Blimit%5D=20&resources%5Boptions%5D%5Bunavailable_products%5D=show",
+ "body": {
+  "resources": {
+   "results": {
+    "products": [
+     {
+      "title": "Tymaret, Chosen from Death [83] [Multiverse Legends] [Etched Foil]",
+      "handle": "tymaret-chosen-from-death-83-multiverse-legends-etched-foil",
+      "available": true
+     },
+     {
+      "title": "Tymaret, Chosen from Death - Serial Numbered [148z] [Planar Showcase] [Multiverse Legends] [Foil]",
+      "handle": "tymaret-chosen-from-death-serial-numbered-148z-planar-showcase-multiverse-legends-foil",
+      "available": false
+     },
+     {
+      "title": "Tymaret, Chosen from Death [18] [Planar Showcase] [Multiverse Legends] [Foil]",
+      "handle": "tymaret-chosen-from-death-18-planar-showcase-multiverse-legends-foil",
+      "available": true
+     },
+     {
+      "title": "Tymaret, Chosen from Death [18] [Planar Showcase] [Multiverse Legends] [Non-Foil]",
+      "handle": "tymaret-chosen-from-death-18-planar-showcase-multiverse-legends-non-foil",
+      "available": true
+     },
+     {
+      "title": "Tymaret, Chosen from Death [148] [Planar Showcase] [Multiverse Legends] [Halo Foil]",
+      "handle": "tymaret-chosen-from-death-148-planar-showcase-multiverse-legends-halo-foil",
+      "available": true
+     },
+     {
+      "title": "Tymaret, Chosen from Death [263] [Alternate Art] [Theros Beyond Death] [Foil]",
+      "handle": "tymaret-chosen-from-death-263-alternate-art-theros-beyond-death-foil",
+      "available": true
+     },
+     {
+      "title": "Tymaret, Chosen from Death - Serial Numbered - 383/500 - Planar Showcase - Foil - Scan 12805",
+      "handle": "tymaret-chosen-from-death-serial-numbered-383500-planar-showcase-foil-scan-12805",
+      "available": false
+     },
+     {
+      "title": "Tymaret, Chosen from Death [263] [Alternate Art] [Theros Beyond Death] [Non-Foil]",
+      "handle": "tymaret-chosen-from-death-263-alternate-art-theros-beyond-death-non-foil",
+      "available": true
+     },
+     {
+      "title": "Tymaret, Chosen from Death [119] [Theros Beyond Death] [Foil]",
+      "handle": "tymaret-chosen-from-death-119-theros-beyond-death-foil",
+      "available": true
+     },
+     {
+      "title": "Tymaret, Chosen from Death [THB-263] [The List] [Non-Foil]",
+      "handle": "tymaret-chosen-from-death-thb-263-the-list-non-foil",
+      "available": false
+     }
+    ]
+   }
+  }
+ }
+}

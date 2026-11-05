@@ -1,0 +1,23 @@
+{
+ "url": "https://facetofacegames.com/products/hymn-to-tourach-quinton-hoover-38c-fallen-empires-non-foil.json",
+ "body": {
+  "product": {
+   "title": "Hymn to Tourach [Quinton Hoover] [38c] [Fallen Empires] [Non-Foil]",
+   "handle": "hymn-to-tourach-quinton-hoover-38c-fallen-empires-non-foil",
+   "variants": [
+    {
+     "sku": "SIN-MTG-FEM-38c-ENG-NM-NF",
+     "title": "NM",
+     "option1": "NM",
+     "price": "1.99"
+    },
+    {
+     "sku": "SIN-MTG-FEM-38c-ENG-PL-NF",
+     "title": "PL",
+     "option1": "PL",
+     "price": "1.59"
+    }
+   ]
+  }
+ }
+}

@@ -1,0 +1,23 @@
+{
+ "url": "https://facetofacegames.com/products/hymn-to-tourach-susan-van-camp-38a-fallen-empires-non-foil.json",
+ "body": {
+  "product": {
+   "title": "Hymn to Tourach [Susan Van Camp] [38a] [Fallen Empires] [Non-Foil]",
+   "handle": "hymn-to-tourach-susan-van-camp-38a-fallen-empires-non-foil",
+   "variants": [
+    {
+     "sku": "SIN-MTG-FEM-38a-ENG-NM-NF",
+     "title": "NM",
+     "option1": "NM",
+     "price": "0.99"
+    },
+    {
+     "sku": "SIN-MTG-FEM-38a-ENG-PL-NF",
+     "title": "PL",
+     "option1": "PL",
+     "price": "0.79"
+    }
+   ]
+  }
+ }
+}

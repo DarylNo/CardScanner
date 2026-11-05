@@ -1,0 +1,61 @@
+{
+ "url": "https://facetofacegames.com/search/suggest.json?q=Midnight%20Scavengers%2096%20Eldritch%20Moon&resources%5Btype%5D=product&resources%5Blimit%5D=20&resources%5Boptions%5D%5Bunavailable_products%5D=show",
+ "body": {
+  "resources": {
+   "results": {
+    "products": [
+     {
+      "title": "Midnight Scavengers // Chittering Host [96a] [B] [Eldritch Moon] [Foil]",
+      "handle": "midnight-scavengers-chittering-host-96a-b-eldritch-moon-foil",
+      "available": true
+     },
+     {
+      "title": "Midnight Scavengers // Chittering Host [96a] [B] [Eldritch Moon] [Non-Foil]",
+      "handle": "midnight-scavengers-chittering-host-96a-b-eldritch-moon-non-foil",
+      "available": true
+     },
+     {
+      "title": "Graf Rats // Chittering Host [91a] [A] [Eldritch Moon] [Foil]",
+      "handle": "graf-rats-chittering-host-91a-a-eldritch-moon-foil",
+      "available": true
+     },
+     {
+      "title": "Ingenious Skaab [66] [Eldritch Moon] [Non-Foil]",
+      "handle": "ingenious-skaab-66-eldritch-moon-non-foil",
+      "available": true
+     },
+     {
+      "title": "Cryptbreaker [86] [Eldritch Moon] [Non-Foil]",
+      "handle": "cryptbreaker-86-eldritch-moon-non-foil",
+      "available": true
+     },
+     {
+      "title": "Noosegraf Mob [98] [Intro Pack] [Eldritch Moon Promos] [Foil]",
+      "handle": "noosegraf-mob-98-intro-pack-eldritch-moon-promos-foil",
+      "available": true
+     },
+     {
+      "title": "Tamiyo, Field Researcher [190] [Eldritch Moon] [Non-Foil]",
+      "handle": "tamiyo-field-researcher-190-eldritch-moon-non-foil",
+      "available": true
+     },
+     {
+      "title": "Eldritch Moon Intro Pack - Shallow Graves",
+      "handle": "eldritch-moon-intro-pack-shallow-graves",
+      "available": false
+     },
+     {
+      "title": "Take Inventory [76] [Eldritch Moon] [Non-Foil]",
+      "handle": "take-inventory-76-eldritch-moon-non-foil",
+      "available": true
+     },
+     {
+      "title": "Deploy the Gatewatch [20] [Eldritch Moon] [Non-Foil]",
+      "handle": "deploy-the-gatewatch-20-eldritch-moon-non-foil",
+      "available": true
+     }
+    ]
+   }
+  }
+ }
+}

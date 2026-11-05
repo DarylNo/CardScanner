@@ -1,0 +1,29 @@
+{
+ "url": "https://facetofacegames.com/products/mishras-factory-summer-80b-antiquities-non-foil.json",
+ "body": {
+  "product": {
+   "title": "Mishra's Factory [Summer] [80b] [Antiquities] [Non-Foil]",
+   "handle": "mishras-factory-summer-80b-antiquities-non-foil",
+   "variants": [
+    {
+     "sku": "SIN-MTG-ATQ-80b-ENG-HP-NF",
+     "title": "HP",
+     "option1": "HP",
+     "price": "175.00"
+    },
+    {
+     "sku": "SIN-MTG-ATQ-80b-ENG-NM-NF",
+     "title": "NM",
+     "option1": "NM",
+     "price": "349.99"
+    },
+    {
+     "sku": "SIN-MTG-ATQ-80b-ENG-PL-NF",
+     "title": "PL",
+     "option1": "PL",
+     "price": "244.99"
+    }
+   ]
+  }
+ }
+}

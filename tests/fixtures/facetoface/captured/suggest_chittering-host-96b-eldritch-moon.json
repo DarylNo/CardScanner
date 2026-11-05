@@ -1,0 +1,61 @@
+{
+ "url": "https://facetofacegames.com/search/suggest.json?q=Chittering%20Host%2096b%20Eldritch%20Moon&resources%5Btype%5D=product&resources%5Blimit%5D=20&resources%5Boptions%5D%5Bunavailable_products%5D=show",
+ "body": {
+  "resources": {
+   "results": {
+    "products": [
+     {
+      "title": "Midnight Scavengers // Chittering Host [96a] [B] [Eldritch Moon] [Foil]",
+      "handle": "midnight-scavengers-chittering-host-96a-b-eldritch-moon-foil",
+      "available": true
+     },
+     {
+      "title": "Midnight Scavengers // Chittering Host [96a] [B] [Eldritch Moon] [Non-Foil]",
+      "handle": "midnight-scavengers-chittering-host-96a-b-eldritch-moon-non-foil",
+      "available": true
+     },
+     {
+      "title": "Graf Rats // Chittering Host [91a] [A] [Eldritch Moon] [Foil]",
+      "handle": "graf-rats-chittering-host-91a-a-eldritch-moon-foil",
+      "available": true
+     },
+     {
+      "title": "Graf Rats // Chittering Host [91a] [A] [Eldritch Moon] [Non-Foil]",
+      "handle": "graf-rats-chittering-host-91a-a-eldritch-moon-non-foil",
+      "available": true
+     },
+     {
+      "title": "Eldritch Moon Booster Box",
+      "handle": "eldritch-moon-booster-box",
+      "available": true
+     },
+     {
+      "title": "Geist-Fueled Scarecrow [196] [Eldritch Moon] [Non-Foil]",
+      "handle": "geist-fueled-scarecrow-196-eldritch-moon-non-foil",
+      "available": true
+     },
+     {
+      "title": "Permeating Mass [165] [Eldritch Moon] [Non-Foil]",
+      "handle": "permeating-mass-165-eldritch-moon-non-foil",
+      "available": true
+     },
+     {
+      "title": "Distemper of the Blood [126] [Eldritch Moon] [Non-Foil]",
+      "handle": "distemper-of-the-blood-126-eldritch-moon-non-foil",
+      "available": true
+     },
+     {
+      "title": "Stitcher's Graft [200s] [Eldritch Moon Promos] [Foil]",
+      "handle": "stitchers-graft-200s-eldritch-moon-promos-foil",
+      "available": true
+     },
+     {
+      "title": "Contingency Plan [52] [Eldritch Moon] [Non-Foil]",
+      "handle": "contingency-plan-52-eldritch-moon-non-foil",
+      "available": true
+     }
+    ]
+   }
+  }
+ }
+}

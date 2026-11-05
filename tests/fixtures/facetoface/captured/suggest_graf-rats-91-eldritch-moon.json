@@ -1,0 +1,61 @@
+{
+ "url": "https://facetofacegames.com/search/suggest.json?q=Graf%20Rats%2091%20Eldritch%20Moon&resources%5Btype%5D=product&resources%5Blimit%5D=20&resources%5Boptions%5D%5Bunavailable_products%5D=show",
+ "body": {
+  "resources": {
+   "results": {
+    "products": [
+     {
+      "title": "Graf Rats // Chittering Host [91a] [A] [Eldritch Moon] [Foil]",
+      "handle": "graf-rats-chittering-host-91a-a-eldritch-moon-foil",
+      "available": true
+     },
+     {
+      "title": "Graf Rats // Chittering Host [91a] [A] [Eldritch Moon] [Non-Foil]",
+      "handle": "graf-rats-chittering-host-91a-a-eldritch-moon-non-foil",
+      "available": true
+     },
+     {
+      "title": "Graf Harvest [90] [Eldritch Moon] [Non-Foil]",
+      "handle": "graf-harvest-90-eldritch-moon-non-foil",
+      "available": true
+     },
+     {
+      "title": "Graf Harvest [90] [Eldritch Moon] [Foil]",
+      "handle": "graf-harvest-90-eldritch-moon-foil",
+      "available": false
+     },
+     {
+      "title": "Ishkanah, Grafwidow [162] [Eldritch Moon] [Non-Foil]",
+      "handle": "ishkanah-grafwidow-162-eldritch-moon-non-foil",
+      "available": true
+     },
+     {
+      "title": "Midnight Scavengers // Chittering Host [96a] [B] [Eldritch Moon] [Foil]",
+      "handle": "midnight-scavengers-chittering-host-96a-b-eldritch-moon-foil",
+      "available": true
+     },
+     {
+      "title": "Ishkanah, Grafwidow [162s] [Eldritch Moon Promos] [Foil]",
+      "handle": "ishkanah-grafwidow-162s-eldritch-moon-promos-foil",
+      "available": true
+     },
+     {
+      "title": "Eldritch Moon Intro Pack - Shallow Graves",
+      "handle": "eldritch-moon-intro-pack-shallow-graves",
+      "available": false
+     },
+     {
+      "title": "Ishkanah, Grafwidow [162] [Eldritch Moon] [Foil]",
+      "handle": "ishkanah-grafwidow-162-eldritch-moon-foil",
+      "available": true
+     },
+     {
+      "title": "Noosegraf Mob [98s] [Eldritch Moon Promos] [Foil]",
+      "handle": "noosegraf-mob-98s-eldritch-moon-promos-foil",
+      "available": true
+     }
+    ]
+   }
+  }
+ }
+}

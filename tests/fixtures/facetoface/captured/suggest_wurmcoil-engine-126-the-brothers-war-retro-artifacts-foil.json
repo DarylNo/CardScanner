@@ -1,0 +1,61 @@
+{
+ "url": "https://facetofacegames.com/search/suggest.json?q=Wurmcoil%20Engine%20126%20The%20Brothers%27%20War%20Retro%20Artifacts%20foil&resources%5Btype%5D=product&resources%5Blimit%5D=20&resources%5Boptions%5D%5Bunavailable_products%5D=show",
+ "body": {
+  "resources": {
+   "results": {
+    "products": [
+     {
+      "title": "Wurmcoil Engine - Serial Numbered [126z] [Retro Frame] [Schematic] [The Brothers' War Retro Artifacts] [Foil]",
+      "handle": "wurmcoil-engine-serial-numbered-126z-retro-frame-schematic-the-brothers-war-retro-artifacts-foil",
+      "available": false
+     },
+     {
+      "title": "Wurmcoil Engine [126] [Retro Frame] [Schematic] [The Brothers' War Retro Artifacts] [Foil]",
+      "handle": "wurmcoil-engine-126-retro-frame-schematic-the-brothers-war-retro-artifacts-foil",
+      "available": true
+     },
+     {
+      "title": "Wurmcoil Engine [126] [Retro Frame] [Schematic] [The Brothers' War Retro Artifacts] [Non-Foil]",
+      "handle": "wurmcoil-engine-126-retro-frame-schematic-the-brothers-war-retro-artifacts-non-foil",
+      "available": true
+     },
+     {
+      "title": "Wurmcoil Engine [63] [Retro Frame] [The Brothers' War Retro Artifacts] [Non-Foil]",
+      "handle": "wurmcoil-engine-63-retro-frame-the-brothers-war-retro-artifacts-non-foil",
+      "available": true
+     },
+     {
+      "title": "Wurmcoil Engine [63] [Retro Frame] [The Brothers' War Retro Artifacts] [Foil]",
+      "handle": "wurmcoil-engine-63-retro-frame-the-brothers-war-retro-artifacts-foil",
+      "available": true
+     },
+     {
+      "title": "Staff of Domination [56] [Retro Frame] [The Brothers' War Retro Artifacts] [Foil]",
+      "handle": "staff-of-domination-56-retro-frame-the-brothers-war-retro-artifacts-foil",
+      "available": true
+     },
+     {
+      "title": "Sigil of Valor [116] [Retro Frame] [Schematic] [The Brothers' War Retro Artifacts] [Foil]",
+      "handle": "sigil-of-valor-116-retro-frame-schematic-the-brothers-war-retro-artifacts-foil",
+      "available": true
+     },
+     {
+      "title": "Foundry Inspector [79] [Retro Frame] [Schematic] [The Brothers' War Retro Artifacts] [Foil]",
+      "handle": "foundry-inspector-79-retro-frame-schematic-the-brothers-war-retro-artifacts-foil",
+      "available": true
+     },
+     {
+      "title": "Scrap Trawler [49] [Retro Frame] [The Brothers' War Retro Artifacts] [Foil]",
+      "handle": "scrap-trawler-49-retro-frame-the-brothers-war-retro-artifacts-foil",
+      "available": true
+     },
+     {
+      "title": "Foundry Inspector [16] [Retro Frame] [The Brothers' War Retro Artifacts] [Foil]",
+      "handle": "foundry-inspector-16-retro-frame-the-brothers-war-retro-artifacts-foil",
+      "available": true
+     }
+    ]
+   }
+  }
+ }
+}

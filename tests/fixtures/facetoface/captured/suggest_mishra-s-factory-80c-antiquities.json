@@ -1,0 +1,41 @@
+{
+ "url": "https://facetofacegames.com/search/suggest.json?q=Mishra%27s%20Factory%2080c%20Antiquities&resources%5Btype%5D=product&resources%5Blimit%5D=20&resources%5Boptions%5D%5Bunavailable_products%5D=show",
+ "body": {
+  "resources": {
+   "results": {
+    "products": [
+     {
+      "title": "Mishra's Factory [Autumn] [80c] [Antiquities] [Non-Foil]",
+      "handle": "mishras-factory-autumn-80c-antiquities-non-foil",
+      "available": true
+     },
+     {
+      "title": "Mishra's Factory [Summer] [80b] [Antiquities] [Non-Foil]",
+      "handle": "mishras-factory-summer-80b-antiquities-non-foil",
+      "available": false
+     },
+     {
+      "title": "Mishra's Factory [Spring] [80a] [Antiquities] [Non-Foil]",
+      "handle": "mishras-factory-spring-80a-antiquities-non-foil",
+      "available": false
+     },
+     {
+      "title": "Mishra's Factory [Winter] [80d] [Antiquities] [Non-Foil]",
+      "handle": "mishras-factory-winter-80d-antiquities-non-foil",
+      "available": false
+     },
+     {
+      "title": "Mishra's Workshop [81] [Antiquities] [Non-Foil]",
+      "handle": "mishras-workshop-81-antiquities-non-foil",
+      "available": false
+     },
+     {
+      "title": "Mishra's Factory - Scan 11682",
+      "handle": "mishras-factory-scan-11682",
+      "available": false
+     }
+    ]
+   }
+  }
+ }
+}

@@ -1,0 +1,23 @@
+{
+ "url": "https://facetofacegames.com/products/phyrexian-dragon-engine-mishra-lost-to-phyrexia-163a-the-brothers-war-non-foil.json",
+ "body": {
+  "product": {
+   "title": "Phyrexian Dragon Engine // Mishra, Lost to Phyrexia [163a] [The Brothers' War] [Non-Foil]",
+   "handle": "phyrexian-dragon-engine-mishra-lost-to-phyrexia-163a-the-brothers-war-non-foil",
+   "variants": [
+    {
+     "sku": "SIN-MTG-BRO-163-ENG-NM-NF",
+     "title": "NM",
+     "option1": "NM",
+     "price": "2.49"
+    },
+    {
+     "sku": "SIN-MTG-BRO-163-ENG-PL-NF",
+     "title": "PL",
+     "option1": "PL",
+     "price": "1.99"
+    }
+   ]
+  }
+ }
+}

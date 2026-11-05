@@ -1,0 +1,61 @@
+{
+ "url": "https://facetofacegames.com/search/suggest.json?q=Hymn%20to%20Tourach%2038c%20Fallen%20Empires&resources%5Btype%5D=product&resources%5Blimit%5D=20&resources%5Boptions%5D%5Bunavailable_products%5D=show",
+ "body": {
+  "resources": {
+   "results": {
+    "products": [
+     {
+      "title": "Hymn to Tourach [Quinton Hoover] [38c] [Fallen Empires] [Non-Foil]",
+      "handle": "hymn-to-tourach-quinton-hoover-38c-fallen-empires-non-foil",
+      "available": true
+     },
+     {
+      "title": "Hymn to Tourach [Liz Danforth] [38b] [Fallen Empires] [Non-Foil]",
+      "handle": "hymn-to-tourach-liz-danforth-38b-fallen-empires-non-foil",
+      "available": true
+     },
+     {
+      "title": "Hymn to Tourach [Scott Kirschner] [38d] [Fallen Empires] [Non-Foil]",
+      "handle": "hymn-to-tourach-scott-kirschner-38d-fallen-empires-non-foil",
+      "available": true
+     },
+     {
+      "title": "Hymn to Tourach [Susan Van Camp] [38a] [Fallen Empires] [Non-Foil]",
+      "handle": "hymn-to-tourach-susan-van-camp-38a-fallen-empires-non-foil",
+      "available": true
+     },
+     {
+      "title": "Tourach's Chant [47] [Fallen Empires] [Non-Foil]",
+      "handle": "tourachs-chant-47-fallen-empires-non-foil",
+      "available": true
+     },
+     {
+      "title": "Hymn to Tourach [ll38b] [Leon Lindback] [Séance Circle] [Pro Tour Collector Set] [Non-Foil]",
+      "handle": "hymn-to-tourach-ll38b-leon-lindback-seance-circle-pro-tour-collector-set-non-foil",
+      "available": false
+     },
+     {
+      "title": "Hymn to Tourach [ll38d] [Leon Lindback] [Haunted Brunch] [Pro Tour Collector Set] [Non-Foil]",
+      "handle": "hymn-to-tourach-ll38d-leon-lindback-haunted-brunch-pro-tour-collector-set-non-foil",
+      "available": false
+     },
+     {
+      "title": "Hymn to Tourach [ll38c] [Leon Lindback] [Old Man With Cloak] [Pro Tour Collector Set] [Non-Foil]",
+      "handle": "hymn-to-tourach-ll38c-leon-lindback-old-man-with-cloak-pro-tour-collector-set-non-foil",
+      "available": false
+     },
+     {
+      "title": "Hymn to Tourach [gb38d] [George Baxter] [Haunted Brunch] [Pro Tour Collector Set] [Non-Foil]",
+      "handle": "hymn-to-tourach-gb38d-george-baxter-haunted-brunch-pro-tour-collector-set-non-foil",
+      "available": false
+     },
+     {
+      "title": "Hymn to Tourach [gb38b] [George Baxter] [Séance Circle] [Pro Tour Collector Set] [Non-Foil]",
+      "handle": "hymn-to-tourach-gb38b-george-baxter-seance-circle-pro-tour-collector-set-non-foil",
+      "available": false
+     }
+    ]
+   }
+  }
+ }
+}

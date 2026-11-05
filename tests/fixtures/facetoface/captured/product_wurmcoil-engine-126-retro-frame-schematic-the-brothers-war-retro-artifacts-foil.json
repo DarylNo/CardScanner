@@ -1,0 +1,23 @@
+{
+ "url": "https://facetofacegames.com/products/wurmcoil-engine-126-retro-frame-schematic-the-brothers-war-retro-artifacts-foil.json",
+ "body": {
+  "product": {
+   "title": "Wurmcoil Engine [126] [Retro Frame] [Schematic] [The Brothers' War Retro Artifacts] [Foil]",
+   "handle": "wurmcoil-engine-126-retro-frame-schematic-the-brothers-war-retro-artifacts-foil",
+   "variants": [
+    {
+     "sku": "SIN-MTG-BRR-126-ENG-NM-F",
+     "title": "NM",
+     "option1": "NM",
+     "price": "32.99"
+    },
+    {
+     "sku": "SIN-MTG-BRR-126-ENG-PL-F",
+     "title": "PL",
+     "option1": "PL",
+     "price": "26.39"
+    }
+   ]
+  }
+ }
+}

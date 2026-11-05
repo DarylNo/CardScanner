@@ -1,0 +1,61 @@
+{
+ "url": "https://facetofacegames.com/search/suggest.json?q=Urza%2C%20Lord%20Protector%20225%20The%20Brothers%27%20War&resources%5Btype%5D=product&resources%5Blimit%5D=20&resources%5Boptions%5D%5Bunavailable_products%5D=show",
+ "body": {
+  "resources": {
+   "results": {
+    "products": [
+     {
+      "title": "Urza, Lord Protector // Urza, Planeswalker [225] [The Brothers' War] [Foil]",
+      "handle": "urza-lord-protector-urza-planeswalker-225-the-brothers-war-foil",
+      "available": true
+     },
+     {
+      "title": "Urza, Lord Protector // Urza, Planeswalker [225s] [Prerelease] [The Brothers' War: Promos] [Foil]",
+      "handle": "urza-lord-protector-urza-planeswalker-225s-prerelease-the-brothers-war-promos-foil",
+      "available": true
+     },
+     {
+      "title": "Urza, Lord Protector // Urza, Planeswalker [225] [The Brothers' War] [Non-Foil]",
+      "handle": "urza-lord-protector-urza-planeswalker-225-the-brothers-war-non-foil",
+      "available": true
+     },
+     {
+      "title": "The Mightstone and Weakstone // Urza, Planeswalker [238a] [The Brothers' War] [Foil]",
+      "handle": "the-mightstone-and-weakstone-urza-planeswalker-238a-the-brothers-war-foil",
+      "available": true
+     },
+     {
+      "title": "Urza, Prince of Kroog [226s] [Prerelease] [The Brothers' War: Promos] [Foil]",
+      "handle": "urza-prince-of-kroog-226s-prerelease-the-brothers-war-promos-foil",
+      "available": true
+     },
+     {
+      "title": "Urza's Workshop [51] [Extended Art] [The Brothers' War: Commander] [Foil]",
+      "handle": "urzas-workshop-51-extended-art-the-brothers-war-commander-foil",
+      "available": true
+     },
+     {
+      "title": "Urza, Prince of Kroog [226] [The Brothers' War] [Foil]",
+      "handle": "urza-prince-of-kroog-226-the-brothers-war-foil",
+      "available": true
+     },
+     {
+      "title": "Urza, Chief Artificer [49] [Extended Art] [The Brothers' War: Commander] [Non-Foil]",
+      "handle": "urza-chief-artificer-49-extended-art-the-brothers-war-commander-non-foil",
+      "available": false
+     },
+     {
+      "title": "Urza, Prince of Kroog [226p] [Promo Pack] [The Brothers' War: Promos] [Non-Foil]",
+      "handle": "urza-prince-of-kroog-226p-promo-pack-the-brothers-war-promos-non-foil",
+      "available": true
+     },
+     {
+      "title": "Urza's Workshop [51] [Extended Art] [The Brothers' War: Commander] [Non-Foil]",
+      "handle": "urzas-workshop-51-extended-art-the-brothers-war-commander-non-foil",
+      "available": false
+     }
+    ]
+   }
+  }
+ }
+}

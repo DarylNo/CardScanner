@@ -1,0 +1,61 @@
+{
+ "url": "https://facetofacegames.com/search/suggest.json?q=The%20Mightstone%20and%20Weakstone%20238%20The%20Brothers%27%20War&resources%5Btype%5D=product&resources%5Blimit%5D=20&resources%5Boptions%5D%5Bunavailable_products%5D=show",
+ "body": {
+  "resources": {
+   "results": {
+    "products": [
+     {
+      "title": "The Mightstone and Weakstone // Urza, Planeswalker [238a] [The Brothers' War] [Non-Foil]",
+      "handle": "the-mightstone-and-weakstone-urza-planeswalker-238a-the-brothers-war-non-foil",
+      "available": true
+     },
+     {
+      "title": "The Mightstone and Weakstone // Urza, Planeswalker [238a] [The Brothers' War] [Foil]",
+      "handle": "the-mightstone-and-weakstone-urza-planeswalker-238a-the-brothers-war-foil",
+      "available": true
+     },
+     {
+      "title": "The Mightstone and Weakstone // Urza, Planeswalker [238as] [Prerelease] [The Brothers' War: Promos] [Foil]",
+      "handle": "the-mightstone-and-weakstone-urza-planeswalker-238as-prerelease-the-brothers-war-promos-foil",
+      "available": true
+     },
+     {
+      "title": "Mightstone's Animation [58] [The Brothers' War] [Non-Foil]",
+      "handle": "mightstones-animation-58-the-brothers-war-non-foil",
+      "available": true
+     },
+     {
+      "title": "Mechanized Warfare [338] [Extended Art] [The Brothers' War] [Foil]",
+      "handle": "mechanized-warfare-338-extended-art-the-brothers-war-foil",
+      "available": true
+     },
+     {
+      "title": "Plains [268] [The Brothers' War] [Non-Foil]",
+      "handle": "plains-268-the-brothers-war-non-foil",
+      "available": true
+     },
+     {
+      "title": "The Brothers' War - Set Booster Box",
+      "handle": "the-brothers-war-set-booster-box",
+      "available": true
+     },
+     {
+      "title": "The Brothers' War - Collector Booster Box",
+      "handle": "the-brothers-war-collector-booster-box",
+      "available": true
+     },
+     {
+      "title": "The Brothers' War: Commander - Commander Deck - Urza's Iron Alliance",
+      "handle": "the-brothers-war-commander-commander-deck-urzas-iron-alliance",
+      "available": false
+     },
+     {
+      "title": "Mox Amber [98] [Retro Frame] [Schematic] [The Brothers' War Retro Artifacts] [Foil]",
+      "handle": "mox-amber-98-retro-frame-schematic-the-brothers-war-retro-artifacts-foil",
+      "available": true
+     }
+    ]
+   }
+  }
+ }
+}

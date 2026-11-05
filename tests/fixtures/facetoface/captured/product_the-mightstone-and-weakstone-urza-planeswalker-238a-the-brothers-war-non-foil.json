@@ -1,0 +1,23 @@
+{
+ "url": "https://facetofacegames.com/products/the-mightstone-and-weakstone-urza-planeswalker-238a-the-brothers-war-non-foil.json",
+ "body": {
+  "product": {
+   "title": "The Mightstone and Weakstone // Urza, Planeswalker [238a] [The Brothers' War] [Non-Foil]",
+   "handle": "the-mightstone-and-weakstone-urza-planeswalker-238a-the-brothers-war-non-foil",
+   "variants": [
+    {
+     "sku": "SIN-MTG-BRO-238-ENG-NM-NF",
+     "title": "NM",
+     "option1": "NM",
+     "price": "6.99"
+    },
+    {
+     "sku": "SIN-MTG-BRO-238-ENG-PL-NF",
+     "title": "PL",
+     "option1": "PL",
+     "price": "5.59"
+    }
+   ]
+  }
+ }
+}

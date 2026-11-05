@@ -1,0 +1,23 @@
+{
+ "url": "https://facetofacegames.com/products/gisela-the-broken-blade-brisela-voice-of-nightmares-28a-a-eldritch-moon-non-foil.json",
+ "body": {
+  "product": {
+   "title": "Gisela, the Broken Blade // Brisela, Voice of Nightmares [28a] [A] [Eldritch Moon] [Non-Foil]",
+   "handle": "gisela-the-broken-blade-brisela-voice-of-nightmares-28a-a-eldritch-moon-non-foil",
+   "variants": [
+    {
+     "sku": "M-EMN-Gisela_th-28a-NM-NF",
+     "title": "NM",
+     "option1": "NM",
+     "price": "49.99"
+    },
+    {
+     "sku": "M-EMN-Gisela_th-28a-PL-NF",
+     "title": "PL",
+     "option1": "PL",
+     "price": "42.49"
+    }
+   ]
+  }
+ }
+}

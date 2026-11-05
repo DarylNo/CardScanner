@@ -155,11 +155,44 @@ def _title_names_card(title: str, name: str) -> bool:
     return want in (_norm_name(part), _norm_name(_NAME_END.split(part, 1)[0]))
 
 
-# A first bracket that IS a collector number: "141", "0083", "185j", "12★",
+def _title_is_meld_half(title: str, name: str) -> bool:
+    """True if the title's name part (the text before the first "[") is
+    "<the card's name> // <another face>" while the card itself is single-faced
+    — how F2F titles a meld half: "Midnight Scavengers // Chittering Host [96a]
+    [B] [Eldritch Moon] [Non-Foil]" for Scryfall's one-faced "Midnight
+    Scavengers". The front is compared with _norm_name; the other face must not
+    normalise to nothing. A card whose own name holds " // " (transform, split,
+    adventure) never is one: a letter after its number is another face."""
+    if " // " in str(name or ""):
+        return False
+    want = _norm_name(name)
+    part = str(title or "").split("[", 1)[0]
+    if not want or " // " not in part:
+        return False
+    front, other = part.split(" // ", 1)
+    return _norm_name(front) == want and _norm_name(other) != ""
+
+
+_ASCII_DIGITS = "0123456789"
+_ASCII_LOWER = "abcdefghijklmnopqrstuvwxyz"
+
+
+def _side_letter_of(title_collector: str, collector: str) -> bool:
+    """True if the title's collector is *collector* plus ONE side letter: F2F
+    numbers a meld half "96a" / "163a" where Scryfall says "96" / "163". Both
+    are compared through _norm_collector; the card's must end in an ASCII digit
+    and the extra character must be an ASCII letter (so "96b" for a "96a", a
+    "96★" or a "196a" never is one)."""
+    t, want = _norm_collector(title_collector), _norm_collector(collector)
+    return (want != "" and want[-1] in _ASCII_DIGITS
+            and len(t) == len(want) + 1 and t.startswith(want) and t[-1] in _ASCII_LOWER)
+
+
+# A bracket that IS a collector number: "141", "0083", "185j", "12★", "59s",
 # and the List's compounds "A25-141", "PF19-1", "PZ2-038", "TAFR-1",
 # "M19-185j" — never "Rulebook Showcase", "30th Anniversary Edition",
-# "2019 Judge Promo" (narrow on purpose: World Championship numbers like
-# "mlp315" are left to the set-name fallback, as before).
+# "2019 Judge Promo", "B" (narrow on purpose: World Championship numbers like
+# "mlp315" and a meld promo's "15as" are left to the set-name fallback).
 # ASCII digits and a FULL match (the Kotlin port's Regex.matches): Python's
 # \d would take any Unicode digit and its $ a trailing newline.
 _COLLECTOR_RE = re.compile(r"(?:[A-Za-z0-9]{1,6}-)?[0-9]+[A-Za-z★†]?")
@@ -175,8 +208,18 @@ def _parse_title_brackets(title: str) -> dict[str, str]:
     [401] [Rulebook Showcase] [Commander Legends: Battle for Baldur's Gate]
     [Non-Foil]``, ``Urza's Saga [114] [White Border] [Mystery Booster 2]
     [Non-Foil]``). The last bracket is always the foil label, the second-last
-    the set name, and the collector is the FIRST bracket when there are at
-    least three and it looks like a collector number (else "").
+    the set name, and the collector is the first bracket BEFORE the set name
+    that looks like a collector number, when there are at least three (else
+    ""). Usually that is the first bracket; promos and old variants put a
+    label first — ``Lier, Disciple of the Drowned [Prerelease] [59s]
+    [Innistrad: Midnight Hunt Promos] [Foil]``, ``[Promo Pack] [59p]``,
+    ``Hymn to Tourach [Susan Van Camp] [38a] [Fallen Empires]``, ``Mishra's
+    Factory [Autumn] [80c] [Antiquities]``. Read as collector-less those fell
+    to the set-name fallback, which admits every same-name version of the set
+    (one SKU code for all of them), so whichever F2F listed first won. Of the
+    907 distinct titles in the F2F answers captured 2026-11-04/05, 32 carry
+    the collector after a label and none two collector-shaped brackets before
+    the set name.
     """
     brackets = [b.strip() for b in re.findall(r"\[([^\]]+)\]", title)]
     out = {"collector": "", "set_name": "", "foil_label": ""}
@@ -185,8 +228,8 @@ def _parse_title_brackets(title: str) -> dict[str, str]:
     out["foil_label"] = brackets[-1]
     if len(brackets) >= 2:
         out["set_name"] = brackets[-2]
-    if len(brackets) >= 3 and _COLLECTOR_RE.fullmatch(brackets[0]):
-        out["collector"] = brackets[0]
+    if len(brackets) >= 3:
+        out["collector"] = next((b for b in brackets[:-2] if _COLLECTOR_RE.fullmatch(b)), "")
     return out
 
 
@@ -476,8 +519,9 @@ class FaceToFaceClient:
         Return the F2F price for the given printing, or ``None`` if not found.
 
         Strategy: predictive-search by name, then narrow to a confident set of
-        candidate products by foil + collector number (or, for promos that carry
-        no collector number in the title, by set name). Confirm the exact printing
+        candidate products by foil + collector number (or a meld half's one
+        side-lettered title, or, for promos that carry no collector number in
+        the title, by set name and the card's own name). Confirm the exact printing
         via the variant SKU's set-code segment before reading per-condition prices.
         Returns ``None`` rather than guessing when the printing can't be confirmed.
         """
@@ -566,6 +610,26 @@ class FaceToFaceClient:
             if p["_parts"]["collector"]
             and _norm_collector(p["_parts"]["collector"]) == want_collector
         ]
+        # 2b) A meld half: F2F titles it "Midnight Scavengers // Chittering
+        #     Host [96a] [B] [Eldritch Moon] [Non-Foil]" where Scryfall says
+        #     "Midnight Scavengers" #96 (1.1.17 lost every one: the exact match
+        #     misses the side letter, and the fallback below takes only
+        #     collector-less titles). With no exact title, ONE title whose
+        #     collector is the card's plus a side letter AND whose name part is
+        #     "<this card> // <another face>" is the candidate — two such (96a
+        #     and 96b) are ambiguous, never a guess. Meld-shaped on purpose: a
+        #     plain "one letter more" took "Tymaret, Chosen from Death - Serial
+        #     Numbered [148z]" ($299.99) for a foil whose own product is
+        #     labelled [Halo Foil]. The SKU still confirms the set (step 3).
+        if not candidates:
+            halves = [
+                p for p in foil_matches
+                if p["_parts"]["collector"]
+                and _side_letter_of(p["_parts"]["collector"], want_collector)
+                and _title_is_meld_half(p.get("title", ""), name)
+            ]
+            if len(halves) == 1:
+                candidates = halves
         if not candidates and want_set_name:
             candidates = [
                 p for p in foil_matches

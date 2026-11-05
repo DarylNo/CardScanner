@@ -1,0 +1,29 @@
+{
+ "url": "https://facetofacegames.com/products/mishras-factory-autumn-80c-antiquities-non-foil.json",
+ "body": {
+  "product": {
+   "title": "Mishra's Factory [Autumn] [80c] [Antiquities] [Non-Foil]",
+   "handle": "mishras-factory-autumn-80c-antiquities-non-foil",
+   "variants": [
+    {
+     "sku": "SIN-MTG-ATQ-80c-ENG-HP-NF",
+     "title": "HP",
+     "option1": "HP",
+     "price": "225.00"
+    },
+    {
+     "sku": "SIN-MTG-ATQ-80c-ENG-NM-NF",
+     "title": "NM",
+     "option1": "NM",
+     "price": "449.99"
+    },
+    {
+     "sku": "SIN-MTG-ATQ-80c-ENG-PL-NF",
+     "title": "PL",
+     "option1": "PL",
+     "price": "314.99"
+    }
+   ]
+  }
+ }
+}

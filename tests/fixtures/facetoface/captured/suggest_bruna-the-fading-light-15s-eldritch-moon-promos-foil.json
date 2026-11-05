@@ -1,0 +1,61 @@
+{
+ "url": "https://facetofacegames.com/search/suggest.json?q=Bruna%2C%20the%20Fading%20Light%2015s%20Eldritch%20Moon%20Promos%20foil&resources%5Btype%5D=product&resources%5Blimit%5D=20&resources%5Boptions%5D%5Bunavailable_products%5D=show",
+ "body": {
+  "resources": {
+   "results": {
+    "products": [
+     {
+      "title": "Bruna, the Fading Light // Brisela, Voice of Nightmares [15as] [B] [Eldritch Moon Promos] [Foil]",
+      "handle": "bruna-the-fading-light-brisela-voice-of-nightmares-15as-b-eldritch-moon-promos-foil",
+      "available": true
+     },
+     {
+      "title": "Bruna, the Fading Light // Brisela, Voice of Nightmares [15a] [B] [Eldritch Moon] [Foil]",
+      "handle": "bruna-the-fading-light-brisela-voice-of-nightmares-15a-b-eldritch-moon-foil",
+      "available": true
+     },
+     {
+      "title": "Bruna, the Fading Light // Brisela, Voice of Nightmares [15a] [B] [Eldritch Moon] [Non-Foil]",
+      "handle": "bruna-the-fading-light-brisela-voice-of-nightmares-15a-b-eldritch-moon-non-foil",
+      "available": true
+     },
+     {
+      "title": "Summary Dismissal [75s] [Eldritch Moon Promos] [Foil]",
+      "handle": "summary-dismissal-75s-eldritch-moon-promos-foil",
+      "available": true
+     },
+     {
+      "title": "Bruna, the Fading Light // Brisela, Voice of Nightmares [14] [Innistrad Remastered] [Foil]",
+      "handle": "bruna-the-fading-light-brisela-voice-of-nightmares-14-innistrad-remastered-foil",
+      "available": true
+     },
+     {
+      "title": "Gisela, the Broken Blade // Brisela, Voice of Nightmares [28as] [A] [Eldritch Moon Promos] [Foil]",
+      "handle": "gisela-the-broken-blade-brisela-voice-of-nightmares-28as-a-eldritch-moon-promos-foil",
+      "available": true
+     },
+     {
+      "title": "Liliana, the Last Hope [93s] [Eldritch Moon Promos] [Foil]",
+      "handle": "liliana-the-last-hope-93s-eldritch-moon-promos-foil",
+      "available": true
+     },
+     {
+      "title": "Spirit of the Hunt [170s] [Eldritch Moon Promos] [Foil]",
+      "handle": "spirit-of-the-hunt-170s-eldritch-moon-promos-foil",
+      "available": true
+     },
+     {
+      "title": "Bruna, the Fading Light // Brisela, Voice of Nightmares [1336] [Borderless] [Angels: They're Just Like Us] [Secret Lair Drop] [Foil]",
+      "handle": "bruna-the-fading-light-brisela-voice-of-nightmares-1336-borderless-angels-theyre-just-like-us-secret-lair-drop-foil",
+      "available": false
+     },
+     {
+      "title": "Emrakul's Evangel [156s] [Eldritch Moon Promos] [Foil]",
+      "handle": "emrakuls-evangel-156s-eldritch-moon-promos-foil",
+      "available": true
+     }
+    ]
+   }
+  }
+ }
+}

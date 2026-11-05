@@ -1,0 +1,61 @@
+{
+ "url": "https://facetofacegames.com/search/suggest.json?q=Midnight%20Scavengers%2096%20Eldritch%20Moon%20foil&resources%5Btype%5D=product&resources%5Blimit%5D=20&resources%5Boptions%5D%5Bunavailable_products%5D=show",
+ "body": {
+  "resources": {
+   "results": {
+    "products": [
+     {
+      "title": "Midnight Scavengers // Chittering Host [96a] [B] [Eldritch Moon] [Foil]",
+      "handle": "midnight-scavengers-chittering-host-96a-b-eldritch-moon-foil",
+      "available": true
+     },
+     {
+      "title": "Midnight Scavengers // Chittering Host [96a] [B] [Eldritch Moon] [Non-Foil]",
+      "handle": "midnight-scavengers-chittering-host-96a-b-eldritch-moon-non-foil",
+      "available": true
+     },
+     {
+      "title": "Graf Rats // Chittering Host [91a] [A] [Eldritch Moon] [Foil]",
+      "handle": "graf-rats-chittering-host-91a-a-eldritch-moon-foil",
+      "available": true
+     },
+     {
+      "title": "Slayer's Cleaver [198] [Eldritch Moon] [Foil]",
+      "handle": "slayers-cleaver-198-eldritch-moon-foil",
+      "available": true
+     },
+     {
+      "title": "Take Inventory [76] [Eldritch Moon] [Foil]",
+      "handle": "take-inventory-76-eldritch-moon-foil",
+      "available": true
+     },
+     {
+      "title": "Graf Harvest [90] [Eldritch Moon] [Foil]",
+      "handle": "graf-harvest-90-eldritch-moon-foil",
+      "available": false
+     },
+     {
+      "title": "Subjugator Angel [45] [Eldritch Moon] [Foil]",
+      "handle": "subjugator-angel-45-eldritch-moon-foil",
+      "available": true
+     },
+     {
+      "title": "Mausoleum Wanderer [69] [Eldritch Moon] [Foil]",
+      "handle": "mausoleum-wanderer-69-eldritch-moon-foil",
+      "available": true
+     },
+     {
+      "title": "Liliana, the Last Hope [93] [Eldritch Moon] [Foil]",
+      "handle": "liliana-the-last-hope-93-eldritch-moon-foil",
+      "available": true
+     },
+     {
+      "title": "Murder [97] [Eldritch Moon] [Foil]",
+      "handle": "murder-97-eldritch-moon-foil",
+      "available": false
+     }
+    ]
+   }
+  }
+ }
+}
