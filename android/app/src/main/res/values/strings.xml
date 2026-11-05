@@ -179,7 +179,7 @@
     <string name="pv_pair_off">The server isn\'t reachable on a network yet — join Wi-Fi or turn on the hotspot, then try again.</string>
     <string name="pv_paired">Paired computers (admin): %1$d</string>
     <string name="pv_forget">Forget paired computers</string>
-    <string name="pv_forget_confirm">Stop treating every paired computer as admin? They will need a new one-time code.</string>
+    <string name="pv_forget_confirm">Stop treating every paired computer as admin? They will need a new one-time code. (Anyone using the 6-digit Share code keeps full access while “Guests get full access” is on.)</string>
     <string name="pv_done">Done</string>
     <string name="settings_guests_full">Guests get full access</string>
     <string name="settings_guests_full_desc">On: anyone with the 6-digit Share code can do everything the paired computer can — delete scans for good (this phone holds the only copy; there is no backup), clear the list, export, run pricing, read the app log and change the scanner\'s settings. Off: guests can only review, pick, edit and flag cards for deletion. Applies at once, to guests already connected too.</string>

@@ -105,6 +105,9 @@
              background: var(--card); border: 1px solid var(--line); box-shadow: 0 6px 24px #0008; font-size: 14px; }
   #undoBar.show { display: flex; }
   #undoBar span { flex: 1 1 auto; }
+  /* d55: room under the last row while the bar shows — it sat over the last row's 🗑, so a
+     second delete near the bottom hit Undo and brought the first one back. */
+  #list.undoing { padding-bottom: 76px; }
   .empty { color: var(--dim); text-align: center; padding: 40px 20px; }
 
   /* ── detail ─────────────────────────────────────────────────────────── */
@@ -500,9 +503,19 @@ const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;
 async function jget(u){ return (await fetch(u)).json(); }
 async function jsend(u,m,b){ return (await fetch(u,{method:m,headers:{'Content-Type':'application/json'},body:JSON.stringify(b)})).json(); }
 
-function toast(msg){
+function toast(msg, ms = 1800){
   const t = $("#toast"); t.textContent = msg; t.classList.add("show");
-  clearTimeout(toast._t); toast._t = setTimeout(()=>t.classList.remove("show"), 1800);
+  clearTimeout(toast._t); toast._t = setTimeout(()=>t.classList.remove("show"), ms);
+}
+// A delete the phone did not carry out, in words that say why (d55): a 403 means this browser
+// lost full access while the page was open (the owner turned "Guests get full access" off) —
+// a retry can never succeed, so the page asks /api/me again and its delete controls go;
+// anything else (no answer, a 5xx) is worth another try.
+function deleteFailMsg(status, n){
+  const what = n ? ` ${n} scan${n > 1 ? "s" : ""}` : "";
+  return status === 403
+    ? `Couldn't delete${what} — this browser no longer has full access (the phone's owner turned it off)`
+    : `Couldn't delete${what} — the phone didn't answer; try again`;
 }
 
 /* ── pricing helpers ───────────────────────────────────────────────────── */
@@ -799,7 +812,7 @@ function renderList(){
       focusScan(Number(r.dataset.id));
     }));
   $("#list").querySelectorAll("[data-del]").forEach(b =>
-    b.addEventListener("click", e => { e.stopPropagation(); queueDelete(Number(b.dataset.del)); }));
+    b.addEventListener("click", e => { e.stopPropagation(); queueDelete(Number(b.dataset.del), e.detail === 0); }));
   $("#list").querySelectorAll("[data-inc]").forEach(cb =>
     cb.addEventListener("change", async () => {
       await jsend(`/api/scans/${cb.dataset.inc}`, "PATCH", { included: cb.checked });
@@ -835,31 +848,50 @@ const UNDO_MS = 5000;
 const waitingDel = new Set();          // hidden, Undo still possible
 const sentDel = new Map();             // hidden, DELETE sent → the pollSeq it answered at (Infinity = not yet)
 let undoTimer = null;
+let reopenId = null;                   // the card that was OPEN when its row was deleted: Undo opens it again
+let lastQueued = null;                 // where a keyboard Undo puts focus back
+let deferredMsg = null;                // a refusal that landed while the tab was hidden: told on return
 function liveScans(){
   return waitingDel.size || sentDel.size ? scans.filter(s => !waitingDel.has(s.id) && !sentDel.has(s.id)) : scans;
 }
-function queueDelete(id){
+function showUndoBar(on){
+  $("#undoBar").classList.toggle("show", on);
+  $("#list").classList.toggle("undoing", on);
+}
+// `viaKeyboard`: Enter / Space on the 🗑 (a click with detail 0). The re-render drops focus to
+// <body>, and Undo is the last control on the page — dozens of Tabs away inside the 5 s — so
+// focus goes to Undo itself (d55). A mouse click or a tap leaves focus alone.
+function queueDelete(id, viaKeyboard = false){
   waitingDel.add(id);
-  if (focusedId === id){ focusedId = null; detailSig = sigOf(null); renderDetail(); }
+  lastQueued = id;
+  if (focusedId === id){ reopenId = id; focusedId = null; detailSig = sigOf(null); renderDetail(); }
   $("#undoMsg").textContent = waitingDel.size > 1 ? `${waitingDel.size} scans deleted` : "Scan deleted";
-  $("#undoBar").classList.add("show");
+  showUndoBar(true);
   clearTimeout(undoTimer);
   undoTimer = setTimeout(() => commitDeletes(false), UNDO_MS);
   renderList();
+  if (viaKeyboard) $("#undoBtn").focus();
 }
+// Sends what waits; the promise settles once every DELETE answered (Export waits for it, so the
+// file and its preview never hold a row the list already shows as gone).
 function commitDeletes(keepalive){
   clearTimeout(undoTimer); undoTimer = null;
   const ids = [...waitingDel];
   waitingDel.clear();
-  $("#undoBar").classList.remove("show");
-  if (!ids.length) return;
+  reopenId = null;
+  showUndoBar(false);
+  if (!ids.length) return Promise.resolve();
   ids.forEach(id => sentDel.set(id, Infinity));
-  Promise.all(ids.map(id => fetch(`/api/scans/${id}`, { method: "DELETE", keepalive })
-      .then(r => r.ok || r.status === 404, () => false)))          // 404: already gone
-    .then(ok => {
+  return Promise.all(ids.map(id => fetch(`/api/scans/${id}`, { method: "DELETE", keepalive })
+      .then(r => r.ok || r.status === 404 ? 0 : r.status, () => -1)))   // 404: already gone; -1: no answer
+    .then(res => {
       ids.forEach(id => sentDel.set(id, pollSeq));
-      const bad = ok.filter(x => !x).length;
-      if (bad && !keepalive) toast(`Couldn't delete ${bad} scan${bad > 1 ? "s" : ""} — try again`);
+      const bad = res.filter(x => x !== 0);
+      if (bad.length){
+        const msg = deleteFailMsg(bad.includes(403) ? 403 : 0, bad.length);
+        if (document.hidden) deferredMsg = msg; else toast(msg, 5000);
+        if (bad.includes(403)) refreshRole();
+      }
       if (!keepalive) poll();
     });
 }
@@ -868,13 +900,25 @@ function settleDeletes(seq){
   for (const [id, at] of sentDel) if (seq > at) sentDel.delete(id);
 }
 $("#undoBtn").addEventListener("click", () => {
+  const back = [...waitingDel], fromBar = document.activeElement === $("#undoBtn");
   clearTimeout(undoTimer); undoTimer = null;
   waitingDel.clear();
-  $("#undoBar").classList.remove("show");
-  renderList();
+  showUndoBar(false);
+  // Undo puts back what Delete took: the card that was open opens again — unless another one was
+  // opened meanwhile (d55: the pane stayed on "Scan a card on your phone to begin").
+  if (reopenId != null && focusedId == null && back.includes(reopenId)) focusScan(reopenId);
+  reopenId = null;
+  listSig = ""; renderList();
+  if (fromBar){
+    const b = document.querySelector(`#list [data-del="${back.includes(lastQueued) ? lastQueued : back[0]}"]`);
+    if (b) b.focus();
+  }
 });
 addEventListener("pagehide", () => commitDeletes(true));
-document.addEventListener("visibilitychange", () => { if (document.hidden) commitDeletes(true); });
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) { commitDeletes(true); return; }
+  if (deferredMsg) { toast(deferredMsg, 5000); deferredMsg = null; poll(); }
+});
 
 // The detail is rendered from `scans` right here, so its signature is current:
 // clearing it made the next poll re-render the same scan a second time.
@@ -2208,7 +2252,12 @@ function wireDetail(scan){
     }));
 
   $("#delBtn")?.addEventListener("click", async () => {
-    await fetch(`/api/scans/${scan.id}`, { method: "DELETE" });
+    const r = await fetch(`/api/scans/${scan.id}`, { method: "DELETE" }).catch(() => null);
+    if (!r || !(r.ok || r.status === 404)) {            // refused or no answer: the card stays, and says why
+      toast(deleteFailMsg(r ? r.status : 0, 0), 5000);
+      if (r && r.status === 403) refreshRole();
+      return;
+    }
     focusedId = null; await poll(); renderDetail();
     toast("Scan deleted");
   });
@@ -2273,19 +2322,25 @@ function sigOf(scan){
 
 // Version banner — page version · server git hash. Same rationale as the
 // phone: without it, "is this the old page?" is undebuggable.
-const UI_VERSION = "d54";
+const UI_VERSION = "d55";
 
-// Who is asking: the phone server says "guest" for the 6-digit code (admin =
-// the paired computer); the computer's own server always says admin. Guests
-// get the review page without delete/clear/export/sweep (body.guest hides the
-// .admin-only controls; the server refuses them anyway).
+// Who is asking: the phone server says "admin" for the paired computer and, while
+// Settings → "Guests get full access" is on (the default), for the 6-digit Share
+// code too; with it off the Share code is a "guest". The computer's own server
+// always says admin. Guests get the review page without delete/clear/export/sweep
+// (body.guest hides the .admin-only controls; the server refuses them anyway).
+// Asked at load and again whenever the server refuses one of those (403: the owner
+// turned full access off while this page was open — d55).
 // Fails CLOSED: guest until /api/me answers (a 404 = a server from before roles = admin).
-fetch("/api/me").then(r => r.status === 404 ? { role: "admin" } : r.ok ? r.json() : null).then(d => {
-  if (!d) return;
-  role = d.role === "admin" ? "admin" : "guest";
-  document.body.classList.toggle("guest", role === "guest");
-  listSig = ""; detailSig = ""; renderList(); renderDetail();
-}).catch(() => {});
+function refreshRole(){
+  return fetch("/api/me").then(r => r.status === 404 ? { role: "admin" } : r.ok ? r.json() : null).then(d => {
+    if (!d) return;
+    role = d.role === "admin" ? "admin" : "guest";
+    document.body.classList.toggle("guest", role === "guest");
+    listSig = ""; detailSig = ""; renderList(); renderDetail();
+  }).catch(() => {});
+}
+refreshRole();
 $("#sweepStopBtn").addEventListener("click", async () => {
   await jsend("/api/price-sweep/stop", "POST", {});
   toast("Sweep stopping — auto-sweep paused 10 min");
@@ -2463,7 +2518,15 @@ async function clearScans(only){
   // "flagged" sends the ids counted above: a flag landing after this confirm is never swept up.
   const body = only === "flagged" ? { only, ids: scans.filter(s => s.flagged).map(s => s.id) }
     : only ? { only } : {};
-  const r = await jsend("/api/scans/delete-all", "POST", body);
+  const res = await fetch("/api/scans/delete-all", { method: "POST",
+    headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).catch(() => null);
+  const r = res && res.ok ? await res.json().catch(() => null) : null;
+  if (!r || typeof r.deleted !== "number") {          // refused or no answer: nothing went (d55: "Deleted undefined scans")
+    toast(deleteFailMsg(res ? res.status : 0, 0), 5000);
+    if (res && res.status === 403) refreshRole();
+    poll();
+    return;
+  }
   focusedId = null; listSig = ""; detailSig = "";
   await poll(); renderDetail();
   toast(`Deleted ${r.deleted} scan${r.deleted===1?'':'s'}`);
@@ -2471,7 +2534,9 @@ async function clearScans(only){
 $("#clearJunkBtn").addEventListener("click", () => clearScans("unselected"));
 $("#clearAllBtn").addEventListener("click", () => clearScans(null));
 $("#clearFlagBtn").addEventListener("click", () => clearScans("flagged"));
-$("#exportBtn").addEventListener("click", openCsvBuilder);
+// Rows waiting in their Undo window go first (d55): the stats already leave them out, so the
+// file and its preview must too — the server would still export them until their DELETE lands.
+$("#exportBtn").addEventListener("click", async () => { await commitDeletes(false); openCsvBuilder(); });
 
 /* ── Export to CSV builder ──────────────────────────────────────────────────
    The layout lives on the server (one per scanner, export_layout.json), is

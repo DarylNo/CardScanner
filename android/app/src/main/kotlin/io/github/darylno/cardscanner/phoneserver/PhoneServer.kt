@@ -30,7 +30,8 @@ import java.util.concurrent.atomic.AtomicInteger
  * — the app's own review screen and any computer on the LAN — are served from
  * here through the gateway ([GatewayService] keeps it up while the app runs,
  * screen off included): LAN only, the paired computer is admin, the 6-digit
- * code makes a guest, lockouts as before.
+ * code is admin too while Settings → "Guests get full access" is on (the
+ * default) and a guest when it is off, lockouts as before.
  *
  * Storage: the owner's rule (2026-09-30) — at [WARN_AT] scans show the photo
  * size and free space as a warning, then keep going; nothing is pruned.
@@ -122,7 +123,7 @@ class PhoneServer(
     private val f2f by lazy { PhoneF2f(ctx, File(ctx.cacheDir, "facetoface")) }
     private val sweepExec = Executors.newSingleThreadExecutor { r -> Thread(r, "price-sweep").apply { isDaemon = true } }
 
-    /** The paired computer(s): admin; everyone with the 6-digit code is a guest. */
+    /** The paired computer(s): admin. The 6-digit code's role is the "Guests get full access" setting, asked by [GatewayServer] per request. */
     val admins = AdminPairing(File(root, "admins.json"))
 
     /** The upload queue's door: identify on the phone, file here (see [LocalScanUploader]). */

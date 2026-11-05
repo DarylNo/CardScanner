@@ -982,8 +982,27 @@ lens on testers' phones), minSdk 29, arm64-v8a.
   is applied (`settleDeletes`; `poll` now drops an answer older than the newest
   applied), so no in-flight poll flashes it back; a refused DELETE (403 — full
   access turned off meanwhile) shows the row again with a toast.
-  `scripts/check_row_delete_ui.py` drives it in Chromium (admin, touch, a
-  refused delete, a restricted guest); `test_static_pages.py` guards it in CI.
+  **Review of d54 (desktop d55, phone v57):** the list gets bottom room while the
+  bar shows (`#list.undoing` — the bar sat over the last row's 🗑, so a second
+  delete near the bottom hit Undo); Enter / Space on a 🗑 (a click with
+  `detail` 0) moves focus to Undo — the re-render dropped it to `<body>`, Undo
+  dozens of Tabs away — and a keyboard Undo puts it back on the restored row's
+  🗑; Undo re-opens the card that was open when its row went (`reopenId`, never
+  over a card opened meanwhile); Export sends what waits FIRST (the stats leave
+  it out, the server would still export it); EVERY delete path says why it did
+  not happen (`deleteFailMsg`): a 403 is "no longer has full access (the phone's
+  owner turned it off)" — never "try again" — and re-asks `/api/me`
+  (`refreshRole`), so the controls go; no answer is "try again". Before, the
+  detail's "Delete this scan" toasted "Scan deleted" on a 403, Clear read
+  "Deleted undefined scans", phone.html put a swiped scan back silently, and a
+  refusal while the tab was hidden was never told (now kept in `deferredMsg`
+  until the tab is back). phone.html's `#flash` sits above every panel
+  (`position: fixed`, z 30 — it was in the list, under an open card) with a
+  `.bad` colour, and Clear says its result there too (the status line is hidden
+  in the app). `scripts/check_row_delete_ui.py` drives all of it in Chromium
+  (admin, touch, keyboard, 30 rows, refusals on every path, a hidden tab,
+  Export, a restricted guest, phone.html) — 19 of its checks fail on d54/v56;
+  `test_static_pages.py` guards it in CI.
 - **The live log** (`core/DebugLog.global`, a 3000-line ring, mirrored to
   logcat as `CardScanner`): triggers (box, mask %), captures (`done #k`:
   flattened or not, card px, the three frames' sharpness, the chosen frame's
@@ -1265,9 +1284,9 @@ lens on testers' phones), minSdk 29, arm64-v8a.
   (`ScanServer.adminOnly`). `GatewayServer.roleOf` asks the setting on EVERY
   request (a provider from `PhoneServer.newServer`; a throwing one = off), so
   a flip reaches sessions already open at once — no re-join; a page loaded
-  under the old answer keeps its controls until reloaded, and the server
-  refuses what it may no longer do (the desktop row delete puts the row back
-  with a toast). A flip is logged once under `server` (never a code); Settings
+  under the old answer keeps its controls until the server first refuses one
+  (every delete path then says so and re-asks `/api/me`, so its controls go —
+  d55 / v57), and the server refuses what it may no longer do. A flip is logged once under `server` (never a code); Settings
   says plainly what ON gives away (delete is for good — the phone holds the
   only copy), the Share screen's amber card follows the setting, and
   Diagnostics has a `guests (Share code):` line. The setting never opens the

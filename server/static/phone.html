@@ -125,11 +125,13 @@
   #undoBar span { flex:1 1 auto; }
   #undoBar button { min-height:40px; padding:0 18px; border-radius:999px; border:0; font-weight:700;
                     background:transparent; color:var(--accent); font-size:15px; }
-  /* A passing notice on the list (a pick just closed the card): the undo bar's look, no button. */
-  #flash { position:absolute; left:12px; right:12px; bottom:calc(12px + env(safe-area-inset-bottom)); z-index:5;
+  /* A passing notice (a pick just closed the card; a delete the phone refused): the undo bar's
+     look, no button. Above every panel (v57: it sat in the list, under an open card's detail). */
+  #flash { position:fixed; left:12px; right:12px; bottom:calc(12px + env(safe-area-inset-bottom)); z-index:30;
            display:none; padding:12px 16px; border-radius:14px; background:#262a35; color:var(--good);
            box-shadow:0 6px 24px #0008; font-size:14px; font-weight:600; text-align:center; }
   #flash.show { display:block; }
+  #flash.bad { color:var(--bad); }
   .srow .sthumb { flex:0 0 48px; width:48px; height:67px; border-radius:5px; overflow:hidden;
                   background:var(--line); }
   .srow .sthumb img { width:100%; height:100%; object-fit:cover; display:block; }
@@ -343,8 +345,8 @@
     <div id="sweepInfo" style="display:none"></div>
     <div class="pbody" id="scansList"></div>
     <div id="undoBar" role="status"><span id="undoMsg"></span><button id="undoBtn">Undo</button></div>
-    <div id="flash" role="status"></div>
   </div>
+  <div id="flash" role="status"></div>
 
   <div class="panel" id="detailPanel">
     <header><span class="ptitle" id="detailTitle">Card</span>
@@ -486,22 +488,37 @@ function formatChipsHtml(scan, pop = popOf(scan)){
 }
 
 /* ── version banner — proves which page+server combo is running ────────────── */
-const UI_VERSION = 'v56';
+const UI_VERSION = 'v57';
 
-// Who is asking: the phone server says "guest" for the 6-digit code (admin =
-// the paired computer); the computer's own server always says admin. Guests
-// get the list without delete/clear/sweep — a swipe FLAGS the scan instead —
-// and the server refuses the admin-only routes anyway.
+// Who is asking: the phone server says "admin" for the paired computer, the app's
+// own review screen and — while Settings → "Guests get full access" is on (the
+// default) — the 6-digit Share code; with it off the Share code is a "guest". The
+// computer's own server always says admin. Guests get the list without
+// delete/clear/sweep — a swipe FLAGS the scan instead — and the server refuses the
+// admin-only routes anyway. Asked at load and again when the server refuses one of
+// those (403: full access was turned off while this page was open — v57).
 // Fails CLOSED: guest until /api/me answers (a 404 = a server from before roles = admin).
 let role = 'guest';
-fetch('/api/me').then(r => r.status === 404 ? { role: 'admin' } : r.ok ? r.json() : null).then(d => {
-  if (!d) return;
-  role = d.role === 'admin' ? 'admin' : 'guest';
-  document.body.classList.toggle('guest', role === 'guest');
-  lastListSig = ''; lastStatSig = '';
-  if (typeof renderScansPanel === 'function') renderScansPanel();
-  if (typeof renderScanDetail === 'function' && detailScanId) renderScanDetail();   // an open card too
-}).catch(() => {});
+function refreshRole() {
+  return fetch('/api/me').then(r => r.status === 404 ? { role: 'admin' } : r.ok ? r.json() : null).then(d => {
+    if (!d) return;
+    role = d.role === 'admin' ? 'admin' : 'guest';
+    document.body.classList.toggle('guest', role === 'guest');
+    lastListSig = ''; lastStatSig = '';
+    if (typeof renderScansPanel === 'function') renderScansPanel();
+    if (typeof renderScanDetail === 'function' && detailScanId) renderScanDetail();   // an open card too
+  }).catch(() => {});
+}
+refreshRole();
+// A delete the phone did not carry out, in words that say why (v57; it used to put the scan
+// back silently, or read "Deleted undefined scans"): 403 = full access was turned off while
+// this page was open, a retry cannot succeed; anything else (no answer) is worth another try.
+function deleteFailMsg(status, n) {
+  const what = n ? ` ${n} scan${n > 1 ? 's' : ''}` : '';
+  return status === 403
+    ? `Couldn't delete${what} — this page no longer has full access (the phone's owner turned it off)`
+    : `Couldn't delete${what} — the phone didn't answer; try again`;
+}
 fetch('/api/version').then(r => r.json())
   .then(d => { $('#ver').textContent = `${UI_VERSION} · ${d.version}`; })
   .catch(() => { $('#ver').textContent = UI_VERSION; });
@@ -1233,13 +1250,21 @@ function liveScans() { return pendingDel.size ? scans.filter(s => !pendingDel.ha
 function tellAppPending() {
   try { window.CardScannerApp?.pendingDeletes?.(JSON.stringify([...pendingDel])); } catch (e) {}
 }
+let deferredMsg = null;     // a refusal that landed while the page was hidden: told on return
 function commitDeletes(keepalive) {
   clearTimeout(undoTimer); undoTimer = null;
   const ids = [...pendingDel];
   $('#undoBar').classList.remove('show');
   if (!ids.length) return;
   Promise.all(ids.map(id => fetch(`/api/scans/${id}`, { method: 'DELETE', keepalive })
-      .catch(() => {})))
+      .then(r => r.ok || r.status === 404 ? 0 : r.status, () => -1)))   // 404: already gone; -1: no answer
+    .then(res => {
+      const bad = res.filter(x => x !== 0);
+      if (!bad.length) return;
+      const msg = deleteFailMsg(bad.includes(403) ? 403 : 0, bad.length);
+      if (document.hidden) deferredMsg = msg; else flash(msg, 5000, true);
+      if (bad.includes(403)) refreshRole();
+    })
     .finally(() => { ids.forEach(id => pendingDel.delete(id)); tellAppPending(); if (!keepalive) refreshScans(); });
 }
 function queueDelete(id) {
@@ -1261,7 +1286,10 @@ $('#undoBtn').addEventListener('click', () => {
 });
 // Leaving the page (WebView closed, tab hidden for good) keeps the delete.
 addEventListener('pagehide', () => commitDeletes(true));
-document.addEventListener('visibilitychange', () => { if (document.hidden) commitDeletes(true); });
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) { commitDeletes(true); return; }
+  if (deferredMsg) { flash(deferredMsg, 5000, true); deferredMsg = null; refreshScans(); }
+});
 
 function attachSwipe(row) {
   let x0 = 0, y0 = 0, t0 = 0, dx = 0, mode = null, pid = null;
@@ -1435,10 +1463,19 @@ async function clearScans(only) {
     : only === 'flagged' ? `${n} flagged scan${n>1?'s':''}` : `ALL ${n} scans`;
   if (!confirm(`Delete ${what}? This cannot be undone.`)) return;
   // "flagged" sends those ids: a flag landing after this confirm is never swept up.
-  const r = await jsend('/api/scans/delete-all', 'POST',
-    only === 'flagged' ? { only, ids: flaggedIds } : only ? { only } : {});
+  const res = await fetch('/api/scans/delete-all', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(only === 'flagged' ? { only, ids: flaggedIds } : only ? { only } : {}) }).catch(() => null);
+  const r = res && res.ok ? await res.json().catch(() => null) : null;
   refreshScans();
-  setStatus(`Deleted ${r.deleted} scan${r.deleted === 1 ? '' : 's'}.`, 'ok');
+  // Said on the list too (#flash): in the app's review screen the camera page's status line is hidden.
+  if (!r || typeof r.deleted !== 'number') {        // refused or no answer: nothing went
+    const msg = deleteFailMsg(res ? res.status : 0, 0);
+    setStatus(msg, 'err'); flash(msg, 5000, true);
+    if (res && res.status === 403) refreshRole();
+    return;
+  }
+  const msg = `Deleted ${r.deleted} scan${r.deleted === 1 ? '' : 's'}.`;
+  setStatus(msg, 'ok'); flash(msg);
 }
 $('#clr-junk').addEventListener('click', () => clearScans('unselected'));
 $('#clr-all').addEventListener('click', () => clearScans(null));
@@ -2630,7 +2667,12 @@ async function renderScanDetail() {
   $('#p-search').addEventListener('keydown', e => { if (e.key==='Enter') doSearch(); });
 
   $('#p-delete')?.addEventListener('click', async () => {
-    await fetch(`/api/scans/${scan.id}`, { method: 'DELETE' });
+    const r = await fetch(`/api/scans/${scan.id}`, { method: 'DELETE' }).catch(() => null);
+    if (!r || !(r.ok || r.status === 404)) {         // refused or no answer: the card stays open, and says why
+      flash(deleteFailMsg(r ? r.status : 0, 0), 5000, true);
+      if (r && r.status === 403) refreshRole();
+      return;
+    }
     detailPanel.classList.remove('open');
     refreshScans();
   });
@@ -2638,13 +2680,14 @@ async function renderScanDetail() {
 function closePanelApp() {
   if (window.CardScannerApp) window.CardScannerApp.close(); else history.back();
 }
-/** A passing notice on the list (the camera page's #status is hidden in panel mode). */
+/** A passing notice over whatever is open (the camera page's #status is hidden in panel mode);
+ *  `bad` = something did not happen (a refused delete). */
 let flashTimer = null;
-function flash(msg) {
+function flash(msg, ms = 2500, bad = false) {
   const el = $('#flash');
-  el.textContent = msg; el.classList.add('show');
+  el.textContent = msg; el.classList.add('show'); el.classList.toggle('bad', bad);
   clearTimeout(flashTimer);
-  flashTimer = setTimeout(() => el.classList.remove('show'), 2500);
+  flashTimer = setTimeout(() => el.classList.remove('show'), ms);
 }
 /** Close the detail view onto the scan list (a pick, or Back). */
 function closeDetail() {

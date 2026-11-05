@@ -65,9 +65,31 @@ def test_the_desktop_row_delete_is_admin_only_and_waits_for_undo():
     keepalive. Driven for real in Chromium by scripts/check_row_delete_ui.py."""
     page = (STATIC / "desktop.html").read_text(encoding="utf-8")
     assert re.search(r'role === "admin" \? `<button type="button" class="rdel admin-only" data-del="\$\{s\.id\}"', page)
-    assert 'b.addEventListener("click", e => { e.stopPropagation(); queueDelete(Number(b.dataset.del)); })' in page
+    assert 'b.addEventListener("click", e => { e.stopPropagation(); queueDelete(Number(b.dataset.del), e.detail === 0); })' in page
     assert "const UNDO_MS = 5000;" in page and "const UNDO_MS = 5000;" in (STATIC / "phone.html").read_text(encoding="utf-8")
     assert 'fetch(`/api/scans/${id}`, { method: "DELETE", keepalive })' in page
     assert 'addEventListener("pagehide", () => commitDeletes(true));' in page
-    assert "if (document.hidden) commitDeletes(true);" in page
+    assert "if (document.hidden) { commitDeletes(true); return; }" in page
     assert re.search(r"function visibleScans\(\)\{\n  const q = filterText\.toLowerCase\(\);\n  return liveScans\(\)\.filter", page)
+
+
+def test_a_refused_delete_says_why_on_every_path():
+    """Review of desktop d54 (d55 / phone v57): every delete path checks the answer — a 403
+    (full access turned off while the page was open) says "no longer has full access" and
+    re-asks /api/me, never "try again" (it cannot succeed); the Undo bar leaves room for the
+    last row's 🗑; a keyboard delete moves focus to Undo; Export sends the waiting DELETEs
+    first. Driven for real in Chromium by scripts/check_row_delete_ui.py."""
+    desk = (STATIC / "desktop.html").read_text(encoding="utf-8")
+    phone = (STATIC / "phone.html").read_text(encoding="utf-8")
+    for name, page in (("desktop.html", desk), ("phone.html", phone)):
+        assert re.search(r"function deleteFailMsg\(status, n\)", page), name
+        assert "no longer has full access" in page, name
+        assert re.search(r"function refreshRole\(\)", page), name
+        assert re.search(r"\.then\(r => r\.ok \|\| r\.status === 404 \? 0 : r\.status, \(\) => -1\)\)", page), name
+        assert "typeof r.deleted !== 'number'" in page or 'typeof r.deleted !== "number"' in page, name
+        assert "Deleted ${r.deleted}" in page, name
+        assert "deferredMsg" in page, name
+    assert "#list.undoing { padding-bottom: 76px; }" in desk
+    assert 'if (viaKeyboard) $("#undoBtn").focus();' in desk
+    assert '$("#exportBtn").addEventListener("click", async () => { await commitDeletes(false); openCsvBuilder(); });' in desk
+    assert re.search(r"#flash \{ position:fixed;[^}]*z-index:30;", phone)

@@ -368,12 +368,16 @@ Run on the Nord N200 after installing a new build:
       can export CSV; 📱 Scanner changes the phone's torch/mode live.
 - [ ] Share: a second phone joins via QR and via typed code as a guest — with
       Guests get full access on it can delete (swipe, 5 s Undo); turned off in
-      Settings, its next delete is refused with no re-join (a reload shows the
-      guest page, where a swipe flags); wrong code 8×
+      Settings, its next delete is refused with no re-join — the page says
+      "Couldn't delete … no longer has full access", puts the scan back and
+      turns into the guest page (a swipe flags); wrong code 8×
       → locked out; New guest code → the guest is signed out and the old code
       fails, the computer stays in.
 - [ ] The computer's list: 🗑 on a row (hover) → the row goes, Undo brings it
-      back; left alone 5 s the scan is gone from the phone too.
+      back (an open card opens again); left alone 5 s the scan is gone from the
+      phone too. Tab to a 🗑 and press Enter → focus jumps to Undo; Enter again
+      restores it. Delete a row near the bottom → the last row's 🗑 is still
+      clickable above the Undo bar.
 - [ ] Screen off for 10 minutes: the computer and guests still get through.
 - [ ] Settings → Diagnostics shows the camera setting, every offered lens,
       the bound camera, hardware level, analysis size and capture timings;

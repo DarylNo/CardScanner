@@ -9,8 +9,9 @@ import java.security.SecureRandom
  * Admin pairing for the phone server (owner decision
  * 2026-09-30): the computer pairs ONCE with a one-time 8-digit code
  * shown on the phone and is then remembered — a long-lived `cs_admin` cookie —
- * until revoked on the phone. Everyone else joins as a guest with the 6-digit
- * [JoinCode].
+ * until revoked on the phone. Everyone else joins with the 6-digit [JoinCode]:
+ * a guest, or admin too while Settings → "Guests get full access" is on (the
+ * default; [GatewayServer] asks it per request — this file never sees it).
  *
  *  - [newCode] makes a code valid for [CODE_TTL_MS], usable ONCE; making a new
  *    one or pairing with it retires it. [redeem] runs inside the gateway's

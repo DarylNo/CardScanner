@@ -1,6 +1,6 @@
 """Drive the REAL desktop.html in headless Chromium against a stub server and check
 the scan list's per-row delete (owner, 2026-11-05: "I want delete options here in
-the list"; desktop d54 — CLAUDE.md → "Roles" and "Desktop row delete"):
+the list"; desktop d54, d55 — CLAUDE.md → "Roles" and "Desktop row delete"):
 
   * as admin every row carries a 🗑 button, hidden until the row is hovered or the
     button has keyboard focus, always shown on a touch screen;
@@ -13,8 +13,18 @@ the list"; desktop d54 — CLAUDE.md → "Roles" and "Desktop row delete"):
   * leaving the page with rows still waiting sends their DELETEs (keepalive);
   * the list's polling never brings a waiting row back;
   * a DELETE the server refuses (full access turned off meanwhile → 403) shows its row
-    again, with a toast;
-  * as a restricted guest (Settings → Guests get full access off) there is no button.
+    again, with a toast that says WHY (never "try again" — it cannot succeed), and the
+    page asks /api/me again so the 🗑 buttons go; a refusal while the tab was hidden
+    is told when it comes back;
+  * as a restricted guest (Settings → Guests get full access off) there is no button;
+  * d55 (review of d54): with the list scrolled to its end, the last row's 🗑 is never
+    under the Undo bar; Enter on a 🗑 moves focus to Undo, and Undo puts it back on the
+    restored row's 🗑; Undo after deleting the OPEN card opens it again; Export sends
+    the waiting DELETEs before the builder's preview (what is counted is what exports);
+    the detail pane's "Delete this scan" and Clear unpicked / Clear all say "Couldn't
+    delete" on a refusal (they said "Scan deleted" / "Deleted undefined scans");
+  * phone.html (v57): a refused swipe delete, "Delete this scan" or Clear says so on
+    the page (it put the scan back silently / said "Deleted undefined scans").
 
     pip install playwright        # Chromium: /opt/pw-browsers in a cloud session, or set CHROME
     python scripts/check_row_delete_ui.py
@@ -27,7 +37,8 @@ from pathlib import Path
 from playwright.sync_api import sync_playwright
 
 STATIC = Path(__file__).resolve().parents[1] / "server" / "static"
-VERSION = "d54"
+VERSION = "d55"
+PHONE_VERSION = "v57"
 
 
 def scan(i, name, sel=False):
@@ -41,14 +52,18 @@ def scan(i, name, sel=False):
 
 
 NAMES = {1: "Forest", 2: "Opt", 3: "Lightning Bolt", 4: "Counterspell", 5: "Sol Ring"}
-STATE = {"role": "admin", "scans": [], "deletes": [], "lock": threading.Lock()}
+STATE = {"role": "admin", "scans": [], "deletes": [], "log": [], "lock": threading.Lock()}
 
 
-def reset(role="admin"):
+def reset(role="admin", n=5):
     with STATE["lock"]:
         STATE["role"] = role
-        STATE["scans"] = [scan(i, NAMES[i], sel=i % 2 == 1) for i in (5, 4, 3, 2, 1)]
+        STATE["scans"] = [scan(i, NAMES.get(i, f"Card {i}"), sel=i % 2 == 1) for i in range(n, 0, -1)]
         STATE["deletes"] = []
+        STATE["log"] = []
+
+
+LAYOUT = {"columns": [{"field": "name", "header": "Name"}], "header": True, "delimiter": "comma", "combine": True}
 
 
 class H(BaseHTTPRequestHandler):
@@ -62,7 +77,11 @@ class H(BaseHTTPRequestHandler):
 
     def do_GET(self):
         p = self.path.split("?")[0]
+        with STATE["lock"]: STATE["log"].append(("GET", p))
         if p == "/": return self.send(200, (STATIC / "desktop.html").read_bytes(), "text/html")
+        if p == "/phone": return self.send(200, (STATIC / "phone.html").read_bytes(), "text/html")
+        if p == "/api/export/layout":
+            return self.send(200, {"fields": [{"field": "name", "header": "Name"}], "default": LAYOUT, "layout": LAYOUT})
         if p == "/api/me": return self.send(200, {"role": STATE["role"]})
         if p == "/api/version": return self.send(200, {"version": "stub"})
         if p == "/api/price-status": return self.send(200, {"active": False, "done": 0, "total": 0, "cooldown_s": 0})
@@ -83,13 +102,32 @@ class H(BaseHTTPRequestHandler):
         i = int(m.group(1))
         with STATE["lock"]:
             STATE["deletes"].append(i)
+            STATE["log"].append(("DELETE", self.path))
             if STATE["role"] != "admin": return self.send(403, {"error": "guest"})
             before = len(STATE["scans"])
             STATE["scans"] = [s for s in STATE["scans"] if s["id"] != i]
             gone = len(STATE["scans"]) < before
         self.send(200 if gone else 404, {"deleted": i} if gone else {"error": "not found"})
 
-    def do_POST(self): self.send(200, {})
+    def do_POST(self):
+        p = self.path.split("?")[0]
+        n = int(self.headers.get("Content-Length") or 0)
+        body = json.loads(self.rfile.read(n) or b"{}")
+        with STATE["lock"]:
+            STATE["log"].append(("POST", p))
+            if p == "/api/scans/delete-all":
+                if STATE["role"] != "admin":
+                    return self.send(403, {"error": "only the scanner's owner can do that — flag it for deletion instead"})
+                keep = (lambda s: s["status"] == "selected") if body.get("only") == "unselected" else (lambda s: False)
+                before = len(STATE["scans"])
+                STATE["scans"] = [s for s in STATE["scans"] if keep(s)]
+                return self.send(200, {"deleted": before - len(STATE["scans"])})
+            if p == "/api/export/preview":
+                live = [s for s in STATE["scans"] if s["status"] == "selected" and s["included"]]
+                return self.send(200, {"csv": "Name\r\n" + "".join(s["card_read"]["name"] + "\r\n" for s in live),
+                                       "rows": len(live)})
+        self.send(200, {})
+
     def do_PATCH(self): self.send(200, {})
 
 
@@ -127,6 +165,24 @@ def open_card(pg):
 
 def undo_shown(pg):
     return pg.evaluate("getComputedStyle(document.querySelector('#undoBar')).display !== 'none'")
+
+
+def focused(pg):
+    """What has keyboard focus: '#undoBtn', 'del:<id>' for a row's 🗑, else the tag name."""
+    return pg.evaluate("""(() => { const a = document.activeElement;
+        if (!a) return null; if (a.id) return '#' + a.id;
+        if (a.dataset && a.dataset.del) return 'del:' + a.dataset.del; return a.tagName; })()""")
+
+
+def toast_text(pg):
+    return pg.evaluate("document.querySelector('#toast').classList.contains('show') ? document.querySelector('#toast').textContent : ''")
+
+
+def set_hidden(pg, hidden):
+    """Emulate the tab going to the background / coming back (Playwright pages are always visible)."""
+    pg.evaluate("""h => { Object.defineProperty(document, 'hidden', { value: h, configurable: true });
+        Object.defineProperty(document, 'visibilityState', { value: h ? 'hidden' : 'visible', configurable: true });
+        document.dispatchEvent(new Event('visibilitychange')); }""", hidden)
 
 
 def load(ctx):
@@ -199,9 +255,19 @@ with sync_playwright() as pw:
     pg.locator("#undoBtn").click(); pg.wait_for_timeout(200)
     check(ids(pg) == [5, 3, 2, 1], f"Undo restores every waiting row ({ids(pg)})")
 
-    # Enter on the focused button: deletes, never opens
+    # Enter on the focused button: deletes, never opens — and focus moves to Undo (d55: the list
+    # re-render dropped it to <body>, and Undo was dozens of Tabs away inside the 5 s)
     btn(pg, 2).focus(); pg.keyboard.press("Enter"); pg.wait_for_timeout(150)
     check(2 not in ids(pg) and open_card(pg) == "Lightning Bolt", f"Enter on the button deletes without opening ({ids(pg)}, {open_card(pg)})")
+    check(focused(pg) == "#undoBtn", f"keyboard focus is on Undo ({focused(pg)})")
+    pg.keyboard.press("Enter"); pg.wait_for_timeout(200)
+    check(2 in ids(pg), f"Enter again = Undo: the row is back ({ids(pg)})")
+    check(focused(pg) == "del:2", f"focus is back on the restored row's 🗑 ({focused(pg)})")
+    if 2 not in ids(pg): pg.locator("#undoBtn").click(); pg.wait_for_timeout(200)     # (an older page: carry on)
+    pg.evaluate("document.activeElement.blur()")
+    # a mouse click never moves focus to the bar (only a keyboard press does)
+    pg.locator("#list .row[data-id='2']").hover(); btn(pg, 2).click(); pg.wait_for_timeout(150)
+    check(focused(pg) != "#undoBtn", f"a click leaves focus alone ({focused(pg)})")
     pg.locator("#undoBtn").click(); pg.wait_for_timeout(200)
 
     # deleting the open card clears the right pane
@@ -212,6 +278,14 @@ with sync_playwright() as pw:
     check(open_card(pg) is None, f"a poll never re-opens it ({open_card(pg)})")
     pg.locator("#undoBtn").click(); pg.wait_for_timeout(200)
     check(3 in ids(pg), "Undo brings the row back")
+    check(open_card(pg) == "Lightning Bolt", f"… and opens it again in the right pane ({open_card(pg)})")
+    check(pg.evaluate("document.querySelector('#list .row.active')?.dataset.id") == "3", "row 3 active again")
+    # Undo after the pane moved on to another card leaves that card open
+    pg.locator("#list .row[data-id='3']").hover(); btn(pg, 3).click(); pg.wait_for_timeout(150)
+    pg.locator("#list .row[data-id='2'] .nm").click(); pg.wait_for_timeout(250)
+    pg.locator("#undoBtn").click(); pg.wait_for_timeout(200)
+    check(open_card(pg) == "Opt", f"Undo never takes over a card opened meanwhile ({open_card(pg)})")
+    pg.locator("#list .row[data-id='3'] .nm").click(); pg.wait_for_timeout(250)
 
     # two rows waiting, then leave the page: both DELETEs go (keepalive)
     pg.locator("#list .row[data-id='5']").hover(); btn(pg, 5).click()
@@ -247,8 +321,101 @@ with sync_playwright() as pw:
     check(deletes() == [2], f"the DELETE was sent ({deletes()})")
     pg.wait_for_function("document.querySelector(\"#list .row[data-id='2']\")", timeout=5000)
     check(2 in ids(pg), f"refused (403): the row is back ({ids(pg)})")
-    check("Couldn't delete 1 scan" in (pg.locator("#toast").text_content() or ""),
-          f"and a toast says so ({pg.locator('#toast').text_content()})")
+    t = pg.locator("#toast").text_content() or ""
+    check("Couldn't delete 1 scan" in t, f"and a toast says so ({t})")
+    check("try again" not in t and "full access" in t, f"… and why — a retry cannot succeed ({t})")
+    pg.wait_for_timeout(1000)
+    check(pg.locator("#list .row [data-del]").count() == 0, "the page asked /api/me again: no 🗑 buttons now")
+    check(errs == [], f"no page errors ({errs})")
+    pg.close()
+
+    print("desktop.html — refused while the tab was hidden: told on return")
+    reset()
+    pg, errs = load(ctx)
+    with STATE["lock"]: STATE["role"] = "guest"
+    pg.locator("#list .row[data-id='2']").hover(); btn(pg, 2).click(); pg.wait_for_timeout(150)
+    set_hidden(pg, True)                             # the tab goes to the background: the DELETE goes now
+    t0 = time.time()
+    while time.time() - t0 < 3 and deletes() != [2]: time.sleep(0.05)
+    check(deletes() == [2], f"hiding the tab sent the DELETE ({deletes()})")
+    pg.wait_for_timeout(2500)                        # the refusal lands while hidden (and the toast would lapse)
+    set_hidden(pg, False)
+    pg.wait_for_timeout(200)
+    t = toast_text(pg)
+    check("Couldn't delete 1 scan" in t, f"coming back says the delete was refused ({t})")
+    pg.wait_for_function("document.querySelector(\"#list .row[data-id='2']\")", timeout=5000)
+    check(2 in ids(pg), f"the row is back ({ids(pg)})")
+    check(errs == [], f"no page errors ({errs})")
+    pg.close()
+
+    print("desktop.html — the detail's Delete this scan and Clear, refused")
+    reset()
+    pg, errs = load(ctx)
+    pg.on("dialog", lambda d: d.accept())
+    pg.locator("#list .row[data-id='3'] .nm").click()
+    pg.wait_for_function("document.querySelector('#list .row.active')?.dataset.id === '3'")
+    with STATE["lock"]: STATE["role"] = "guest"
+    pg.locator("#delBtn").click(); pg.wait_for_timeout(600)
+    t = toast_text(pg)
+    check(deletes() == [3], f"the DELETE went ({deletes()})")
+    check("Couldn't delete" in t and "Scan deleted" not in t, f"the detail's delete says it was refused ({t})")
+    check(open_card(pg) == "Lightning Bolt", f"the card stays open ({open_card(pg)})")
+    check(3 in ids(pg), f"and in the list ({ids(pg)})")
+    pg.close()
+    reset()
+    pg, errs = load(ctx)
+    pg.on("dialog", lambda d: d.accept())
+    with STATE["lock"]: STATE["role"] = "guest"
+    pg.locator("#clearJunkBtn").click(); pg.wait_for_timeout(600)
+    t = toast_text(pg)
+    check("undefined" not in t and "Couldn't delete" in t, f"Clear unpicked refused says so ({t})")
+    check(ids(pg) == [5, 4, 3, 2, 1], f"nothing left the list ({ids(pg)})")
+    pg.close()
+    reset()
+    pg, errs = load(ctx)
+    pg.on("dialog", lambda d: d.accept())
+    pg.locator("#clearJunkBtn").click(); pg.wait_for_timeout(600)
+    t = toast_text(pg)
+    check(t == "Deleted 2 scans", f"Clear unpicked allowed: 'Deleted 2 scans' ({t})")
+    check(ids(pg) == [5, 3, 1], f"the unpicked rows went ({ids(pg)})")
+    check(errs == [], f"no page errors ({errs})")
+    pg.close()
+
+    print("desktop.html — Export sends the waiting DELETEs first")
+    reset()
+    pg, errs = load(ctx)
+    check("<b>3</b> to export" in pg.locator("#stats").inner_html(), f"3 to export ({pg.locator('#stats').inner_text()})")
+    pg.locator("#list .row[data-id='5']").hover(); btn(pg, 5).click(); pg.wait_for_timeout(150)
+    check("<b>2</b> to export" in pg.locator("#stats").inner_html(), f"the waiting row is not counted ({pg.locator('#stats').inner_text()})")
+    with STATE["lock"]: STATE["log"] = []
+    pg.locator("#exportBtn").click()
+    pg.wait_for_selector("#csvModal.open")
+    pg.wait_for_function("/ row/.test(document.querySelector('#csvPrevH').textContent)", timeout=3000)
+    with STATE["lock"]: log = [x for x in STATE["log"] if x[0] in ("DELETE", "POST")]
+    check(log[:1] == [("DELETE", "/api/scans/5")], f"the waiting DELETE went before anything else ({log})")
+    check(("POST", "/api/export/preview") in log, f"then the preview ({log})")
+    check(not undo_shown(pg), "the Undo bar is gone (the delete is no longer undoable)")
+    check("2 of 2 rows" in pg.locator("#csvPrevH").text_content(), f"the preview counts what the list counted ({pg.locator('#csvPrevH').text_content()})")
+    check(errs == [], f"no page errors ({errs})")
+    pg.close()
+
+    print("desktop.html — 30 scans: the last row's 🗑 is never under the Undo bar")
+    reset(n=30)
+    pg, errs = load(ctx)
+    pg.locator("#list .row[data-id='29']").hover(); btn(pg, 29).click(); pg.wait_for_timeout(150)
+    check(undo_shown(pg), "the Undo bar shows")
+    pg.evaluate("document.querySelector('#left').scrollTop = 1e6"); pg.wait_for_timeout(150)
+    hit = pg.evaluate("""(() => { const b = document.querySelector("#list .row[data-id='1'] [data-del]");
+        const r = b.getBoundingClientRect(); const e = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+        return e && (e.closest('[data-del]')?.dataset.del || e.id || e.tagName); })()""")
+    check(hit == "1", f"the point on the last row's 🗑 is that 🗑, not the bar ({hit})")
+    gap = pg.evaluate("""document.querySelector('#undoBar').getBoundingClientRect().top
+        - document.querySelector("#list .row[data-id='1']").getBoundingClientRect().bottom""")
+    check(gap >= 0, f"the whole last row sits above the bar ({gap:.0f} px)")
+    btn(pg, 1).click(); pg.wait_for_timeout(150)
+    check(1 not in ids(pg) and 29 not in ids(pg), f"so a second delete deletes (no Undo by mistake) ({len(ids(pg))} rows)")
+    check(pg.locator("#undoMsg").text_content() == "2 scans deleted", f"'2 scans deleted' ({pg.locator('#undoMsg').text_content()})")
+    pg.locator("#undoBtn").click(); pg.wait_for_timeout(200)
     check(errs == [], f"no page errors ({errs})")
     pg.close()
 
@@ -267,6 +434,48 @@ with sync_playwright() as pw:
     pg, errs = load(ctx)
     check(pg.locator("#list .row [data-del]").count() == 5, "the Share-code guest with full access gets the buttons")
     pg.close()
+
+    print("phone.html — refused deletes say so")
+    pctx = b.new_context(viewport={"width": 411, "height": 914}, is_mobile=True, has_touch=True)
+    reset()
+    pg = pctx.new_page(); errs = []
+    pg.on("pageerror", lambda e: errs.append(str(e)))
+    pg.on("dialog", lambda d: d.accept())
+    pg.goto(BASE + "/phone?panel=1"); pg.wait_for_selector(".srow[data-sid='2']"); pg.wait_for_timeout(400)
+    check(pg.evaluate("UI_VERSION") == PHONE_VERSION, f"phone banner {PHONE_VERSION}")
+    flash = lambda: pg.evaluate("document.querySelector('#flash').classList.contains('show') ? document.querySelector('#flash').textContent : ''")
+    status = lambda: pg.evaluate("document.querySelector('#status').textContent")
+    with STATE["lock"]: STATE["role"] = "guest"
+    pg.evaluate("queueDelete(2); commitDeletes(false)"); pg.wait_for_timeout(700)
+    check(deletes() == [2], f"the swipe's DELETE went ({deletes()})")
+    check("Couldn't delete 1 scan" in flash(), f"a refused swipe delete says so ({flash()})")
+    pg.wait_for_function("document.querySelector(\".srow[data-sid='2']\")", timeout=5000)
+    check(True, "and the row is back")
+    pg.wait_for_function("role === 'guest'", timeout=3000)
+    check(pg.evaluate("document.body.classList.contains('guest')"), "the page asked /api/me again: a guest now (a swipe flags)")
+    with STATE["lock"]: STATE["role"] = "admin"
+    pg.evaluate("refreshRole()"); pg.wait_for_function("role === 'admin'", timeout=3000)
+    pg.evaluate("openDetail(3)"); pg.wait_for_selector("#p-delete")
+    with STATE["lock"]: STATE["role"] = "guest"
+    pg.locator("#p-delete").click(); pg.wait_for_timeout(700)
+    check(deletes() == [2, 3], f"the detail's DELETE went ({deletes()})")
+    check("Couldn't delete" in flash(), f"a refused Delete this scan says so ({flash()})")
+    check(pg.evaluate("document.querySelector('#detailPanel').classList.contains('open')"), "the card stays open")
+    on_top = pg.evaluate("""(() => { const r = document.querySelector('#flash').getBoundingClientRect();
+        const e = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2); return !!e && e.id === 'flash'; })()""")
+    check(on_top, "the notice is visible over the open card (it sat in the list, under the detail)")
+    pg.evaluate("closeDetail()"); pg.wait_for_timeout(200)
+    with STATE["lock"]: STATE["role"] = "admin"
+    pg.evaluate("refreshRole()"); pg.wait_for_function("role === 'admin'", timeout=3000)
+    with STATE["lock"]: STATE["role"] = "guest"
+    pg.evaluate("clearScans('unselected')"); pg.wait_for_timeout(700)
+    check("undefined" not in flash() and "Couldn't delete" in flash(), f"a refused Clear says so on the list ({flash()})")
+    check("Couldn't delete" in status(), f"… and on the camera page's status line ({status()})")
+    with STATE["lock"]: STATE["role"] = "admin"
+    pg.evaluate("clearScans('unselected')"); pg.wait_for_timeout(700)
+    check(flash() == "Deleted 2 scans.", f"an allowed Clear: 'Deleted 2 scans.' on the list ({flash()})")
+    check(errs == [], f"no page errors ({errs})")
+    pg.close(); pctx.close()
     b.close()
 
 srv.shutdown()

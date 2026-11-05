@@ -73,9 +73,10 @@ class GatewayServer(
     private val random: SecureRandom = SecureRandom(),
     /**
      * Roles (the phone server): when set, the one-time admin code pairs a computer as
-     * ADMIN (a long-lived [ADMIN_COOKIE]); the 6-digit code makes a GUEST; and every
-     * proxied request carries [ROLE_HEADER] = admin|guest (a client's own is dropped).
-     * Null: one role and no header — the upstream decides (tests).
+     * ADMIN (a long-lived [ADMIN_COOKIE]); a 6-digit-code session's role is asked of
+     * [guestsFullAccess] on every request (ADMIN while it says yes — the default —
+     * else GUEST); and every proxied request carries [ROLE_HEADER] = admin|guest (a
+     * client's own is dropped). Null: one role and no header — the upstream decides (tests).
      */
     val admins: AdminPairing? = null,
     /**
