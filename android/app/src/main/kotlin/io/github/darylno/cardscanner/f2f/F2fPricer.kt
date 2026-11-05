@@ -89,8 +89,8 @@ class F2fPricer(
         //    a name that merely started with it, Fireball's on a Fire // Ice)
         var candidates = foilMatches.filter { it.second.collector.isNotEmpty() && normCollector(it.second.collector) == wantCollector }
         // 2b) a meld half: "Midnight Scavengers // Chittering Host [96a] [B] [Eldritch Moon]" for Scryfall's
-        //     one-faced #96 — with no exact title, ONE title whose collector is the card's plus a side letter
-        //     and whose name part is "<this card> // <another face>" (two such are ambiguous: none). Meld-shaped
+        //     one-faced #96 — with no exact title, ONE title whose collector is the card's plus the side letter
+        //     "a" and whose name part is "<this card> // <another face>" (two such are ambiguous: none). Meld-shaped
         //     on purpose: "one letter more" alone took Tymaret's "- Serial Numbered [148z]". SKU still confirms.
         if (candidates.isEmpty()) {
             val halves = foilMatches.filter {
@@ -225,14 +225,16 @@ class F2fPricer(
         }
 
         /**
-         * facetoface._side_letter_of: the title's collector is the card's plus ONE side letter ("96a" for "96"),
-         * both through normCollector; the card's ends in an ASCII digit, the extra character is an ASCII letter.
+         * facetoface._side_letter_of: the title's collector is the card's plus the side letter "a" ("96a" for
+         * "96"), both through normCollector (so "91A" reads "91a"); the card's ends in an ASCII digit. Only "a":
+         * every meld half F2F letters uses it, while its meld PROMOS are meld-shaped too with another letter
+         * ("Urza, Lord Protector // Urza, Planeswalker [225s] [Prerelease] …") and may carry the main set's SKU.
          */
         fun sideLetterOf(titleCollector: String, collector: String): Boolean {
             val t = normCollector(titleCollector)
             val want = normCollector(collector)
             return want.isNotEmpty() && want.last() in '0'..'9' &&
-                t.length == want.length + 1 && t.startsWith(want) && t.last() in 'a'..'z'
+                t.length == want.length + 1 && t.startsWith(want) && t.last() == 'a'
         }
 
         /**

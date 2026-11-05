@@ -581,7 +581,7 @@ def test_set_name_fallback_still_takes_the_cards_own_suffixed_promo(name, title)
 # 9 regressions, all meld halves (EMN [96a] [B] / [91a] [A] / [15a] [B] /
 # [28a] [A] / [130a] [B] / [204a] [A], both finishes; BRO [163a] / [238a]).
 # The rule: when no title carries the card's exact collector, ONE title whose
-# collector is the card's plus one side letter (the card's ending in a digit)
+# collector is the card's plus the side letter "a" (the card's ending in a digit)
 # and whose name part is "<the card's name> // <another face>" (the card itself
 # single-faced) is the candidate; the SKU still confirms the set. Meld-shaped
 # on purpose: "one more letter" alone took "Tymaret, Chosen from Death - Serial
@@ -789,9 +789,13 @@ def _emn(title_part: str) -> str:
     [_emn("Midnight Scavengers // Chittering Host [9a] [B]")],
     # a half with no other face
     [_emn("Midnight Scavengers //  [96a] [B]")],
-    # TWO lettered halves of the number: ambiguous, never a guess
+    # TWO side-lettered halves of the number: ambiguous, never a guess
     [_emn("Midnight Scavengers // Chittering Host [96a] [B]"),
-     _emn("Midnight Scavengers // Chittering Host [96b] [B]")],
+     _emn("Midnight Scavengers // Chittering Host [96a] [A]")],
+    # only "a" is a side letter: a meld-shaped "[96b]" / "[96s]" / "[96p]" alone
+    # is never the card's half
+    [_emn("Midnight Scavengers // Chittering Host [96b] [B]")],
+    [_emn("Midnight Scavengers // Chittering Host [96s] [B]")],
 ])
 def test_side_letter_takes_only_the_cards_own_unambiguous_half(titles):
     fetched: list = []
@@ -799,6 +803,23 @@ def test_side_letter_takes_only_the_cards_own_unambiguous_half(titles):
     assert FaceToFaceClient(get_json=get_json).get_price(
         "Midnight Scavengers", "emn", "96", False, "Eldritch Moon") is None
     assert fetched == []
+
+
+def test_a_half_beside_another_letter_is_still_the_half():
+    """Only "a" is a side letter, so a meld-shaped "[96b]" (or a promo's
+    "[96s]") beside the real "[96a]" half no longer makes it ambiguous: of the
+    907 distinct titles captured, every meld-shaped one lettered "a" is a meld
+    half and every other letter a promo (BRO [225s] / [216s] Prerelease, ELD
+    [115p] Promo Pack …)."""
+    half = _emn("Midnight Scavengers // Chittering Host [96a] [B]")
+    other = _emn("Midnight Scavengers // Chittering Host [96b] [B]")
+    promo = _emn("Midnight Scavengers // Chittering Host [96s] [B]")
+    fetched: list = []
+    get_json = _synthetic_get_json([other, promo, half], {t: "M-EMN-X-96a-NM-NF" for t in (other, promo, half)},
+                                   fetched)
+    p = FaceToFaceClient(get_json=get_json).get_price(
+        "Midnight Scavengers", "emn", "96", False, "Eldritch Moon")
+    assert p is not None and fetched == [half]
 
 
 def test_the_exact_collector_beats_a_lettered_half():
@@ -821,6 +842,36 @@ def test_the_sku_still_confirms_a_lettered_half():
     assert fetched == [half] * 3                   # asked on each rung, refused by the SKU
 
 
+@pytest.mark.parametrize("title, card", [
+    # real titles (F2F answers captured 2026-11-05): a meld half's PRERELEASE
+    # promo, "<the card> // <the meld result> [225s]" — meld-shaped and one
+    # letter past the main card's 225 / 216
+    ("Urza, Lord Protector // Urza, Planeswalker [225s] [Prerelease] [The Brothers' War: Promos] [Foil]",
+     ("Urza, Lord Protector", "bro", "225", True, "The Brothers' War")),
+    ("Mishra, Claimed by Gix // Mishra, Lost to Phyrexia [216s] [Prerelease] "
+     "[The Brothers' War: Promos] [Foil]",
+     ("Mishra, Claimed by Gix", "bro", "216", True, "The Brothers' War")),
+    # the other promo letters on a meld-shaped title
+    (_emn("Midnight Scavengers // Chittering Host [96p] [B]"),
+     ("Midnight Scavengers", "emn", "96", False, "Eldritch Moon")),
+    (_emn("Midnight Scavengers // Chittering Host [96b] [B]"),
+     ("Midnight Scavengers", "emn", "96", False, "Eldritch Moon")),
+])
+def test_a_lettered_promo_of_a_meld_half_is_never_the_main_cards_half(title, card):
+    """Every meld half F2F titles with a side letter uses "a" (EMN 96a / 91a /
+    15a / 28a / 130a / 204a, BRO 163a / 238a, FTV 5a); "s" / "p" are F2F's
+    prerelease / promo-pack versions. With the main product missing, such a
+    promo whose SKU carries the MAIN set code (F2F files promos that way:
+    "SIN-MTG-NEO-266p-ENG-NM-NF" for pneo's Boseiju 266p) would otherwise be
+    taken — and its price filed for the main card. Only "a" is a side letter."""
+    fetched: list = []
+    name, set_code, collector, foil, set_name = card
+    get_json = _synthetic_get_json(
+        [title], {title: f"SIN-MTG-{set_code.upper()}-{collector}s-ENG-NM-{'F' if foil else 'NF'}"}, fetched)
+    assert FaceToFaceClient(get_json=get_json).get_price(name, set_code, collector, foil, set_name) is None
+    assert fetched == []
+
+
 def test_a_two_faced_card_never_takes_a_side_letter():
     """A transform / split card's own name holds " // " — a letter after its
     number is another face, never this side of a meld."""
@@ -836,6 +887,11 @@ def test_a_two_faced_card_never_takes_a_side_letter():
     ("96a", "96", True), ("91A", "91", True), ("096a", "96", True), ("163a", "0163", True),
     ("A25-141a", "A25-141", True),
     ("96", "96", False),                 # equal is the exact match, not a side letter
+    # only "a": F2F's "s" / "p" are prerelease / promo-pack versions (BRO
+    # [225s] / [216s] are meld-shaped), "b" the meld result's own side, "z" a
+    # serial-numbered twin
+    ("225s", "225", False), ("216S", "216", False), ("96p", "96", False), ("96b", "96", False),
+    ("96B", "96", False), ("148z", "148", False),
     ("96ab", "96", False), ("96★", "96", False), ("96†", "96", False), ("9a", "96", False),
     ("196a", "96", False), ("96a", "96a", False), ("96b", "96a", False),
     ("96a", "", False), ("a", "", False),

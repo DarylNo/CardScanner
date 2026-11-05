@@ -146,6 +146,10 @@ EXTRA_SIDE_LETTER = [
     ("96ab", "96"), ("96★", "96"), ("96†", "96"), ("9a", "96"), ("196a", "96"), ("96a", "96a"),
     ("96b", "96a"), ("96a", ""), ("a", ""), ("", ""), ("96a", "9٦"), ("96ä", "96"), ("96ı", "96"),
     ("0a", "0"), (" 96a ", "96"), ("96-a", "96"), ("96İ", "96"),
+    # only "a": F2F's meld PROMOS ("[225s] [Prerelease]", "[216s]"), promo packs
+    # ("[115p]"), the meld result's own side ("96b"), a serial-numbered twin
+    ("225s", "225"), ("216S", "216"), ("115p", "115"), ("96b", "96"), ("96B", "96"), ("148z", "148"),
+    ("96ª", "96"), ("96ａ", "96"), ("96à", "96"),
 ]
 
 _JGP_BOLT = "lightning-bolt-judge-gift-cards-1998-foil"   # a real handle (the "Lightning Bolt" capture)
@@ -154,6 +158,23 @@ _MS_96A = "midnight-scavengers-chittering-host-96a-b-eldritch-moon-non-foil"   #
 _MS_96A_FOIL = "midnight-scavengers-chittering-host-96a-b-eldritch-moon-foil"
 _MS_96_EXACT = "midnight-scavengers-96-eldritch-moon-non-foil"                 # made up
 _MS_96A_SOI = "midnight-scavengers-chittering-host-96a-b-eldritch-moon-non-foil-soi"
+_URZA_SUGGEST = ("https://facetofacegames.com/search/suggest.json?q=Urza%2C%20Lord%20Protector%20225%20"
+                 "The%20Brothers%27%20War&resources%5Btype%5D=product&resources%5Blimit%5D=20"
+                 "&resources%5Boptions%5D%5Bunavailable_products%5D=show")
+_URZA_225_FOIL = "urza-lord-protector-urza-planeswalker-225-the-brothers-war-foil"          # real handles
+_URZA_225S = "urza-lord-protector-urza-planeswalker-225s-prerelease-the-brothers-war-promos-foil"
+
+
+def _without_product(url: str, handle: str) -> dict:
+    """The captured suggest answer at *url*, with the product *handle* taken out."""
+    path = next(p for p in sorted(CAPTURED.glob("suggest_*.json"))
+                if json.loads(p.read_text(encoding="utf-8"))["url"] == url)
+    body = copy.deepcopy(json.loads(path.read_text(encoding="utf-8"))["body"])
+    prods = body["resources"]["results"]["products"]
+    assert any(p["handle"] == handle for p in prods), handle
+    body["resources"]["results"]["products"] = [p for p in prods if p["handle"] != handle]
+    return body
+
 
 # Hand-written bodies for shapes no capture shows (see the docstring). Ids are
 # never URLs, so an uncaptured URL can only reach one through a declaration.
@@ -201,12 +222,23 @@ SYNTHETIC: dict[str, dict] = {
                 ("Midnight Scavengers // Chittering Host [96a] [B]", "Foil", _MS_96A_FOIL)]]}}},
     },
     "synthetic:suggest/Midnight Scavengers two halves": {
-        "note": "two side-lettered halves of the card's number (96a, 96b): ambiguous — none is taken",
+        "note": "two side-lettered halves of the card's number (96a [B], 96a [A]): ambiguous — none is taken",
         "body": {"resources": {"results": {"products": [
             {"title": "Midnight Scavengers // Chittering Host [96a] [B] [Eldritch Moon] [Non-Foil]",
              "handle": _MS_96A},
+            {"title": "Midnight Scavengers // Chittering Host [96a] [A] [Eldritch Moon] [Non-Foil]",
+             "handle": "midnight-scavengers-chittering-host-96a-a-eldritch-moon-non-foil"}]}}},
+    },
+    "synthetic:suggest/Midnight Scavengers half beside other letters": {
+        "note": "meld-shaped [96b] and [96s] titles listed BEFORE the real [96a] half: only 'a' is a "
+                "side letter, so they never make it ambiguous",
+        "body": {"resources": {"results": {"products": [
             {"title": "Midnight Scavengers // Chittering Host [96b] [B] [Eldritch Moon] [Non-Foil]",
-             "handle": "midnight-scavengers-chittering-host-96b-b-eldritch-moon-non-foil"}]}}},
+             "handle": "midnight-scavengers-chittering-host-96b-b-eldritch-moon-non-foil"},
+            {"title": "Midnight Scavengers // Chittering Host [96s] [B] [Eldritch Moon] [Non-Foil]",
+             "handle": "midnight-scavengers-chittering-host-96s-b-eldritch-moon-non-foil"},
+            {"title": "Midnight Scavengers // Chittering Host [96a] [B] [Eldritch Moon] [Non-Foil]",
+             "handle": _MS_96A}]}}},
     },
     "synthetic:suggest/Midnight Scavengers half and exact": {
         "note": "the real half AFTER a title carrying the exact 96: the exact collector wins",
@@ -234,6 +266,25 @@ SYNTHETIC: dict[str, dict] = {
                                       "[Non-Foil]", "handle": _MS_96A_SOI, "variants": [
                                  {"sku": "M-SOI-Midnight_S-96a-NM-NF", "title": "NM", "option1": "NM",
                                   "price": "2.22"}]}},
+    },
+    # Only "a" is a side letter: F2F's meld PROMOS are meld-shaped too ("Urza,
+    # Lord Protector // Urza, Planeswalker [225s] [Prerelease] [The Brothers'
+    # War: Promos] [Foil]", captured) and F2F files some promos under the MAIN
+    # set's SKU code (SIN-MTG-NEO-266p-ENG-NM-NF, pneo's Boseiju 266p).
+    "synthetic:suggest/Urza 225 foil missing": {
+        "note": "the captured 'Urza, Lord Protector 225 The Brothers' War' answer with the main 225 foil "
+                "taken out: the meld-shaped [225s] Prerelease promo is the only foil title one letter "
+                "past 225",
+        "body": _without_product(_URZA_SUGGEST, _URZA_225_FOIL),
+    },
+    f"synthetic:product/{_URZA_225S}": {
+        "note": "the [225s] promo's product filed under the MAIN set's SKU code BRO (how F2F files "
+                "pneo's 266p: SIN-MTG-NEO-266p), so only the side-letter rule can refuse it (prices "
+                "made up)",
+        "body": {"product": {"title": "Urza, Lord Protector // Urza, Planeswalker [225s] [Prerelease] "
+                                      "[The Brothers' War: Promos] [Foil]", "handle": _URZA_225S, "variants": [
+                                 {"sku": "SIN-MTG-BRO-225s-ENG-NM-F", "title": "NM", "option1": "NM",
+                                  "price": "33.33"}]}},
     },
 }
 
@@ -353,10 +404,15 @@ SESSIONS: list[dict] = [
      "card": ["Midnight Scavengers", "emn", "96", False, "Eldritch Moon"],
      "stand_ins": {q: "synthetic:suggest/Midnight Scavengers decoys" for q in (
          "Midnight Scavengers 96 Eldritch Moon", "Midnight Scavengers Eldritch Moon", "Midnight Scavengers")}},
-    {"id": "midnight_scavengers_two_halves", "note": "96a and 96b: ambiguous, none fetched",
+    {"id": "midnight_scavengers_two_halves", "note": "two 96a halves: ambiguous, none fetched",
      "card": ["Midnight Scavengers", "emn", "96", False, "Eldritch Moon"],
      "stand_ins": {q: "synthetic:suggest/Midnight Scavengers two halves" for q in (
          "Midnight Scavengers 96 Eldritch Moon", "Midnight Scavengers Eldritch Moon", "Midnight Scavengers")}},
+    {"id": "midnight_scavengers_half_beside_other_letters", "note": "meld-shaped 96b and 96s before the "
+     "96a half: only 'a' is a side letter — the 96a is the card",
+     "card": ["Midnight Scavengers", "emn", "96", False, "Eldritch Moon"],
+     "stand_ins": {"Midnight Scavengers 96 Eldritch Moon":
+                   "synthetic:suggest/Midnight Scavengers half beside other letters"}},
     {"id": "midnight_scavengers_exact_beats_half", "note": "a title with the exact 96 wins over the "
      "half listed before it",
      "card": ["Midnight Scavengers", "emn", "96", False, "Eldritch Moon"],
@@ -368,6 +424,14 @@ SESSIONS: list[dict] = [
      "stand_ins": {q: "synthetic:suggest/Midnight Scavengers half of another set" for q in (
          "Midnight Scavengers 96 Eldritch Moon", "Midnight Scavengers Eldritch Moon", "Midnight Scavengers")},
      "products": {_MS_96A_SOI: f"synthetic:product/{_MS_96A_SOI}"}},
+    {"id": "urza_bro_225_foil_promo_decoy", "note": "the main 225 foil absent: the meld-shaped "
+     "'[225s] [Prerelease]' promo, its product under a BRO SKU, is never the card ('s' is no side "
+     "letter) — none, nothing fetched",
+     "card": ["Urza, Lord Protector", "bro", "225", True, "The Brothers' War"],
+     "stand_ins": {q: "synthetic:suggest/Urza 225 foil missing" for q in (
+         "Urza, Lord Protector 225 The Brothers' War foil", "Urza, Lord Protector The Brothers' War foil",
+         "Urza, Lord Protector foil", "Urza, Lord Protector")},
+     "products": {_URZA_225S: f"synthetic:product/{_URZA_225S}"}},
     # The collector after a variant bracket: same name, same set, one SKU code
     # — only the collector tells the versions apart, whatever F2F's order.
     {"id": "lier_pmid_59s_foil", "note": "'[Prerelease] [59s] [Innistrad: Midnight Hunt Promos]'",

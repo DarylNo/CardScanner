@@ -2880,6 +2880,26 @@
     }
    }
   },
+  "synthetic:suggest/Midnight Scavengers half beside other letters": {
+   "resources": {
+    "results": {
+     "products": [
+      {
+       "handle": "midnight-scavengers-chittering-host-96b-b-eldritch-moon-non-foil",
+       "title": "Midnight Scavengers // Chittering Host [96b] [B] [Eldritch Moon] [Non-Foil]"
+      },
+      {
+       "handle": "midnight-scavengers-chittering-host-96s-b-eldritch-moon-non-foil",
+       "title": "Midnight Scavengers // Chittering Host [96s] [B] [Eldritch Moon] [Non-Foil]"
+      },
+      {
+       "handle": "midnight-scavengers-chittering-host-96a-b-eldritch-moon-non-foil",
+       "title": "Midnight Scavengers // Chittering Host [96a] [B] [Eldritch Moon] [Non-Foil]"
+      }
+     ]
+    }
+   }
+  },
   "synthetic:suggest/Midnight Scavengers half of another set": {
    "resources": {
     "results": {
@@ -2901,8 +2921,61 @@
        "title": "Midnight Scavengers // Chittering Host [96a] [B] [Eldritch Moon] [Non-Foil]"
       },
       {
-       "handle": "midnight-scavengers-chittering-host-96b-b-eldritch-moon-non-foil",
-       "title": "Midnight Scavengers // Chittering Host [96b] [B] [Eldritch Moon] [Non-Foil]"
+       "handle": "midnight-scavengers-chittering-host-96a-a-eldritch-moon-non-foil",
+       "title": "Midnight Scavengers // Chittering Host [96a] [A] [Eldritch Moon] [Non-Foil]"
+      }
+     ]
+    }
+   }
+  },
+  "synthetic:suggest/Urza 225 foil missing": {
+   "resources": {
+    "results": {
+     "products": [
+      {
+       "available": true,
+       "handle": "urza-lord-protector-urza-planeswalker-225s-prerelease-the-brothers-war-promos-foil",
+       "title": "Urza, Lord Protector // Urza, Planeswalker [225s] [Prerelease] [The Brothers' War: Promos] [Foil]"
+      },
+      {
+       "available": true,
+       "handle": "urza-lord-protector-urza-planeswalker-225-the-brothers-war-non-foil",
+       "title": "Urza, Lord Protector // Urza, Planeswalker [225] [The Brothers' War] [Non-Foil]"
+      },
+      {
+       "available": true,
+       "handle": "the-mightstone-and-weakstone-urza-planeswalker-238a-the-brothers-war-foil",
+       "title": "The Mightstone and Weakstone // Urza, Planeswalker [238a] [The Brothers' War] [Foil]"
+      },
+      {
+       "available": true,
+       "handle": "urza-prince-of-kroog-226s-prerelease-the-brothers-war-promos-foil",
+       "title": "Urza, Prince of Kroog [226s] [Prerelease] [The Brothers' War: Promos] [Foil]"
+      },
+      {
+       "available": true,
+       "handle": "urzas-workshop-51-extended-art-the-brothers-war-commander-foil",
+       "title": "Urza's Workshop [51] [Extended Art] [The Brothers' War: Commander] [Foil]"
+      },
+      {
+       "available": true,
+       "handle": "urza-prince-of-kroog-226-the-brothers-war-foil",
+       "title": "Urza, Prince of Kroog [226] [The Brothers' War] [Foil]"
+      },
+      {
+       "available": false,
+       "handle": "urza-chief-artificer-49-extended-art-the-brothers-war-commander-non-foil",
+       "title": "Urza, Chief Artificer [49] [Extended Art] [The Brothers' War: Commander] [Non-Foil]"
+      },
+      {
+       "available": true,
+       "handle": "urza-prince-of-kroog-226p-promo-pack-the-brothers-war-promos-non-foil",
+       "title": "Urza, Prince of Kroog [226p] [Promo Pack] [The Brothers' War: Promos] [Non-Foil]"
+      },
+      {
+       "available": false,
+       "handle": "urzas-workshop-51-extended-art-the-brothers-war-commander-non-foil",
+       "title": "Urza's Workshop [51] [Extended Art] [The Brothers' War: Commander] [Non-Foil]"
       }
      ]
     }
@@ -3984,7 +4057,7 @@
     "set_name": "Eldritch Moon"
    },
    "id": "midnight_scavengers_two_halves",
-   "note": "96a and 96b: ambiguous, none fetched",
+   "note": "two 96a halves: ambiguous, none fetched",
    "requests": [
     "https://facetofacegames.com/search/suggest.json?q=Midnight%20Scavengers%2096%20Eldritch%20Moon&resources%5Btype%5D=product&resources%5Blimit%5D=20&resources%5Boptions%5D%5Bunavailable_products%5D=show",
     "https://facetofacegames.com/search/suggest.json?q=Midnight%20Scavengers%20Eldritch%20Moon&resources%5Btype%5D=product&resources%5Blimit%5D=20&resources%5Boptions%5D%5Bunavailable_products%5D=show",
@@ -4000,6 +4073,38 @@
     "https://facetofacegames.com/search/suggest.json?q=Midnight%20Scavengers%2096%20Eldritch%20Moon&resources%5Btype%5D=product&resources%5Blimit%5D=20&resources%5Boptions%5D%5Bunavailable_products%5D=show",
     "https://facetofacegames.com/search/suggest.json?q=Midnight%20Scavengers%20Eldritch%20Moon&resources%5Btype%5D=product&resources%5Blimit%5D=20&resources%5Boptions%5D%5Bunavailable_products%5D=show",
     "https://facetofacegames.com/search/suggest.json?q=Midnight%20Scavengers&resources%5Btype%5D=product&resources%5Blimit%5D=20&resources%5Boptions%5D%5Bunavailable_products%5D=show"
+   ]
+  },
+  {
+   "answers": {
+    "https://facetofacegames.com/products/midnight-scavengers-chittering-host-96a-b-eldritch-moon-non-foil.json": "https://facetofacegames.com/products/midnight-scavengers-chittering-host-96a-b-eldritch-moon-non-foil.json",
+    "https://facetofacegames.com/search/suggest.json?q=Midnight%20Scavengers%2096%20Eldritch%20Moon&resources%5Btype%5D=product&resources%5Blimit%5D=20&resources%5Boptions%5D%5Bunavailable_products%5D=show": "synthetic:suggest/Midnight Scavengers half beside other letters"
+   },
+   "card": {
+    "collector_number": "96",
+    "foil": false,
+    "name": "Midnight Scavengers",
+    "set_code": "emn",
+    "set_name": "Eldritch Moon"
+   },
+   "id": "midnight_scavengers_half_beside_other_letters",
+   "note": "meld-shaped 96b and 96s before the 96a half: only 'a' is a side letter — the 96a is the card",
+   "requests": [
+    "https://facetofacegames.com/search/suggest.json?q=Midnight%20Scavengers%2096%20Eldritch%20Moon&resources%5Btype%5D=product&resources%5Blimit%5D=20&resources%5Boptions%5D%5Bunavailable_products%5D=show",
+    "https://facetofacegames.com/products/midnight-scavengers-chittering-host-96a-b-eldritch-moon-non-foil.json"
+   ],
+   "result": {
+    "conditions": {
+     "NM": 0.49,
+     "PL": 0.39
+    },
+    "handle": "midnight-scavengers-chittering-host-96a-b-eldritch-moon-non-foil"
+   },
+   "stand_ins": [
+    "https://facetofacegames.com/search/suggest.json?q=Midnight%20Scavengers%2096%20Eldritch%20Moon&resources%5Btype%5D=product&resources%5Blimit%5D=20&resources%5Boptions%5D%5Bunavailable_products%5D=show"
+   ],
+   "synthetic": [
+    "https://facetofacegames.com/search/suggest.json?q=Midnight%20Scavengers%2096%20Eldritch%20Moon&resources%5Btype%5D=product&resources%5Blimit%5D=20&resources%5Boptions%5D%5Bunavailable_products%5D=show"
    ]
   },
   {
@@ -4075,6 +4180,42 @@
     "https://facetofacegames.com/products/midnight-scavengers-chittering-host-96a-b-eldritch-moon-non-foil-soi.json",
     "https://facetofacegames.com/search/suggest.json?q=Midnight%20Scavengers&resources%5Btype%5D=product&resources%5Blimit%5D=20&resources%5Boptions%5D%5Bunavailable_products%5D=show",
     "https://facetofacegames.com/products/midnight-scavengers-chittering-host-96a-b-eldritch-moon-non-foil-soi.json"
+   ]
+  },
+  {
+   "answers": {
+    "https://facetofacegames.com/search/suggest.json?q=Urza%2C%20Lord%20Protector%20225%20The%20Brothers%27%20War%20foil&resources%5Btype%5D=product&resources%5Blimit%5D=20&resources%5Boptions%5D%5Bunavailable_products%5D=show": "synthetic:suggest/Urza 225 foil missing",
+    "https://facetofacegames.com/search/suggest.json?q=Urza%2C%20Lord%20Protector%20The%20Brothers%27%20War%20foil&resources%5Btype%5D=product&resources%5Blimit%5D=20&resources%5Boptions%5D%5Bunavailable_products%5D=show": "synthetic:suggest/Urza 225 foil missing",
+    "https://facetofacegames.com/search/suggest.json?q=Urza%2C%20Lord%20Protector%20foil&resources%5Btype%5D=product&resources%5Blimit%5D=20&resources%5Boptions%5D%5Bunavailable_products%5D=show": "synthetic:suggest/Urza 225 foil missing",
+    "https://facetofacegames.com/search/suggest.json?q=Urza%2C%20Lord%20Protector&resources%5Btype%5D=product&resources%5Blimit%5D=20&resources%5Boptions%5D%5Bunavailable_products%5D=show": "synthetic:suggest/Urza 225 foil missing"
+   },
+   "card": {
+    "collector_number": "225",
+    "foil": true,
+    "name": "Urza, Lord Protector",
+    "set_code": "bro",
+    "set_name": "The Brothers' War"
+   },
+   "id": "urza_bro_225_foil_promo_decoy",
+   "note": "the main 225 foil absent: the meld-shaped '[225s] [Prerelease]' promo, its product under a BRO SKU, is never the card ('s' is no side letter) — none, nothing fetched",
+   "requests": [
+    "https://facetofacegames.com/search/suggest.json?q=Urza%2C%20Lord%20Protector%20225%20The%20Brothers%27%20War%20foil&resources%5Btype%5D=product&resources%5Blimit%5D=20&resources%5Boptions%5D%5Bunavailable_products%5D=show",
+    "https://facetofacegames.com/search/suggest.json?q=Urza%2C%20Lord%20Protector%20The%20Brothers%27%20War%20foil&resources%5Btype%5D=product&resources%5Blimit%5D=20&resources%5Boptions%5D%5Bunavailable_products%5D=show",
+    "https://facetofacegames.com/search/suggest.json?q=Urza%2C%20Lord%20Protector%20foil&resources%5Btype%5D=product&resources%5Blimit%5D=20&resources%5Boptions%5D%5Bunavailable_products%5D=show",
+    "https://facetofacegames.com/search/suggest.json?q=Urza%2C%20Lord%20Protector&resources%5Btype%5D=product&resources%5Blimit%5D=20&resources%5Boptions%5D%5Bunavailable_products%5D=show"
+   ],
+   "result": null,
+   "stand_ins": [
+    "https://facetofacegames.com/search/suggest.json?q=Urza%2C%20Lord%20Protector%20225%20The%20Brothers%27%20War%20foil&resources%5Btype%5D=product&resources%5Blimit%5D=20&resources%5Boptions%5D%5Bunavailable_products%5D=show",
+    "https://facetofacegames.com/search/suggest.json?q=Urza%2C%20Lord%20Protector%20The%20Brothers%27%20War%20foil&resources%5Btype%5D=product&resources%5Blimit%5D=20&resources%5Boptions%5D%5Bunavailable_products%5D=show",
+    "https://facetofacegames.com/search/suggest.json?q=Urza%2C%20Lord%20Protector%20foil&resources%5Btype%5D=product&resources%5Blimit%5D=20&resources%5Boptions%5D%5Bunavailable_products%5D=show",
+    "https://facetofacegames.com/search/suggest.json?q=Urza%2C%20Lord%20Protector&resources%5Btype%5D=product&resources%5Blimit%5D=20&resources%5Boptions%5D%5Bunavailable_products%5D=show"
+   ],
+   "synthetic": [
+    "https://facetofacegames.com/search/suggest.json?q=Urza%2C%20Lord%20Protector%20225%20The%20Brothers%27%20War%20foil&resources%5Btype%5D=product&resources%5Blimit%5D=20&resources%5Boptions%5D%5Bunavailable_products%5D=show",
+    "https://facetofacegames.com/search/suggest.json?q=Urza%2C%20Lord%20Protector%20The%20Brothers%27%20War%20foil&resources%5Btype%5D=product&resources%5Blimit%5D=20&resources%5Boptions%5D%5Bunavailable_products%5D=show",
+    "https://facetofacegames.com/search/suggest.json?q=Urza%2C%20Lord%20Protector%20foil&resources%5Btype%5D=product&resources%5Blimit%5D=20&resources%5Boptions%5D%5Bunavailable_products%5D=show",
+    "https://facetofacegames.com/search/suggest.json?q=Urza%2C%20Lord%20Protector&resources%5Btype%5D=product&resources%5Blimit%5D=20&resources%5Boptions%5D%5Bunavailable_products%5D=show"
    ]
   },
   {
@@ -4437,8 +4578,10 @@
   "synthetic:suggest/Fire // Ice": "a suggest for Fire // Ice offering Fireball's collector-less G05 promo (same set name, foil) beside Fire // Ice's own numbered APC printings",
   "synthetic:suggest/Midnight Scavengers decoys": "one more letter than 96 but never Midnight Scavengers' half: ANOTHER card's half at its number, a serial-numbered and a single-faced title, another number, a half with no other face — and the real half in the other finish",
   "synthetic:suggest/Midnight Scavengers half and exact": "the real half AFTER a title carrying the exact 96: the exact collector wins",
+  "synthetic:suggest/Midnight Scavengers half beside other letters": "meld-shaped [96b] and [96s] titles listed BEFORE the real [96a] half: only 'a' is a side letter, so they never make it ambiguous",
   "synthetic:suggest/Midnight Scavengers half of another set": "the half's title, its product filed under another set's SKU: the SKU still refuses it",
-  "synthetic:suggest/Midnight Scavengers two halves": "two side-lettered halves of the card's number (96a, 96b): ambiguous — none is taken"
+  "synthetic:suggest/Midnight Scavengers two halves": "two side-lettered halves of the card's number (96a [B], 96a [A]): ambiguous — none is taken",
+  "synthetic:suggest/Urza 225 foil missing": "the captured 'Urza, Lord Protector 225 The Brothers' War' answer with the main 225 foil taken out: the meld-shaped [225s] Prerelease promo is the only foil title one letter past 225"
  },
  "norm_collector": {"columns": ["in", "out"], "rows": [
   ["27", "27"],
@@ -4537,6 +4680,7 @@
   ["123", "123"],
   ["196a", "196a"],
   ["96b", "96b"],
+  ["96s", "96s"],
   ["96", "96"],
   ["58", "58"],
   ["279", "279"],
@@ -5048,9 +5192,11 @@
   ["Midnight Scavengers // Chittering Host [123] [Innistrad Remastered] [Foil]", "123", "Innistrad Remastered", "Foil"],
   ["Midnight Scavengers // Chittering Host [123] [Innistrad Remastered] [Non-Foil]", "123", "Innistrad Remastered", "Non-Foil"],
   ["Midnight Scavengers // Chittering Host [196a] [B] [Eldritch Moon] [Non-Foil]", "196a", "Eldritch Moon", "Non-Foil"],
+  ["Midnight Scavengers // Chittering Host [96a] [A] [Eldritch Moon] [Non-Foil]", "96a", "Eldritch Moon", "Non-Foil"],
   ["Midnight Scavengers // Chittering Host [96a] [B] [Eldritch Moon] [Foil]", "96a", "Eldritch Moon", "Foil"],
   ["Midnight Scavengers // Chittering Host [96a] [B] [Eldritch Moon] [Non-Foil]", "96a", "Eldritch Moon", "Non-Foil"],
   ["Midnight Scavengers // Chittering Host [96b] [B] [Eldritch Moon] [Non-Foil]", "96b", "Eldritch Moon", "Non-Foil"],
+  ["Midnight Scavengers // Chittering Host [96s] [B] [Eldritch Moon] [Non-Foil]", "96s", "Eldritch Moon", "Non-Foil"],
   ["Midnight Scavengers [96] [Eldritch Moon] [Non-Foil]", "96", "Eldritch Moon", "Non-Foil"],
   ["Midnight Scavengers [96a] [Eldritch Moon] [Non-Foil]", "96a", "Eldritch Moon", "Non-Foil"],
   ["Mightstone's Animation [58] [The Brothers' War] [Non-Foil]", "58", "The Brothers' War", "Non-Foil"],
@@ -5408,7 +5554,7 @@
   ["113A", "113", true],
   ["113★", "113", false],
   ["156s", "156s", false],
-  ["156s", "156", true],
+  ["156s", "156", false],
   ["156sa", "156s", false],
   ["156sA", "156s", false],
   ["156s★", "156s", false],
@@ -5492,17 +5638,17 @@
   ["130aA", "130a", false],
   ["130a★", "130a", false],
   ["38b", "38b", false],
-  ["38b", "38", true],
+  ["38b", "38", false],
   ["38ba", "38b", false],
   ["38bA", "38b", false],
   ["38b★", "38b", false],
   ["38c", "38c", false],
-  ["38c", "38", true],
+  ["38c", "38", false],
   ["38ca", "38c", false],
   ["38cA", "38c", false],
   ["38c★", "38c", false],
   ["38d", "38d", false],
-  ["38d", "38", true],
+  ["38d", "38", false],
   ["38da", "38d", false],
   ["38dA", "38d", false],
   ["38d★", "38d", false],
@@ -5527,7 +5673,7 @@
   ["162A", "162", true],
   ["162★", "162", false],
   ["162s", "162s", false],
-  ["162s", "162", true],
+  ["162s", "162", false],
   ["162sa", "162s", false],
   ["162sA", "162s", false],
   ["162s★", "162s", false],
@@ -5557,12 +5703,12 @@
   ["59A", "59", true],
   ["59★", "59", false],
   ["59s", "59s", false],
-  ["59s", "59", true],
+  ["59s", "59", false],
   ["59sa", "59s", false],
   ["59sA", "59s", false],
   ["59s★", "59s", false],
   ["59p", "59p", false],
-  ["59p", "59", true],
+  ["59p", "59", false],
   ["59pa", "59p", false],
   ["59pA", "59p", false],
   ["59p★", "59p", false],
@@ -5657,7 +5803,7 @@
   ["93A", "93", true],
   ["93★", "93", false],
   ["93s", "93s", false],
-  ["93s", "93", true],
+  ["93s", "93", false],
   ["93sa", "93s", false],
   ["93sA", "93s", false],
   ["93s★", "93s", false],
@@ -5682,7 +5828,7 @@
   ["338A", "338", true],
   ["338★", "338", false],
   ["96z", "96z", false],
-  ["96z", "96", true],
+  ["96z", "96", false],
   ["96za", "96z", false],
   ["96zA", "96z", false],
   ["96z★", "96z", false],
@@ -5696,10 +5842,15 @@
   ["196aA", "196a", false],
   ["196a★", "196a", false],
   ["96b", "96b", false],
-  ["96b", "96", true],
+  ["96b", "96", false],
   ["96ba", "96b", false],
   ["96bA", "96b", false],
   ["96b★", "96b", false],
+  ["96s", "96s", false],
+  ["96s", "96", false],
+  ["96sa", "96s", false],
+  ["96sA", "96s", false],
+  ["96s★", "96s", false],
   ["96", "96", false],
   ["96", "9", false],
   ["96A", "96", true],
@@ -5720,7 +5871,7 @@
   ["CHK-279A", "CHK-279", true],
   ["CHK-279★", "CHK-279", false],
   ["80c", "80c", false],
-  ["80c", "80", true],
+  ["80c", "80", false],
   ["80ca", "80c", false],
   ["80cA", "80c", false],
   ["80c★", "80c", false],
@@ -5730,12 +5881,12 @@
   ["80aA", "80a", false],
   ["80a★", "80a", false],
   ["80b", "80b", false],
-  ["80b", "80", true],
+  ["80b", "80", false],
   ["80ba", "80b", false],
   ["80bA", "80b", false],
   ["80b★", "80b", false],
   ["80d", "80d", false],
-  ["80d", "80", true],
+  ["80d", "80", false],
   ["80da", "80d", false],
   ["80dA", "80d", false],
   ["80d★", "80d", false],
@@ -5765,7 +5916,7 @@
   ["110A", "110", true],
   ["110★", "110", false],
   ["98s", "98s", false],
-  ["98s", "98", true],
+  ["98s", "98", false],
   ["98sa", "98s", false],
   ["98sA", "98s", false],
   ["98s★", "98s", false],
@@ -5784,7 +5935,7 @@
   ["163aA", "163a", false],
   ["163a★", "163a", false],
   ["102z", "102z", false],
-  ["102z", "102", true],
+  ["102z", "102", false],
   ["102za", "102z", false],
   ["102zA", "102z", false],
   ["102z★", "102z", false],
@@ -5889,7 +6040,7 @@
   ["7A", "7", true],
   ["7★", "7", false],
   ["170s", "170s", false],
-  ["170s", "170", true],
+  ["170s", "170", false],
   ["170sa", "170s", false],
   ["170sA", "170s", false],
   ["170s★", "170s", false],
@@ -5914,12 +6065,12 @@
   ["56A", "56", true],
   ["56★", "56", false],
   ["200s", "200s", false],
-  ["200s", "200", true],
+  ["200s", "200", false],
   ["200sa", "200s", false],
   ["200sA", "200s", false],
   ["200s★", "200s", false],
   ["75s", "75s", false],
-  ["75s", "75", true],
+  ["75s", "75", false],
   ["75sa", "75s", false],
   ["75sA", "75s", false],
   ["75s★", "75s", false],
@@ -5954,12 +6105,12 @@
   ["118A", "118", true],
   ["118★", "118", false],
   ["118s", "118s", false],
-  ["118s", "118", true],
+  ["118s", "118", false],
   ["118sa", "118s", false],
   ["118sA", "118s", false],
   ["118s★", "118s", false],
   ["148z", "148z", false],
-  ["148z", "148", true],
+  ["148z", "148", false],
   ["148za", "148z", false],
   ["148zA", "148z", false],
   ["148z★", "148z", false],
@@ -6014,7 +6165,7 @@
   ["225A", "225", true],
   ["225★", "225", false],
   ["225s", "225s", false],
-  ["225s", "225", true],
+  ["225s", "225", false],
   ["225sa", "225s", false],
   ["225sA", "225s", false],
   ["225s★", "225s", false],
@@ -6024,12 +6175,12 @@
   ["226A", "226", true],
   ["226★", "226", false],
   ["226p", "226p", false],
-  ["226p", "226", true],
+  ["226p", "226", false],
   ["226pa", "226p", false],
   ["226pA", "226p", false],
   ["226p★", "226p", false],
   ["226s", "226s", false],
-  ["226s", "226", true],
+  ["226s", "226", false],
   ["226sa", "226s", false],
   ["226sA", "226s", false],
   ["226s★", "226s", false],
@@ -6049,7 +6200,7 @@
   ["115A", "115", true],
   ["115★", "115", false],
   ["126z", "126z", false],
-  ["126z", "126", true],
+  ["126z", "126", false],
   ["126za", "126z", false],
   ["126zA", "126z", false],
   ["126z★", "126z", false],
@@ -6064,12 +6215,12 @@
   ["1†A", "1†", false],
   ["1†★", "1†", false],
   ["185j", "185j", false],
-  ["185j", "185", true],
+  ["185j", "185", false],
   ["185ja", "185j", false],
   ["185jA", "185j", false],
   ["185j★", "185j", false],
   ["M19-185j", "M19-185j", false],
-  ["M19-185j", "M19-185", true],
+  ["M19-185j", "M19-185", false],
   ["M19-185ja", "M19-185j", false],
   ["M19-185jA", "M19-185j", false],
   ["M19-185j★", "M19-185j", false],
@@ -6129,7 +6280,7 @@
   ["238A", "238", true],
   ["238★", "238", false],
   ["15s", "15s", false],
-  ["15s", "15", true],
+  ["15s", "15", false],
   ["15sa", "15s", false],
   ["15sA", "15s", false],
   ["15s★", "15s", false],
@@ -6216,7 +6367,13 @@
   ["96ı", "96", false],
   [" 96a ", "96", true],
   ["96-a", "96", false],
-  ["96İ", "96", false]
+  ["96İ", "96", false],
+  ["216S", "216", false],
+  ["115p", "115", false],
+  ["96B", "96", false],
+  ["96ª", "96", false],
+  ["96ａ", "96", false],
+  ["96à", "96", false]
  ]},
  "sku_matches_set": {"columns": ["sku", "set", "match"], "rows": [
   ["M-CMB1-NOPW-Slivdrazi_-102-NM-NF", "plst", false],
@@ -7332,6 +7489,27 @@
   ["SIN-MTG-BRO-225-ENG-PL-NF", "jgp", false],
   ["SIN-MTG-BRO-225-ENG-PL-NF", "g05", false],
   ["SIN-MTG-BRO-225-ENG-PL-NF", "", false],
+  ["SIN-MTG-BRO-225s-ENG-NM-F", "plst", false],
+  ["SIN-MTG-BRO-225s-ENG-NM-F", "plist", false],
+  ["SIN-MTG-BRO-225s-ENG-NM-F", "mb1", false],
+  ["SIN-MTG-BRO-225s-ENG-NM-F", "fmb1", false],
+  ["SIN-MTG-BRO-225s-ENG-NM-F", "ulst", false],
+  ["SIN-MTG-BRO-225s-ENG-NM-F", "uplist", false],
+  ["SIN-MTG-BRO-225s-ENG-NM-F", "ust", false],
+  ["SIN-MTG-BRO-225s-ENG-NM-F", "pust", false],
+  ["SIN-MTG-BRO-225s-ENG-NM-F", "cmb1", false],
+  ["SIN-MTG-BRO-225s-ENG-NM-F", "cmb2", false],
+  ["SIN-MTG-BRO-225s-ENG-NM-F", "nopw", false],
+  ["SIN-MTG-BRO-225s-ENG-NM-F", "mb2", false],
+  ["SIN-MTG-BRO-225s-ENG-NM-F", "clb", false],
+  ["SIN-MTG-BRO-225s-ENG-NM-F", "a25", false],
+  ["SIN-MTG-BRO-225s-ENG-NM-F", "tmp", false],
+  ["SIN-MTG-BRO-225s-ENG-NM-F", "m10", false],
+  ["SIN-MTG-BRO-225s-ENG-NM-F", "m11", false],
+  ["SIN-MTG-BRO-225s-ENG-NM-F", "PLST", false],
+  ["SIN-MTG-BRO-225s-ENG-NM-F", "jgp", false],
+  ["SIN-MTG-BRO-225s-ENG-NM-F", "g05", false],
+  ["SIN-MTG-BRO-225s-ENG-NM-F", "", false],
   ["SIN-MTG-BRO-238-ENG-NM-NF", "plst", false],
   ["SIN-MTG-BRO-238-ENG-NM-NF", "plist", false],
   ["SIN-MTG-BRO-238-ENG-NM-NF", "mb1", false],

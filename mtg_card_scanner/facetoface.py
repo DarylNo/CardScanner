@@ -174,18 +174,24 @@ def _title_is_meld_half(title: str, name: str) -> bool:
 
 
 _ASCII_DIGITS = "0123456789"
-_ASCII_LOWER = "abcdefghijklmnopqrstuvwxyz"
 
 
 def _side_letter_of(title_collector: str, collector: str) -> bool:
-    """True if the title's collector is *collector* plus ONE side letter: F2F
-    numbers a meld half "96a" / "163a" where Scryfall says "96" / "163". Both
-    are compared through _norm_collector; the card's must end in an ASCII digit
-    and the extra character must be an ASCII letter (so "96b" for a "96a", a
-    "96★" or a "196a" never is one)."""
+    """True if the title's collector is *collector* plus the side letter "a":
+    F2F numbers a meld half "96a" / "163a" where Scryfall says "96" / "163".
+    Both are compared through _norm_collector (so "91A" reads "91a"); the
+    card's must end in an ASCII digit and the extra character must be "a" —
+    every meld half F2F letters uses it (EMN 96a / 91a / 15a / 28a / 130a /
+    204a, BRO 163a / 238a, FTV 5a), while its meld PROMOS are meld-shaped too
+    with another letter ("Urza, Lord Protector // Urza, Planeswalker [225s]
+    [Prerelease] [The Brothers' War: Promos]", "Mishra, Claimed by Gix //
+    Mishra, Lost to Phyrexia [216s] …") and F2F files some promos under the
+    main set's SKU code (SIN-MTG-NEO-266p for pneo's 266p): with the main
+    product missing, "any letter" filed the promo's price on the main card.
+    So "96b", "96s", "96p", "96z", "96★" and "196a" never are one."""
     t, want = _norm_collector(title_collector), _norm_collector(collector)
     return (want != "" and want[-1] in _ASCII_DIGITS
-            and len(t) == len(want) + 1 and t.startswith(want) and t[-1] in _ASCII_LOWER)
+            and len(t) == len(want) + 1 and t.startswith(want) and t[-1] == "a")
 
 
 # A bracket that IS a collector number: "141", "0083", "185j", "12★", "59s",
@@ -615,9 +621,9 @@ class FaceToFaceClient:
         #     "Midnight Scavengers" #96 (1.1.17 lost every one: the exact match
         #     misses the side letter, and the fallback below takes only
         #     collector-less titles). With no exact title, ONE title whose
-        #     collector is the card's plus a side letter AND whose name part is
-        #     "<this card> // <another face>" is the candidate — two such (96a
-        #     and 96b) are ambiguous, never a guess. Meld-shaped on purpose: a
+        #     collector is the card's plus the side letter "a" AND whose name
+        #     part is "<this card> // <another face>" is the candidate — two
+        #     such are ambiguous, never a guess. Meld-shaped on purpose: a
         #     plain "one letter more" took "Tymaret, Chosen from Death - Serial
         #     Numbered [148z]" ($299.99) for a foil whose own product is
         #     labelled [Halo Foil]. The SKU still confirms the set (step 3).
