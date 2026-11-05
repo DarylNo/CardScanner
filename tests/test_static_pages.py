@@ -91,5 +91,13 @@ def test_a_refused_delete_says_why_on_every_path():
         assert "deferredMsg" in page, name
     assert "#list.undoing { padding-bottom: 76px; }" in desk
     assert 'if (viaKeyboard) $("#undoBtn").focus();' in desk
-    assert '$("#exportBtn").addEventListener("click", async () => { await commitDeletes(false); openCsvBuilder(); });' in desk
+    assert "await Promise.race([commitDeletes(false), new Promise(r => setTimeout(r, 3000))]);" in desk
     assert re.search(r"#flash \{ position:fixed;[^}]*z-index:30;", phone)
+    # review of d55 / v57: a 401 / another status get their own words; a mouse Undo never focuses a 🗑;
+    # phone.html's notice never covers (or takes the taps of) the Undo bar
+    for name, page in (("desktop.html", desk), ("phone.html", phone)):
+        assert "status === 401 ?" in page and "the phone refused it (HTTP ${status})" in page, name
+        assert "deleteFailMsg(worstStatus(bad), bad.length)" in page, name
+    assert "fromBar = e.detail === 0;" in desk
+    assert "#flash { pointer-events:none; }" in phone
+    assert "body.undoing #flash { bottom:calc(84px + env(safe-area-inset-bottom)); }" in phone

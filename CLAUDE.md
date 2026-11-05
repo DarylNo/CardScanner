@@ -1018,7 +1018,17 @@ lens on testers' phones), minSdk 29, arm64-v8a.
   in the app). `scripts/check_row_delete_ui.py` drives all of it in Chromium
   (admin, touch, keyboard, 30 rows, refusals on every path, a hidden tab,
   Export, a restricted guest, phone.html) — 19 of its checks fail on d54/v56;
-  `test_static_pages.py` guards it in CI.
+  `test_static_pages.py` guards it in CI. **Re-review (desktop d56, phone v58):**
+  a 401 (the session is gone — a new guest code, "Forget paired computers") reads
+  "no longer signed in … reload the page to join again", another status "the
+  phone refused it (HTTP n); try again", only no answer "didn't answer"
+  (`worstStatus` picks a batch's words: 403, 401, any status, none); a MOUSE
+  Undo leaves focus alone (`e.detail === 0`, as on the 🗑 — Chrome focuses a
+  clicked button, so the restored 🗑 stayed shown and the next Space deleted it
+  again); Export waits ≤ 3 s for those DELETEs (one the phone never answers left
+  Export dead); phone.html's `#flash` takes no taps and is lifted above the Undo
+  bar while it shows (`body.undoing`) — a 5 s "try again" notice sat exactly on
+  Undo, so a tap there did nothing and the swiped scan went for good.
 - **The live log** (`core/DebugLog.global`, a 3000-line ring, mirrored to
   logcat as `CardScanner`): triggers (box, mask %), captures (`done #k`:
   flattened or not, card px, the three frames' sharpness, the chosen frame's

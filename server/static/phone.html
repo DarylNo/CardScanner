@@ -132,6 +132,10 @@
            box-shadow:0 6px 24px #0008; font-size:14px; font-weight:600; text-align:center; }
   #flash.show { display:block; }
   #flash.bad { color:var(--bad); }
+  /* Never over the Undo bar (a "try again" notice is up for 5 s — exactly when a user swipes again):
+     lifted above it while it shows, and never the target of a tap. */
+  #flash { pointer-events:none; }
+  body.undoing #flash { bottom:calc(84px + env(safe-area-inset-bottom)); }
   .srow .sthumb { flex:0 0 48px; width:48px; height:67px; border-radius:5px; overflow:hidden;
                   background:var(--line); }
   .srow .sthumb img { width:100%; height:100%; object-fit:cover; display:block; }
@@ -488,7 +492,7 @@ function formatChipsHtml(scan, pop = popOf(scan)){
 }
 
 /* ── version banner — proves which page+server combo is running ────────────── */
-const UI_VERSION = 'v57';
+const UI_VERSION = 'v58';
 
 // Who is asking: the phone server says "admin" for the paired computer, the app's
 // own review screen and — while Settings → "Guests get full access" is on (the
@@ -513,11 +517,17 @@ refreshRole();
 // A delete the phone did not carry out, in words that say why (v57; it used to put the scan
 // back silently, or read "Deleted undefined scans"): 403 = full access was turned off while
 // this page was open, a retry cannot succeed; anything else (no answer) is worth another try.
+// A 401 = the session is gone (a new guest code): join again; another status = the phone refused
+// (HTTP n); none (≤ 0) = no answer — those two are worth another try.
 function deleteFailMsg(status, n) {
   const what = n ? ` ${n} scan${n > 1 ? 's' : ''}` : '';
-  return status === 403
-    ? `Couldn't delete${what} — this page no longer has full access (the phone's owner turned it off)`
+  return status === 403 ? `Couldn't delete${what} — this page no longer has full access (the phone's owner turned it off)`
+    : status === 401 ? `Couldn't delete${what} — this page is no longer signed in to the phone; reload it to join again`
+    : status > 0 ? `Couldn't delete${what} — the phone refused it (HTTP ${status}); try again`
     : `Couldn't delete${what} — the phone didn't answer; try again`;
+}
+function worstStatus(bad) {
+  return bad.includes(403) ? 403 : bad.includes(401) ? 401 : (bad.find(x => x > 0) ?? 0);
 }
 fetch('/api/version').then(r => r.json())
   .then(d => { $('#ver').textContent = `${UI_VERSION} · ${d.version}`; })
@@ -1243,6 +1253,10 @@ function renderScansPanel() {
 const UNDO_MS = 5000;
 let undoTimer = null, swipeEatClick = false;
 function liveScans() { return pendingDel.size ? scans.filter(s => !pendingDel.has(s.id)) : scans; }
+function showUndoBar(on) {
+  $('#undoBar').classList.toggle('show', on);
+  document.body.classList.toggle('undoing', on);      // lifts #flash clear of the bar
+}
 // Inside the app the WebView is destroyed when its screen closes — no pagehide,
 // no timers — so a delete still inside its Undo window was lost (owner: "slide
 // to delete doesn't really delete"). The app is told what's pending and deletes
@@ -1254,14 +1268,14 @@ let deferredMsg = null;     // a refusal that landed while the page was hidden: 
 function commitDeletes(keepalive) {
   clearTimeout(undoTimer); undoTimer = null;
   const ids = [...pendingDel];
-  $('#undoBar').classList.remove('show');
+  showUndoBar(false);
   if (!ids.length) return;
   Promise.all(ids.map(id => fetch(`/api/scans/${id}`, { method: 'DELETE', keepalive })
       .then(r => r.ok || r.status === 404 ? 0 : r.status, () => -1)))   // 404: already gone; -1: no answer
     .then(res => {
       const bad = res.filter(x => x !== 0);
       if (!bad.length) return;
-      const msg = deleteFailMsg(bad.includes(403) ? 403 : 0, bad.length);
+      const msg = deleteFailMsg(worstStatus(bad), bad.length);
       if (document.hidden) deferredMsg = msg; else flash(msg, 5000, true);
       if (bad.includes(403)) refreshRole();
     })
@@ -1272,7 +1286,7 @@ function queueDelete(id) {
   tellAppPending();
   scansBtn.textContent = `Scans (${liveScans().length})`;
   $('#undoMsg').textContent = pendingDel.size > 1 ? `${pendingDel.size} scans deleted` : 'Scan deleted';
-  $('#undoBar').classList.add('show');
+  showUndoBar(true);
   clearTimeout(undoTimer);
   undoTimer = setTimeout(() => commitDeletes(false), UNDO_MS);
 }
@@ -1280,7 +1294,7 @@ $('#undoBtn').addEventListener('click', () => {
   clearTimeout(undoTimer); undoTimer = null;
   pendingDel.clear();
   tellAppPending();
-  $('#undoBar').classList.remove('show');
+  showUndoBar(false);
   scansBtn.textContent = `Scans (${liveScans().length})`;
   lastListSig = ''; lastStatSig = ''; renderScansPanel();
 });

@@ -509,13 +509,20 @@ function toast(msg, ms = 1800){
 }
 // A delete the phone did not carry out, in words that say why (d55): a 403 means this browser
 // lost full access while the page was open (the owner turned "Guests get full access" off) —
-// a retry can never succeed, so the page asks /api/me again and its delete controls go;
-// anything else (no answer, a 5xx) is worth another try.
+// a retry can never succeed, so the page asks /api/me again and its delete controls go; a 401
+// means its session is gone (a new guest code, "Forget paired computers") — a retry cannot
+// succeed either, the page must join again; another status is the phone refusing (HTTP n); no
+// status at all (≤ 0) is no answer. Those two are worth another try.
 function deleteFailMsg(status, n){
   const what = n ? ` ${n} scan${n > 1 ? "s" : ""}` : "";
-  return status === 403
-    ? `Couldn't delete${what} — this browser no longer has full access (the phone's owner turned it off)`
+  return status === 403 ? `Couldn't delete${what} — this browser no longer has full access (the phone's owner turned it off)`
+    : status === 401 ? `Couldn't delete${what} — this browser is no longer signed in to the phone; reload the page to join again`
+    : status > 0 ? `Couldn't delete${what} — the phone refused it (HTTP ${status}); try again`
     : `Couldn't delete${what} — the phone didn't answer; try again`;
+}
+// The status that says most about a batch's failures: 403, then 401, then any other answer, else none.
+function worstStatus(bad){
+  return bad.includes(403) ? 403 : bad.includes(401) ? 401 : (bad.find(x => x > 0) ?? 0);
 }
 
 /* ── pricing helpers ───────────────────────────────────────────────────── */
@@ -888,7 +895,7 @@ function commitDeletes(keepalive){
       ids.forEach(id => sentDel.set(id, pollSeq));
       const bad = res.filter(x => x !== 0);
       if (bad.length){
-        const msg = deleteFailMsg(bad.includes(403) ? 403 : 0, bad.length);
+        const msg = deleteFailMsg(worstStatus(bad), bad.length);
         if (document.hidden) deferredMsg = msg; else toast(msg, 5000);
         if (bad.includes(403)) refreshRole();
       }
@@ -899,8 +906,10 @@ function commitDeletes(keepalive){
 function settleDeletes(seq){
   for (const [id, at] of sentDel) if (seq > at) sentDel.delete(id);
 }
-$("#undoBtn").addEventListener("click", () => {
-  const back = [...waitingDel], fromBar = document.activeElement === $("#undoBtn");
+$("#undoBtn").addEventListener("click", e => {
+  // A keyboard Undo (detail 0) puts focus back on the restored row's 🗑; a mouse one leaves it be —
+  // Chrome focuses a clicked button, and a 🗑 left focused stays shown and deletes on the next Space.
+  const back = [...waitingDel], fromBar = e.detail === 0;
   clearTimeout(undoTimer); undoTimer = null;
   waitingDel.clear();
   showUndoBar(false);
@@ -2322,7 +2331,7 @@ function sigOf(scan){
 
 // Version banner — page version · server git hash. Same rationale as the
 // phone: without it, "is this the old page?" is undebuggable.
-const UI_VERSION = "d55";
+const UI_VERSION = "d56";
 
 // Who is asking: the phone server says "admin" for the paired computer and, while
 // Settings → "Guests get full access" is on (the default), for the 6-digit Share
@@ -2536,7 +2545,12 @@ $("#clearAllBtn").addEventListener("click", () => clearScans(null));
 $("#clearFlagBtn").addEventListener("click", () => clearScans("flagged"));
 // Rows waiting in their Undo window go first (d55): the stats already leave them out, so the
 // file and its preview must too — the server would still export them until their DELETE lands.
-$("#exportBtn").addEventListener("click", async () => { await commitDeletes(false); openCsvBuilder(); });
+// Waits ≤ 3 s: a DELETE the phone never answers (gone from the LAN) must not leave Export dead —
+// the builder's preview is the server's own answer either way.
+$("#exportBtn").addEventListener("click", async () => {
+  await Promise.race([commitDeletes(false), new Promise(r => setTimeout(r, 3000))]);
+  openCsvBuilder();
+});
 
 /* ── Export to CSV builder ──────────────────────────────────────────────────
    The layout lives on the server (one per scanner, export_layout.json), is
