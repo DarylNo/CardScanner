@@ -56,3 +56,18 @@ def test_a_wanted_card_is_never_filtered_away_on_either_page():
         arg, lines = body.group(1), body.group(2)
         first_vote = lines.index("activeFilters()")
         assert re.search(rf"isWanted\({arg}\)\)? return true;", lines[:first_vote]), name
+
+
+def test_the_desktop_row_delete_is_admin_only_and_waits_for_undo():
+    """CLAUDE.md → "Roles" / desktop row delete (owner, 2026-11-05: "I want delete options
+    here in the list"): each scan row's 🗑 is admin-only, never opens the row, and holds the
+    DELETE for the same 5 s Undo as phone.html's swipe, sent on pagehide / a hidden tab with
+    keepalive. Driven for real in Chromium by scripts/check_row_delete_ui.py."""
+    page = (STATIC / "desktop.html").read_text(encoding="utf-8")
+    assert re.search(r'role === "admin" \? `<button type="button" class="rdel admin-only" data-del="\$\{s\.id\}"', page)
+    assert 'b.addEventListener("click", e => { e.stopPropagation(); queueDelete(Number(b.dataset.del)); })' in page
+    assert "const UNDO_MS = 5000;" in page and "const UNDO_MS = 5000;" in (STATIC / "phone.html").read_text(encoding="utf-8")
+    assert 'fetch(`/api/scans/${id}`, { method: "DELETE", keepalive })' in page
+    assert 'addEventListener("pagehide", () => commitDeletes(true));' in page
+    assert "if (document.hidden) commitDeletes(true);" in page
+    assert re.search(r"function visibleScans\(\)\{\n  const q = filterText\.toLowerCase\(\);\n  return liveScans\(\)\.filter", page)

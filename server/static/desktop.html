@@ -92,6 +92,19 @@
   .fmt.banned { background: #3a1c1c; color: var(--bad); text-decoration: line-through; }
   .fmt.restricted { background: #3f2d10; color: var(--warn); }
   .row input[type=checkbox] { width: 18px; height: 18px; flex: 0 0 auto; }
+  /* Per-row delete (owner, 2026-11-05: "I want delete options here in the list"; d54) — admin
+     only; shown on hover or keyboard focus, always on a touch screen. The DELETE waits UNDO_MS. */
+  .row .rdel { flex: 0 0 auto; font: inherit; font-size: 15px; line-height: 1; padding: 7px 8px; border: 0;
+               border-radius: 6px; background: transparent; color: var(--muted); cursor: pointer; opacity: 0; }
+  .row:hover .rdel, .row .rdel:focus { opacity: 1; }
+  .row .rdel:hover, .row .rdel:focus-visible { background: #3a1c1c; color: var(--bad); }
+  @media (hover: none) { .row .rdel { opacity: 1; } }
+  /* The row delete's Undo bar: over the bottom of the list column (the toast keeps the centre). */
+  #undoBar { position: fixed; left: 16px; bottom: 16px; width: 368px; z-index: 55; display: none;
+             align-items: center; gap: 12px; padding: 8px 8px 8px 16px; border-radius: 10px;
+             background: var(--card); border: 1px solid var(--line); box-shadow: 0 6px 24px #0008; font-size: 14px; }
+  #undoBar.show { display: flex; }
+  #undoBar span { flex: 1 1 auto; }
   .empty { color: var(--dim); text-align: center; padding: 40px 20px; }
 
   /* ── detail ─────────────────────────────────────────────────────────── */
@@ -466,12 +479,14 @@
 </main>
 <div id="lightbox"><img id="lightboxImg" alt=""><div id="lbDuo" style="display:none"></div></div>
 <div class="toast" id="toast"></div>
+<div id="undoBar" role="status" aria-live="polite"><span id="undoMsg"></span><button class="btn sm" id="undoBtn">Undo</button></div>
 
 <script>
 const CONDITIONS = ["NM","LP","MP","HP","DMG"];
 const FINISHES = ["Non-Foil","Foil","Etched"];
 let scans = [], focusedId = null, lastMaxId = 0, detailSig = "", listSig = "";
 let renderedDetailId = null;   // the scan the right pane shows (a re-render of it keeps the scroll)
+let pollSeq = 0, pollApplied = 0;   // polls started / the newest whose answer was applied (poll)
 let filterText = "", priceMin = null, priceMax = null, view = "all";
 // Popularity floor + how the two bars combine. "any" (OR) is the default and
 // the point of the pair: a price floor is what keeps an expensive UNRANKED
@@ -727,7 +742,7 @@ function renderFilterHint(){
 /* ── list ──────────────────────────────────────────────────────────────── */
 function visibleScans(){
   const q = filterText.toLowerCase();
-  return scans.filter(s => {
+  return liveScans().filter(s => {
     if (!passesFilters(s)) return false;
     if (taggedOnly && listOn() && !isProblem(s) && !listTags(s).length) return false;
     if (view === "pending"  && s.status === "selected") return false;
@@ -774,14 +789,17 @@ function renderList(){
         ${pr?`<span class="price">${pr}</span>`:''}
         ${sel && role === "admin"?`<input type="checkbox" title="include in export" ${s.included?'checked':''} data-inc="${s.id}">`:''}
       </div>
+      ${role === "admin" ? `<button type="button" class="rdel admin-only" data-del="${s.id}" title="Delete this scan (5 s to undo)" aria-label="Delete ${esc(titleFor(s))}">🗑</button>` : ""}
     </div>`;
   }).join("") || `<div class="empty">No scans match.</div>`;
 
   $("#list").querySelectorAll(".row").forEach(r =>
     r.addEventListener("click", e => {
-      if (e.target.dataset.inc) return;
+      if (e.target.dataset.inc || e.target.closest("[data-del]")) return;
       focusScan(Number(r.dataset.id));
     }));
+  $("#list").querySelectorAll("[data-del]").forEach(b =>
+    b.addEventListener("click", e => { e.stopPropagation(); queueDelete(Number(b.dataset.del)); }));
   $("#list").querySelectorAll("[data-inc]").forEach(cb =>
     cb.addEventListener("change", async () => {
       await jsend(`/api/scans/${cb.dataset.inc}`, "PATCH", { included: cb.checked });
@@ -791,6 +809,7 @@ function renderList(){
 }
 
 function updateStats(){
+  const scans = liveScans();      // rows deleted from the list (Undo window) count as gone
   const sel = scans.filter(s => s.status==="selected");
   const inc = sel.filter(s => s.included);
   // quantity matters: a row set to ×3 exports 3 copies
@@ -803,6 +822,59 @@ function updateStats(){
   $("#clearFlagBtn").style.display = nf ? "" : "none";
   $("#clearFlagBtn").textContent = `Delete flagged (${nf})`;
 }
+
+/* ── per-row delete, held for Undo ───────────────────────────────────────────
+   phone.html's swipe-to-delete, on the desktop (owner, 2026-11-05: "I want delete
+   options here in the list"; d54): the row leaves the list at once and the DELETE
+   waits UNDO_MS, so a mis-click costs nothing; Undo restores every row still
+   waiting; leaving the page or hiding the tab sends what is waiting (keepalive).
+   A SENT id stays hidden until a poll STARTED after its DELETE answered lands
+   (settleDeletes) — an older poll still in flight never flashes it back — and a
+   DELETE the server refused shows its row again, with a toast. */
+const UNDO_MS = 5000;
+const waitingDel = new Set();          // hidden, Undo still possible
+const sentDel = new Map();             // hidden, DELETE sent → the pollSeq it answered at (Infinity = not yet)
+let undoTimer = null;
+function liveScans(){
+  return waitingDel.size || sentDel.size ? scans.filter(s => !waitingDel.has(s.id) && !sentDel.has(s.id)) : scans;
+}
+function queueDelete(id){
+  waitingDel.add(id);
+  if (focusedId === id){ focusedId = null; detailSig = sigOf(null); renderDetail(); }
+  $("#undoMsg").textContent = waitingDel.size > 1 ? `${waitingDel.size} scans deleted` : "Scan deleted";
+  $("#undoBar").classList.add("show");
+  clearTimeout(undoTimer);
+  undoTimer = setTimeout(() => commitDeletes(false), UNDO_MS);
+  renderList();
+}
+function commitDeletes(keepalive){
+  clearTimeout(undoTimer); undoTimer = null;
+  const ids = [...waitingDel];
+  waitingDel.clear();
+  $("#undoBar").classList.remove("show");
+  if (!ids.length) return;
+  ids.forEach(id => sentDel.set(id, Infinity));
+  Promise.all(ids.map(id => fetch(`/api/scans/${id}`, { method: "DELETE", keepalive })
+      .then(r => r.ok || r.status === 404, () => false)))          // 404: already gone
+    .then(ok => {
+      ids.forEach(id => sentDel.set(id, pollSeq));
+      const bad = ok.filter(x => !x).length;
+      if (bad && !keepalive) toast(`Couldn't delete ${bad} scan${bad > 1 ? "s" : ""} — try again`);
+      if (!keepalive) poll();
+    });
+}
+// Called with the seq of the poll whose answer was just applied: it started after these DELETEs answered.
+function settleDeletes(seq){
+  for (const [id, at] of sentDel) if (seq > at) sentDel.delete(id);
+}
+$("#undoBtn").addEventListener("click", () => {
+  clearTimeout(undoTimer); undoTimer = null;
+  waitingDel.clear();
+  $("#undoBar").classList.remove("show");
+  renderList();
+});
+addEventListener("pagehide", () => commitDeletes(true));
+document.addEventListener("visibilitychange", () => { if (document.hidden) commitDeletes(true); });
 
 // The detail is rendered from `scans` right here, so its signature is current:
 // clearing it made the next poll re-render the same scan a second time.
@@ -2201,7 +2273,7 @@ function sigOf(scan){
 
 // Version banner — page version · server git hash. Same rationale as the
 // phone: without it, "is this the old page?" is undebuggable.
-const UI_VERSION = "d53";
+const UI_VERSION = "d54";
 
 // Who is asking: the phone server says "guest" for the 6-digit code (admin =
 // the paired computer); the computer's own server always says admin. Guests
@@ -2268,10 +2340,14 @@ checkForUpdate();
 setInterval(checkForUpdate, 3600 * 1000);
 
 async function poll(){
+  const mine = ++pollSeq;
   try {
     const [scansData, sweep] = await Promise.all([
       jget("/api/scans"), jget("/api/price-status")]);
+    if (mine < pollApplied) return;   // an older poll answering after a newer one: stale
+    pollApplied = mine;
     scans = scansData;
+    settleDeletes(mine);
     // Live sweep readout: which card the background pricer is searching on
     // F2F right now, progress, and measured ETA — it was invisible before.
     const ss = $("#sweepStat");
@@ -2375,6 +2451,7 @@ $("#exclBtn").addEventListener("click", async () => {
 $("#refreshBtn").addEventListener("click", () => { listSig=""; detailSig=""; poll(); });
 
 async function clearScans(only){
+  const scans = liveScans();      // rows already deleted from the list are not counted again
   const n = only === "unselected" ? scans.filter(s => s.status !== "selected").length
     : only === "flagged" ? scans.filter(s => s.flagged).length
     : scans.length;
@@ -2382,6 +2459,7 @@ async function clearScans(only){
   const what = only === "unselected" ? `${n} unpicked scan${n>1?'s':''}`
     : only === "flagged" ? `${n} flagged scan${n>1?'s':''}` : `ALL ${n} scans`;
   if (!confirm(`Delete ${what}? This cannot be undone.`)) return;
+  commitDeletes(false);           // rows waiting in their Undo window go now, before the clear
   // "flagged" sends the ids counted above: a flag landing after this confirm is never swept up.
   const body = only === "flagged" ? { only, ids: scans.filter(s => s.flagged).map(s => s.id) }
     : only ? { only } : {};

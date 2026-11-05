@@ -58,7 +58,7 @@ server and check the 📱 Scanner panel's "Zoom to fit the Area" controls
   later polls (another computer's change too, unless the dropdown has focus),
   and on a refused PATCH shows the phone's error and goes back to the phone's
   value;
-- the banner reads d53 and the page throws nothing.
+- the banner reads d54 and the page throws nothing.
 
     pip install playwright        # the browser: Chromium, see EXE below
     python scripts/check_device_ui.py
@@ -74,7 +74,7 @@ from PIL import Image, ImageDraw
 from playwright.sync_api import sync_playwright
 
 STATIC = Path(__file__).resolve().parents[1] / "server" / "static"
-VERSION = "d53"
+VERSION = "d54"
 
 ZOOMED = {"ratio": 1.9, "target": 1.9, "limit": "the Area fit", "fit": 2.0, "lossless": 2.6, "max": 10.0, "settling": False}
 UNZOOMED = {"ratio": 1.0, "target": 1.0, "limit": "Zoom to fit is off", "fit": 2.0, "lossless": 2.6, "max": 10.0, "settling": False}
