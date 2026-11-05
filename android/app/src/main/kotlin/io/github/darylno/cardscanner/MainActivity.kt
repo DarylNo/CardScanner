@@ -1332,9 +1332,10 @@ class MainActivity : AppCompatActivity() {
     private fun measureArmOn(): Boolean = app.measure.active && app.measure.step.arm != null
 
     /**
-     * A step changed its settings (AE lock, vibration, check time, Zoom to fit) — or the
-     * session ended and put the owner's back: apply what the camera reads live. Before
-     * 1.1.17 only AE lock was pushed, so the zoom A/B's B step would have run at 1×.
+     * A step changed its settings (AE lock, vibration, check time, Zoom to fit, Refocus on a
+     * card) — or the session ended and put the owner's back: apply what the camera reads live.
+     * Before 1.1.17 only AE lock was pushed, so the zoom A/B's B step would have run at 1×; the
+     * zoom steps' "Refocus on a card" Never (review of 1.1.18) goes the same way.
      */
     private fun afterMeasureStep() {
         // The probe belongs to its step (Back / Next / Stop only cancel it while it runs — this is a guard).
@@ -1343,6 +1344,7 @@ class MainActivity : AppCompatActivity() {
         probeWords = null
         camera?.setAeLock(settings.aeLock)
         camera?.setZoomFit(settings.zoomFit)
+        camera?.setRefocusMin(settings.refocusMin)
         camera?.setMeasureDetail(measureArmOn())
         val m = app.measure
         // The switch logs nothing when it did not change: record what this step zooms anyway

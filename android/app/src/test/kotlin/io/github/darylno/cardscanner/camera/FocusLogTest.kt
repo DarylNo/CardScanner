@@ -69,6 +69,15 @@ class FocusLogTest {
             "focusing again on the next card", w)
         val g = FocusLog.givenUpLine(3)
         assertTrue(g, g.startsWith("card focus failed 3 times in a row — no more card passes"))
+        // Review of 1.1.18 (F6): the periodic refocus is named only when there is one.
+        assertEquals("card focus failed 3 times in a row — no more card passes until a tap, a new Area, a camera re-open " +
+            "or the soft-capture watchdog; the lens stays where it is", FocusLog.givenUpLine(3, -1))
+        assertEquals(g, FocusLog.givenUpLine(3, -1))
+        assertEquals("card focus failed 3 times in a row — no more card passes until a tap, a new Area, a camera re-open, " +
+            "the soft-capture watchdog or the next periodic refocus in 5 min (Refocus on a card); the lens stays where it is",
+            FocusLog.givenUpLine(3, 5))
+        assertEquals("card focus failed 3 times in a row — this chain ends; Refocus on a card is Every card, so the next card " +
+            "starts a fresh one; the lens stays where it is", FocusLog.givenUpLine(3, 0))
     }
 
     @Test fun agesReadNaturally() {

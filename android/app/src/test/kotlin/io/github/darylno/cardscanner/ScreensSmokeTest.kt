@@ -1259,6 +1259,44 @@ class ScreensSmokeTest {
     }
 
     /**
+     * Review of 1.1.18 (F5): the zoom steps' "Refocus on a card" Never reaches the camera at the step
+     * change — like their AE lock and Zoom to fit — and the owner's own goes back to it at Stop.
+     */
+    @Test
+    fun mainActivity_zoomStepsPinRefocusOnTheCamera_F5() {
+        app.settings.roi = io.github.darylno.cardscanner.core.RoiFrac(0.25, 0.25, 0.75, 0.75)
+        app.settings.auto = true
+        app.settings.zoomFit = false
+        app.settings.refocusMin = 10
+        val cam = RecordingCamera()
+        app.cameraFactory = { _, _ -> cam }
+        grantCamera(true)
+        app.measure.start()                                      // the full session: set-up keeps the owner's
+        val c = Robolectric.buildActivity(MainActivity::class.java)
+        controllers += c
+        c.setup()
+        ShadowLooper.idleMainLooper()
+        val a = c.get()
+        val root = a.window.decorView
+        fun refocus() = cam.calls.filter { it.startsWith("setRefocusMin(") }
+        assertEquals("${cam.calls}", "setRefocusMin(10)", refocus().lastOrNull())
+        repeat(app.measure.steps.size) {
+            if (app.measure.active && app.measure.step.id != "zoom-a1" && !app.measure.isLast) {
+                findText(root, a.getString(R.string.measure_next))!!.performClick()
+                ShadowLooper.idleMainLooper()
+            }
+        }
+        assertEquals("zoom-a1", app.measure.step.id)
+        assertEquals(-1, app.settings.refocusMin)
+        assertEquals("A1's Never reaches the camera at once: ${cam.calls}", "setRefocusMin(-1)", refocus().lastOrNull())
+        findText(root, a.getString(R.string.measure_stop))!!.performClick()
+        ShadowLooper.idleMainLooper()
+        assertFalse(app.measure.active)
+        assertEquals(10, app.settings.refocusMin)
+        assertEquals("Stop gives the camera the owner's own back: ${cam.calls}", "setRefocusMin(10)", refocus().lastOrNull())
+    }
+
+    /**
      * The Area chip says when the camera is zoomed ("Area ✓ · 1.55×", the longest label)
      * and still fits on screen at the N200's size; drawing a new Area reads Cancel, and
      * Cancel comes back to the zoomed label.

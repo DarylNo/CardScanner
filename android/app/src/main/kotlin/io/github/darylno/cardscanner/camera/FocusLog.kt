@@ -1,5 +1,6 @@
 package io.github.darylno.cardscanner.camera
 
+import io.github.darylno.cardscanner.core.RefocusPolicy
 import io.github.darylno.cardscanner.core.ZoomProbe
 import kotlin.math.abs
 
@@ -90,10 +91,21 @@ object FocusLog {
         "watchdog: capture sharpness %.1f < %.2f × the session median %.1f (last %d flattened Tray captures) — focusing again on the next card"
             .format(value, ratio, median, samples)
 
-    /** The card pass failed [tries] times in a row and stops trying (until something arms a fresh chain). */
-    fun givenUpLine(tries: Int): String =
-        "card focus failed $tries times in a row — no more card passes until a tap, a new Area, a camera re-open, " +
-            "the soft-capture watchdog or the next periodic refocus (Refocus on a card); the lens stays where it is"
+    /**
+     * The card pass failed [tries] times in a row and stops trying (until something arms a fresh
+     * chain). [refocusMin] = "Refocus on a card" (core RefocusPolicy): the periodic pass is named
+     * only when there is one — Never has none, Every card starts a fresh chain on the next card.
+     */
+    fun givenUpLine(tries: Int, refocusMin: Int = RefocusPolicy.NEVER): String {
+        val head = "card focus failed $tries times in a row — "
+        val tail = "; the lens stays where it is"
+        return when {
+            refocusMin < 0 -> head + "no more card passes until a tap, a new Area, a camera re-open or the soft-capture watchdog" + tail
+            refocusMin == RefocusPolicy.EVERY_CARD -> head + "this chain ends; Refocus on a card is Every card, so the next card starts a fresh one" + tail
+            else -> head + "no more card passes until a tap, a new Area, a camera re-open, the soft-capture watchdog " +
+                "or the next periodic refocus in $refocusMin min (Refocus on a card)" + tail
+        }
+    }
 
     /** "12.3 s" / "2 min 5 s" / "1 h 3 min" — how old a reading is. */
     fun age(ms: Long): String {

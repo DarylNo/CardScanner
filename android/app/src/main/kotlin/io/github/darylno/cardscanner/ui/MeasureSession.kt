@@ -2,6 +2,7 @@ package io.github.darylno.cardscanner.ui
 
 import io.github.darylno.cardscanner.core.DebugLog
 import io.github.darylno.cardscanner.core.MiniJson
+import io.github.darylno.cardscanner.core.RefocusPolicy
 import io.github.darylno.cardscanner.core.ZoomCoordinator
 import io.github.darylno.cardscanner.core.ZoomFit
 import io.github.darylno.cardscanner.core.ZoomProbe
@@ -18,14 +19,16 @@ import kotlin.math.abs
  * pixel size (the zoom question) and the N200 timings — as a card on the scan
  * screen that walks through the steps, counts the captures during each one,
  * applies the settings a step needs (AE lock, vibration, check mark time, Zoom to
- * fit) and restores the owner's own at the end, and writes a `test` marker into
+ * fit, Refocus on a card) and restores the owner's own at the end, and writes a `test` marker into
  * the debug log at every step so the `shadow` / `outline` / `capture` lines can be
  * read against what was being done. The session survives leaving the screen
  * (plan, step and counters live in [AppSettings]); Stop or the last step ends it.
  *
  * THE ZOOM A/B (1.1.17): the same 10 cards at 1× (A1), zoomed by "Zoom to fit the
  * Area" (B) and at 1× again (A2) — each arm step pins the switch, so B's zoom never
- * leaks into another step (Back included) — with each Tray capture's zoom, card
+ * leaks into another step (Back included), and pins "Refocus on a card" to Never
+ * (review of 1.1.18: a periodic pass in one arm and not another — or Every card's hold
+ * on each card — would confound the A/B and the probe) — with each Tray capture's zoom, card
  * size, strip detail and ISO and its identification tallied ([AbRecord]) and
  * judged by rules written down before the data ([AbSummary]); the summary and the
  * verdict are logged before "session END". "Run the zoom steps" ([Plan.ZOOM]) runs
@@ -52,7 +55,8 @@ class MeasureSession(
      * One step. [target] = how many times to do it (0 = not counted); [minutes] = how
      * long to hold it (0 = no timer); [question] asks for a Yes/No before Next; the
      * nullable settings are applied when the step starts (null = inherited from the
-     * step before). [arm] = the zoom A/B arm ("A1" | "B" | "A2") whose captures are
+     * step before; [refocusMin] = "Refocus on a card", core RefocusPolicy minutes).
+     * [arm] = the zoom A/B arm ("A1" | "B" | "A2") whose captures are
      * tallied; [action] = what the step's own button does ([Action.PROBE]: the scan
      * screen's Run probe / Cancel probe / Run again).
      */
@@ -67,6 +71,7 @@ class MeasureSession(
         val vibration: Boolean? = null,
         val checkMs: Int? = null,
         val zoomFit: Boolean? = null,
+        val refocusMin: Int? = null,
         val arm: String? = null,
         val action: Action? = null,
     )
@@ -114,9 +119,10 @@ class MeasureSession(
         settings.measureAb = null
         settings.zoomProbeRuns = null
         probeThumbs.clear()
-        settings.measureOriginal = "${settings.aeLock},${settings.vibration},${settings.checkMs},${settings.zoomFit}"
+        settings.measureOriginal = "${settings.aeLock},${settings.vibration},${settings.checkMs},${settings.zoomFit},${settings.refocusMin}"
         log.i("test", "session START${if (plan == Plan.ZOOM) ", the zoom steps" else ""} (your settings: AE lock ${settings.aeLock}, " +
-            "vibration ${settings.vibration}, check ${settings.checkMs} ms, zoom to fit ${settings.zoomFit})")
+            "vibration ${settings.vibration}, check ${settings.checkMs} ms, zoom to fit ${settings.zoomFit}, " +
+            "refocus on a card ${refocusWords(settings.refocusMin)})")
         enter(0)
     }
 
@@ -338,12 +344,14 @@ class MeasureSession(
         s.aeLock?.let { settings.aeLock = it }
         s.vibration?.let { settings.vibration = it }
         s.checkMs?.let { settings.checkMs = it }
-        if (s.zoomFit != null) keepOwnersZoomFit()
+        if (s.zoomFit != null || s.refocusMin != null) keepOwnersZoomFit()
         s.zoomFit?.let { settings.zoomFit = it }
+        if (s.refocusMin != null) keepOwnersRefocus()
+        s.refocusMin?.let { settings.refocusMin = it }
         // Entering an arm (by Next or Back) starts it afresh: a re-run replaces its records.
         s.arm?.let { arm -> records.let { r -> if (r.any { it.arm == arm }) save(r.filter { it.arm != arm }) } }
         val applied = listOfNotNull(s.aeLock?.let { "AE lock $it" }, s.vibration?.let { "vibration $it" }, s.checkMs?.let { "check $it ms" },
-            s.zoomFit?.let { "zoom to fit ${if (it) "on" else "off"}" })
+            s.zoomFit?.let { "zoom to fit ${if (it) "on" else "off"}" }, s.refocusMin?.let { "refocus ${refocusWords(it)}" })
         log.i("test", "step ${i + 1}/${list.size} START ${s.id}: ${s.title}" +
             (if (s.target > 0) " ×${s.target}" else "") + (if (s.minutes > 0) " ${s.minutes} min" else "") +
             (if (applied.isNotEmpty()) " [${applied.joinToString(", ")}]" else ""))
@@ -379,6 +387,19 @@ class MeasureSession(
         log.i("test", "a session started on an older build: your Zoom to fit (${settings.zoomFit}) is kept now, before this step sets it")
     }
 
+    /**
+     * The same for "Refocus on a card" (review of 1.1.18): a session started on 1.1.17 saved four
+     * fields (1.1.16's three, upgraded by [keepOwnersZoomFit] first), none of its steps pinned it,
+     * so the first zoom step about to pin it to Never saves the owner's own as the 5th — or Stop /
+     * Finish would leave it at Never. Once only: the original then has five fields.
+     */
+    private fun keepOwnersRefocus() {
+        val o = settings.measureOriginal ?: return
+        if (o.split(",").size != 4) return
+        settings.measureOriginal = "$o,${settings.refocusMin}"
+        log.i("test", "a session started on an older build: your Refocus on a card (${refocusWords(settings.refocusMin)}) is kept now, before this step sets it")
+    }
+
     private fun restore() {
         val o = settings.measureOriginal?.split(",") ?: return
         if (o.size < 3) return
@@ -388,6 +409,8 @@ class MeasureSession(
         // 1.1.17 saves Zoom to fit too; a session started on 1.1.16 saved three fields — the 4th is
         // added when one of our steps first pins the switch ([keepOwnersZoomFit]), else it is left alone.
         o.getOrNull(3)?.toBooleanStrictOrNull()?.let { settings.zoomFit = it }
+        // 1.1.18 saves "Refocus on a card" as the 5th; an older session gets it at its first pin ([keepOwnersRefocus]).
+        o.getOrNull(4)?.toIntOrNull()?.let { settings.refocusMin = it }
     }
 
     /** What an upload outcome means to the A/B: its rank (3 OCR ✓ · 2 auto-filed · 1 needs a pick · 0 none), name, OCR ✓, auto-filed, printings. */
@@ -396,6 +419,9 @@ class MeasureSession(
     companion object {
         /** Cards per zoom A/B arm: the same 10 cards each time. */
         const val AB_CARDS = 10
+        /** "every 5 min", "every card", "never" — the log's words for a "Refocus on a card" value. */
+        fun refocusWords(minutes: Int): String = RefocusPolicy.label(minutes).lowercase(Locale.ROOT)
+
         /** The A/B records kept (3 arms × 10 cards, re-runs and strays): the oldest go first. */
         const val MAX_RECORDS = 120
         /** The probe runs kept per session (2 agreeing runs decide; a third if they disagree): the oldest go first. */
@@ -479,22 +505,22 @@ class MeasureSession(
             "Then, from an empty tray showing \"Watching for a card\", put down the SAME 10 cards one at a time, in order, lifting each before the next. " +
             "Use cards with 2+ printings and a printed set code and collector number (2015-style frame or newer), no foils, the same sleeves throughout. " +
             "Leave the 10th on the tray.",
-            target = AB_CARDS, aeLock = false, zoomFit = false, arm = "A1")
+            target = AB_CARDS, aeLock = false, zoomFit = false, refocusMin = RefocusPolicy.NEVER, arm = "A1")
         private val ZOOM_PROBE = Step("zoom-probe", "Zoom probe",
             "Leave the card on the tray, untouched — it has scanned and nothing more is filed. Tap Run probe and keep hands and shadows off the tray " +
             "for about 30 s: the camera zooms in and out on the card, then comes back. Then run it once more on a DIFFERENT card: lift this one, " +
             "put the other down, let it scan (it is filed like any scan), tap Run again. Any button while it runs only cancels it.",
-            aeLock = false, zoomFit = false, action = Action.PROBE)
+            aeLock = false, zoomFit = false, refocusMin = RefocusPolicy.NEVER, action = Action.PROBE)
         private val ZOOM_B = Step("zoom-b", "Same cards zoomed",
             "Zoom to fit is now ON (the line below says how far). The card you left must NOT scan again while the zoom changes. " +
             "Then lift it and wait for \"Watching for a card\" (a couple of seconds of \"no card shape yet\" is normal — the tray was re-learned with the card on it) " +
             "and put the SAME 10 cards down in the same order. Before Next, lift the last card.",
             target = AB_CARDS, question = "Did the card you left stay un-scanned when the zoom came on?",
-            aeLock = false, zoomFit = true, arm = "B")
+            aeLock = false, zoomFit = true, refocusMin = RefocusPolicy.NEVER, arm = "B")
         private val ZOOM_A2 = Step("zoom-a2", "Same cards at 1× again",
             "A again — Zoom to fit is OFF. Wait for \"Watching for a card\", then the same 10 cards once more, in order. " +
             "This checks that 1× gives the same answers twice.",
-            target = AB_CARDS, aeLock = false, zoomFit = false, arm = "A2")
+            target = AB_CARDS, aeLock = false, zoomFit = false, refocusMin = RefocusPolicy.NEVER, arm = "A2")
 
         /** The rig session (PR #27's checklist), in order, with the zoom A/B before AE lock. Durations and counts are the plan's. */
         val STEPS: List<Step> = listOf(
@@ -524,7 +550,7 @@ class MeasureSession(
                 "AE lock is now ON. Repeat: 5 swaps without emptying the tray, then 5 lean-ins.", target = 10, aeLock = true, zoomFit = false),
             Step("done", "Done",
                 "That is everything. Wait until no card is still identifying (the chip at the top), then Next: it ends the session, puts your settings back " +
-                "— AE lock, vibration, check time and Zoom to fit, even if changed from the computer; your Area stays as drawn — and opens the share sheet " +
+                "— AE lock, vibration, check time, Zoom to fit and Refocus on a card, even if changed from the computer; your Area stays as drawn — and opens the share sheet " +
                 "for the debug report — send it over. The test scans stay in Scans: delete them there."),
         )
 
@@ -532,8 +558,8 @@ class MeasureSession(
         val ZOOM_STEPS: List<Step> = listOf(
             ZOOM_A1, ZOOM_PROBE, ZOOM_B, ZOOM_A2,
             Step("zoom-done", "Done",
-                "Wait until no card is still identifying (the chip at the top), then Next. Your settings are put back — AE lock, vibration, check time AND " +
-                "Zoom to fit, even if changed from the computer; your Area stays as drawn — and the share sheet opens with the debug report. " +
+                "Wait until no card is still identifying (the chip at the top), then Next. Your settings are put back — AE lock, vibration, check time, " +
+                "Zoom to fit AND Refocus on a card, even if changed from the computer; your Area stays as drawn — and the share sheet opens with the debug report. " +
                 "The 30 test scans stay in Scans: delete them there."),
         )
     }

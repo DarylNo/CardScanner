@@ -46,13 +46,14 @@ class RefocusPolicyTest {
     }
 
     /**
-     * No card focus since the bind is NOT due: every bind / re-open / new Area / mode switch /
-     * zoom change already arms the first-card pass, so a periodic arm there would arm twice;
-     * and when that chain ended without an answer (cancelled 3×) or a tap is still in flight,
-     * the policy waits for an answer instead of overriding it.
+     * An interval with nothing since the bind (no answer, no chain end) is NOT due: every bind /
+     * re-open / new Area / mode switch / zoom change already arms the first-card pass, so a
+     * periodic arm there would arm twice — the interval waits for that chain to end (CardFocusState
+     * then counts from its end, answered or not). Every card is due whatever came before.
      */
-    @Test fun noCardFocusYetIsNotDue() {
+    @Test fun nothingSinceTheBindIsNotDueForAnInterval() {
         for (m in listOf(2, 5, 10, 30)) assertFalse("$m", RefocusPolicy.due(1_000 * min, null, m))
+        assertTrue(RefocusPolicy.due(1_000 * min, null, RefocusPolicy.EVERY_CARD))
     }
 
     @Test fun labels() {
@@ -76,5 +77,14 @@ class RefocusPolicyTest {
         assertEquals("refocus every 5 min · last card focus none yet", RefocusPolicy.describe(5, 13 * min, null))
         assertEquals("refocus every card · last card focus none yet", RefocusPolicy.describe(0, 13 * min, null))
         assertEquals("refocus never · last card focus 2 h 5 min ago", RefocusPolicy.describe(-1, 125 * min, 0L))
+        // Counting from a give-up (review of 1.1.18, F1) and a tap's pause (F4) say so.
+        assertEquals("periodic: every 5 min — 5 min since the last card focus gave up",
+            RefocusPolicy.periodicWhy(8 * min, 3 * min, 5, gaveUp = true))
+        assertEquals("refocus paused — you tapped to focus (every 5 min) · last card focus 3 min ago",
+            RefocusPolicy.describe(5, 13 * min, 10 * min, paused = true))
+        assertEquals("refocus paused — you tapped to focus (every card) · last card focus none yet",
+            RefocusPolicy.describe(0, 13 * min, null, paused = true))
+        assertEquals("Never has nothing to pause", "refocus never · last card focus none yet",
+            RefocusPolicy.describe(-1, 13 * min, null, paused = true))
     }
 }

@@ -4,6 +4,7 @@ import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
 import io.github.darylno.cardscanner.core.AutoScanner
 import io.github.darylno.cardscanner.core.Box
+import io.github.darylno.cardscanner.core.CardFocusState
 import io.github.darylno.cardscanner.core.CardOutline
 import io.github.darylno.cardscanner.core.OutlineTracker
 import io.github.darylno.cardscanner.core.DebugLog
@@ -65,12 +66,18 @@ class DetectionUpdate(
  * [ScanAnalyzer.onNoCard] if the server answers no_card.
  */
 /**
- * A held first-card Trigger asking the camera to focus on ITS card: [box] in
+ * A held Tray Trigger asking the camera to focus on ITS card: [box] in
  * the [sampleW]×[sampleH] detection sample, which covers [roi] of the upright
  * frame (null = the whole frame). The camera meters the box's centre
- * ([io.github.darylno.cardscanner.core.FocusPoint]).
+ * ([io.github.darylno.cardscanner.core.FocusPoint]). [hold] = how the capture
+ * waits for the answer: [waitNs] at most ([ScanAnalyzer.holdWaitNs]).
  */
-class FocusRequest(val box: Box, val roi: RoiFrac?, val sampleW: Int, val sampleH: Int)
+class FocusRequest(
+    val box: Box, val roi: RoiFrac?, val sampleW: Int, val sampleH: Int,
+    val hold: CardFocusState.Hold = CardFocusState.Hold.CARD,
+) {
+    val waitNs: Long get() = ScanAnalyzer.holdWaitNs(hold)
+}
 
 class CaptureBurst(
     val id: Long,
@@ -209,10 +216,11 @@ class ScanAnalyzer(
         fun onCaptureRequest(request: CaptureBurst)
         fun onAnalyzerError(error: Throwable)
         /**
-         * An AUTO trigger is being held because [focusFirst] said the lens should
+         * An AUTO trigger is being held because [focusHold] said the lens should
          * focus on this card first ([request] = where the card is). Answer with
          * [focusDone] (any outcome); the capture then uses frames taken after
-         * focus settled, or fires anyway after [FOCUS_WAIT_NS].
+         * focus settled, or fires anyway after the hold's wait ([FocusRequest.waitNs]:
+         * [FOCUS_WAIT_NS], or [PERIODIC_FOCUS_WAIT_NS] for a periodic pass).
          */
         fun onFocusRequest(request: FocusRequest) {}
         /**
@@ -235,7 +243,7 @@ class ScanAnalyzer(
     private var manualPending = false
 
     /**
-     * Asked on every AUTO trigger (analysis thread): hold this capture until the
+     * The yes / no form of [focusHold] (its default asks this): hold this capture until the
      * lens has focused on the card? (Mount: the first card after a bind / area
      * change / sharpness drop, and — "Refocus on a card", 1.1.18 — the next card
      * once its interval has passed since the last focus on a card; the answer may
@@ -244,9 +252,22 @@ class ScanAnalyzer(
      * (1.1.14; "first card: …" before 1.1.18): held, answered after N ms → capture
      * #k from the frames after it, TIMED OUT after [FOCUS_WAIT_NS] → shot from the
      * last frames, a late answer, or cancelled — the controller logs the pass itself.
+     * A yes is a [CardFocusState.Hold.CARD] hold; [focusHold] is what a trigger asks.
      */
     @Volatile var focusFirst: () -> Boolean = { false }
+    /**
+     * What a Tray trigger asks (analysis thread, ONCE per trigger — it may arm a pass): hold
+     * this capture for a focus pass on the card, and how ([CardFocusState.Hold]; null = shoot
+     * now)? [CardFocusState.Hold.CARD] waits ≤ [FOCUS_WAIT_NS] and a time-out owes the
+     * late-focus rebase (1.1.14, unchanged); [CardFocusState.Hold.PERIODIC] ("Refocus on a
+     * card", review of 1.1.18) waits for the camera's answer, ≤ [PERIODIC_FOCUS_WAIT_NS], and a
+     * time-out owes no rebase (see [PERIODIC_FOCUS_WAIT_NS]). By default it asks [focusFirst].
+     */
+    @Volatile var focusHold: () -> CardFocusState.Hold? = { if (focusFirst()) CardFocusState.Hold.CARD else null }
     private var deferring = false
+    /** The running hold's kind and wait ([focusHold]). */
+    private var deferHold = CardFocusState.Hold.CARD
+    private var deferWaitNs = FOCUS_WAIT_NS
     /** The last hold timed out before its focus answered (its scene may be a blur). */
     private var heldTimedOut = false
     /** Re-take the scanned scene from the next sample (a late focus settled). */
@@ -576,22 +597,26 @@ class ScanAnalyzer(
         }
 
         if (trigger != null) {
-            if (mode == ScanMode.MOUNT && runCatching { focusFirst() }.getOrDefault(false)) {
+            val hold = if (mode == ScanMode.MOUNT) runCatching { focusHold() }.getOrNull() else null
+            if (hold != null) {
                 // Focus on THIS card before shooting it (the first card per bind / Area /
                 // zoom, or a periodic refocus): the capture is held, and taken from frames
                 // newer than the focus.
                 deferring = true
+                deferHold = hold
+                deferWaitNs = holdWaitNs(hold)
                 deferredBox = trigger.box
                 deferStartTs = timestampNs
                 focusReadyTs = NONE
                 val b = trigger.box
                 val sw0 = g0?.w ?: lastGrayDims?.get(0) ?: 0
                 val sh0 = g0?.h ?: lastGrayDims?.get(1) ?: 0
+                val kind = if (hold == CardFocusState.Hold.PERIODIC) ", a periodic pass — it waits for the camera's answer" else ""
                 safeLog("focus") {
-                    "card focus: Trigger held (≤ %.1f s) for a focus pass on the card — box %d,%d %d×%d of %d×%d"
-                        .format(FOCUS_WAIT_NS / 1e9, b.x, b.y, b.w, b.h, sw0, sh0)
+                    "card focus: Trigger held (≤ %.1f s%s) for a focus pass on the card — box %d,%d %d×%d of %d×%d"
+                        .format(deferWaitNs / 1e9, kind, b.x, b.y, b.w, b.h, sw0, sh0)
                 }
-                runCatching { sink.onFocusRequest(FocusRequest(b, roi, sw0, sh0)) }
+                runCatching { sink.onFocusRequest(FocusRequest(b, roi, sw0, sh0, hold)) }
             } else {
                 fire(CaptureTrigger.AUTO, trigger.box, uw, uh, AUTO_FRESH_NS)
             }
@@ -599,14 +624,17 @@ class ScanAnalyzer(
             val sinceFocus = if (focusReadyTs == NONE || timestampNs <= focusReadyTs) -1L
                 else timestampNs - focusReadyTs - 1
             val focused = sinceFocus >= 0 && ring.countFresh(sinceFocus) >= BURST
-            if (focused || timestampNs - deferStartTs >= FOCUS_WAIT_NS || timestampNs < deferStartTs) {
+            if (focused || timestampNs - deferStartTs >= deferWaitNs || timestampNs < deferStartTs) {
                 // The lens moved since the trigger: "what was scanned" becomes
                 // THIS frame (the burst's newest), not the pre-focus trigger scene.
                 runCatching {
                     scanner.rebaseScene(GraySampler.sampleY(p.yBuffer, p.yRowStride, sw, sh, rotation, roi))
                 }
-                // focus never answered → shoot anyway, from the usual fresh window
-                heldTimedOut = !focused
+                // focus never answered → shoot anyway, from the usual fresh window. A CARD hold
+                // owes the late-focus rebase (its scene may be a mid-sweep blur); a PERIODIC one
+                // does not — it waited past CameraX's own AF timeout (PERIODIC_FOCUS_WAIT_NS).
+                val periodic = deferHold == CardFocusState.Hold.PERIODIC
+                heldTimedOut = !focused && !periodic
                 val heldMs = (timestampNs - deferStartTs) / 1_000_000
                 val answeredMs = if (focusReadyTs == NONE) -1L else (focusReadyTs - deferStartTs) / 1_000_000
                 val clockReset = timestampNs < deferStartTs
@@ -618,9 +646,12 @@ class ScanAnalyzer(
                         focused -> "card focus: focus answered $answeredMs ms after the Trigger — $shot shot from the $BURST frames after it ($heldMs ms after the Trigger)"
                         clockReset -> "card focus: focus hold ended — the camera's clock restarted; $shot shot from the last frames"
                         answeredMs >= 0 -> "card focus: focus hold timed out after %.1f s — focus answered after $answeredMs ms but fewer than $BURST frames came after it; $shot shot from the last frames"
-                            .format(FOCUS_WAIT_NS / 1e9)
+                            .format(deferWaitNs / 1e9)
+                        periodic -> ("card focus: periodic hold timed out after %.1f s — no focus answer, past the camera's own " +
+                            "5 s AF timeout; $shot shot from the last frames (no late-focus rebase: a card swapped meanwhile will scan)")
+                            .format(deferWaitNs / 1e9)
                         else -> "card focus: focus hold timed out after %.1f s — no focus answer; $shot shot from the last frames (the lens may still have been moving)"
-                            .format(FOCUS_WAIT_NS / 1e9)
+                            .format(deferWaitNs / 1e9)
                     }
                 }
             }
@@ -1267,8 +1298,27 @@ class ScanAnalyzer(
         const val MANUAL_SETTLE_NS = 150_000_000L
         /** Frames dropped after the zoom is read back before the gate opens (they may predate it). */
         const val SETTLE_DROP_FRAMES = 2
-        /** Longest a first-card capture waits for focus before shooting anyway. */
+        /** Longest a first-card capture (a [CardFocusState.Hold.CARD] hold) waits for focus before shooting anyway. */
         const val FOCUS_WAIT_NS = 1_500_000_000L
+        /**
+         * Longest a PERIODIC hold ("Refocus on a card", review of 1.1.18) waits for the camera's
+         * answer. CameraX completes an AF pass that never converges NOT focused after
+         * FocusMeteringControl.AUTO_FOCUS_TIMEOUT_DURATION = 5 s (1.5.3 bytecode); 0.5 s more covers
+         * the answer's hop to the analysis thread and the [BURST] frames after it at ≥ 10 fps. So a
+         * periodic hold sees every answer CameraX gives and never shoots mid-sweep (at 1.5 s, a pass
+         * that took longer shot a moving lens, and its late answer re-took the scanned scene — with
+         * Every card that could swallow a swapped card). A periodic hold that still times out
+         * (the camera gave no answer at all) owes NO late-focus rebase: the lens was locked on a
+         * card before the pass, and a re-take of the scene from a later sample could swallow a card
+         * swapped meanwhile; the CARD hold keeps it (its tray scene may be an unfocused blur).
+         */
+        const val PERIODIC_FOCUS_WAIT_NS = 5_500_000_000L
+
+        /** How long a hold of kind [h] waits for its focus answer. */
+        fun holdWaitNs(h: CardFocusState.Hold): Long = when (h) {
+            CardFocusState.Hold.CARD -> FOCUS_WAIT_NS
+            CardFocusState.Hold.PERIODIC -> PERIODIC_FOCUS_WAIT_NS
+        }
         /** [canProbe]'s refusals (the owner's words; nothing changed). */
         const val PROBE_NOT_SCANNED = "Let the card scan first (wait for the ✓), then Run probe"
         const val PROBE_SCAN_PENDING = "A scan is in progress — a second"
