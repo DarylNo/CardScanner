@@ -209,8 +209,10 @@ On the same Wi-Fi, or the phone's hotspot:
   - **off** — a guest can review, pick, edit and **flag** cards for deletion;
     the admin sees "Delete flagged".
 
-  The switch applies at once, to guests already connected too. **New guest
-  code** ends every guest session.
+  The phone applies the switch at once, to guests already connected too; a
+  guest's open page gains or loses its controls within 30 seconds, no reload
+  (a control used before then says why it was refused). **New guest code**
+  ends every guest session.
 
   Wrong codes are limited: 8 from one device within 5 minutes lock that device
   out for 5 minutes, and 20 from all devices together **pause joining** for

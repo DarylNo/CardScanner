@@ -65,7 +65,8 @@ def test_the_desktop_row_delete_is_admin_only_and_waits_for_undo():
     keepalive. Driven for real in Chromium by scripts/check_row_delete_ui.py."""
     page = (STATIC / "desktop.html").read_text(encoding="utf-8")
     assert re.search(r'role === "admin" \? `<button type="button" class="rdel admin-only" data-del="\$\{s\.id\}"', page)
-    assert 'b.addEventListener("click", e => { e.stopPropagation(); queueDelete(Number(b.dataset.del), e.detail === 0); })' in page
+    assert ('b.addEventListener("click", e => { e.stopPropagation(); if (e.detail > 1) return; '
+            'queueDelete(Number(b.dataset.del), e.detail === 0); })') in page
     assert "const UNDO_MS = 5000;" in page and "const UNDO_MS = 5000;" in (STATIC / "phone.html").read_text(encoding="utf-8")
     assert 'fetch(`/api/scans/${id}`, { method: "DELETE", keepalive })' in page
     assert 'addEventListener("pagehide", () => commitDeletes(true));' in page
@@ -101,3 +102,46 @@ def test_a_refused_delete_says_why_on_every_path():
     assert "fromBar = e.detail === 0;" in desk
     assert "#flash { pointer-events:none; }" in phone
     assert "body.undoing #flash { bottom:calc(84px + env(safe-area-inset-bottom)); }" in phone
+
+
+def test_every_admin_control_says_why_and_the_role_follows_the_switch():
+    """Final review of desktop d56 / phone v58 (d57 / v59): a 🗑 double-click deletes ONE row; the
+    Undo bar stays left of the 🗑 column and lifts the toast; a keyboard delete left to run hands
+    focus to the row that took its place; every admin-only call (ScanServer.adminOnly) goes through
+    adminFetch, so a refusal says why instead of reading as an answer; both pages re-read /api/me
+    every 30 s and when shown again; phone.html keeps a sent DELETE out of Undo (sentDel) and out
+    of a refresh still in flight (settleDeletes), and Clear counts the list as shown. Driven for
+    real in Chromium by scripts/check_row_delete_ui.py."""
+    desk = (STATIC / "desktop.html").read_text(encoding="utf-8")
+    phone = (STATIC / "phone.html").read_text(encoding="utf-8")
+    for name, page in (("desktop.html", desk), ("phone.html", phone)):
+        assert re.search(r"function failMsg\(what, status, detail\)", page), name
+        assert re.search(r"async function adminFetch\(url, opts, what, say = ", page), name
+        assert "if (status === 403) refreshRole();" in page, name
+        assert re.search(r"const ROLE_REFRESH_MS = 30000;", page), name
+        assert re.search(r"setInterval\(\(\) => \{ if \(!document\.hidden\) refreshRole\(\); \}, "
+                         r"window\.__roleRefreshMs \|\| ROLE_REFRESH_MS\);", page), name
+        assert "if (role === was) return;" in page, name          # a re-render only on a change
+        vis = re.search(r"addEventListener\(['\"]visibilitychange['\"], \(\) => \{\n  if \(document\.hidden\) "
+                        r"\{ commitDeletes\(true\); return; \}\n  refreshRole\(\);", page)
+        assert vis, name
+        # no admin route through the old helpers (they read a refusal as an answer) or by navigating to it
+        assert not re.search(r"jsend\(\s*[`'\"]/api/(price-sweep/stop|scans/price-missing|export|device)", page), name
+        assert not re.search(r"jget\(\s*[`'\"]/api/(export|device|debug)", page), name
+        assert not re.search(r"jsend\([^)]*PATCH['\"], \{ included", page), name
+        assert not re.search(r"window\.location = ['\"]/api/(export|debug)", page), name
+        clear = re.search(r"async function clearScans\(only\) ?\{(.*?)\n\}", page, re.S)
+        assert clear and "await Promise.race([commitDeletes(false), new Promise(r => setTimeout(r, 3000))]);" in clear.group(1), name
+    assert "#undoBar { position: fixed; left: 16px; bottom: 16px; width: 316px;" in desk
+    assert "body.undoing .toast { bottom: 76px; }" in desk
+    assert 'document.body.classList.toggle("undoing", on);' in desk
+    assert "kbNext = i < 0 ? [] : [...vis.slice(i + 1), ...vis.slice(0, i).reverse()];" in desk
+    assert 'const onUndo = document.activeElement === $("#undoBtn");' in desk
+    assert "?.focus({ preventScroll: true });" in desk
+    assert "adminDownload(\"/api/export\", \"cards.txt\"" in desk and "adminDownload(\"/api/export.csv\", \"cards.csv\"" in desk
+    # phone.html: desktop's delete model
+    assert "const sentDel = new Map();" in phone
+    assert "return pendingDel.size || sentDel.size ? scans.filter(s => !pendingDel.has(s.id) && !sentDel.has(s.id)) : scans;" in phone
+    assert "const owed = [...pendingDel, ...[...sentDel].filter(([, at]) => at === Infinity).map(([id]) => id)];" in phone
+    assert "if (mine < pollApplied) return;" in phone and "settleDeletes(mine);" in phone
+    assert re.search(r"async function clearScans\(only\) \{\n(\s*//[^\n]*\n)*\s*const live = liveScans\(\);", phone)

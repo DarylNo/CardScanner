@@ -1029,6 +1029,43 @@ lens on testers' phones), minSdk 29, arm64-v8a.
   Export dead); phone.html's `#flash` takes no taps and is lifted above the Undo
   bar while it shows (`body.undoing`) — a 5 s "try again" notice sat exactly on
   Undo, so a tap there did nothing and the swiped scan went for good.
+  **Final review (desktop d57, phone v59):** a 🗑's click with `e.detail > 1` is
+  ignored — the 2nd click of a double-click landed on the row that slid up under
+  the pointer and deleted it too (Enter / Space are detail 0, a 1st click 1). The
+  Undo bar is 316 px wide (x 16–332): the 🗑s sit at x 356–387 of the 400 px
+  column at every window width, and at 368 px (to x 384) a second delete at the
+  same spot MID-list — where d55's room at the end does nothing — hit Undo. The
+  toast lifts to `bottom: 76px` while the bar shows (`body.undoing`; the bar is
+  y 890–934 at 950 px high, a long refusal sat at 868–930 over it at ≤ 1280 px
+  wide) and sits above the 🐞 panel (z 65 > 60: its Copy report / Download words
+  were behind it). A keyboard delete left to run hands focus, as the bar goes, to
+  the 🗑 of the row that took its place (`kbNext`: below, else above), else the
+  first 🗑, else the name filter (it fell to `<body>`), and a list re-render keeps
+  a focused 🗑 focused (`preventScroll`). Every admin-only call (`ScanServer.adminOnly`)
+  goes through `adminFetch` on both pages — `failMsg(what, status, detail)` is
+  `deleteFailMsg`'s words for any action (403 full access, 401 signed in, a
+  400 / 422 the phone's own words, HTTP n, no answer), a 403 re-asks `/api/me`:
+  the builder opens only on its layout (a 403 threw on `r.fields` and nothing
+  said why), a layout save / the preview / Download CSV / TXT / the 🐞 report
+  say why in place (the downloads are fetched then saved under the server's
+  Content-Disposition name — navigating left the page for the error JSON),
+  the include box is put back, ▶ Sweep / ■ Stop / Price missing no longer say
+  "Nothing needs pricing" / "stopping", Exclude filtered stops at the first
+  refusal and says how far it got, the 📱 panel says why (its 403 body read "flag
+  it for deletion instead"). Both pages re-read the role (above, "Roles") and
+  re-render only when it CHANGES (a 30 s re-render of the open card would wipe a
+  typed name search). phone.html takes desktop's delete model: committed ids move
+  from `pendingDel` to `sentDel` (Undo clears only `pendingDel` — it "restored"
+  a scan whose DELETE was in flight, and the bar counted it); a sent id stays
+  hidden until a refresh STARTED after its DELETE answered is applied
+  (`settleDeletes`, `pollSeq` / `pollApplied` — Chromium holds a second GET of
+  `/api/scans` behind the first, so the stale list still flashed the row for
+  ~5 ms before the fresh one, longer on a LAN); the app hears every id still owed
+  (waiting, or sent with no answer). Clear counts the list as shown
+  (`liveScans()`) and sends what waits first (≤ 3 s) — the question counted
+  swiped rows and the bar stayed up after the clear; desktop's Clear waits for
+  them too, so "Deleted n" answers "Delete n?". `check_row_delete_ui.py`: 54
+  checks fail on d56/v58 (+ the 2 banner pins), all 199 pass on d57/v59.
 - **The live log** (`core/DebugLog.global`, a 3000-line ring, mirrored to
   logcat as `CardScanner`): triggers (box, mask %), captures (`done #k`:
   flattened or not, card px, the three frames' sharpness, the chosen frame's
@@ -1310,10 +1347,12 @@ lens on testers' phones), minSdk 29, arm64-v8a.
   log; OFF, it is a GUEST: review/pick/edit/flag, refused (403) the rest
   (`ScanServer.adminOnly`). `GatewayServer.roleOf` asks the setting on EVERY
   request (a provider from `PhoneServer.newServer`; a throwing one = off), so
-  a flip reaches sessions already open at once — no re-join; a page loaded
-  under the old answer keeps its controls until the server first refuses one
-  (every delete path then says so and re-asks `/api/me`, so its controls go —
-  d55 / v57), and the server refuses what it may no longer do. A flip is logged once under `server` (never a code); Settings
+  a flip reaches sessions already open at once — no re-join; an open page
+  re-reads `/api/me` every 30 s (`ROLE_REFRESH_MS`) and when its tab comes
+  back, so it gains or loses its admin controls within 30 s, no reload, either
+  way (d57 / v59 — before, a page loaded as a guest never gained them); a
+  control used before then is refused by the server and says why (every admin
+  call goes through `adminFetch`; a 403 re-asks `/api/me` at once). A flip is logged once under `server` (never a code); Settings
   says plainly what ON gives away (delete is for good — the phone holds the
   only copy), the Share screen's amber card follows the setting, and
   Diagnostics has a `guests (Share code):` line. The setting never opens the

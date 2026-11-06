@@ -245,7 +245,9 @@ the same network could copy the admin cookie.
 **Share** shows the **6-digit guest code**, a QR and the phone's addresses.
 Guests on the same Wi-Fi (or your hotspot) open the link and enter the code.
 What they may do is Settings → *This phone's server* → **Guests get full
-access** (on by default; it applies at once, to guests already connected too):
+access** (on by default; the phone applies it at once, to guests already
+connected too, and an open guest page gains or loses its controls within 30 s,
+no reload — a control used before then says why it was refused):
 
 - **On:** a guest is treated like the paired computer — delete (a swipe on the
   phone page, the 🗑 on a row of the computer page, both with a 5 s Undo),

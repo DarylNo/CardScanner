@@ -24,7 +24,19 @@ the list"; desktop d54, d55 — CLAUDE.md → "Roles" and "Desktop row delete"):
     the detail pane's "Delete this scan" and Clear unpicked / Clear all say "Couldn't
     delete" on a refusal (they said "Scan deleted" / "Deleted undefined scans");
   * phone.html (v57): a refused swipe delete, "Delete this scan" or Clear says so on
-    the page (it put the scan back silently / said "Deleted undefined scans").
+    the page (it put the scan back silently / said "Deleted undefined scans");
+  * d57 / v59 (final review of d56 / v58): a double-click on a 🗑 deletes ONE row; the
+    Undo bar stays left of the 🗑 column (mid-list, at 1280 and 1500 px) and the toast
+    clears it (and the 🐞 panel); a keyboard delete left to run hands focus to the row
+    that took its place; with full access turned off mid-session EVERY admin control
+    (Export, the layout, preview, Download CSV / TXT, the include box, ▶ Sweep / ■ Stop,
+    Exclude filtered, the 📱 panel, the 🐞 report; phone.html's Price missing / Stop /
+    Exclude filtered) says why and re-asks /api/me, and the downloads still download;
+    an open page gains / loses its controls within 30 s (the timer, shortened through
+    window.__roleRefreshMs) and when it is shown again; phone.html: Undo never "restores"
+    a scan whose DELETE is in flight, a refresh in flight across a DELETE never flashes
+    its row back (a MutationObserver: the stale list lands ~5 ms before the fresh one),
+    Clear counts the list as shown and sends what waits first.
 
     pip install playwright        # Chromium: /opt/pw-browsers in a cloud session, or set CHROME
     python scripts/check_row_delete_ui.py
@@ -37,8 +49,8 @@ from pathlib import Path
 from playwright.sync_api import sync_playwright
 
 STATIC = Path(__file__).resolve().parents[1] / "server" / "static"
-VERSION = "d56"
-PHONE_VERSION = "v58"
+VERSION = "d57"
+PHONE_VERSION = "v59"
 
 
 def scan(i, name, sel=False):
@@ -52,7 +64,8 @@ def scan(i, name, sel=False):
 
 
 NAMES = {1: "Forest", 2: "Opt", 3: "Lightning Bolt", 4: "Counterspell", 5: "Sol Ring"}
-STATE = {"role": "admin", "scans": [], "deletes": [], "log": [], "status": {}, "hang": set(), "lock": threading.Lock()}
+STATE = {"role": "admin", "scans": [], "deletes": [], "log": [], "status": {}, "hang": set(), "hang_s": 8,
+         "sweep": False, "hold_scans": 0, "patch_status": 0, "lock": threading.Lock()}
 
 
 def reset(role="admin", n=5):
@@ -62,7 +75,11 @@ def reset(role="admin", n=5):
         STATE["deletes"] = []
         STATE["log"] = []
         STATE["status"] = {}       # id → the status its DELETE answers (401 / 500 …)
-        STATE["hang"] = set()      # ids whose DELETE answers only after 8 s (the phone gone from the LAN)
+        STATE["hang"] = set()      # ids whose DELETE answers only after hang_s (the phone gone from the LAN)
+        STATE["hang_s"] = 8
+        STATE["sweep"] = False     # /api/price-status says a sweep is running (the desktop's ■ Stop shows)
+        STATE["hold_scans"] = 0    # > 0: the NEXT GET /api/scans answers its list as it was, this many s later
+        STATE["patch_status"] = 0  # ≠ 0: every PATCH answers this status
 
 
 LAYOUT = {"columns": [{"field": "name", "header": "Name"}], "header": True, "delimiter": "comma", "combine": True}
@@ -71,27 +88,56 @@ LAYOUT = {"columns": [{"field": "name", "header": "Name"}], "header": True, "del
 class H(BaseHTTPRequestHandler):
     def log_message(self, *a): pass
 
-    def send(self, code, body, ctype="application/json"):
+    def send(self, code, body, ctype="application/json", headers=None):
         if not isinstance(body, bytes): body = json.dumps(body).encode()
         self.send_response(code); self.send_header("Content-Type", ctype)
+        for k, v in (headers or {}).items(): self.send_header(k, v)
         self.send_header("Cache-Control", "no-store"); self.send_header("Content-Length", str(len(body)))
         self.end_headers(); self.wfile.write(body)
+
+    def guest(self):
+        """The phone's ScanServer.adminOnly: a guest is refused (403) every admin route."""
+        with STATE["lock"]: return STATE["role"] != "admin"
+
+    def refuse(self):
+        return self.send(403, {"error": "only the scanner's owner can do that — flag it for deletion instead"})
+
+    def body(self):
+        n = int(self.headers.get("Content-Length") or 0)
+        return json.loads(self.rfile.read(n) or b"{}")
 
     def do_GET(self):
         p = self.path.split("?")[0]
         with STATE["lock"]: STATE["log"].append(("GET", p))
         if p == "/": return self.send(200, (STATIC / "desktop.html").read_bytes(), "text/html")
         if p == "/phone": return self.send(200, (STATIC / "phone.html").read_bytes(), "text/html")
+        if p.startswith("/api/export") and self.guest(): return self.refuse()
         if p == "/api/export/layout":
             return self.send(200, {"fields": [{"field": "name", "header": "Name"}], "default": LAYOUT, "layout": LAYOUT})
+        if p == "/api/export":       # the real servers' headers (server/app.py, Export.kt)
+            return self.send(200, b"1 M10 1 NM Non-Foil\n", "text/plain", {"Content-Disposition": "attachment; filename=cards.txt"})
+        if p == "/api/export.csv":
+            return self.send(200, b"Name\r\nForest\r\n", "text/csv", {"Content-Disposition": "attachment; filename=cards.csv"})
+        if p.startswith("/api/device") or p.startswith("/api/debug/"):     # ScanServer.adminOnly too
+            if self.guest(): return self.refuse()
+            if p == "/api/debug/report.txt":
+                return self.send(200, b"debug report\n", "text/plain",
+                                 {"Content-Disposition": 'attachment; filename="cardscanner-debug.txt"'})
+            return self.send(404, {"error": "stub"})      # no /api/device: the computer's own server
         if p == "/api/me": return self.send(200, {"role": STATE["role"]})
         if p == "/api/version": return self.send(200, {"version": "stub"})
-        if p == "/api/price-status": return self.send(200, {"active": False, "done": 0, "total": 0, "cooldown_s": 0})
+        if p == "/api/price-status":
+            return self.send(200, {"active": STATE["sweep"], "done": 0, "total": 2 if STATE["sweep"] else 0, "cooldown_s": 0})
         if p == "/api/health": return self.send(200, {"ocr": {"available": True}})
         if p == "/api/update-check": return self.send(200, {"update_available": False})
         if p == "/api/setup/status": return self.send(200, {"index_built": True})
+        if p == "/api/scans":
+            with STATE["lock"]:
+                held, STATE["hold_scans"] = STATE["hold_scans"], 0
+                listed = json.loads(json.dumps(STATE["scans"]))    # the list as it is NOW …
+            if held: time.sleep(held)                              # … answered later (a poll still in flight)
+            return self.send(200, listed)
         with STATE["lock"]:
-            if p == "/api/scans": return self.send(200, STATE["scans"])
             m = re.fullmatch(r"/api/scans/(\d+)", p)
             if m:
                 s = next((x for x in STATE["scans"] if x["id"] == int(m.group(1))), None)
@@ -106,7 +152,7 @@ class H(BaseHTTPRequestHandler):
             STATE["deletes"].append(i)
             STATE["log"].append(("DELETE", self.path))
             forced, hang = STATE["status"].get(i), i in STATE["hang"]
-        if hang: time.sleep(8)
+        if hang: time.sleep(STATE["hang_s"])
         if forced: return self.send(forced, {"error": f"stub {forced}"})
         with STATE["lock"]:
             if STATE["role"] != "admin": return self.send(403, {"error": "guest"})
@@ -117,10 +163,12 @@ class H(BaseHTTPRequestHandler):
 
     def do_POST(self):
         p = self.path.split("?")[0]
-        n = int(self.headers.get("Content-Length") or 0)
-        body = json.loads(self.rfile.read(n) or b"{}")
+        body = self.body()
         with STATE["lock"]:
             STATE["log"].append(("POST", p))
+            if STATE["role"] != "admin" and (p.startswith("/api/export") or p in ("/api/scans/price-missing", "/api/price-sweep/stop")):
+                return self.refuse()
+            if p == "/api/scans/price-missing": return self.send(200, {"queued": 0})
             if p == "/api/scans/delete-all":
                 if STATE["role"] != "admin":
                     return self.send(403, {"error": "only the scanner's owner can do that — flag it for deletion instead"})
@@ -134,7 +182,25 @@ class H(BaseHTTPRequestHandler):
                                        "rows": len(live)})
         self.send(200, {})
 
-    def do_PATCH(self): self.send(200, {})
+    def do_PATCH(self):
+        p, body = self.path.split("?")[0], self.body()
+        if p == "/api/device" and self.guest(): return self.refuse()
+        with STATE["lock"]:
+            STATE["log"].append(("PATCH", p))
+            if STATE["patch_status"]: return self.send(STATE["patch_status"], {"error": "stub"})
+            if "included" in body and STATE["role"] != "admin": return self.refuse()
+            m = re.fullmatch(r"/api/scans/(\d+)", p)
+            s = next((x for x in STATE["scans"] if x["id"] == int(m.group(1))), None) if m else None
+            if s and "included" in body: s["included"] = bool(body["included"])
+        self.send(200, {})
+
+    def do_PUT(self):
+        p, body = self.path.split("?")[0], self.body()
+        with STATE["lock"]: STATE["log"].append(("PUT", p))
+        if p == "/api/export/layout":
+            if self.guest(): return self.refuse()
+            return self.send(200, {"layout": body.get("layout", LAYOUT)})
+        self.send(404, {"error": "stub"})
 
 
 srv = ThreadingHTTPServer(("127.0.0.1", 0), H)
@@ -191,13 +257,33 @@ def set_hidden(pg, hidden):
         document.dispatchEvent(new Event('visibilitychange')); }""", hidden)
 
 
-def load(ctx):
+def load(ctx, init=None):
     pg = ctx.new_page(); errs = []
     pg.on("pageerror", lambda e: errs.append(str(e)))
+    if init: pg.add_init_script(init)
     pg.goto(BASE + "/")
     pg.wait_for_selector("#list .row[data-id='1']")
     pg.wait_for_timeout(400)                       # /api/me answered, the first polls rendered
     return pg, errs
+
+
+def load_phone(ctx, init=None):
+    pg = ctx.new_page(); errs = []
+    pg.on("pageerror", lambda e: errs.append(str(e)))
+    if init: pg.add_init_script(init)
+    pg.goto(BASE + "/phone?panel=1"); pg.wait_for_selector(".srow[data-sid='2']"); pg.wait_for_timeout(400)
+    return pg, errs
+
+
+def as_admin_then_guest(pg):
+    """The page re-reads /api/me as admin (its admin controls back), then the owner turns full access off."""
+    with STATE["lock"]: STATE["role"] = "admin"
+    pg.evaluate("refreshRole()"); pg.wait_for_function("role === 'admin'", timeout=3000); pg.wait_for_timeout(100)
+    with STATE["lock"]: STATE["role"] = "guest"
+
+
+def js_has(pg, name):
+    return pg.evaluate(f"typeof {name} !== 'undefined'")
 
 
 with sync_playwright() as pw:
@@ -476,6 +562,222 @@ with sync_playwright() as pw:
     check(pg.locator("#list .row [data-del]").count() == 5, "the Share-code guest with full access gets the buttons")
     pg.close()
 
+    # ── d57 (final review of d56) ───────────────────────────────────────────────────────────
+    print("desktop.html — a double-click on a 🗑 deletes ONE row, never the row that slides up under it (d57)")
+    reset()
+    pg, errs = load(ctx)
+    pg.locator("#list .row[data-id='4']").hover()
+    btn(pg, 4).dblclick(); pg.wait_for_timeout(200)
+    check(ids(pg) == [5, 3, 2, 1], f"only row 4 is waiting ({ids(pg)})")
+    check(pg.locator("#undoMsg").text_content() == "Scan deleted", f"'Scan deleted' ({pg.locator('#undoMsg').text_content()})")
+    pg.wait_for_timeout(5600)
+    check(deletes() == [4], f"exactly one DELETE after 5 s ({deletes()})")
+    check(errs == [], f"no page errors ({errs})")
+    pg.close()
+
+    for w in (1280, 1500):
+        print(f"desktop.html — 30 scans, {w} px wide: mid-list, a second delete at the same spot never hits Undo (d57)")
+        reset(n=30)
+        wctx = b.new_context(viewport={"width": w, "height": 950})
+        pg, errs = load(wctx)
+        bar = pg.evaluate("""(() => { showUndoBar(true); const r = document.querySelector('#undoBar').getBoundingClientRect();
+            showUndoBar(false); return { top: r.top, bottom: r.bottom, left: r.left, right: r.right }; })()""")
+        # a row in the MIDDLE of the list (d55's padding only helps at its end), scrolled so its 🗑 sits
+        # at the height the bar will take
+        pg.evaluate("""y => { const b = document.querySelector("#list .row[data-id='15'] [data-del]").getBoundingClientRect();
+            document.querySelector('#left').scrollTop += (b.top + b.height / 2) - y; }""", (bar["top"] + bar["bottom"]) / 2)
+        pg.wait_for_timeout(150)
+        pt = pg.evaluate("""(() => { const r = document.querySelector("#list .row[data-id='15'] [data-del]").getBoundingClientRect();
+            return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; })()""")
+        check(bar["top"] <= pt["y"] <= bar["bottom"], f"(row 15's 🗑 at the bar's height: y {pt['y']:.0f} in {bar['top']:.0f}..{bar['bottom']:.0f})")
+        pg.mouse.move(pt["x"], pt["y"]); pg.mouse.click(pt["x"], pt["y"]); pg.wait_for_timeout(200)
+        check(15 not in ids(pg) and undo_shown(pg), "row 15 waiting, the bar up")
+        hit = pg.evaluate("""p => { const e = document.elementFromPoint(p.x, p.y);
+            return e && (e.closest('[data-del]')?.dataset.del || e.id || e.tagName); }""", pt)
+        check(hit == "14", f"the same spot is now row 14's 🗑, not Undo ({hit})")
+        pg.wait_for_timeout(600)                     # past the double-click time: a second, separate click
+        pg.mouse.click(pt["x"], pt["y"]); pg.wait_for_timeout(200)
+        check(14 not in ids(pg) and 15 not in ids(pg), f"so a second delete there deletes ({len(ids(pg))} rows)")
+        check(pg.locator("#undoMsg").text_content() == "2 scans deleted", f"'2 scans deleted' ({pg.locator('#undoMsg').text_content()})")
+        left = pg.evaluate("Math.min(...[...document.querySelectorAll('#list [data-del]')].map(b => b.getBoundingClientRect().left))")
+        check(bar["right"] <= left, f"the bar ends left of the 🗑 column (bar right {bar['right']:.0f}, 🗑s from {left:.0f})")
+        if undo_shown(pg): pg.locator("#undoBtn").click(); pg.wait_for_timeout(200)
+        if w == 1280:
+            # a refusal (the longest words: 401) lands while a newer delete waits: the toast clears the bar
+            with STATE["lock"]: STATE["status"] = {13: 401}
+            pg.evaluate("queueDelete(13); commitDeletes(false); queueDelete(12)")
+            pg.wait_for_function("document.querySelector('#toast').classList.contains('show')", timeout=3000)
+            check(undo_shown(pg) and "no longer signed in" in toast_text(pg), f"(the toast and the bar both up: {toast_text(pg)})")
+            ov = pg.evaluate("""(() => { const a = document.querySelector('#toast').getBoundingClientRect(),
+                b = document.querySelector('#undoBar').getBoundingClientRect();
+                return a.right > b.left && a.left < b.right && a.bottom > b.top && a.top < b.bottom; })()""")
+            check(not ov, "the refusal toast never sits behind the Undo bar")
+            if undo_shown(pg): pg.locator("#undoBtn").click(); pg.wait_for_timeout(200)
+        check(errs == [], f"no page errors ({errs})")
+        pg.close(); wctx.close()
+
+    print("desktop.html — a keyboard delete left to run: focus goes to the row that took its place (d57)")
+    reset()
+    pg, errs = load(ctx)
+    btn(pg, 2).focus(); pg.keyboard.press("Enter"); pg.wait_for_timeout(150)
+    check(focused(pg) == "#undoBtn", f"(focus on Undo: {focused(pg)})")
+    pg.wait_for_timeout(5600)
+    check(deletes() == [2], f"the DELETE went ({deletes()})")
+    check(focused(pg) == "del:1", f"focus is on the 🗑 of the row below it, not lost to <body> ({focused(pg)})")
+    pg.evaluate("listSig = ''; renderList()")         # a price landing re-renders the list
+    check(focused(pg) == "del:1", f"… and a re-render of the list keeps it there ({focused(pg)})")
+    if focused(pg) != "del:1": btn(pg, 1).focus()
+    pg.keyboard.press("Enter"); pg.wait_for_timeout(5800)  # the LAST row: the one above takes the focus
+    check(deletes() == [2, 1], f"the DELETE went ({deletes()})")
+    check(focused(pg) == "del:3", f"after the last row, focus is on the 🗑 above it ({focused(pg)})")
+    check(errs == [], f"no page errors ({errs})")
+    pg.close()
+
+    print("desktop.html — full access turned off mid-session: every admin control says why (d57)")
+    reset()
+    pg, errs = load(ctx)
+    with STATE["lock"]: STATE["role"] = "guest"
+    pg.locator("#exportBtn").click(); pg.wait_for_timeout(800)
+    t = toast_text(pg)
+    check("full access" in t and "export" in t, f"Export: the builder's layout refused — said so ({t})")
+    check(not pg.evaluate("document.querySelector('#csvModal').classList.contains('open')"), "… and no half-built builder opens")
+    check(pg.evaluate("role") == "guest" and pg.evaluate("document.body.classList.contains('guest')"), "… and the page asked /api/me again")
+    check(errs == [], f"… no page errors ({errs})")
+    errs.clear()
+    as_admin_then_guest(pg)
+    cb = pg.locator("#list .row[data-id='5'] [data-inc]")
+    check(cb.is_checked(), "(row 5 is included)")
+    cb.click(); pg.wait_for_timeout(800)
+    t = toast_text(pg)
+    check("full access" in t, f"the include checkbox: refused — said so ({t})")
+    cb = pg.locator("#list .row[data-id='5'] [data-inc]")
+    check(cb.count() == 0 or cb.is_checked(), "… and never left showing a change that did not happen")
+    as_admin_then_guest(pg)
+    with STATE["lock"]: STATE["role"], STATE["patch_status"] = "admin", 500     # refused another way: the role stays
+    cb = pg.locator("#list .row[data-id='5'] [data-inc]")
+    cb.click(); pg.wait_for_timeout(800)
+    t = toast_text(pg)
+    check("HTTP 500" in t, f"the include checkbox, a 500: said so ({t})")
+    check(pg.locator("#list .row[data-id='5'] [data-inc]").is_checked(), "… and the box is ticked again (the change did not happen)")
+    with STATE["lock"]: STATE["patch_status"] = 0
+    as_admin_then_guest(pg)
+    pg.wait_for_selector("#sweepStartBtn", state="visible", timeout=3000)
+    pg.locator("#sweepStartBtn").click(); pg.wait_for_timeout(800)
+    t = toast_text(pg)
+    check("full access" in t and "Nothing needs pricing" not in t, f"▶ Sweep: refused — said so ({t})")
+    as_admin_then_guest(pg)
+    with STATE["lock"]: STATE["sweep"] = True
+    pg.wait_for_selector("#sweepStopBtn", state="visible", timeout=4000)
+    pg.locator("#sweepStopBtn").click(); pg.wait_for_timeout(800)
+    t = toast_text(pg)
+    check("full access" in t and "stopping" not in t, f"■ Stop: refused — said so ({t})")
+    with STATE["lock"]: STATE["sweep"] = False
+    as_admin_then_guest(pg)
+    pg.locator("#pmin").fill("100"); pg.wait_for_timeout(300)
+    pg.locator("#exclBtn").click(); pg.wait_for_timeout(800)
+    t = toast_text(pg)
+    check("full access" in t and "Excluded" not in t, f"Exclude filtered: refused — said so ({t})")
+    pg.locator("#pmin").fill(""); pg.wait_for_timeout(200)
+    # the builder open as admin, then full access goes: a layout edit, Download CSV and Download TXT
+    with STATE["lock"]: STATE["role"] = "admin"
+    pg.evaluate("refreshRole()"); pg.wait_for_function("role === 'admin'", timeout=3000)
+    pg.locator("#exportBtn").click(); pg.wait_for_selector("#csvModal.open", timeout=3000)
+    with STATE["lock"]: STATE["role"] = "guest"
+    pg.locator("#csvList input[data-k='header']").first.fill("Card"); pg.wait_for_timeout(900)
+    m = pg.locator("#csvMsg").text_content() or ""
+    check("full access" in m, f"a layout edit: refused — said so in the builder ({m})")
+    m = pg.locator("#csvRaw").text_content() or ""
+    check("full access" in m and "flag it" not in m, f"… and its preview says why it is empty ({m})")
+    pg.evaluate("document.querySelector('#csvMsg').textContent = ''")
+    pg.locator("#csvDl").click(); pg.wait_for_timeout(800)
+    m = pg.locator("#csvMsg").text_content() or ""
+    check("full access" in m and pg.url == BASE + "/", f"Download CSV: refused — said so, the page stays ({m}, {pg.url})")
+    if pg.url == BASE + "/":
+        pg.evaluate("document.querySelector('#csvMsg').textContent = ''")
+        pg.locator("#csvTxt").click(); pg.wait_for_timeout(800)
+        stayed = pg.url == BASE + "/"
+        try: m = pg.evaluate("document.querySelector('#csvMsg')?.textContent || ''") if stayed else ""
+        except Exception: m = ""
+        check("full access" in m and stayed, f"Download TXT: refused — said so, the page stays ({m}, {pg.url})")
+        if stayed: check(errs == [], f"no page errors ({errs})")
+    pg.close()
+    # the 📱 Scanner panel and the 🐞 debug report are admin-only routes too (ScanServer.adminOnly)
+    reset()
+    pg, errs = load(ctx)
+    with STATE["lock"]: STATE["role"] = "guest"
+    pg.evaluate("devPatch({ torch: true })"); pg.wait_for_timeout(600)
+    m = pg.locator("#devMsg").text_content() or ""
+    check("full access" in m and "flag it" not in m, f"a 📱 Scanner setting: refused — said so ({m})")
+    as_admin_then_guest(pg)
+    pg.evaluate("openDev()"); pg.wait_for_timeout(600)
+    t = toast_text(pg)
+    check("full access" in t, f"opening 📱 Scanner: refused — said so ({t})")
+    as_admin_then_guest(pg)
+    pg.evaluate("toggleF2fLog()"); pg.wait_for_timeout(400)            # the 🐞 panel open, as it is to copy
+    pg.evaluate("document.querySelector('#dbgCopy').click()"); pg.wait_for_timeout(600)
+    t = toast_text(pg)
+    check("full access" in t and "copied" not in t, f"🐞 Copy report: refused — said so, nothing copied ({t})")
+    top = pg.evaluate("""(() => { const r = document.querySelector('#toast').getBoundingClientRect();
+        const e = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2); return e ? (e.id || e.tagName) : null; })()""")
+    check(top == "toast", f"… readable over the open 🐞 panel ({top})")
+    as_admin_then_guest(pg)
+    pg.evaluate("document.querySelector('#dbgSave').click()"); pg.wait_for_timeout(800)
+    stayed = pg.url == BASE + "/"
+    t = toast_text(pg) if stayed else ""
+    check(stayed and "full access" in t, f"🐞 Download: refused — said so, the page stays ({t}, {pg.url})")
+    if stayed: check(errs == [], f"no page errors ({errs})")
+    pg.close()
+
+    print("desktop.html — the downloads still download (d57: fetched, so a refusal can say why)")
+    reset()
+    pg, errs = load(ctx)
+    pg.locator("#exportBtn").click(); pg.wait_for_selector("#csvModal.open", timeout=3000)
+    for sel, name, body in (("#csvTxt", "cards.txt", "1 M10 1 NM Non-Foil\n"), ("#csvDl", "cards.csv", "Name\r\nForest\r\n"),
+                            ("#dbgSave", "cardscanner-debug.txt", "debug report\n")):
+        try:
+            with pg.expect_download(timeout=4000) as dl:
+                pg.evaluate(f"document.querySelector('{sel}').click()")
+            d = dl.value
+            got = (d.suggested_filename, Path(d.path()).read_bytes().decode())
+        except Exception as e: got = (None, str(e)[:60])
+        check(got == (name, body), f"{sel}: {name} with the server's bytes ({got[0]})")
+    check(pg.url == BASE + "/" and errs == [], f"the page stays, no page errors ({errs})")
+    pg.close()
+
+    print("desktop.html — full access turned ON while a guest page is open: its controls come within 30 s (d57)")
+    reset(role="guest")
+    pg, errs = load(ctx)
+    check(js_has(pg, "ROLE_REFRESH_MS") and pg.evaluate("ROLE_REFRESH_MS") == 30000, "the page re-reads /api/me every 30 s")
+    pg.close()
+    reset(role="guest")
+    pg, errs = load(ctx, init="window.__roleRefreshMs = 800")   # the same timer, shortened for the test
+    check(pg.locator("#list .row [data-del]").count() == 0, "(a guest: no 🗑)")
+    with STATE["lock"]: STATE["role"] = "admin"
+    try:
+        pg.wait_for_function("document.querySelectorAll('#list .row [data-del]').length === 5", timeout=2500)
+        got = True
+    except Exception: got = False
+    check(got and not pg.evaluate("document.body.classList.contains('guest')"), "turned on: the 🗑s come with no reload")
+    with STATE["lock"]: STATE["role"] = "guest"
+    try:
+        pg.wait_for_function("document.querySelectorAll('#list .row [data-del]').length === 0", timeout=2500)
+        got = True
+    except Exception: got = False
+    check(got, "turned off: they go with nothing refused first")
+    check(errs == [], f"no page errors ({errs})")
+    pg.close()
+    reset(role="guest")
+    pg, errs = load(ctx)
+    with STATE["lock"]: STATE["role"] = "admin"
+    set_hidden(pg, True); set_hidden(pg, False)
+    try:
+        pg.wait_for_function("document.querySelectorAll('#list .row [data-del]').length === 5", timeout=1500)
+        got = True
+    except Exception: got = False
+    check(got, "coming back to the tab re-reads it at once")
+    check(errs == [], f"no page errors ({errs})")
+    pg.close()
+
     print("phone.html — refused deletes say so")
     pctx = b.new_context(viewport={"width": 411, "height": 914}, is_mobile=True, has_touch=True)
     reset()
@@ -534,7 +836,125 @@ with sync_playwright() as pw:
     pg.locator("#undoBtn").tap(); pg.wait_for_timeout(200)
     check(pg.evaluate("pendingDel.size") == 0, "a tap on Undo undoes")
     check(errs == [], f"no page errors ({errs})")
-    pg.close(); pctx.close()
+    pg.close()
+
+    # ── v59 (final review of v58) ───────────────────────────────────────────────────────────
+    print("phone.html — full access turned off mid-session: Price missing / Stop / Exclude filtered say why (v59)")
+    reset()
+    pg, errs = load_phone(pctx)
+    with STATE["lock"]: STATE["role"] = "guest"
+    pg.evaluate("document.querySelector('#p-fill').click()"); pg.wait_for_timeout(800)
+    check("full access" in flash() and "already priced" not in status(), f"Price missing: refused — said so ({flash()} | {status()})")
+    check(pg.evaluate("role") == "guest", "… and the page asked /api/me again")
+    as_admin_then_guest(pg)
+    with STATE["lock"]: STATE["role"], STATE["sweep"] = "admin", True
+    pg.evaluate("refreshScans()"); pg.wait_for_function("sweepActive === true", timeout=3000)
+    with STATE["lock"]: STATE["role"] = "guest"
+    pg.evaluate("document.querySelector('#p-fill').click()"); pg.wait_for_timeout(800)
+    check("full access" in flash() and "Stopping" not in status(), f"■ Stop: refused — said so ({flash()} | {status()})")
+    with STATE["lock"]: STATE["sweep"] = False
+    as_admin_then_guest(pg)
+    set_min = lambda v: pg.evaluate("""v => { const i = document.querySelector('#p-min'); i.value = v;
+        i.dispatchEvent(new Event('input')); }""", v)
+    set_min("100"); pg.wait_for_timeout(200)          # the selected scans ($1.50) fail the filter: 3 to exclude
+    pg.evaluate("document.querySelector('#p-excl').click()"); pg.wait_for_timeout(800)
+    check("full access" in flash() and "Excluded" not in status(), f"Exclude filtered: refused — said so ({flash()} | {status()})")
+    set_min(""); pg.wait_for_timeout(200)
+    check(errs == [], f"no page errors ({errs})")
+    pg.close()
+
+    print("phone.html — full access turned ON while a guest page is open: its controls come within 30 s (v59)")
+    reset(role="guest")
+    pg, errs = load_phone(pctx)
+    check(js_has(pg, "ROLE_REFRESH_MS") and pg.evaluate("ROLE_REFRESH_MS") == 30000, "the page re-reads /api/me every 30 s")
+    pg.close()
+    reset(role="guest")
+    pg, errs = load_phone(pctx, init="window.__roleRefreshMs = 800")
+    check(pg.evaluate("document.body.classList.contains('guest')"), "(a guest)")
+    with STATE["lock"]: STATE["role"] = "admin"
+    try:
+        pg.wait_for_function("role === 'admin' && !document.body.classList.contains('guest')", timeout=2500)
+        got = True
+    except Exception: got = False
+    check(got and "Delete" in (pg.locator(".srow[data-sid='2']").locator("xpath=..").locator(".sdel").text_content() or ""),
+          "turned on: Clear / Price missing / a swipe that deletes come with no reload")
+    pg.close()
+    reset(role="guest")
+    pg, errs = load_phone(pctx)
+    with STATE["lock"]: STATE["role"] = "admin"
+    set_hidden(pg, True); set_hidden(pg, False)
+    try:
+        pg.wait_for_function("role === 'admin'", timeout=1500)
+        got = True
+    except Exception: got = False
+    check(got, "coming back to the page re-reads it at once")
+    check(errs == [], f"no page errors ({errs})")
+    pg.close()
+
+    print("phone.html — Undo while an earlier swipe's DELETE is in flight (v59)")
+    reset()
+    with STATE["lock"]: STATE["hang"], STATE["hang_s"] = {2}, 2.5
+    pg, errs = load_phone(pctx, init="window.CardScannerApp = { pendingDeletes: s => { window.__pend = JSON.parse(s); } };")
+    srows = lambda: pg.evaluate("[...document.querySelectorAll('.srow[data-sid]')].map(r => +r.dataset.sid)")
+    # "; 0": evaluate() would otherwise wait for the promise commitDeletes answers (v59) — the DELETE
+    pg.evaluate("queueDelete(2); renderScansPanel(); commitDeletes(false); 0"); pg.wait_for_timeout(200)
+    check(deletes() == [2], f"(scan 2's DELETE is on its way: {deletes()})")
+    pg.evaluate("queueDelete(4); renderScansPanel()"); pg.wait_for_timeout(150)
+    check(pg.locator("#undoMsg").text_content() == "Scan deleted", f"the bar counts only what Undo can bring back ({pg.locator('#undoMsg').text_content()})")
+    check(sorted(pg.evaluate("window.__pend || []")) == [2, 4], f"the app is told both (it deletes them if the screen closes) ({pg.evaluate('window.__pend')})")
+    pg.locator("#undoBtn").tap(); pg.wait_for_timeout(250)
+    check(4 in srows() and 2 not in srows(), f"Undo brings back 4, never the scan being deleted ({srows()})")
+    check(pg.evaluate("window.__pend || []") == [2], f"… and the app still hears of the DELETE in flight ({pg.evaluate('window.__pend')})")
+    pg.wait_for_timeout(3200)
+    check(deletes() == [2] and 2 not in srows(), f"2 gone for good, 4 never sent ({deletes()}, {srows()})")
+    check(errs == [], f"no page errors ({errs})")
+    pg.close()
+
+    print("phone.html — a list refresh in flight across a DELETE never flashes the row back (v59)")
+    reset()
+    pg, errs = load_phone(pctx)
+    srows = lambda: pg.evaluate("[...document.querySelectorAll('.srow[data-sid]')].map(r => +r.dataset.sid)")
+    # Watched on every DOM change, not on a timer: Chromium holds a second GET of the same URL until
+    # the first answers (its cache lock), so the stale list lands only ~5 ms before the fresh one.
+    pg.evaluate("""window.__flashBack = false; new MutationObserver(() => {
+        if (window.__watch && document.querySelector(".srow[data-sid='2']")) window.__flashBack = true;
+    }).observe(document.body, { childList: true, subtree: true })""")
+    pg.evaluate("queueDelete(2); renderScansPanel(); window.__watch = true"); pg.wait_for_timeout(100)
+    with STATE["lock"]: STATE["hold_scans"] = 1.2       # the next refresh gets the list WITH scan 2, 1.2 s late
+    pg.evaluate("() => { refreshScans(); }"); pg.wait_for_timeout(150)
+    pg.evaluate("commitDeletes(false)")
+    pg.wait_for_timeout(2200)
+    check(deletes() == [2], f"(the DELETE went: {deletes()})")
+    check(not pg.evaluate("window.__flashBack"), "the deleted row never showed again")
+    pg.evaluate("window.__watch = false")
+    check(2 not in srows(), f"and is gone ({srows()})")
+    # refused: the row does come back
+    with STATE["lock"]: STATE["status"] = {4: 500}
+    pg.evaluate("queueDelete(4); renderScansPanel(); commitDeletes(false)")
+    try:
+        pg.wait_for_function("document.querySelector(\".srow[data-sid='4']\")", timeout=4000)
+        got = True
+    except Exception: got = False
+    check(got, "a refused DELETE's row comes back")
+    check(errs == [], f"no page errors ({errs})")
+    pg.close()
+
+    print("phone.html — Clear counts what the list shows, and sends what waits first (v59)")
+    for only, words in (("unselected", "Delete 1 unpicked scan?"), (None, "Delete ALL 4 scans?")):
+        reset()
+        pg, errs = load_phone(pctx)
+        asked = []
+        pg.on("dialog", lambda d: (asked.append(d.message), d.accept()))
+        pg.evaluate("queueDelete(2); renderScansPanel()"); pg.wait_for_timeout(100)
+        with STATE["lock"]: STATE["log"] = []
+        pg.evaluate(f"clearScans({json.dumps(only)})"); pg.wait_for_timeout(700)
+        check(asked[:1] == [f"{words} This cannot be undone."], f"the question counts the list as shown ({asked})")
+        check(not undo_shown(pg), "the Undo bar goes (the swiped scan is no longer undoable)")
+        with STATE["lock"]: log = [x for x in STATE["log"] if x[0] in ("DELETE", "POST")]
+        check(log[:2] == [("DELETE", "/api/scans/2"), ("POST", "/api/scans/delete-all")], f"the waiting DELETE went first ({log})")
+        check(errs == [], f"no page errors ({errs})")
+        pg.close(); time.sleep(0.5)   # a DELETE still waiting goes on pagehide: let it land before the next reset()
+    pctx.close()
     b.close()
 
 srv.shutdown()
