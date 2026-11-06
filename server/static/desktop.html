@@ -101,7 +101,8 @@
   @media (hover: none) { .row .rdel { opacity: 1; } }
   /* The row delete's Undo bar: over the bottom of the list column, LEFT of the 🗑s (d57: at 368 px
      it covered the 🗑 column from x 356 — the 400 px column's 🗑s — so a second delete at the same
-     spot mid-list, where d55's room at the end does nothing, hit Undo). 316 px ends at x 332. */
+     spot mid-list, where d55's room at the end does nothing, hit Undo). 316 px ends at x 332; the
+     🗑s start at x 356, or ~340 with a classic 16–17 px scrollbar (Windows) — still clear. */
   #undoBar { position: fixed; left: 16px; bottom: 16px; width: 316px; z-index: 55; display: none;
              align-items: center; gap: 12px; padding: 8px 8px 8px 16px; border-radius: 10px;
              background: var(--card); border: 1px solid var(--line); box-shadow: 0 6px 24px #0008; font-size: 14px; }
@@ -538,9 +539,13 @@ function deleteFailMsg(status, n){
 // as clicked, a download navigated away to the error.
 async function adminFetch(url, opts, what, say = m => toast(m, 5000)){
   const res = await fetch(url, opts).catch(() => null);
-  if (res && res.ok) return res;
-  const status = res ? res.status : 0;
-  const body = res ? await res.json().catch(() => null) : null;
+  // With no session the gateway answers a GET with its join page (200 text/html): an /api route
+  // never answers HTML, so that is a lost session (401) — not the file. Before, the downloads
+  // saved the join page as cards.txt / cardscanner-debug.txt and said nothing (final review).
+  const lost = !!res && res.ok && /^\/api\//.test(url) && /text\/html/i.test(res.headers.get("Content-Type") || "");
+  if (res && res.ok && !lost) return res;
+  const status = lost ? 401 : res ? res.status : 0;
+  const body = res && !lost ? await res.json().catch(() => null) : null;
   say(failMsg(what, status, body && (body.error || body.detail)));
   if (status === 403) refreshRole();
   return null;
@@ -2394,7 +2399,7 @@ function sigOf(scan){
 
 // Version banner — page version · server git hash. Same rationale as the
 // phone: without it, "is this the old page?" is undebuggable.
-const UI_VERSION = "d57";
+const UI_VERSION = "d58";
 
 // Who is asking: the phone server says "admin" for the paired computer and, while
 // Settings → "Guests get full access" is on (the default), for the 6-digit Share

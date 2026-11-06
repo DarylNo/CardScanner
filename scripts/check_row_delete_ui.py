@@ -49,8 +49,8 @@ from pathlib import Path
 from playwright.sync_api import sync_playwright
 
 STATIC = Path(__file__).resolve().parents[1] / "server" / "static"
-VERSION = "d57"
-PHONE_VERSION = "v59"
+VERSION = "d58"
+PHONE_VERSION = "v60"
 
 
 def scan(i, name, sel=False):
@@ -80,8 +80,11 @@ def reset(role="admin", n=5):
         STATE["sweep"] = False     # /api/price-status says a sweep is running (the desktop's ■ Stop shows)
         STATE["hold_scans"] = 0    # > 0: the NEXT GET /api/scans answers its list as it was, this many s later
         STATE["patch_status"] = 0  # ≠ 0: every PATCH answers this status
+        STATE["lost"] = False      # the session is gone (a new guest code, the app restarted): the
+                                   # gateway's join page — 200 text/html to a GET, 401 to anything else
 
 
+JOIN_PAGE = b"<!doctype html><title>Join the card scanner</title><h1>Card scanner</h1><form>code</form>"
 LAYOUT = {"columns": [{"field": "name", "header": "Name"}], "header": True, "delimiter": "comma", "combine": True}
 
 
@@ -106,11 +109,15 @@ class H(BaseHTTPRequestHandler):
         n = int(self.headers.get("Content-Length") or 0)
         return json.loads(self.rfile.read(n) or b"{}")
 
+    def lost(self):
+        with STATE["lock"]: return STATE["lost"]
+
     def do_GET(self):
         p = self.path.split("?")[0]
         with STATE["lock"]: STATE["log"].append(("GET", p))
         if p == "/": return self.send(200, (STATIC / "desktop.html").read_bytes(), "text/html")
         if p == "/phone": return self.send(200, (STATIC / "phone.html").read_bytes(), "text/html")
+        if self.lost(): return self.send(200, JOIN_PAGE, "text/html")    # GatewayServer.codePage to a GET
         if p.startswith("/api/export") and self.guest(): return self.refuse()
         if p == "/api/export/layout":
             return self.send(200, {"fields": [{"field": "name", "header": "Name"}], "default": LAYOUT, "layout": LAYOUT})
@@ -145,6 +152,7 @@ class H(BaseHTTPRequestHandler):
         return self.send(404, {"error": "stub"})
 
     def do_DELETE(self):
+        if self.lost(): return self.send(401, JOIN_PAGE, "text/html")    # codePage: 401 to anything but GET
         m = re.fullmatch(r"/api/scans/(\d+)", self.path.split("?")[0])
         if not m: return self.send(404, {"error": "stub"})
         i = int(m.group(1))
@@ -162,6 +170,7 @@ class H(BaseHTTPRequestHandler):
         self.send(200 if gone else 404, {"deleted": i} if gone else {"error": "not found"})
 
     def do_POST(self):
+        if self.lost(): return self.send(401, JOIN_PAGE, "text/html")    # codePage: 401 to anything but GET
         p = self.path.split("?")[0]
         body = self.body()
         with STATE["lock"]:
@@ -183,6 +192,7 @@ class H(BaseHTTPRequestHandler):
         self.send(200, {})
 
     def do_PATCH(self):
+        if self.lost(): return self.send(401, JOIN_PAGE, "text/html")    # codePage: 401 to anything but GET
         p, body = self.path.split("?")[0], self.body()
         if p == "/api/device" and self.guest(): return self.refuse()
         with STATE["lock"]:
@@ -575,11 +585,17 @@ with sync_playwright() as pw:
     check(errs == [], f"no page errors ({errs})")
     pg.close()
 
-    for w in (1280, 1500):
-        print(f"desktop.html — 30 scans, {w} px wide: mid-list, a second delete at the same spot never hits Undo (d57)")
+    # headless Chromium hides scrollbars (--hide-scrollbars); the owner's Windows Chrome shows a 16–17 px
+    # one on the 30-row list, which moves the 🗑s left by that much — so the last pass shows them
+    bs = pw.chromium.launch(executable_path=EXE, ignore_default_args=["--hide-scrollbars"]) if EXE \
+        else pw.chromium.launch(ignore_default_args=["--hide-scrollbars"])
+    for w, br, how in ((1280, b, ""), (1500, b, ""), (1280, bs, ", with a scrollbar")):
+        print(f"desktop.html — 30 scans, {w} px wide{how}: mid-list, a second delete at the same spot never hits Undo (d57)")
         reset(n=30)
-        wctx = b.new_context(viewport={"width": w, "height": 950})
+        wctx = br.new_context(viewport={"width": w, "height": 950})
         pg, errs = load(wctx)
+        sbar = pg.evaluate("(() => { const l = document.querySelector('#left'); return l.offsetWidth - l.clientWidth; })()")
+        if how: check(sbar >= 10, f"(the list shows a scrollbar: {sbar} px)")
         bar = pg.evaluate("""(() => { showUndoBar(true); const r = document.querySelector('#undoBar').getBoundingClientRect();
             showUndoBar(false); return { top: r.top, bottom: r.bottom, left: r.left, right: r.right }; })()""")
         # a row in the MIDDLE of the list (d55's padding only helps at its end), scrolled so its 🗑 sits
@@ -600,7 +616,7 @@ with sync_playwright() as pw:
         check(14 not in ids(pg) and 15 not in ids(pg), f"so a second delete there deletes ({len(ids(pg))} rows)")
         check(pg.locator("#undoMsg").text_content() == "2 scans deleted", f"'2 scans deleted' ({pg.locator('#undoMsg').text_content()})")
         left = pg.evaluate("Math.min(...[...document.querySelectorAll('#list [data-del]')].map(b => b.getBoundingClientRect().left))")
-        check(bar["right"] <= left, f"the bar ends left of the 🗑 column (bar right {bar['right']:.0f}, 🗑s from {left:.0f})")
+        check(bar["right"] <= left, f"the bar ends left of the 🗑 column (bar right {bar['right']:.0f}, 🗑s from {left:.0f}, scrollbar {sbar} px)")
         if undo_shown(pg): pg.locator("#undoBtn").click(); pg.wait_for_timeout(200)
         if w == 1280:
             # a refusal (the longest words: 401) lands while a newer delete waits: the toast clears the bar
@@ -615,6 +631,7 @@ with sync_playwright() as pw:
             if undo_shown(pg): pg.locator("#undoBtn").click(); pg.wait_for_timeout(200)
         check(errs == [], f"no page errors ({errs})")
         pg.close(); wctx.close()
+    bs.close()
 
     print("desktop.html — a keyboard delete left to run: focus goes to the row that took its place (d57)")
     reset()
@@ -741,6 +758,31 @@ with sync_playwright() as pw:
             got = (d.suggested_filename, Path(d.path()).read_bytes().decode())
         except Exception as e: got = (None, str(e)[:60])
         check(got == (name, body), f"{sel}: {name} with the server's bytes ({got[0]})")
+    check(pg.url == BASE + "/" and errs == [], f"the page stays, no page errors ({errs})")
+    pg.close()
+
+    print("desktop.html — the session gone: a download says so, never saves the join page as the file (d58)")
+    # GatewayServer.codePage answers a GET with no session 200 text/html — the downloads (fetched since
+    # d57) took that for the file and saved the join page as cards.txt / cardscanner-debug.txt, silently
+    reset()
+    pg, errs = load(ctx)
+    pg.locator("#exportBtn").click(); pg.wait_for_selector("#csvModal.open", timeout=3000)
+    pg.evaluate("toggleF2fLog()"); pg.wait_for_timeout(300)
+    with STATE["lock"]: STATE["lost"] = True
+    saved = []
+    pg.on("download", lambda d: saved.append(d.suggested_filename))
+    for sel, where in (("#csvTxt", "#csvMsg"), ("#csvDl", "#csvMsg"), ("#dbgSave", "#toast")):
+        pg.evaluate("document.querySelector('#csvMsg').textContent = ''")
+        saved.clear()
+        pg.evaluate(f"document.querySelector('{sel}').click()"); pg.wait_for_timeout(1200)
+        said = pg.evaluate(f"document.querySelector('{where}').textContent || ''")
+        check(saved == [] and "no longer signed in" in said,
+              f"{sel}: nothing saved ({saved}), it says the session is gone ({said[:70]})")
+    pg.evaluate("document.querySelector('#csvClose').click()"); pg.wait_for_timeout(200)
+    pg.evaluate("document.querySelector('#exportBtn').click()"); pg.wait_for_timeout(800)
+    t = toast_text(pg)
+    check("no longer signed in" in t and not pg.evaluate("document.querySelector('#csvModal').classList.contains('open')"),
+          f"opening Export: says so, opens nothing ({t[:70]})")
     check(pg.url == BASE + "/" and errs == [], f"the page stays, no page errors ({errs})")
     pg.close()
 
@@ -955,6 +997,16 @@ with sync_playwright() as pw:
         check(errs == [], f"no page errors ({errs})")
         pg.close(); time.sleep(0.5)   # a DELETE still waiting goes on pagehide: let it land before the next reset()
     pctx.close()
+    print("phone.html — the session gone: an admin GET that answers the join page is a lost session (v60)")
+    pctx2 = b.new_context(viewport={"width": 411, "height": 914}, is_mobile=True, has_touch=True)
+    reset()
+    pg, errs = load_phone(pctx2)
+    with STATE["lock"]: STATE["lost"] = True
+    got = pg.evaluate("""async () => { let said = ''; const r = await adminFetch('/api/debug/report.txt', undefined,
+        'download the report', m => { said = m; }); return [r === null, said]; }""")
+    check(got[0] and "no longer signed in" in got[1], f"adminFetch: null, says the session is gone ({got[1][:70]})")
+    check(errs == [], f"no page errors ({errs})")
+    pg.close(); pctx2.close()
     b.close()
 
 srv.shutdown()

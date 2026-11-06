@@ -118,6 +118,9 @@ def test_every_admin_control_says_why_and_the_role_follows_the_switch():
         assert re.search(r"function failMsg\(what, status, detail\)", page), name
         assert re.search(r"async function adminFetch\(url, opts, what, say = ", page), name
         assert "if (status === 403) refreshRole();" in page, name
+        # an /api answer in HTML is the gateway's join page: a lost session, never the file (d58 / v60)
+        assert re.search(r"const lost = !!res && res\.ok && /\^\\/api\\//\.test\(url\) && /text\\/html/i\.test\(", page), name
+        assert "const status = lost ? 401 : res ? res.status : 0;" in page, name
         assert re.search(r"const ROLE_REFRESH_MS = 30000;", page), name
         assert re.search(r"setInterval\(\(\) => \{ if \(!document\.hidden\) refreshRole\(\); \}, "
                          r"window\.__roleRefreshMs \|\| ROLE_REFRESH_MS\);", page), name

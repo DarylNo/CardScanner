@@ -1033,7 +1033,9 @@ lens on testers' phones), minSdk 29, arm64-v8a.
   ignored — the 2nd click of a double-click landed on the row that slid up under
   the pointer and deleted it too (Enter / Space are detail 0, a 1st click 1). The
   Undo bar is 316 px wide (x 16–332): the 🗑s sit at x 356–387 of the 400 px
-  column at every window width, and at 368 px (to x 384) a second delete at the
+  column at every window width — from x ~340 with a classic 16–17 px scrollbar
+  (Windows Chrome; headless Chromium hides scrollbars, so the check runs a pass
+  with them shown) — and at 368 px (to x 384) a second delete at the
   same spot MID-list — where d55's room at the end does nothing — hit Undo. The
   toast lifts to `bottom: 76px` while the bar shows (`body.undoing`; the bar is
   y 890–934 at 950 px high, a long refusal sat at 868–930 over it at ≤ 1280 px
@@ -1066,6 +1068,15 @@ lens on testers' phones), minSdk 29, arm64-v8a.
   swiped rows and the bar stayed up after the clear; desktop's Clear waits for
   them too, so "Deleted n" answers "Delete n?". `check_row_delete_ui.py`: 54
   checks fail on d56/v58 (+ the 2 banner pins), all 199 pass on d57/v59.
+  **Its review (desktop d58, phone v60):** with no session the gateway answers a
+  GET with its join page (200 text/html), and d57's fetched downloads took that
+  for the file — Download TXT / CSV and the 🐞 Download saved the join page as
+  cards.txt / cards.csv / cardscanner-debug.txt and said nothing (d56 navigated
+  to the join page). `adminFetch` now reads an `/api` answer in HTML as a lost
+  session (401: "no longer signed in … reload the page to join again") on both
+  pages, so no admin call ever takes the join page for an answer; the check's
+  stub has a "session gone" mode (4 checks fail on d57); 206 + the scrollbar
+  pass pass on d58 / v60.
 - **The live log** (`core/DebugLog.global`, a 3000-line ring, mirrored to
   logcat as `CardScanner`): triggers (box, mask %), captures (`done #k`:
   flattened or not, card px, the three frames' sharpness, the chosen frame's

@@ -492,7 +492,7 @@ function formatChipsHtml(scan, pop = popOf(scan)){
 }
 
 /* ── version banner — proves which page+server combo is running ────────────── */
-const UI_VERSION = 'v59';
+const UI_VERSION = 'v60';
 
 // Who is asking: the phone server says "admin" for the paired computer, the app's
 // own review screen and — while Settings → "Guests get full access" is on (the
@@ -544,9 +544,13 @@ function deleteFailMsg(status, n) {
 const sayBad = m => { setStatus(m, 'err'); flash(m, 5000, true); };
 async function adminFetch(url, opts, what, say = sayBad) {
   const res = await fetch(url, opts).catch(() => null);
-  if (res && res.ok) return res;
-  const status = res ? res.status : 0;
-  const body = res ? await res.json().catch(() => null) : null;
+  // With no session the gateway answers a GET with its join page (200 text/html): an /api route
+  // never answers HTML, so that is a lost session (401) — not the file. Before, the downloads
+  // saved the join page as cards.txt / cardscanner-debug.txt and said nothing (final review).
+  const lost = !!res && res.ok && /^\/api\//.test(url) && /text\/html/i.test(res.headers.get('Content-Type') || '');
+  if (res && res.ok && !lost) return res;
+  const status = lost ? 401 : res ? res.status : 0;
+  const body = res && !lost ? await res.json().catch(() => null) : null;
   say(failMsg(what, status, body && (body.error || body.detail)));
   if (status === 403) refreshRole();
   return null;
