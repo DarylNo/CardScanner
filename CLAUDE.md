@@ -1379,7 +1379,16 @@ lens on testers' phones), minSdk 29, arm64-v8a.
   it fills starts a pause again — the code changes with it: 221 times in the
   test's hour at 50/s); once they stop, ≤ 5 min. Sessions already in, the
   paired computer (`cs_admin`) and the phone's own review screen (owner token)
-  never need a code and carry on. A lockout and a pause are each logged ONCE
+  never need a code and carry on. **The code also changes every 20 wrong codes
+  since it last changed, at any pace** (re-review: a search paced just UNDER the
+  pause — one code every 15.79 s over 3 addresses — never filled the window, so
+  the code never changed and it walked 10⁶ against ONE code, ≈ 91 days average;
+  a probe joined at guess 132 708): no code faces more than 20 guesses, so the
+  ≈ 174 days holds at any pace; one line per change ("… since the guest code
+  last changed — guest code rotated (… no pause)"), the Share screen shows the
+  new code. **A clock set back** (NTP, the owner) stretched a pause by the whole
+  step (a day → 1445 min): entries stamped after now count as now and no lockout
+  runs past 5 min from now. A lockout and a pause are each logged ONCE
   under `server`, when they start ("8 wrong join codes from <ip> within 5 min —
   that address is locked out 5 min", "20 wrong join codes within 5 min — guest
   code rotated, joining paused 5 min"); a refused join is not logged (one device
@@ -1389,7 +1398,9 @@ lens on testers' phones), minSdk 29, arm64-v8a.
   join none, where the old rule joined; an hour at 50/s from 5 addresses — 240
   compared, busiest 5 min 20; 64 parallel addresses; the pause's words, Retry-After
   and one log line; the pause lapsing; sessions, the paired computer and the
-  owner through a pause; an address's count surviving a rotation), `PhoneServerTest` (end to
+  owner through a pause; an address's count surviving a rotation; a search paced
+  under the pause — 2 000 codes meet 100 codes, ≤ 20 each, where one code took
+  all 2 000; a clock a day back — ≤ 5 min of pause / lockout), `PhoneServerTest` (end to
   end on the real API), `AppSettingsTest`, `ScreensSmokeTest` (the switch row
   at the N200's size, the log line, the live provider, Diagnostics, the Share
   card) — not on the phone.

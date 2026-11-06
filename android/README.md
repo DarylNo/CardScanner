@@ -264,7 +264,10 @@ wrong codes from this device"). 20 wrong codes from all devices together within
 codes on this network — joining is paused for N min") until the oldest of them
 is 5 minutes old — a right code waits too, so a search spread over many addresses
 gets at most 20 guesses in any 5 minutes. Guests already in, the paired computer
-and the phone's own review screen carry on; New guest code ends the pause.
+and the phone's own review screen carry on; New guest code ends the pause. The
+code also changes after every 20 wrong codes since it last changed, at any pace
+(so a slow search never faces one code for long) — read the current one off the
+Share screen.
 
 ## Signing setup
 

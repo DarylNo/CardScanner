@@ -352,6 +352,82 @@ class GatewayServerTest {
         assertTrue(facts, rotations <= comparedAt.size)
     }
 
+    /**
+     * Re-review of the pause: a search paced just UNDER it — one wrong code every 15.79 s (5 min / 19),
+     * round-robin over 3 addresses so none reaches its own 8 — never fills the 5-min window, so with a
+     * rotation only at a pause the code never changed and the search walked 000000…999999 against ONE
+     * code (a probe joined on guess 132 708, ≈ 24 days; ≈ 91 days on average, not the ≈ 174 the pause
+     * promised). The code now also changes after every [GatewayServer.GLOBAL_MAX_FAILURES] wrong codes
+     * compared since it last changed, however slowly they came: no code ever faces more than 20 guesses,
+     * so each ≤ 20 are independent draws against a fresh code. No pause (the search stays under it), one
+     * `server` line per change, and the Share screen hears each new code.
+     */
+    @Test
+    fun aSearchPacedUnderThePauseStillChangesTheCodeEveryTwentyWrongCodes() {
+        val ips = listOf("192.168.43.10", "192.168.43.11", "fe80::1c2b:3a4d:5e6f:7081")
+        val rotated = mutableListOf<String>()
+        gateway.onCodeRotated = { rotated += it }
+        val log = io.github.darylno.cardscanner.core.DebugLog.global
+        val from = log.lastSeq
+        val step = GatewayServer.FAIL_WINDOW_MS / (GatewayServer.GLOBAL_MAX_FAILURES - 1) + 1
+        val perCode = HashMap<String, Int>()
+        var compared = 0
+        var refused = 0
+        val attempts = 2_000
+        for (k in 0 until attempts) {
+            val target = gateway.code
+            val (r, c) = gateway.tryJoin(ips[k % ips.size], wrongCode(), now + k * step)
+            if (c) { compared++; perCode.merge(target, 1, Int::plus) }
+            if (r is GatewayServer.JoinResult.Locked) refused++
+            assertFalse(r is GatewayServer.JoinResult.Joined || r is GatewayServer.JoinResult.JoinedAdmin)
+        }
+        val worst = perCode.values.maxOrNull() ?: 0
+        val lines = log.since(from, limit = 3_000).filter { it.tag == "server" && it.msg.contains("guest code rotated") }
+        val facts = "compared $compared of $attempts, refused $refused, codes ${perCode.size}, most guesses at one code $worst, " +
+            "rotations ${rotated.size}, rotation lines ${lines.size}"
+        println("paced under the pause (one per ${step} ms, 3 addresses): $facts")
+        assertEquals(facts, attempts, compared)                       // under the pause: every code compared
+        assertEquals(facts, 0, refused)
+        assertTrue(facts, worst <= GatewayServer.GLOBAL_MAX_FAILURES) // no code faces more than 20 guesses
+        assertEquals(facts, attempts / GatewayServer.GLOBAL_MAX_FAILURES, rotated.size)
+        assertEquals(facts, rotated.size, lines.size)
+        assertTrue(facts, lines.none { it.msg.contains("joining paused") })
+        assertTrue(facts, lines.none { l -> rotated.any { l.msg.contains(it) } })   // never the code
+    }
+
+    /**
+     * Re-review of the pause: the failure windows run on the wall clock, and a clock set BACK (NTP fixing a
+     * fast clock, the owner) while the 20 are inside the window left them stamped in the "future" — joining
+     * stayed paused for the whole step (1445 min in a probe), and an address's own lockout likewise. An entry
+     * stamped after now now counts as now, and a lockout never runs past [GatewayServer.LOCKOUT_MS] from now:
+     * a step back of a day leaves at most the usual 5 min.
+     */
+    @Test
+    fun aClockSetBackNeverStretchesAPauseOrALockout() {
+        now = 1_762_400_000_000L                // a real wall clock (2025-11), so a day back is still a real time
+        val t0 = now
+        val day = 24 * 60 * 60_000L
+        // the network-wide pause
+        for (i in 0 until GatewayServer.GLOBAL_MAX_FAILURES) gateway.attemptJoin("10.50.0.${i + 1}", wrongCode(), t0)
+        assertTrue(isPause(gateway.attemptJoin("10.50.1.1", gateway.code, t0)))
+        val back = t0 - day
+        val r = gateway.attemptJoin("10.50.1.2", gateway.code, back)
+        assertTrue("still a pause right after the step back", isPause(r))
+        assertTrue("…of at most 5 min, not a day (${(r as GatewayServer.JoinResult.Locked).remainingMs} ms)",
+            r.remainingMs <= GatewayServer.FAIL_WINDOW_MS)
+        assertTrue("the current code joins 5 min after the step back",
+            gateway.attemptJoin("10.50.1.3", gateway.code, back + GatewayServer.FAIL_WINDOW_MS + 1) is GatewayServer.JoinResult.Joined)
+        // an address's own lockout
+        val t1 = back + 2 * GatewayServer.FAIL_WINDOW_MS
+        repeat(GatewayServer.MAX_FAILURES) { gateway.attemptJoin("10.60.0.1", wrongCode(), t1) }
+        val own = gateway.attemptJoin("10.60.0.1", gateway.code, t1 - day)
+        assertTrue("locked right after the step back", own is GatewayServer.JoinResult.Locked && !own.paused)
+        assertTrue("…for at most 5 min (${(own as GatewayServer.JoinResult.Locked).remainingMs} ms)",
+            own.remainingMs <= GatewayServer.LOCKOUT_MS)
+        assertTrue("its code joins once that has passed",
+            gateway.attemptJoin("10.60.0.1", gateway.code, t1 - day + GatewayServer.LOCKOUT_MS + 1) is GatewayServer.JoinResult.Joined)
+    }
+
     /** The pause is a wait, not a lock-out for good: once it lapses a guest with the code the phone shows NOW joins. */
     @Test
     fun afterThePauseLapsesAGuestWithTheCurrentCodeJoins() {
@@ -468,17 +544,28 @@ class GatewayServerTest {
         assertTrue(gateway.attemptJoin("192.168.7.8", gateway.code, t0 + GatewayServer.FAIL_WINDOW_MS + 1) is GatewayServer.JoinResult.Joined)
     }
 
+    /**
+     * The PAUSE is a window, not a lifetime count: 19 wrong codes, then a 20th after they left the
+     * window, pause nothing. The CODE, though, changes at that 20th — 20 wrong codes since it last
+     * changed, however slowly (re-review: before, a search paced under the pause faced one code
+     * forever; this test pinned that the code stayed). Right codes count toward neither.
+     */
     @Test
-    fun globalBudgetIsAWindowNotALifetimeCount() {
+    fun thePauseIsAWindowButTheCodeChangesAfterTwentyWrongCodesWhateverTheirPace() {
         val oldCode = gateway.code
         val wrong = if (oldCode == "000000") "111111" else "000000"
         for (i in 0 until 19) gateway.attemptJoin("10.0.0.${i + 2}", wrong, now)
+        assertEquals(oldCode, gateway.code)
         now += GatewayServer.FAIL_WINDOW_MS + 1
-        gateway.attemptJoin("10.0.1.1", wrong, now)
-        assertEquals(oldCode, gateway.code)
-        // right codes do not count toward the budget
-        repeat(30) { gateway.attemptJoin("10.0.2.${it + 2}", oldCode, now) }
-        assertEquals(oldCode, gateway.code)
+        val twentieth = gateway.attemptJoin("10.0.1.1", wrong, now)
+        assertTrue("the 20th, past the window, pauses nothing", twentieth is GatewayServer.JoinResult.Wrong)
+        val newCode = gateway.code
+        assertNotEquals("…but the code changed", oldCode, newCode)
+        assertTrue("a guest with the new code joins at once (no pause)",
+            gateway.attemptJoin("10.0.2.1", newCode, now) is GatewayServer.JoinResult.Joined)
+        // right codes count toward neither
+        repeat(30) { gateway.attemptJoin("10.0.2.${it + 2}", newCode, now) }
+        assertEquals(newCode, gateway.code)
     }
 
     @Test

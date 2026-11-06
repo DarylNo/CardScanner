@@ -219,7 +219,9 @@ On the same Wi-Fi, or the phone's hotspot:
   everyone new (the code changes, and the page says "joining is paused") for
   up to 5 minutes after the wrong codes stop. Whoever is already in — guests, the
   paired computer, the phone itself — carries on; **New guest code** also ends
-  the pause.
+  the pause. The code also changes by itself after every 20 wrong codes, however
+  slowly they come — so if a guest's code suddenly stops working, read the new
+  one off the phone.
 
 The connection on your network is plain HTTP — pair on a network you trust.
 The phone's server stops by itself after 30 minutes with the app in the

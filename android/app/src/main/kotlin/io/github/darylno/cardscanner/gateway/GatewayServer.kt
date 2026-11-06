@@ -56,6 +56,14 @@ import java.util.logging.Logger
  *    paired computer and the phone's own review screen need no code and carry on. Lockouts
  *    in force stay through a pause. Each lockout and each pause is logged once, when it
  *    starts, under `server` — never a refused join, never a code.
+ *  - THE CODE CHANGES every 20 wrong codes compared since it last changed, however slowly
+ *    they came (re-review): a search paced just under the pause (19 per 5 min) never filled
+ *    the window, so without this the code never changed and the search walked the whole
+ *    space against ONE code (≈ 91 days on average). With it no code faces more than 20
+ *    guesses, so the ≈ 174 days above holds for any pace. Logged once per change.
+ *  - The windows run on the wall clock: an entry stamped after now (a clock set back — NTP,
+ *    the owner) counts as now and no lockout runs past 5 min from now, so a step back never
+ *    stretches a pause or a lockout (a day's step kept joining paused 1445 min).
  *  - LAN only: clients whose address is not private/link-local ([isLocalClient]) get a 403
  *    before anything else — the listener binds every interface, so without this the join
  *    page would be reachable over Tailscale (100.64/10) and over cellular public IPv6.
@@ -132,6 +140,8 @@ class GatewayServer(
     }
 
     private var compared = 0L                            // guarded by [failures]
+    /** Wrong codes compared since the code last changed (guarded by [failures]); see [attemptJoin]. */
+    private var wrongSinceRotation = 0
 
     /** Join codes actually compared since start — attempts a lockout or the pause did not refuse. */
     internal val joinCodesCompared: Long get() = synchronized(failures) { compared }
@@ -161,6 +171,7 @@ class GatewayServer(
         return synchronized(failures) {
             failures.clear()
             globalFailures.clear()
+            wrongSinceRotation = 0
             joinCode.rotate()
         }
     }
@@ -262,6 +273,14 @@ class GatewayServer(
      * ever compare more than 20 codes. Before, the 20th reset every count (and every address's
      * own), and three addresses sending 7 / 7 / 6 wrong codes in turn guessed at the request
      * rate, never locked (final review of 1.1.19).
+     *
+     * The code also changes after every [GLOBAL_MAX_FAILURES] wrong codes compared since it last
+     * changed ([wrongSinceRotation]), however slowly they came: a search paced just under the
+     * pause (19 per 5 min) never filled the window, so the code never changed and the search
+     * walked the whole space against ONE code (≈ 91 days on average, re-review). Now no code
+     * faces more than 20 guesses, so each ≤ 20 are independent draws against a fresh code. A
+     * pause's rotation and this one are the same rotation (once, the counter restarts); only the
+     * pause retires a waiting admin code (it has its own budget).
      */
     internal fun attemptJoin(ip: String, given: String, now: Long): JoinResult {
         var rotatedTo: String? = null
@@ -289,13 +308,19 @@ class GatewayServer(
                 a.lockedUntil = now + LOCKOUT_MS
                 lockedNow = true
             }
-            if (globalFailures.size >= GLOBAL_MAX_FAILURES) {
-                // The pause starts ([refusal] now answers every address). The code rotates so each
-                // ≤ 20 guesses aim at a fresh unknown code; NO count is reset (that reset was the
-                // hole) and lockouts in force stay; sessions stay.
+            wrongSinceRotation++
+            val pausing = globalFailures.size >= GLOBAL_MAX_FAILURES
+            if (pausing || wrongSinceRotation >= GLOBAL_MAX_FAILURES) {
+                // The code rotates so no code faces more than 20 guesses (each ≤ 20 aim at a fresh
+                // unknown code); NO window count is reset (that reset was the hole) and lockouts in
+                // force stay; sessions stay.
                 rotatedTo = joinCode.rotate()
-                admins?.cancelCode()        // a distributed search must not keep aiming at the admin code
-                pausedFor = globalFailures.first() + FAIL_WINDOW_MS - now
+                wrongSinceRotation = 0
+                if (pausing) {
+                    // The pause starts ([refusal] now answers every address).
+                    admins?.cancelCode()    // a distributed search must not keep aiming at the admin code
+                    pausedFor = globalFailures.first() + FAIL_WINDOW_MS - now
+                }
             }
             // This wrong code may itself have locked the address or started the pause: say so now.
             refusal(ip, now) ?: JoinResult.Wrong
@@ -304,10 +329,17 @@ class GatewayServer(
         if (lockedNow) io.github.darylno.cardscanner.core.DebugLog.global.w("server",
             "$MAX_FAILURES wrong join codes from $ip within 5 min — that address is locked out ${waitWords(LOCKOUT_MS)}")
         rotatedTo?.let { code ->
-            val wait = waitWords(pausedFor)
-            LOG.log(Level.WARNING, "gateway: $GLOBAL_MAX_FAILURES wrong join codes within the window — code rotated, joining paused $wait")
-            io.github.darylno.cardscanner.core.DebugLog.global.w("server",
-                "$GLOBAL_MAX_FAILURES wrong join codes within 5 min — guest code rotated, joining paused $wait")
+            if (pausedFor > 0L) {
+                val wait = waitWords(pausedFor)
+                LOG.log(Level.WARNING, "gateway: $GLOBAL_MAX_FAILURES wrong join codes within the window — code rotated, joining paused $wait")
+                io.github.darylno.cardscanner.core.DebugLog.global.w("server",
+                    "$GLOBAL_MAX_FAILURES wrong join codes within 5 min — guest code rotated, joining paused $wait")
+            } else {
+                LOG.log(Level.WARNING, "gateway: $GLOBAL_MAX_FAILURES wrong join codes since the code last changed — code rotated")
+                io.github.darylno.cardscanner.core.DebugLog.global.w("server",
+                    "$GLOBAL_MAX_FAILURES wrong join codes since the guest code last changed — guest code rotated " +
+                        "(slower than $GLOBAL_MAX_FAILURES in 5 min: no pause)")
+            }
             try { onCodeRotated?.invoke(code) } catch (e: Exception) { LOG.log(Level.WARNING, "onCodeRotated failed", e) }
         }
         return result
@@ -320,6 +352,14 @@ class GatewayServer(
      * later — or null. Never adds an entry, so a refused flood from fresh addresses costs no memory.
      */
     private fun refusal(ip: String, now: Long): JoinResult.Locked? {
+        // A wall clock set BACK (NTP fixing a fast clock, the owner) must never stretch a pause or a
+        // lockout (re-review: a day's step kept joining paused 1445 min): anything stamped after now
+        // counts as now, and no lockout runs past LOCKOUT_MS from now.
+        clampToNow(globalFailures, now)
+        for (x in failures.values) {
+            clampToNow(x.times, now)
+            if (x.lockedUntil > now + LOCKOUT_MS) x.lockedUntil = now + LOCKOUT_MS
+        }
         // Forget IPs whose last failure is out of the window and who are not locked.
         failures.entries.removeAll { (_, a) -> a.lockedUntil <= now && (a.times.lastOrNull() ?: 0L) <= now - FAIL_WINDOW_MS }
         while (globalFailures.isNotEmpty() && globalFailures.first() <= now - FAIL_WINDOW_MS) globalFailures.removeFirst()
@@ -332,6 +372,12 @@ class GatewayServer(
             own >= pause -> JoinResult.Locked(own)
             else -> JoinResult.Locked(pause, paused = true)
         }
+    }
+
+    /** Entries stamped after [now] (a clock set back) become [now]; the deque stays in order. */
+    private fun clampToNow(q: ArrayDeque<Long>, now: Long) {
+        if ((q.lastOrNull() ?: Long.MIN_VALUE) <= now) return
+        for (i in q.indices) if (q[i] > now) q[i] = now
     }
 
     private fun tooMany(locked: JoinResult.Locked): Response {
