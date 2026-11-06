@@ -16,15 +16,28 @@ import android.widget.ScrollView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.launch
 import io.github.darylno.cardscanner.App
 import io.github.darylno.cardscanner.R
 
 /**
  * Share: people on the phone's local network (shop Wi-Fi or this phone's
  * hotspot) scan the QR / type the 6-digit code and get the review pages the
- * phone serves — as GUESTS (review, pick, flag for deletion; deleting,
- * clearing and export are the paired computer's). "New guest code" ends every
- * guest session; the server itself keeps running.
+ * phone serves. With Settings → "Guests get full access" on (the default) they
+ * get everything the paired computer gets — delete (for good), clear, export,
+ * pricing, the scanner's settings; off, they are GUESTS: review, pick, edit,
+ * flag for deletion. "New guest code" ends every guest session (and any
+ * lockout or join pause the gateway is holding); the server itself keeps running.
+ *
+ * The screen FOLLOWS the gateway while it is on screen ([GatewayPort.changes]): the gateway
+ * changes the code by itself (a join pause; 20 wrong codes since it last changed — ordinary
+ * typos reach that) and "New guest code" lands on the service's thread after the tap. Before
+ * (review of 1.1.19) it drew only in onCreate / onResume / its own buttons, so it kept the OLD
+ * code and a QR for it on the mount and every guest who scanned it was refused.
  */
 class ShareActivity : AppCompatActivity() {
     private lateinit var app: App
@@ -57,6 +70,10 @@ class ShareActivity : AppCompatActivity() {
         chrome.applyInsets(root)
         setContentView(root)
         render()
+        lifecycleScope.launch {
+            // drop(1): a StateFlow hands its current value to each new collector — onResume drew that.
+            repeatOnLifecycle(Lifecycle.State.STARTED) { app.gateway.changes.drop(1).collect { render() } }
+        }
     }
 
     override fun onResume() {
@@ -74,12 +91,15 @@ class ShareActivity : AppCompatActivity() {
         awake.focus(hasFocus)
     }
 
-    /** Amber card: guests get FULL access. Shown in every state — never hide it. */
+    /**
+     * Amber card: what a guest may do — with Settings → "Guests get full access" on (the default)
+     * that is EVERYTHING, delete and export included. Shown in every state — never hide it.
+     */
     private fun warningCard() = chrome.card(ScanChrome.Palette.WARN_BG, ScanChrome.Palette.WARN_STROKE).apply {
         orientation = LinearLayout.HORIZONTAL
         isBaselineAligned = false   // else the multi-line text is shifted down and its last line clipped
         addView(chrome.text("⚠", 18f, ScanChrome.Palette.WARN), LinearLayout.LayoutParams(wrap(), wrap()).apply { marginEnd = dp(12) })
-        addView(chrome.text(getString(R.string.share_warning), 14f, ScanChrome.Palette.WARN), LinearLayout.LayoutParams(0, wrap(), 1f))
+        addView(chrome.text(getString(if (app.settings.guestsFullAccess) R.string.share_warning_full else R.string.share_warning), 14f, ScanChrome.Palette.WARN), LinearLayout.LayoutParams(0, wrap(), 1f))
     }
 
     private fun errorCard(msg: String) = chrome.card(ScanChrome.Palette.ERR_BG, ScanChrome.Palette.ERR_STROKE).apply {

@@ -92,6 +92,25 @@
   .fmt.banned { background: #3a1c1c; color: var(--bad); text-decoration: line-through; }
   .fmt.restricted { background: #3f2d10; color: var(--warn); }
   .row input[type=checkbox] { width: 18px; height: 18px; flex: 0 0 auto; }
+  /* Per-row delete (owner, 2026-11-05: "I want delete options here in the list"; d54) — admin
+     only; shown on hover or keyboard focus, always on a touch screen. The DELETE waits UNDO_MS. */
+  .row .rdel { flex: 0 0 auto; font: inherit; font-size: 15px; line-height: 1; padding: 7px 8px; border: 0;
+               border-radius: 6px; background: transparent; color: var(--muted); cursor: pointer; opacity: 0; }
+  .row:hover .rdel, .row .rdel:focus { opacity: 1; }
+  .row .rdel:hover, .row .rdel:focus-visible { background: #3a1c1c; color: var(--bad); }
+  @media (hover: none) { .row .rdel { opacity: 1; } }
+  /* The row delete's Undo bar: over the bottom of the list column, LEFT of the 🗑s (d57: at 368 px
+     it covered the 🗑 column from x 356 — the 400 px column's 🗑s — so a second delete at the same
+     spot mid-list, where d55's room at the end does nothing, hit Undo). 316 px ends at x 332; the
+     🗑s start at x 356, or ~340 with a classic 16–17 px scrollbar (Windows) — still clear. */
+  #undoBar { position: fixed; left: 16px; bottom: 16px; width: 316px; z-index: 55; display: none;
+             align-items: center; gap: 12px; padding: 8px 8px 8px 16px; border-radius: 10px;
+             background: var(--card); border: 1px solid var(--line); box-shadow: 0 6px 24px #0008; font-size: 14px; }
+  #undoBar.show { display: flex; }
+  #undoBar span { flex: 1 1 auto; }
+  /* d55: room under the last row while the bar shows — it sat over the last row's 🗑, so a
+     second delete near the bottom hit Undo and brought the first one back. */
+  #list.undoing { padding-bottom: 76px; }
   .empty { color: var(--dim); text-align: center; padding: 40px 20px; }
 
   /* ── detail ─────────────────────────────────────────────────────────── */
@@ -198,8 +217,12 @@
                    font-size: 13px; color: var(--muted); border: 2px dashed var(--line); min-height: 120px; }
   .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
            background: var(--card); border: 1px solid var(--line); padding: 10px 18px;
-           border-radius: 10px; z-index: 50; display: none; }
+           border-radius: 10px; z-index: 65; display: none; }
   .toast.show { display: block; }
+  /* d57: lifted clear of the Undo bar while it shows — a refusal's words ran under it — and over
+     the 🐞 panel (z 60, bottom right: its Copy report / Download words were behind it); the
+     builder and the 📱 panel (z 70) say theirs on their own line. */
+  body.undoing .toast { bottom: 76px; }
   /* ── Export to CSV builder ── */
   #csvModal { position: fixed; inset: 0; background: #000a; z-index: 70; display: none;
               align-items: center; justify-content: center; padding: 24px; }
@@ -466,12 +489,14 @@
 </main>
 <div id="lightbox"><img id="lightboxImg" alt=""><div id="lbDuo" style="display:none"></div></div>
 <div class="toast" id="toast"></div>
+<div id="undoBar" role="status" aria-live="polite"><span id="undoMsg"></span><button class="btn sm" id="undoBtn">Undo</button></div>
 
 <script>
 const CONDITIONS = ["NM","LP","MP","HP","DMG"];
 const FINISHES = ["Non-Foil","Foil","Etched"];
 let scans = [], focusedId = null, lastMaxId = 0, detailSig = "", listSig = "";
 let renderedDetailId = null;   // the scan the right pane shows (a re-render of it keeps the scroll)
+let pollSeq = 0, pollApplied = 0;   // polls started / the newest whose answer was applied (poll)
 let filterText = "", priceMin = null, priceMax = null, view = "all";
 // Popularity floor + how the two bars combine. "any" (OR) is the default and
 // the point of the pair: a price floor is what keeps an expensive UNRANKED
@@ -485,9 +510,67 @@ const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;
 async function jget(u){ return (await fetch(u)).json(); }
 async function jsend(u,m,b){ return (await fetch(u,{method:m,headers:{'Content-Type':'application/json'},body:JSON.stringify(b)})).json(); }
 
-function toast(msg){
+function toast(msg, ms = 1800){
   const t = $("#toast"); t.textContent = msg; t.classList.add("show");
-  clearTimeout(toast._t); toast._t = setTimeout(()=>t.classList.remove("show"), 1800);
+  clearTimeout(toast._t); toast._t = setTimeout(()=>t.classList.remove("show"), ms);
+}
+// An admin action the phone did not carry out, in words that say why (d55 for deletes, d57 for
+// every admin control): a 403 means this browser lost full access while the page was open (the
+// owner turned "Guests get full access" off) — a retry can never succeed, so the page asks /api/me
+// again and its admin controls go; a 401 means its session is gone (a new guest code, "Forget
+// paired computers") — a retry cannot succeed either, the page must join again; a 400 / 422 is the
+// phone saying what is wrong with the request (`detail`, its own words); another status is the
+// phone refusing (HTTP n); no status at all (≤ 0) is no answer. Those two are worth another try.
+function failMsg(what, status, detail){
+  return status === 403 ? `Couldn't ${what} — this browser no longer has full access (the phone's owner turned it off)`
+    : status === 401 ? `Couldn't ${what} — this browser is no longer signed in to the phone; reload the page to join again`
+    : (status === 400 || status === 422) && detail ? `Couldn't ${what} — ${detail}`
+    : status > 0 ? `Couldn't ${what} — the phone refused it (HTTP ${status}); try again`
+    : `Couldn't ${what} — the phone didn't answer; try again`;
+}
+function deleteFailMsg(status, n){
+  return failMsg(`delete${n ? ` ${n} scan${n > 1 ? "s" : ""}` : ""}`, status);
+}
+// An admin-only call (ScanServer.adminOnly — export, the include box, the sweep, the 📱 panel, the
+// 🐞 report; d57): the Response when the phone carried it out, else null — the words above said
+// through `say` (the toast unless the caller has its own line), and a 403 re-asks /api/me. Before,
+// each control read a refusal as an answer: the builder threw on a 403 layout and never opened,
+// ▶ Sweep said "Nothing needs pricing", Exclude filtered "Excluded 3 cards", the include box stayed
+// as clicked, a download navigated away to the error.
+// With no session the gateway answers a GET with its join page (200 text/html): an /api route never
+// answers HTML, so that is a lost session (401) — not the answer. Before, the downloads saved the join
+// page as cards.txt / cardscanner-debug.txt and said nothing (final review); every raw /api GET of
+// an admin route asks this too (d59: the 📱 panel said "aren't available", the 🐞 log threw).
+function lostSession(url, res){
+  return !!res && res.ok && /^\/api\//.test(url) && /text\/html/i.test(res.headers.get("Content-Type") || "");
+}
+async function adminFetch(url, opts, what, say = m => toast(m, 5000)){
+  const res = await fetch(url, opts).catch(() => null);
+  const lost = lostSession(url, res);
+  if (res && res.ok && !lost) return res;
+  const status = lost ? 401 : res ? res.status : 0;
+  const body = res && !lost ? await res.json().catch(() => null) : null;
+  say(failMsg(what, status, body && (body.error || body.detail)));
+  if (status === 403) refreshRole();
+  return null;
+}
+const jsonOpts = (method, body) => ({ method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body ?? {}) });
+// A file from an admin-only route: fetched first (a refusal says why and the page stays), then
+// saved under the server's own name (Content-Disposition), else `name`.
+async function adminDownload(url, name, what, say){
+  const res = await adminFetch(url, undefined, what, say);
+  if (!res) return false;
+  const blob = await res.blob();
+  const cd = /filename="?([^";]+)"?/i.exec(res.headers.get("Content-Disposition") || "");
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = cd ? cd[1] : name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 30000);
+  return true;
+}
+// The status that says most about a batch's failures: 403, then 401, then any other answer, else none.
+function worstStatus(bad){
+  return bad.includes(403) ? 403 : bad.includes(401) ? 401 : (bad.find(x => x > 0) ?? 0);
 }
 
 /* ── pricing helpers ───────────────────────────────────────────────────── */
@@ -727,7 +810,7 @@ function renderFilterHint(){
 /* ── list ──────────────────────────────────────────────────────────────── */
 function visibleScans(){
   const q = filterText.toLowerCase();
-  return scans.filter(s => {
+  return liveScans().filter(s => {
     if (!passesFilters(s)) return false;
     if (taggedOnly && listOn() && !isProblem(s) && !listTags(s).length) return false;
     if (view === "pending"  && s.status === "selected") return false;
@@ -752,6 +835,9 @@ function renderList(){
     printInfo(s).vals.join(";"),popSig(s),tagSig(s),s.id===focusedId,s.flagged?'f':'',role].join("~")).join("|");
   if (sig === listSig) { updateStats(); return; }
   listSig = sig;
+  // A 🗑 with keyboard focus keeps it across the rebuild (d57): a price landing re-rendered the
+  // list and dropped focus to <body>. preventScroll: the list never jumps back to it.
+  const keepFocus = document.activeElement?.closest?.("#list [data-del]")?.dataset.del;
 
   $("#list").innerHTML = rows.map(s => {
     const sel = s.status === "selected";
@@ -774,23 +860,33 @@ function renderList(){
         ${pr?`<span class="price">${pr}</span>`:''}
         ${sel && role === "admin"?`<input type="checkbox" title="include in export" ${s.included?'checked':''} data-inc="${s.id}">`:''}
       </div>
+      ${role === "admin" ? `<button type="button" class="rdel admin-only" data-del="${s.id}" title="Delete this scan (5 s to undo)" aria-label="Delete ${esc(titleFor(s))}">🗑</button>` : ""}
     </div>`;
   }).join("") || `<div class="empty">No scans match.</div>`;
 
   $("#list").querySelectorAll(".row").forEach(r =>
     r.addEventListener("click", e => {
-      if (e.target.dataset.inc) return;
+      if (e.target.dataset.inc || e.target.closest("[data-del]")) return;
       focusScan(Number(r.dataset.id));
     }));
+  // e.detail > 1: the 2nd click of a double-click (d57) — the row it deleted is gone and the next
+  // one has slid up under the pointer, so it would delete THAT row too. Enter / Space = detail 0.
+  $("#list").querySelectorAll("[data-del]").forEach(b =>
+    b.addEventListener("click", e => { e.stopPropagation(); if (e.detail > 1) return; queueDelete(Number(b.dataset.del), e.detail === 0); }));
   $("#list").querySelectorAll("[data-inc]").forEach(cb =>
     cb.addEventListener("change", async () => {
-      await jsend(`/api/scans/${cb.dataset.inc}`, "PATCH", { included: cb.checked });
+      const on = cb.checked;
+      const ok = await adminFetch(`/api/scans/${cb.dataset.inc}`, jsonOpts("PATCH", { included: on }),
+        on ? "include it in the export" : "leave it out of the export");
+      if (!ok) { cb.checked = !on; listSig = ""; }   // it did not happen: the box says so again
       poll();
     }));
+  if (keepFocus) $("#list").querySelector(`[data-del="${keepFocus}"]`)?.focus({ preventScroll: true });
   updateStats();
 }
 
 function updateStats(){
+  const scans = liveScans();      // rows deleted from the list (Undo window) count as gone
   const sel = scans.filter(s => s.status==="selected");
   const inc = sel.filter(s => s.included);
   // quantity matters: a row set to ×3 exports 3 copies
@@ -803,6 +899,107 @@ function updateStats(){
   $("#clearFlagBtn").style.display = nf ? "" : "none";
   $("#clearFlagBtn").textContent = `Delete flagged (${nf})`;
 }
+
+/* ── per-row delete, held for Undo ───────────────────────────────────────────
+   phone.html's swipe-to-delete, on the desktop (owner, 2026-11-05: "I want delete
+   options here in the list"; d54): the row leaves the list at once and the DELETE
+   waits UNDO_MS, so a mis-click costs nothing; Undo restores every row still
+   waiting; leaving the page or hiding the tab sends what is waiting (keepalive).
+   A SENT id stays hidden until a poll STARTED after its DELETE answered lands
+   (settleDeletes) — an older poll still in flight never flashes it back — and a
+   DELETE the server refused shows its row again, with a toast. */
+const UNDO_MS = 5000;
+const waitingDel = new Set();          // hidden, Undo still possible
+const sentDel = new Map();             // hidden, DELETE sent → the pollSeq it answered at (Infinity = not yet)
+let undoTimer = null;
+let reopenId = null;                   // the card that was OPEN when its row was deleted: Undo opens it again
+let lastQueued = null;                 // where a keyboard Undo puts focus back
+let kbNext = [];                       // a keyboard delete: the rows that take its place, nearest first (d57)
+let deferredMsg = null;                // a refusal that landed while the tab was hidden: told on return
+function liveScans(){
+  return waitingDel.size || sentDel.size ? scans.filter(s => !waitingDel.has(s.id) && !sentDel.has(s.id)) : scans;
+}
+function showUndoBar(on){
+  $("#undoBar").classList.toggle("show", on);
+  $("#list").classList.toggle("undoing", on);
+  document.body.classList.toggle("undoing", on);      // lifts the toast clear of the bar (d57)
+}
+// `viaKeyboard`: Enter / Space on the 🗑 (a click with detail 0). The re-render drops focus to
+// <body>, and Undo is the last control on the page — dozens of Tabs away inside the 5 s — so
+// focus goes to Undo itself (d55). A mouse click or a tap leaves focus alone. Left to run, the
+// bar goes with focus on it (d57: lost to <body>): the 🗑 of the row that took the deleted one's
+// place gets it — the row below, else above (kbNext) — else the first 🗑, else the name filter.
+function queueDelete(id, viaKeyboard = false){
+  if (viaKeyboard){
+    const vis = visibleScans().map(s => s.id), i = vis.indexOf(id);
+    kbNext = i < 0 ? [] : [...vis.slice(i + 1), ...vis.slice(0, i).reverse()];
+  }
+  waitingDel.add(id);
+  lastQueued = id;
+  if (focusedId === id){ reopenId = id; focusedId = null; detailSig = sigOf(null); renderDetail(); }
+  $("#undoMsg").textContent = waitingDel.size > 1 ? `${waitingDel.size} scans deleted` : "Scan deleted";
+  showUndoBar(true);
+  clearTimeout(undoTimer);
+  undoTimer = setTimeout(() => commitDeletes(false), UNDO_MS);
+  renderList();
+  if (viaKeyboard) $("#undoBtn").focus();
+}
+// Sends what waits; the promise settles once every DELETE answered (Export waits for it, so the
+// file and its preview never hold a row the list already shows as gone).
+function commitDeletes(keepalive){
+  clearTimeout(undoTimer); undoTimer = null;
+  const ids = [...waitingDel];
+  waitingDel.clear();
+  reopenId = null;
+  const onUndo = document.activeElement === $("#undoBtn");
+  showUndoBar(false);
+  if (onUndo) {
+    const b = kbNext.map(id => $("#list").querySelector(`[data-del="${id}"]`)).find(Boolean)
+      || $("#list").querySelector("[data-del]");
+    (b || $("#filter")).focus();
+  }
+  if (!ids.length) return Promise.resolve();
+  ids.forEach(id => sentDel.set(id, Infinity));
+  return Promise.all(ids.map(id => fetch(`/api/scans/${id}`, { method: "DELETE", keepalive })
+      .then(r => r.ok || r.status === 404 ? 0 : r.status, () => -1)))   // 404: already gone; -1: no answer
+    .then(res => {
+      ids.forEach(id => sentDel.set(id, pollSeq));
+      const bad = res.filter(x => x !== 0);
+      if (bad.length){
+        const msg = deleteFailMsg(worstStatus(bad), bad.length);
+        if (document.hidden) deferredMsg = msg; else toast(msg, 5000);
+        if (bad.includes(403)) refreshRole();
+      }
+      if (!keepalive) poll();
+    });
+}
+// Called with the seq of the poll whose answer was just applied: it started after these DELETEs answered.
+function settleDeletes(seq){
+  for (const [id, at] of sentDel) if (seq > at) sentDel.delete(id);
+}
+$("#undoBtn").addEventListener("click", e => {
+  // A keyboard Undo (detail 0) puts focus back on the restored row's 🗑; a mouse one leaves it be —
+  // Chrome focuses a clicked button, and a 🗑 left focused stays shown and deletes on the next Space.
+  const back = [...waitingDel], fromBar = e.detail === 0;
+  clearTimeout(undoTimer); undoTimer = null;
+  waitingDel.clear();
+  showUndoBar(false);
+  // Undo puts back what Delete took: the card that was open opens again — unless another one was
+  // opened meanwhile (d55: the pane stayed on "Scan a card on your phone to begin").
+  if (reopenId != null && focusedId == null && back.includes(reopenId)) focusScan(reopenId);
+  reopenId = null;
+  listSig = ""; renderList();
+  if (fromBar){
+    const b = document.querySelector(`#list [data-del="${back.includes(lastQueued) ? lastQueued : back[0]}"]`);
+    if (b) b.focus();
+  }
+});
+addEventListener("pagehide", () => commitDeletes(true));
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) { commitDeletes(true); return; }
+  refreshRole();                       // full access may have been turned on or off meanwhile (d57)
+  if (deferredMsg) { toast(deferredMsg, 5000); deferredMsg = null; poll(); }
+});
 
 // The detail is rendered from `scans` right here, so its signature is current:
 // clearing it made the next poll re-render the same scan a second time.
@@ -2136,7 +2333,12 @@ function wireDetail(scan){
     }));
 
   $("#delBtn")?.addEventListener("click", async () => {
-    await fetch(`/api/scans/${scan.id}`, { method: "DELETE" });
+    const r = await fetch(`/api/scans/${scan.id}`, { method: "DELETE" }).catch(() => null);
+    if (!r || !(r.ok || r.status === 404)) {            // refused or no answer: the card stays, and says why
+      toast(deleteFailMsg(r ? r.status : 0, 0), 5000);
+      if (r && r.status === 403) refreshRole();
+      return;
+    }
     focusedId = null; await poll(); renderDetail();
     toast("Scan deleted");
   });
@@ -2201,22 +2403,37 @@ function sigOf(scan){
 
 // Version banner — page version · server git hash. Same rationale as the
 // phone: without it, "is this the old page?" is undebuggable.
-const UI_VERSION = "d53";
+const UI_VERSION = "d59";
 
-// Who is asking: the phone server says "guest" for the 6-digit code (admin =
-// the paired computer); the computer's own server always says admin. Guests
-// get the review page without delete/clear/export/sweep (body.guest hides the
-// .admin-only controls; the server refuses them anyway).
+// Who is asking: the phone server says "admin" for the paired computer and, while
+// Settings → "Guests get full access" is on (the default), for the 6-digit Share
+// code too; with it off the Share code is a "guest". The computer's own server
+// always says admin. Guests get the review page without delete/clear/export/sweep
+// (body.guest hides the .admin-only controls; the server refuses them anyway).
+// Asked at load, whenever the server refuses one of those (403: the owner turned full
+// access off while this page was open — d55), when the tab comes back and every
+// ROLE_REFRESH_MS (d57): the switch reaches an open page both ways within 30 s, no reload —
+// before, a guest page opened with it off never gained the controls it was given.
+// Re-renders only on a CHANGE: a re-render of the open card wipes a typed name search.
 // Fails CLOSED: guest until /api/me answers (a 404 = a server from before roles = admin).
-fetch("/api/me").then(r => r.status === 404 ? { role: "admin" } : r.ok ? r.json() : null).then(d => {
-  if (!d) return;
-  role = d.role === "admin" ? "admin" : "guest";
-  document.body.classList.toggle("guest", role === "guest");
-  listSig = ""; detailSig = ""; renderList(); renderDetail();
-}).catch(() => {});
+const ROLE_REFRESH_MS = 30000;
+function refreshRole(){
+  return fetch("/api/me").then(r => r.status === 404 ? { role: "admin" } : r.ok ? r.json() : null).then(d => {
+    if (!d) return;
+    const was = role;
+    role = d.role === "admin" ? "admin" : "guest";
+    document.body.classList.toggle("guest", role === "guest");
+    if (role === was) return;
+    listSig = ""; detailSig = ""; renderList(); renderDetail();
+    if (role === "admin") devShowBtn();          // the 📱 Scanner button (shown only once /api/device answers)
+  }).catch(() => {});
+}
+refreshRole();
+// (window.__roleRefreshMs: check_row_delete_ui.py shortens the same timer)
+setInterval(() => { if (!document.hidden) refreshRole(); }, window.__roleRefreshMs || ROLE_REFRESH_MS);
 $("#sweepStopBtn").addEventListener("click", async () => {
-  await jsend("/api/price-sweep/stop", "POST", {});
-  toast("Sweep stopping — auto-sweep paused 10 min");
+  if (await adminFetch("/api/price-sweep/stop", jsonOpts("POST"), "stop the price sweep"))
+    toast("Sweep stopping — auto-sweep paused 10 min");
   poll();
 });
 // OCR is optional at import time, so a missing engine used to fail silently
@@ -2268,10 +2485,14 @@ checkForUpdate();
 setInterval(checkForUpdate, 3600 * 1000);
 
 async function poll(){
+  const mine = ++pollSeq;
   try {
     const [scansData, sweep] = await Promise.all([
       jget("/api/scans"), jget("/api/price-status")]);
+    if (mine < pollApplied) return;   // an older poll answering after a newer one: stale
+    pollApplied = mine;
     scans = scansData;
+    settleDeletes(mine);
     // Live sweep readout: which card the background pricer is searching on
     // F2F right now, progress, and measured ETA — it was invisible before.
     const ss = $("#sweepStat");
@@ -2368,13 +2589,24 @@ $("#exclBtn").addEventListener("click", async () => {
   const targets = scans.filter(s =>
     s.status === "selected" && s.included && priceOf(s) != null && !passesFilters(s));
   if (!targets.length) { toast("Nothing to exclude"); return; }
-  for (const s of targets) await jsend(`/api/scans/${s.id}`, "PATCH", { included: false });
-  poll(); toast(`Excluded ${targets.length} card${targets.length>1?'s':''}`);
+  const cards = n => `${n} card${n > 1 ? "s" : ""}`;
+  let done = 0;
+  for (const s of targets) {
+    // A refusal stops it there and says how far it got (d57: a 403 read "Excluded 3 cards").
+    const left = targets.length - done;
+    const ok = await adminFetch(`/api/scans/${s.id}`, jsonOpts("PATCH", { included: false }),
+      `exclude ${done ? `the other ${cards(left)}` : cards(left)}`,
+      m => toast(done ? `Excluded ${cards(done)}. ${m}` : m, 5000));
+    if (!ok) { poll(); return; }
+    done++;
+  }
+  poll(); toast(`Excluded ${cards(done)}`);
 });
 
 $("#refreshBtn").addEventListener("click", () => { listSig=""; detailSig=""; poll(); });
 
 async function clearScans(only){
+  const scans = liveScans();      // rows already deleted from the list are not counted again
   const n = only === "unselected" ? scans.filter(s => s.status !== "selected").length
     : only === "flagged" ? scans.filter(s => s.flagged).length
     : scans.length;
@@ -2382,10 +2614,21 @@ async function clearScans(only){
   const what = only === "unselected" ? `${n} unpicked scan${n>1?'s':''}`
     : only === "flagged" ? `${n} flagged scan${n>1?'s':''}` : `ALL ${n} scans`;
   if (!confirm(`Delete ${what}? This cannot be undone.`)) return;
+  // Rows waiting in their Undo window go now, BEFORE the clear (≤ 3 s, like Export): a waiting
+  // unpicked row the clear swept up first made "Deleted n+1" answer "Delete n?" (d57).
+  await Promise.race([commitDeletes(false), new Promise(r => setTimeout(r, 3000))]);
   // "flagged" sends the ids counted above: a flag landing after this confirm is never swept up.
   const body = only === "flagged" ? { only, ids: scans.filter(s => s.flagged).map(s => s.id) }
     : only ? { only } : {};
-  const r = await jsend("/api/scans/delete-all", "POST", body);
+  const res = await fetch("/api/scans/delete-all", { method: "POST",
+    headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).catch(() => null);
+  const r = res && res.ok ? await res.json().catch(() => null) : null;
+  if (!r || typeof r.deleted !== "number") {          // refused or no answer: nothing went (d55: "Deleted undefined scans")
+    toast(deleteFailMsg(res ? res.status : 0, 0), 5000);
+    if (res && res.status === 403) refreshRole();
+    poll();
+    return;
+  }
   focusedId = null; listSig = ""; detailSig = "";
   await poll(); renderDetail();
   toast(`Deleted ${r.deleted} scan${r.deleted===1?'':'s'}`);
@@ -2393,7 +2636,14 @@ async function clearScans(only){
 $("#clearJunkBtn").addEventListener("click", () => clearScans("unselected"));
 $("#clearAllBtn").addEventListener("click", () => clearScans(null));
 $("#clearFlagBtn").addEventListener("click", () => clearScans("flagged"));
-$("#exportBtn").addEventListener("click", openCsvBuilder);
+// Rows waiting in their Undo window go first (d55): the stats already leave them out, so the
+// file and its preview must too — the server would still export them until their DELETE lands.
+// Waits ≤ 3 s: a DELETE the phone never answers (gone from the LAN) must not leave Export dead —
+// the builder's preview is the server's own answer either way.
+$("#exportBtn").addEventListener("click", async () => {
+  await Promise.race([commitDeletes(false), new Promise(r => setTimeout(r, 3000))]);
+  openCsvBuilder();
+});
 
 /* ── Export to CSV builder ──────────────────────────────────────────────────
    The layout lives on the server (one per scanner, export_layout.json), is
@@ -2406,7 +2656,9 @@ const CSV_PRESETS = {
   priced: ["quantity", "name", "set_code", "set_name", "collector_number", "condition", "finish", "price", "total"],
 };
 async function openCsvBuilder(){
-  const r = await jget("/api/export/layout");
+  const res = await adminFetch("/api/export/layout", undefined, "open the export");
+  const r = res && await res.json().catch(() => null);
+  if (!r || !Array.isArray(r.fields)) return;     // refused (said so): no half-built builder
   csvFields = r.fields; csvDefault = r.default; csvLayout = r.layout;
   $("#csvAdd").innerHTML = `<option value="">+ Add column…</option>` +
     csvFields.map(f => `<option value="${esc(f.field)}">${esc(f.header)}</option>`).join("");
@@ -2438,12 +2690,12 @@ function csvChanged(rerender){
   if (rerender) renderCsvBuilder(); else csvPreview();
   clearTimeout(csvSaveT);
   csvSaveT = setTimeout(async () => {
-    const r = await jsend("/api/export/layout", "PUT", { layout: csvLayout });
-    const m = $("#csvMsg");
-    m.classList.toggle("err", !!r.error);
-    m.textContent = r.error ? r.error : "Layout saved";
+    if (await adminFetch("/api/export/layout", jsonOpts("PUT", { layout: csvLayout }), "save the layout", csvSay))
+      csvSay("Layout saved", false);
   }, 300);
 }
+// The builder's own line (#csvMsg) — it sits over the page's toast.
+function csvSay(t, err = true){ const m = $("#csvMsg"); m.textContent = t; m.classList.toggle("err", err); }
 $("#csvList").addEventListener("input", e => {
   const row = e.target.closest(".ccol"); if (!row) return;
   const c = csvLayout.columns[+row.dataset.i];
@@ -2481,12 +2733,12 @@ $("#csvCombine").addEventListener("change", e => { csvLayout.combine = e.target.
 $("#csvClose").addEventListener("click", closeCsvBuilder);
 $("#csvModal").addEventListener("click", e => { if (e.target.id === "csvModal") closeCsvBuilder(); });
 document.addEventListener("keydown", e => { if (e.key === "Escape" && $("#csvModal").classList.contains("open")) closeCsvBuilder(); });
-$("#csvTxt").addEventListener("click", () => { window.location = "/api/export"; });
+// Fetched, not navigated to (d57): a refusal said nothing and left the page for the error.
+$("#csvTxt").addEventListener("click", () => adminDownload("/api/export", "cards.txt", "download the TXT", csvSay));
 $("#csvDl").addEventListener("click", async () => {
   clearTimeout(csvSaveT);                 // the download reads the SAVED layout
-  const r = await jsend("/api/export/layout", "PUT", { layout: csvLayout });
-  if (r.error) { $("#csvMsg").textContent = r.error; $("#csvMsg").classList.add("err"); return; }
-  window.location = "/api/export.csv";
+  if (!(await adminFetch("/api/export/layout", jsonOpts("PUT", { layout: csvLayout }), "save the layout", csvSay))) return;
+  adminDownload("/api/export.csv", "cards.csv", "download the CSV", csvSay);
 });
 function parseCsv(text, d){
   const rows = []; let row = [], cell = "", q = false;
@@ -2507,9 +2759,11 @@ function csvPreview(){
     // Sequenced, and parsed with the layout it was ASKED for: a slow older
     // reply must neither land last nor be read with newer settings.
     const seq = ++csvPrevSeq, lay = JSON.parse(JSON.stringify(csvLayout));
-    const r = await jsend("/api/export/preview", "POST", { layout: lay });
+    let said = null;
+    const res = await adminFetch("/api/export/preview", jsonOpts("POST", { layout: lay }), "preview the export", m => { said = m; });
+    const r = res && await res.json().catch(() => null);
     if (seq !== csvPrevSeq) return;
-    if (r.error){ $("#csvPrev").innerHTML = ""; $("#csvRaw").textContent = r.error; return; }
+    if (!r || typeof r.csv !== "string"){ $("#csvPrev").innerHTML = ""; $("#csvRaw").textContent = said || "Couldn't preview the export"; return; }
     const d = { comma: ",", semicolon: ";", tab: "\t" }[lay.delimiter];
     const rows = parseCsv(r.csv, d);
     const head = lay.header ? rows.shift() : null;
@@ -2668,8 +2922,14 @@ function renderAppLog(){
 async function pollAppLog(){
   let r;
   try { r = await fetch(`/api/debug/log?since=${dbgSeq}`); } catch(e){ return; }
+  if (lostSession("/api/debug/log", r)) {            // the session is gone: say so once, stop polling
+    clearInterval(f2fLogTimer); f2fLogTimer = null;
+    toast(failMsg("read the app log", 401), 5000);
+    return;
+  }
   if (!r.ok) { if (dbgHasApp === null) { dbgHasApp = false; setDbgTab("f2f"); } return; }
-  const d = await r.json();
+  const d = await r.json().catch(() => null);
+  if (!d) return;
   if (dbgHasApp !== true) { dbgHasApp = true; $("#dbgTabApp").style.display = ""; }
   if (d.seq < dbgSeq) dbgLines = [];                  // the phone restarted: its log starts again
   dbgSeq = d.seq;
@@ -2716,13 +2976,16 @@ async function copyText(t){
   if (!ok) throw new Error("copy refused");
 }
 $("#dbgCopy").addEventListener("click", async () => {
+  // Refused: said why, nothing copied (d57: the 403's JSON was copied as "the report").
+  const res = await adminFetch("/api/debug/report.txt", undefined, "copy the report");
+  if (!res) return;
   try {
-    const t = await (await fetch("/api/debug/report.txt")).text();
+    const t = await res.text();
     await copyText(t);
     toast("Debug report copied — paste it to Claude");
   } catch(e){ toast("Couldn't copy — use Download instead"); }
 });
-$("#dbgSave").addEventListener("click", () => { window.location = "/api/debug/report.txt"; });
+$("#dbgSave").addEventListener("click", () => adminDownload("/api/debug/report.txt", "cardscanner-debug.txt", "download the report"));
 
 /* ── Scanner phone settings (phone server only; admin only) ──────────────────
    GET/PATCH /api/device + /api/device/snapshot.jpg. The computer's own server
@@ -2746,12 +3009,12 @@ const devCamViewOk = () => Array.isArray(dev?.snapshot_views) && dev.snapshot_vi
 async function devLoad(){
   try {
     const r = await fetch("/api/device");
-    if (!r.ok) return null;
+    if (!r.ok || lostSession("/api/device", r)) return null;
     return await r.json();
   } catch(e){ return null; }
 }
+// Called by refreshRole whenever the page becomes admin (at load, or when full access is turned on).
 function devShowBtn(){ devLoad().then(d => { if (d) { dev = d; $("#devBtn").style.display = ""; } }); }
-fetch("/api/me").then(r => r.ok ? r.json() : null).then(d => { if (d && d.role === "admin") devShowBtn(); }).catch(() => {});
 function devMsg(t, err){ $("#devMsg").textContent = t || ""; $("#devMsg").classList.toggle("err", !!err); }
 function devRender(){
   if (!dev) return;
@@ -2892,7 +3155,15 @@ function devDrawRoi(){
 async function devPatch(body){
   devMsg("Saving…");
   try {
-    const r = await jsend("/api/device", "PATCH", body);
+    const res = await fetch("/api/device", jsonOpts("PATCH", body));
+    // 401 / 403: why (d57 — the 403 body read "only the scanner's owner can do that — flag it for
+    // deletion instead"); any other refusal is the phone's own words (a lens it doesn't offer …).
+    if (res.status === 401 || res.status === 403) {
+      devMsg(failMsg("save that setting", res.status), true);
+      if (res.status === 403) refreshRole();
+      return false;
+    }
+    const r = await res.json();
     if (r.error || r.detail) { devMsg(r.error || r.detail, true); return false; }
     // A zoom / Area / lens change: the answer's zoom may be from BEFORE it (the phone applies
     // it on its own UI thread; 1.1.14 before its review answered at once). Show "applying…"
@@ -2960,6 +3231,8 @@ function devSnapshot(){
   };
   devCamBusy = true;
   fetch("/api/device/snapshot.jpg?view=camera&t=" + Date.now()).then(async r => {
+    if (lostSession("/api/device/snapshot.jpg", r))
+      throw new Error("this browser is no longer signed in to the phone; reload the page to join again");
     if (!r.ok) {
       let e = ""; try { e = (await r.json()).error || ""; } catch(_){}
       throw new Error(e || `the phone answered ${r.status}`);
@@ -2978,7 +3251,16 @@ function devSnapshot(){
     .finally(() => { devCamBusy = false; });
 }
 async function openDev(){
-  const d = await devLoad();
+  // 401 / 403: say why (d57 — it read "aren't available"); a 404 = no phone behind this server.
+  let d = null;
+  const res = await fetch("/api/device").catch(() => null);
+  const status = lostSession("/api/device", res) ? 401 : res ? res.status : 0;
+  if (status === 401 || status === 403) {
+    toast(failMsg("open the scanner's settings", status), 5000);
+    if (status === 403) refreshRole();
+    return;
+  }
+  if (res && res.ok) d = await res.json().catch(() => null);
   if (!d) { toast("The scanner phone's settings aren't available"); return; }
   dev = d; devDraft = null; devMsg("");
   devView = "base";                             // the panel always opens on the whole frame
@@ -3075,8 +3357,9 @@ $("#devStage").addEventListener("pointerup", () => {
 
 /* ── manual sweep start ──────────────────────────────────────────────────── */
 $("#sweepStartBtn").addEventListener("click", async () => {
-  const r = await jsend("/api/scans/price-missing", "POST", {});
-  toast(r.already_running ? "Sweep already running"
+  const res = await adminFetch("/api/scans/price-missing", jsonOpts("POST"), "start the price sweep");
+  const r = res && await res.json().catch(() => ({}));
+  if (r) toast(r.already_running ? "Sweep already running"
     : r.queued ? `Sweep started — ${r.queued} prices to fetch` : "Nothing needs pricing");
   poll();
 });

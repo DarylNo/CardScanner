@@ -221,6 +221,47 @@ class PhoneServerTest {
         assertTrue(page(base, admin, "/api/scans").contains("Join the card scanner"))
     }
 
+    /**
+     * Settings → "Guests get full access" (owner, 2026-11-05: "Any guest to the web site to pick
+     * cards has full admin access"; on by default): end to end on the real API, a Share-code
+     * session deletes and exports while it is on, and is refused (403) the moment it goes off —
+     * no re-join; a client's own role header never helps; no cookie never reaches the data.
+     */
+    @Test fun guestsGetFullAccessWhileTheSettingIsOn_andLoseItTheMomentItGoesOff() {
+        val admins = AdminPairing(null)
+        var full = true
+        val g = GatewayServer(LocalUpstream(backend), port = 0, hostname = "127.0.0.1", admins = admins,
+            guestsFullAccess = { full }).also { gateway = it }
+        g.startServing()
+        val base = "http://127.0.0.1:${g.listeningPort}"
+        fileTwo(); fileTwo()                      // scans 1..4
+        fun me(cookie: String) = client.newCall(Request.Builder().url("$base/api/me").header("Cookie", cookie).build())
+            .execute().use { MiniJson.parse(it.body!!.string()) }
+        // no cookie: still the code page — the setting never opens the door
+        client.newCall(Request.Builder().url("$base/api/scans/1").delete().build()).execute().use { r -> assertEquals(401, r.code) }
+        assertTrue(!page(base, "x=1", "/api/scans").startsWith("["))
+        val guest = joinCookie(base, g.code, GatewayServer.COOKIE)!!
+        assertEquals(mapOf("role" to "admin"), me(guest))
+        assertEquals(200, req(base, guest, "DELETE", "/api/scans/1"))
+        assertEquals(200, req(base, guest, "GET", "/api/export.csv"))
+        assertEquals(200, req(base, guest, "PATCH", "/api/scans/2", """{"included":false}"""))
+        assertEquals(listOf(4L, 3L, 2L), store.list().map { it["id"] })
+        full = false                              // flipped in Settings: the open session is a guest at once
+        assertEquals(mapOf("role" to "guest"), me(guest))
+        assertEquals(403, req(base, guest, "DELETE", "/api/scans/2"))
+        assertEquals(403, req(base, guest, "GET", "/api/export.csv"))
+        assertEquals(403, req(base, guest, "DELETE", "/api/scans/2", extra = GatewayServer.ROLE_HEADER to "admin"))
+        assertEquals(200, req(base, guest, "PATCH", "/api/scans/2", """{"flagged":true}"""))
+        assertEquals(listOf(4L, 3L, 2L), store.list().map { it["id"] })
+        full = true                               // and back
+        assertEquals(200, req(base, guest, "DELETE", "/api/scans/2"))
+        assertEquals(listOf(4L, 3L), store.list().map { it["id"] })
+        // stopping sharing still ends every guest session, full access or not
+        g.stopSharing()
+        assertTrue(page(base, guest, "/api/scans").contains("Join the card scanner"))
+        assertEquals(listOf(4L, 3L), store.list().map { it["id"] })
+    }
+
     @Test fun theAdminCodeHasItsOwnBudgetAcrossAddresses() {
         // spread over many LAN addresses no IP is locked out — the code itself retires
         val admins = AdminPairing(null)

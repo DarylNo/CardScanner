@@ -62,7 +62,7 @@ Modules and packages (`io.github.darylno.cardscanner`):
 | `app/phoneserver` | `PhoneServer` (the phone's server: `SqliteScanStore`, `PhotoDir`, `PhoneBackend` over `:core`'s `PhoneApi`/`PriceSweep`/`Export`/`DeviceApi`), `LocalScanUploader`, `LocalUpstream`, `PhoneF2f`, `DeviceBridge`. |
 | `app/gateway` | `GatewayServer` (NanoHTTPD, roles: `AdminPairing`), `JoinCode`, `LocalAddresses`, `GatewayService` (foreground service that keeps the phone serving), `QrBitmap`. |
 | `app/f2f` | `F2fFetcher` (port of `facetoface._default_get_json` pacing/retry, parity-tested against `app/src/test/resources/f2f/pacing.json`), `F2fPricer` (query ladder + SKU confirmation), `F2fCache`, `OkHttpTransport` / `CronetTransport`, `F2fProbe` (the network test). |
-| `app/ui` | `MainActivity`, `OverlayView`, `PanelActivity` (review WebView of the phone's own pages), `ShareActivity` (guest code), `SettingsActivity` + `ServerSection` (this phone's server: pair a computer, card database, storage), `AppSettings`. |
+| `app/ui` | `MainActivity`, `OverlayView`, `PanelActivity` (review WebView of the phone's own pages), `ShareActivity` (guest code), `SettingsActivity` + `ServerSection` (this phone's server: pair a computer, Guests get full access, card database, storage), `AppSettings`. |
 
 Rules the app keeps (see also CLAUDE.md → "Android app"):
 
@@ -194,6 +194,10 @@ yet…", and after a couple of seconds the app adopts it as the empty tray.
 shows the lens in use; swipe or tap it to step through Automatic and each back
 camera. Settings → Camera picks from a list, and a paired computer's
 📱 Scanner panel has the same choice. Automatic is camera 0 facing back.
+With Settings → Camera → **Zoom to fit the Area** on, a white crosshair on the
+preview marks the centre of the Area (the screen centre with none) — aim the
+card's centre there; a dot in the outline's colour marks the card's own centre.
+It hides while you draw an Area and under the capture ✓.
 
 **Tap to scan** — tap the shutter. It always scans inside a scan Area: if
 none is set, the app draws one for you — a card-shaped box in the middle of
@@ -239,12 +243,31 @@ the same network could copy the admin cookie.
 ## Guests (Share)
 
 **Share** shows the **6-digit guest code**, a QR and the phone's addresses.
-Guests on the same Wi-Fi (or your hotspot) open the link and enter the code:
-they can review, pick and edit, and a swipe **flags** a scan for deletion — the
-admin confirms with **Delete flagged (n)**. They can't delete, clear, export
-or run pricing (the phone refuses them, not just the page). **New guest code**
-ends every guest session; the server keeps running. 8 wrong codes from one
-device within 5 minutes lock it out for 5 minutes.
+Guests on the same Wi-Fi (or your hotspot) open the link and enter the code.
+What they may do is Settings → *This phone's server* → **Guests get full
+access** (on by default; the phone applies it at once, to guests already
+connected too, and an open guest page gains or loses its controls within 30 s,
+no reload — a control used before then says why it was refused):
+
+- **On:** a guest is treated like the paired computer — delete (a swipe on the
+  phone page, the 🗑 on a row of the computer page, both with a 5 s Undo),
+  clear, export, run pricing and change the scanner's settings. Deleting is for
+  good: the phone holds the only copy of the scans. The Share screen says so.
+- **Off:** a guest can review, pick and edit, and a swipe **flags** a scan for
+  deletion — the admin confirms with **Delete flagged (n)**. They can't delete,
+  clear, export or run pricing (the phone refuses them, not just the page).
+
+**New guest code** ends every guest session; the server keeps running. 8 wrong
+codes from one device within 5 minutes lock it out for 5 minutes ("Too many
+wrong codes from this device"). 20 wrong codes from all devices together within
+5 minutes change the code and **pause joining** for everyone new ("Too many wrong
+codes on this network — joining is paused for N min") until the oldest of them
+is 5 minutes old — a right code waits too, so a search spread over many addresses
+gets at most 20 guesses in any 5 minutes. Guests already in, the paired computer
+and the phone's own review screen carry on; New guest code ends the pause. The
+code also changes after every 20 wrong codes since it last changed, at any pace
+(so a slow search never faces one code for long) — read the current one off the
+Share screen.
 
 ## Signing setup
 
@@ -343,6 +366,10 @@ Run on the Nord N200 after installing a new build:
       reads "no card shape yet", then the view is adopted as the empty tray.
 - [ ] The outline sits on the card, turns blue with the ✓ on capture, and stays
       (grey) on the card until it is lifted.
+- [ ] Zoom to fit on: the white crosshair sits at the Area's centre on the
+      zoomed preview and reads on the tray; a card's dot lines up with it when
+      the card is centred; it goes away while drawing an Area and under the ✓.
+      Zoom to fit off: no crosshair.
 - [ ] Every control is visible at the bottom: Tray|Tap · ⚙, then Share over
       Scans · shutter · Area.
 - [ ] Camera pill (if shown): swiping steps the lens and re-learns the tray;
@@ -358,9 +385,18 @@ Run on the Nord N200 after installing a new build:
 - [ ] Force-stop the app with jobs queued → relaunch → they are identified.
 - [ ] Settings → Pair a computer as admin → the computer opens the list and
       can export CSV; 📱 Scanner changes the phone's torch/mode live.
-- [ ] Share: a second phone joins via QR and via typed code as a guest (can
-      flag, can't delete); wrong code 8× → locked out; New guest code → the
-      guest is signed out and the old code fails, the computer stays in.
+- [ ] Share: a second phone joins via QR and via typed code as a guest — with
+      Guests get full access on it can delete (swipe, 5 s Undo); turned off in
+      Settings, its next delete is refused with no re-join — the page says
+      "Couldn't delete … no longer has full access", puts the scan back and
+      turns into the guest page (a swipe flags); wrong code 8×
+      → "Too many wrong codes from this device"; New guest code → the guest is
+      signed out and the old code fails, the computer stays in.
+- [ ] The computer's list: 🗑 on a row (hover) → the row goes, Undo brings it
+      back (an open card opens again); left alone 5 s the scan is gone from the
+      phone too. Tab to a 🗑 and press Enter → focus jumps to Undo; Enter again
+      restores it. Delete a row near the bottom → the last row's 🗑 is still
+      clickable above the Undo bar.
 - [ ] Screen off for 10 minutes: the computer and guests still get through.
 - [ ] Settings → Diagnostics shows the camera setting, every offered lens,
       the bound camera, hardware level, analysis size and capture timings;
@@ -389,4 +425,5 @@ Run on the Nord N200 after installing a new build:
   to Face): offline captures wait in the queue and are identified when the
   phone is back online.
 - The local network leg (a computer, guests) is plain HTTP: pair a computer only
-  on a network you trust. Guests can review and flag, not delete (see above).
+  on a network you trust. With Guests get full access on (the default) the
+  Share code can delete and export too (see above).

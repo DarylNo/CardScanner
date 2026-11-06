@@ -821,7 +821,23 @@ lens on testers' phones), minSdk 29, arm64-v8a.
   for the whole drawing). **With the switch off none of
   this runs** — no zoom call, no gate, no settle: the Area reaches the analyzer
   as `zoomMapped(1.0, Area, settle = false)`, the pre-zoom setRoi path event for
-  event (`zoomOffIsTheOldPathEventForEvent`). **What shows it:** the Area chip
+  event (`zoomOffIsTheOldPathEventForEvent`). **The aimer (owner, 2026-11-05:
+  "if in zoom mode I want a aimer for card centre"; 1.1.19):** with the switch on
+  (`overlay.aimer = zoomFit && !drawing`, `MainActivity.updateAimer` — on every
+  Area change, onZoom, drawing start / Cancel and wherever `setZoomFit` is
+  pushed), Tray and Tap to scan alike, `OverlayView` draws a crosshair at the
+  centre of the Area it draws — the VIEW Area, the frame centre with none (four
+  12 dp arms, a 5 dp gap, white 2 dp over a black-α110 4 dp halo, so it reads on
+  a white or a dark tray) — and a 3.5 dp dot in the shape's state colour at the
+  drawn card's centre (the mean of its 4 corners; a SOLID shape only, never the
+  dashed watch window), so the card is lined up by eye. Hidden while an Area is
+  drawn (from the request, also while zooming out) and under ANY capture ✓ (the
+  hold, and the plain CAPTURED state — the ✓ sits at the card's centre).
+  `Plan.aim` / `Plan.cardCentre` are the pure decision (`OverlayViewTest`;
+  `ScreensSmokeTest` at the N200's size: the view Area's centre after
+  `onZoom(1.55…)`, on screen, gone while drawing, back on Cancel, none with the
+  switch off). Display only — nothing reaches the analyzer, detection, focus,
+  the logs or `/api/device`. Tested in code, not on the phone. **What shows it:** the Area chip
   reads "Area ✓ · 1.55×" while zoomed; the capture line ends "… @ 1.55×"; tag
   `zoom` logs each request ("→ 1.55× requested (why) · 1.55× (limited by the
   Area fit)"), what the camera reports (CONTROL_ZOOM_RATIO, the crop region and
@@ -965,6 +981,107 @@ lens on testers' phones), minSdk 29, arm64-v8a.
   the page reports its pending ids to `CardScannerApp.pendingDeletes` and
   `PanelActivity.onPause` deletes them itself (`PhoneServer.deleteScansAsOwner`)
   — without that, swiped scans came back.
+- **The desktop list deletes per row too, with the same 5 s Undo (owner,
+  2026-11-05: "I want delete options here in the list"; desktop d54).** A 🗑
+  on each scan row (`.rdel`, `admin-only` and rendered for `role === "admin"`
+  only — a restricted guest never sees it): shown on hover or keyboard focus
+  (opacity, so it stays in the tab order), always on a touch screen
+  (`hover: none`); its click stops propagation and the row handler ignores
+  `[data-del]`, so it never opens the row. phone.html's swipe, ported: the row
+  leaves the list at once (`liveScans()` — `visibleScans`, the stats and the
+  clear counts all read it, so the row signature drops it with no new field),
+  an Undo bar over the list column ("Scan deleted" / "N scans deleted") holds
+  the DELETE for `UNDO_MS` 5000; several can wait, Undo restores every one
+  still waiting; `pagehide` / a hidden tab send what waits (`keepalive`);
+  "Clear …" sends it first. Deleting the card open on the right clears the
+  pane. A SENT id stays hidden until a poll STARTED after its DELETE answered
+  is applied (`settleDeletes`; `poll` now drops an answer older than the newest
+  applied), so no in-flight poll flashes it back; a refused DELETE (403 — full
+  access turned off meanwhile) shows the row again with a toast.
+  **Review of d54 (desktop d55, phone v57):** the list gets bottom room while the
+  bar shows (`#list.undoing` — the bar sat over the last row's 🗑, so a second
+  delete near the bottom hit Undo); Enter / Space on a 🗑 (a click with
+  `detail` 0) moves focus to Undo — the re-render dropped it to `<body>`, Undo
+  dozens of Tabs away — and a keyboard Undo puts it back on the restored row's
+  🗑; Undo re-opens the card that was open when its row went (`reopenId`, never
+  over a card opened meanwhile); Export sends what waits FIRST (the stats leave
+  it out, the server would still export it); EVERY delete path says why it did
+  not happen (`deleteFailMsg`): a 403 is "no longer has full access (the phone's
+  owner turned it off)" — never "try again" — and re-asks `/api/me`
+  (`refreshRole`), so the controls go; no answer is "try again". Before, the
+  detail's "Delete this scan" toasted "Scan deleted" on a 403, Clear read
+  "Deleted undefined scans", phone.html put a swiped scan back silently, and a
+  refusal while the tab was hidden was never told (now kept in `deferredMsg`
+  until the tab is back). phone.html's `#flash` sits above every panel
+  (`position: fixed`, z 30 — it was in the list, under an open card) with a
+  `.bad` colour, and Clear says its result there too (the status line is hidden
+  in the app). `scripts/check_row_delete_ui.py` drives all of it in Chromium
+  (admin, touch, keyboard, 30 rows, refusals on every path, a hidden tab,
+  Export, a restricted guest, phone.html) — 19 of its checks fail on d54/v56;
+  `test_static_pages.py` guards it in CI. **Re-review (desktop d56, phone v58):**
+  a 401 (the session is gone — a new guest code, "Forget paired computers") reads
+  "no longer signed in … reload the page to join again", another status "the
+  phone refused it (HTTP n); try again", only no answer "didn't answer"
+  (`worstStatus` picks a batch's words: 403, 401, any status, none); a MOUSE
+  Undo leaves focus alone (`e.detail === 0`, as on the 🗑 — Chrome focuses a
+  clicked button, so the restored 🗑 stayed shown and the next Space deleted it
+  again); Export waits ≤ 3 s for those DELETEs (one the phone never answers left
+  Export dead); phone.html's `#flash` takes no taps and is lifted above the Undo
+  bar while it shows (`body.undoing`) — a 5 s "try again" notice sat exactly on
+  Undo, so a tap there did nothing and the swiped scan went for good.
+  **Final review (desktop d57, phone v59):** a 🗑's click with `e.detail > 1` is
+  ignored — the 2nd click of a double-click landed on the row that slid up under
+  the pointer and deleted it too (Enter / Space are detail 0, a 1st click 1). The
+  Undo bar is 316 px wide (x 16–332): the 🗑s sit at x 356–387 of the 400 px
+  column at every window width — from x ~340 with a classic 16–17 px scrollbar
+  (Windows Chrome; headless Chromium hides scrollbars, so the check runs a pass
+  with them shown) — and at 368 px (to x 384) a second delete at the
+  same spot MID-list — where d55's room at the end does nothing — hit Undo. The
+  toast lifts to `bottom: 76px` while the bar shows (`body.undoing`; the bar is
+  y 890–934 at 950 px high, a long refusal sat at 868–930 over it at ≤ 1280 px
+  wide) and sits above the 🐞 panel (z 65 > 60: its Copy report / Download words
+  were behind it). A keyboard delete left to run hands focus, as the bar goes, to
+  the 🗑 of the row that took its place (`kbNext`: below, else above), else the
+  first 🗑, else the name filter (it fell to `<body>`), and a list re-render keeps
+  a focused 🗑 focused (`preventScroll`). Every admin-only call (`ScanServer.adminOnly`)
+  goes through `adminFetch` on both pages — `failMsg(what, status, detail)` is
+  `deleteFailMsg`'s words for any action (403 full access, 401 signed in, a
+  400 / 422 the phone's own words, HTTP n, no answer), a 403 re-asks `/api/me`:
+  the builder opens only on its layout (a 403 threw on `r.fields` and nothing
+  said why), a layout save / the preview / Download CSV / TXT / the 🐞 report
+  say why in place (the downloads are fetched then saved under the server's
+  Content-Disposition name — navigating left the page for the error JSON),
+  the include box is put back, ▶ Sweep / ■ Stop / Price missing no longer say
+  "Nothing needs pricing" / "stopping", Exclude filtered stops at the first
+  refusal and says how far it got, the 📱 panel says why (its 403 body read "flag
+  it for deletion instead"). Both pages re-read the role (above, "Roles") and
+  re-render only when it CHANGES (a 30 s re-render of the open card would wipe a
+  typed name search). phone.html takes desktop's delete model: committed ids move
+  from `pendingDel` to `sentDel` (Undo clears only `pendingDel` — it "restored"
+  a scan whose DELETE was in flight, and the bar counted it); a sent id stays
+  hidden until a refresh STARTED after its DELETE answered is applied
+  (`settleDeletes`, `pollSeq` / `pollApplied` — Chromium holds a second GET of
+  `/api/scans` behind the first, so the stale list still flashed the row for
+  ~5 ms before the fresh one, longer on a LAN); the app hears every id still owed
+  (waiting, or sent with no answer). Clear counts the list as shown
+  (`liveScans()`) and sends what waits first (≤ 3 s) — the question counted
+  swiped rows and the bar stayed up after the clear; desktop's Clear waits for
+  them too, so "Deleted n" answers "Delete n?". `check_row_delete_ui.py`: 54
+  checks fail on d56/v58 (+ the 2 banner pins), all 199 pass on d57/v59.
+  **Its review (desktop d58, phone v60):** with no session the gateway answers a
+  GET with its join page (200 text/html), and d57's fetched downloads took that
+  for the file — Download TXT / CSV and the 🐞 Download saved the join page as
+  cards.txt / cards.csv / cardscanner-debug.txt and said nothing (d56 navigated
+  to the join page). `adminFetch` now reads an `/api` answer in HTML as a lost
+  session (401: "no longer signed in … reload the page to join again") on both
+  pages, so no admin call ever takes the join page for an answer; the check's
+  stub has a "session gone" mode (4 checks fail on d57); 206 + the scrollbar
+  pass pass on d58 / v60. **Its review (d59):** every raw admin GET asks the same
+  `lostSession(url, res)` — the 📱 panel opening ("aren't available" → "no longer
+  signed in"), its load and Camera view, and the 🐞 App log poll (it threw a JSON
+  error every 1.5 s and froze silently; now it says so once and stops); the stub's
+  session-gone mode answers PUT 401 too (the layout save is what Download CSV
+  meets first). 4 checks fail on d58.
 - **The live log** (`core/DebugLog.global`, a 3000-line ring, mirrored to
   logcat as `CardScanner`): triggers (box, mask %), captures (`done #k`:
   flattened or not, card px, the three frames' sharpness, the chosen frame's
@@ -1231,19 +1348,83 @@ lens on testers' phones), minSdk 29, arm64-v8a.
   ("…" until then, one Delete-all dialog at a time); the debug log says
   "store … opened in N ms".
 - **Roles.** A computer pairs as ADMIN with a one-time 8-digit code (10 min,
-  single use, its own budget of 10 wrong tries, retired by a guest-code
-  rotation) → a long-lived `cs_admin` cookie (only its SHA-256 on disk;
-  "Forget paired computers" revokes). The 6-digit Share code makes a GUEST:
-  review/pick/edit/flag — no delete, clear, export, PATCH `included`, sweep
-  controls or `/api/device` (`ScanServer.adminOnly`, 403). The gateway sets
+  single use, its own budget of 10 wrong tries, behind the same lockout and
+  pause as the Share code, retired when a pause starts) → a long-lived
+  `cs_admin` cookie (only its SHA-256 on disk; "Forget paired computers"
+  revokes). The phone's own review screen is admin
+  via `AdminPairing.ownerToken` (in memory, never persisted or counted,
+  untouched by Forget). The 6-digit Share code's role is a SETTING —
+  **"Guests get full access"** (Settings → This phone's server,
+  `AppSettings.guestsFullAccess`, **ON by default**; owner, 2026-11-05, a
+  screenshot of the desktop page with the "guest" pill and no delete: "I want
+  delete options here in the list. Any guest to the web site to pick cards has
+  full admin access"; 1.1.19): ON, a Share-code session is proxied as ADMIN —
+  delete, clear, export, PATCH `included`, the sweep, `/api/device`, the app
+  log; OFF, it is a GUEST: review/pick/edit/flag, refused (403) the rest
+  (`ScanServer.adminOnly`). `GatewayServer.roleOf` asks the setting on EVERY
+  request (a provider from `PhoneServer.newServer`; a throwing one = off), so
+  a flip reaches sessions already open at once — no re-join; an open page
+  re-reads `/api/me` every 30 s (`ROLE_REFRESH_MS`) and when its tab comes
+  back, so it gains or loses its admin controls within 30 s, no reload, either
+  way (d57 / v59 — before, a page loaded as a guest never gained them); a
+  control used before then is refused by the server and says why (every admin
+  call goes through `adminFetch`; a 403 re-asks `/api/me` at once). A flip is logged once under `server` (never a code); Settings
+  says plainly what ON gives away (delete is for good — the phone holds the
+  only copy), the Share screen's amber card follows the setting, and
+  Diagnostics has a `guests (Share code):` line. The setting never opens the
+  door: no session = the code page, as before. The gateway sets
   `x-cardscanner-role` on every proxied request and DROPS a client's own (no
-  header = guest, fail closed). The phone's own review screen is admin via
-  `AdminPairing.ownerToken` (in memory, never persisted or counted, untouched
-  by Forget). Pages start as guest (`<body class="guest">`) until `/api/me`
-  answers; a guest's swipe flags, the admin gets "Delete flagged (n)" (only
-  the ids it confirmed). The gateway answers LAN/hotspot peers only (socket
-  address, not headers), locks an IP after 7 bad codes, and rotates the code
-  after 20 bad codes from anywhere in 5 min.
+  header = guest, fail closed). Pages start as guest (`<body class="guest">`)
+  until `/api/me` answers; a guest's swipe flags, the admin gets "Delete
+  flagged (n)" (only the ids it confirmed). The gateway answers LAN/hotspot
+  peers only (socket address, not headers) and locks an IP at its 8th bad code
+  in 5 min (for 5 min: 429 "Too many wrong codes from this device").
+  **The join pause (final review of 1.1.19, a probe that joined after ~0.4–2.4 M
+  guesses, never locked):** the 20th bad code in 5 min from ALL addresses (6-
+  or 8-digit) rotates the code, retires a waiting admin code and PAUSES joining
+  for every address — a right code is refused like any other (429 "Too many
+  wrong codes on this network — joining is paused for N min", Retry-After) —
+  until the oldest of the 20 is 5 min old. Before, that 20th RESET every count,
+  so 3 addresses sending 7 / 7 / 6 in turn (IPv4 aliases, fe80::/fc00:: — all
+  `isLocalClient`) never locked and guessed at the request rate (~10⁶ requests,
+  1–3 h — and a Share-code session is admin by default). Now nothing but time
+  (and the owner's New guest code, `stopSharing`) empties the count: ≤ 20
+  codes compared in any 5 min, ≈ 10⁶ / 20 × 5 min ≈ 174 days expected (≈ 0.6 %
+  per day of non-stop guessing). The cost: while bad codes keep coming nobody
+  NEW joins or pairs (the attacker takes each slot as it frees, and each slot
+  it fills starts a pause again — the code changes with it: 221 times in the
+  test's hour at 50/s); once they stop, ≤ 5 min. Sessions already in, the
+  paired computer (`cs_admin`) and the phone's own review screen (owner token)
+  never need a code and carry on. **The code also changes every 20 wrong codes
+  since it last changed, at any pace** (re-review: a search paced just UNDER the
+  pause — one code every 15.79 s over 3 addresses — never filled the window, so
+  the code never changed and it walked 10⁶ against ONE code, ≈ 91 days average;
+  a probe joined at guess 132 708): no code faces more than 20 guesses, so the
+  ≈ 174 days holds at any pace; one line per change ("… since the guest code
+  last changed — guest code rotated (… no pause)"), and the Share screen shows the
+  new code at once — it FOLLOWS the gateway while on screen (`GatewayPort.changes`
+  = the service's status flow, collected under `repeatOnLifecycle(STARTED)`; its
+  final review: it drew only in onCreate / onResume / its buttons, so it kept the
+  OLD code and QR on the mount — a guest scanning it was refused — and "New guest
+  code" drew before the service had rotated; `shareActivity_followsACode…` at the
+  N200's size). **A clock set back** (NTP, the owner) stretched a pause by the whole
+  step (a day → 1445 min): entries stamped after now count as now and no lockout
+  runs past 5 min from now. A lockout and a pause are each logged ONCE
+  under `server`, when they start ("8 wrong join codes from <ip> within 5 min —
+  that address is locked out 5 min", "20 wrong join codes within 5 min — guest
+  code rotated, joining paused 5 min"); a refused join is not logged (one device
+  hammering /join used to push the 3000-line log out). Tested: `GatewayServerTest`
+  (the role header per request, flipped live, a client's own dropped, no cookie
+  refused; the 7 / 7 / 6 attack — 100 000 tries at one instant compare 20 and
+  join none, where the old rule joined; an hour at 50/s from 5 addresses — 240
+  compared, busiest 5 min 20; 64 parallel addresses; the pause's words, Retry-After
+  and one log line; the pause lapsing; sessions, the paired computer and the
+  owner through a pause; an address's count surviving a rotation; a search paced
+  under the pause — 2 000 codes meet 100 codes, ≤ 20 each, where one code took
+  all 2 000; a clock a day back — ≤ 5 min of pause / lockout), `PhoneServerTest` (end to
+  end on the real API), `AppSettingsTest`, `ScreensSmokeTest` (the switch row
+  at the N200's size, the log line, the live provider, Diagnostics, the Share
+  card) — not on the phone.
 - **Scanner settings from the browser** (`core/server/DeviceApi`, admin only):
   GET/PATCH `/api/device` (mode, roi, torch, vibration, high_res, ae_lock,
   check_ms, camera — with the phone's `cameras` listed — zoom_fit, with the
@@ -1305,7 +1486,7 @@ lens on testers' phones), minSdk 29, arm64-v8a.
   verify each finding before fixing, add a test that fails without the fix.
 - Decisions that stand: export is "Export to CSV" (column builder) +
   "Download TXT" — no Mana Exchange branding in the UI; swipe a scan row to
-  delete (5 s Undo); cards/min + battery estimate on the scan screen. The
+  delete (5 s Undo; on the desktop the row's 🗑, same Undo); cards/min + battery estimate on the scan screen. The
   ManaExchange store is the owner's own project (`DarylNo/v0-ManaExchange`);
   an MX-inventory integration was built and REVERTED — ask before rebuilding.
 

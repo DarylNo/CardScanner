@@ -16,6 +16,9 @@ object DiagnosticsText {
         append(" · Android ").append(Build.VERSION.RELEASE).append(" (API ").append(Build.VERSION.SDK_INT).append(")\n")
         append("server ").append(if (app.phoneServer.running) "serving on :${app.phoneServer.port}" else "stopped")
             .append(" · paired computers ").append(app.phoneServer.admins.count).append('\n')
+        append(if (app.settings.guestsFullAccess)
+            "guests (Share code): FULL ACCESS — delete, clear, export, scanner settings (Settings → Guests get full access)\n"
+            else "guests (Share code): review, pick and flag only — delete, export and scanner settings are the paired computer's\n")
         append("card database ").append(app.identify.store.installedManifest()?.let { "${it.rows} rows · ${it.buildDate}" } ?: "none")
             .append('\n')
         append("mode ").append(if (app.settings.auto) "Tray" else "Tap to scan")

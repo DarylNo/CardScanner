@@ -9,13 +9,15 @@ import java.security.SecureRandom
  * Admin pairing for the phone server (owner decision
  * 2026-09-30): the computer pairs ONCE with a one-time 8-digit code
  * shown on the phone and is then remembered — a long-lived `cs_admin` cookie —
- * until revoked on the phone. Everyone else joins as a guest with the 6-digit
- * [JoinCode].
+ * until revoked on the phone. Everyone else joins with the 6-digit [JoinCode]:
+ * a guest, or admin too while Settings → "Guests get full access" is on (the
+ * default; [GatewayServer] asks it per request — this file never sees it).
  *
  *  - [newCode] makes a code valid for [CODE_TTL_MS], usable ONCE; making a new
  *    one or pairing with it retires it. [redeem] runs inside the gateway's
  *    join critical section, so wrong admin codes count toward the same
- *    per-IP lockout and global rotation budget as wrong guest codes.
+ *    per-IP lockout and network-wide pause as wrong guest codes, and no
+ *    admin code is tried while either holds; a pause also retires it.
  *  - Only a SHA-256 of each admin token is kept ([file], so pairings survive
  *    a restart); a copied file can't be replayed as a cookie.
  *  - [revokeAll] forgets every paired computer.
@@ -57,9 +59,9 @@ class AdminPairing(
         if (now >= pendingUntil) { pending = null; return null }
         val g = given.filter { !it.isWhitespace() }
         if (!MessageDigest.isEqual(g.toByteArray(), want.toByteArray())) {
-            // Spread over many LAN addresses a search dodges the per-IP lockout, and the
-            // guest code's rotation resets those counters — so the admin code has its OWN
-            // budget: MAX_WRONG wrong 8-digit tries retire it (the owner makes a new one).
+            // Spread over many LAN addresses a search dodges the per-IP lockout (the gateway's
+            // network-wide pause still caps it at 20 codes in 5 min) — so the admin code has its
+            // OWN budget too: MAX_WRONG wrong 8-digit tries retire it (the owner makes a new one).
             if (g.length == CODE_DIGITS && ++wrong >= MAX_WRONG) pending = null
             return null
         }

@@ -125,11 +125,17 @@
   #undoBar span { flex:1 1 auto; }
   #undoBar button { min-height:40px; padding:0 18px; border-radius:999px; border:0; font-weight:700;
                     background:transparent; color:var(--accent); font-size:15px; }
-  /* A passing notice on the list (a pick just closed the card): the undo bar's look, no button. */
-  #flash { position:absolute; left:12px; right:12px; bottom:calc(12px + env(safe-area-inset-bottom)); z-index:5;
+  /* A passing notice (a pick just closed the card; a delete the phone refused): the undo bar's
+     look, no button. Above every panel (v57: it sat in the list, under an open card's detail). */
+  #flash { position:fixed; left:12px; right:12px; bottom:calc(12px + env(safe-area-inset-bottom)); z-index:30;
            display:none; padding:12px 16px; border-radius:14px; background:#262a35; color:var(--good);
            box-shadow:0 6px 24px #0008; font-size:14px; font-weight:600; text-align:center; }
   #flash.show { display:block; }
+  #flash.bad { color:var(--bad); }
+  /* Never over the Undo bar (a "try again" notice is up for 5 s — exactly when a user swipes again):
+     lifted above it while it shows, and never the target of a tap. */
+  #flash { pointer-events:none; }
+  body.undoing #flash { bottom:calc(84px + env(safe-area-inset-bottom)); }
   .srow .sthumb { flex:0 0 48px; width:48px; height:67px; border-radius:5px; overflow:hidden;
                   background:var(--line); }
   .srow .sthumb img { width:100%; height:100%; object-fit:cover; display:block; }
@@ -343,8 +349,8 @@
     <div id="sweepInfo" style="display:none"></div>
     <div class="pbody" id="scansList"></div>
     <div id="undoBar" role="status"><span id="undoMsg"></span><button id="undoBtn">Undo</button></div>
-    <div id="flash" role="status"></div>
   </div>
+  <div id="flash" role="status"></div>
 
   <div class="panel" id="detailPanel">
     <header><span class="ptitle" id="detailTitle">Card</span>
@@ -486,22 +492,73 @@ function formatChipsHtml(scan, pop = popOf(scan)){
 }
 
 /* ── version banner — proves which page+server combo is running ────────────── */
-const UI_VERSION = 'v56';
+const UI_VERSION = 'v60';
 
-// Who is asking: the phone server says "guest" for the 6-digit code (admin =
-// the paired computer); the computer's own server always says admin. Guests
-// get the list without delete/clear/sweep — a swipe FLAGS the scan instead —
-// and the server refuses the admin-only routes anyway.
+// Who is asking: the phone server says "admin" for the paired computer, the app's
+// own review screen and — while Settings → "Guests get full access" is on (the
+// default) — the 6-digit Share code; with it off the Share code is a "guest". The
+// computer's own server always says admin. Guests get the list without
+// delete/clear/sweep — a swipe FLAGS the scan instead — and the server refuses the
+// admin-only routes anyway. Asked at load, when the server refuses one of those (403:
+// full access was turned off while this page was open — v57), when the page comes back
+// and every ROLE_REFRESH_MS (v59): the switch reaches an open page both ways within 30 s,
+// no reload. Re-renders only on a CHANGE (a re-render of the open card wipes a typed search).
 // Fails CLOSED: guest until /api/me answers (a 404 = a server from before roles = admin).
 let role = 'guest';
-fetch('/api/me').then(r => r.status === 404 ? { role: 'admin' } : r.ok ? r.json() : null).then(d => {
-  if (!d) return;
-  role = d.role === 'admin' ? 'admin' : 'guest';
-  document.body.classList.toggle('guest', role === 'guest');
-  lastListSig = ''; lastStatSig = '';
-  if (typeof renderScansPanel === 'function') renderScansPanel();
-  if (typeof renderScanDetail === 'function' && detailScanId) renderScanDetail();   // an open card too
-}).catch(() => {});
+const ROLE_REFRESH_MS = 30000;
+function refreshRole() {
+  return fetch('/api/me').then(r => r.status === 404 ? { role: 'admin' } : r.ok ? r.json() : null).then(d => {
+    if (!d) return;
+    const was = role;
+    role = d.role === 'admin' ? 'admin' : 'guest';
+    document.body.classList.toggle('guest', role === 'guest');
+    if (role === was) return;
+    lastListSig = ''; lastStatSig = '';
+    if (typeof renderScansPanel === 'function') renderScansPanel();
+    if (typeof renderScanDetail === 'function' && detailScanId) renderScanDetail();   // an open card too
+  }).catch(() => {});
+}
+refreshRole();
+// (window.__roleRefreshMs: check_row_delete_ui.py shortens the same timer)
+setInterval(() => { if (!document.hidden) refreshRole(); }, window.__roleRefreshMs || ROLE_REFRESH_MS);
+// An admin action the phone did not carry out, in words that say why (v57 for deletes — it used
+// to put the scan back silently, or read "Deleted undefined scans"; v59 for every admin control):
+// 403 = full access was turned off while this page was open, a retry cannot succeed; 401 = the
+// session is gone (a new guest code): join again; 400 / 422 = the phone's own words on what is
+// wrong (`detail`); another status = the phone refused (HTTP n); none (≤ 0) = no answer — those
+// two are worth another try.
+function failMsg(what, status, detail) {
+  return status === 403 ? `Couldn't ${what} — this page no longer has full access (the phone's owner turned it off)`
+    : status === 401 ? `Couldn't ${what} — this page is no longer signed in to the phone; reload it to join again`
+    : (status === 400 || status === 422) && detail ? `Couldn't ${what} — ${detail}`
+    : status > 0 ? `Couldn't ${what} — the phone refused it (HTTP ${status}); try again`
+    : `Couldn't ${what} — the phone didn't answer; try again`;
+}
+function deleteFailMsg(status, n) {
+  return failMsg(`delete${n ? ` ${n} scan${n > 1 ? 's' : ''}` : ''}`, status);
+}
+// An admin-only call (ScanServer.adminOnly — Price missing / Stop, Exclude filtered; v59): the
+// Response when the phone carried it out, else null — the words said on the list (#flash) and the
+// status line, and a 403 re-asks /api/me. Before, a refusal read as an answer: "All scans already
+// priced.", "Stopping sweep…", "Excluded 3 cards from export.".
+const sayBad = m => { setStatus(m, 'err'); flash(m, 5000, true); };
+async function adminFetch(url, opts, what, say = sayBad) {
+  const res = await fetch(url, opts).catch(() => null);
+  // With no session the gateway answers a GET with its join page (200 text/html): an /api route
+  // never answers HTML, so that is a lost session (401) — not the file. Before, the downloads
+  // saved the join page as cards.txt / cardscanner-debug.txt and said nothing (final review).
+  const lost = !!res && res.ok && /^\/api\//.test(url) && /text\/html/i.test(res.headers.get('Content-Type') || '');
+  if (res && res.ok && !lost) return res;
+  const status = lost ? 401 : res ? res.status : 0;
+  const body = res && !lost ? await res.json().catch(() => null) : null;
+  say(failMsg(what, status, body && (body.error || body.detail)));
+  if (status === 403) refreshRole();
+  return null;
+}
+const jsonOpts = (method, body) => ({ method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body ?? {}) });
+function worstStatus(bad) {
+  return bad.includes(403) ? 403 : bad.includes(401) ? 401 : (bad.find(x => x > 0) ?? 0);
+}
 fetch('/api/version').then(r => r.json())
   .then(d => { $('#ver').textContent = `${UI_VERSION} · ${d.version}`; })
   .catch(() => { $('#ver').textContent = UI_VERSION; });
@@ -996,7 +1053,11 @@ stageEl.addEventListener('dblclick', () => {
 const scansPanel = $('#scansPanel'), scansList = $('#scansList'), scansBtn = $('#scansBtn');
 let scans = [], scansView = 'all', priceMin = null, priceMax = null;
 // Swipe-to-delete state (declared here: refreshScans may run before its block).
-const pendingDel = new Set();
+const pendingDel = new Set();          // hidden, Undo still possible
+// v59 (desktop.html's model): hidden, DELETE sent → the pollSeq it answered at (Infinity = not yet).
+// Before, a sent id stayed in pendingDel until it answered, so Undo "restored" a row being deleted.
+const sentDel = new Map();
+let pollSeq = 0, pollApplied = 0;      // refreshes started / the newest whose answer was applied
 let swipeDragging = false;
 // Popularity floor + how the two bars combine (see desktop.html for why "any"
 // is the default: the price floor is what keeps an expensive UNRANKED card
@@ -1225,43 +1286,77 @@ function renderScansPanel() {
 // leaves the list at once. Undo restores every scan still waiting.
 const UNDO_MS = 5000;
 let undoTimer = null, swipeEatClick = false;
-function liveScans() { return pendingDel.size ? scans.filter(s => !pendingDel.has(s.id)) : scans; }
+function liveScans() {
+  return pendingDel.size || sentDel.size ? scans.filter(s => !pendingDel.has(s.id) && !sentDel.has(s.id)) : scans;
+}
+function showUndoBar(on) {
+  $('#undoBar').classList.toggle('show', on);
+  document.body.classList.toggle('undoing', on);      // lifts #flash clear of the bar
+}
 // Inside the app the WebView is destroyed when its screen closes — no pagehide,
 // no timers — so a delete still inside its Undo window was lost (owner: "slide
 // to delete doesn't really delete"). The app is told what's pending and deletes
-// it itself when the screen goes away (PanelActivity.onPause).
+// it itself when the screen goes away (PanelActivity.onPause): every id still owed —
+// waiting, or sent with no answer yet (a DELETE the closing WebView may never finish).
 function tellAppPending() {
-  try { window.CardScannerApp?.pendingDeletes?.(JSON.stringify([...pendingDel])); } catch (e) {}
+  const owed = [...pendingDel, ...[...sentDel].filter(([, at]) => at === Infinity).map(([id]) => id)];
+  try { window.CardScannerApp?.pendingDeletes?.(JSON.stringify(owed)); } catch (e) {}
 }
+let deferredMsg = null;     // a refusal that landed while the page was hidden: told on return
+// Sends what waits (out of the Undo window: Undo can no longer bring it back). A SENT id stays
+// hidden until a refresh STARTED after its DELETE answered is applied (settleDeletes) — a refresh
+// still in flight across the DELETE never flashes it back (v59) — and one the phone refused
+// comes back with that refresh. The promise settles once every DELETE answered (Clear waits).
 function commitDeletes(keepalive) {
   clearTimeout(undoTimer); undoTimer = null;
   const ids = [...pendingDel];
-  $('#undoBar').classList.remove('show');
-  if (!ids.length) return;
-  Promise.all(ids.map(id => fetch(`/api/scans/${id}`, { method: 'DELETE', keepalive })
-      .catch(() => {})))
-    .finally(() => { ids.forEach(id => pendingDel.delete(id)); tellAppPending(); if (!keepalive) refreshScans(); });
+  pendingDel.clear();
+  showUndoBar(false);
+  if (!ids.length) return Promise.resolve();
+  ids.forEach(id => sentDel.set(id, Infinity));
+  tellAppPending();
+  return Promise.all(ids.map(id => fetch(`/api/scans/${id}`, { method: 'DELETE', keepalive })
+      .then(r => r.ok || r.status === 404 ? 0 : r.status, () => -1)))   // 404: already gone; -1: no answer
+    .then(res => {
+      ids.forEach(id => sentDel.set(id, pollSeq));
+      tellAppPending();
+      const bad = res.filter(x => x !== 0);
+      if (bad.length) {
+        const msg = deleteFailMsg(worstStatus(bad), bad.length);
+        if (document.hidden) deferredMsg = msg; else flash(msg, 5000, true);
+        if (bad.includes(403)) refreshRole();
+      }
+      if (!keepalive) refreshScans();
+    });
+}
+// Called with the seq of the refresh whose answer was just applied: it started after these DELETEs answered.
+function settleDeletes(seq) {
+  for (const [id, at] of sentDel) if (seq > at) sentDel.delete(id);
 }
 function queueDelete(id) {
   pendingDel.add(id);
   tellAppPending();
   scansBtn.textContent = `Scans (${liveScans().length})`;
   $('#undoMsg').textContent = pendingDel.size > 1 ? `${pendingDel.size} scans deleted` : 'Scan deleted';
-  $('#undoBar').classList.add('show');
+  showUndoBar(true);
   clearTimeout(undoTimer);
   undoTimer = setTimeout(() => commitDeletes(false), UNDO_MS);
 }
 $('#undoBtn').addEventListener('click', () => {
   clearTimeout(undoTimer); undoTimer = null;
-  pendingDel.clear();
+  pendingDel.clear();                  // only what still waits: a DELETE already sent is not undone
   tellAppPending();
-  $('#undoBar').classList.remove('show');
+  showUndoBar(false);
   scansBtn.textContent = `Scans (${liveScans().length})`;
   lastListSig = ''; lastStatSig = ''; renderScansPanel();
 });
 // Leaving the page (WebView closed, tab hidden for good) keeps the delete.
 addEventListener('pagehide', () => commitDeletes(true));
-document.addEventListener('visibilitychange', () => { if (document.hidden) commitDeletes(true); });
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) { commitDeletes(true); return; }
+  refreshRole();                       // full access may have been turned on or off meanwhile (v59)
+  if (deferredMsg) { flash(deferredMsg, 5000, true); deferredMsg = null; refreshScans(); }
+});
 
 function attachSwipe(row) {
   let x0 = 0, y0 = 0, t0 = 0, dx = 0, mode = null, pid = null;
@@ -1351,11 +1446,16 @@ function renderSweep(sw) {
 }
 
 async function refreshScans() {
+  const mine = ++pollSeq;
   try {
     const [scansRes, sweepRes] = await Promise.all([
       fetch('/api/scans'), fetch('/api/price-status')]);
-    scans = await scansRes.json();
-    renderSweep(await sweepRes.json());
+    const [list, sweep] = await Promise.all([scansRes.json(), sweepRes.json()]);
+    if (mine < pollApplied) return;    // an older refresh answering after a newer one: stale (v59)
+    pollApplied = mine;
+    scans = list;
+    settleDeletes(mine);
+    renderSweep(sweep);
     scansBtn.textContent = `Scans (${liveScans().length})`;
     renderScansPanel();
   } catch (e) { /* server momentarily unreachable */ }
@@ -1426,19 +1526,33 @@ $('#p-fmode').addEventListener('click', saveFilters);
 document.querySelectorAll('.vchip').forEach(c => c.addEventListener('click', saveFilters));
 
 async function clearScans(only) {
-  // Flagged = what the button counted: rows inside their swipe-Undo window are not in it.
-  const flaggedIds = liveScans().filter(s => s.flagged).map(s => s.id);
-  const n = only === 'unselected' ? scans.filter(s => s.status !== 'selected').length
-    : only === 'flagged' ? flaggedIds.length : scans.length;
+  // Counted from the list as shown (v59: rows swiped away, still in their Undo window, were
+  // counted again — "Delete 2 unpicked scans?" over a list showing one).
+  const live = liveScans();
+  const flaggedIds = live.filter(s => s.flagged).map(s => s.id);
+  const n = only === 'unselected' ? live.filter(s => s.status !== 'selected').length
+    : only === 'flagged' ? flaggedIds.length : live.length;
   if (!n) { setStatus('Nothing to delete.'); return; }
   const what = only === 'unselected' ? `${n} unpicked scan${n>1?'s':''}`
     : only === 'flagged' ? `${n} flagged scan${n>1?'s':''}` : `ALL ${n} scans`;
   if (!confirm(`Delete ${what}? This cannot be undone.`)) return;
+  // Rows waiting in their Undo window go now, BEFORE the clear (≤ 3 s), and the Undo bar with
+  // them (v59: it stayed up over a list the clear had emptied, offering to undo a scan it took).
+  await Promise.race([commitDeletes(false), new Promise(r => setTimeout(r, 3000))]);
   // "flagged" sends those ids: a flag landing after this confirm is never swept up.
-  const r = await jsend('/api/scans/delete-all', 'POST',
-    only === 'flagged' ? { only, ids: flaggedIds } : only ? { only } : {});
+  const res = await fetch('/api/scans/delete-all', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(only === 'flagged' ? { only, ids: flaggedIds } : only ? { only } : {}) }).catch(() => null);
+  const r = res && res.ok ? await res.json().catch(() => null) : null;
   refreshScans();
-  setStatus(`Deleted ${r.deleted} scan${r.deleted === 1 ? '' : 's'}.`, 'ok');
+  // Said on the list too (#flash): in the app's review screen the camera page's status line is hidden.
+  if (!r || typeof r.deleted !== 'number') {        // refused or no answer: nothing went
+    const msg = deleteFailMsg(res ? res.status : 0, 0);
+    setStatus(msg, 'err'); flash(msg, 5000, true);
+    if (res && res.status === 403) refreshRole();
+    return;
+  }
+  const msg = `Deleted ${r.deleted} scan${r.deleted === 1 ? '' : 's'}.`;
+  setStatus(msg, 'ok'); flash(msg);
 }
 $('#clr-junk').addEventListener('click', () => clearScans('unselected'));
 $('#clr-all').addEventListener('click', () => clearScans(null));
@@ -1447,11 +1561,13 @@ $('#clr-flag').addEventListener('click', () => clearScans('flagged'));
 $('#p-fill').addEventListener('click', async () => {
   if (sweepActive) {
     sweepStopRequested = true;
-    await jsend('/api/price-sweep/stop', 'POST', {});
-    setStatus('Stopping sweep… tap Price missing to restart.', 'ok');
+    if (await adminFetch('/api/price-sweep/stop', jsonOpts('POST'), 'stop the price sweep'))
+      setStatus('Stopping sweep… tap Price missing to restart.', 'ok');
+    else sweepStopRequested = false;   // refused: it was not stopped (said so)
   } else {
-    const r = await jsend('/api/scans/price-missing', 'POST', {});
-    setStatus(r.already_running ? 'A pricing sweep is already running.'
+    const res = await adminFetch('/api/scans/price-missing', jsonOpts('POST'), 'start the price sweep');
+    const r = res && await res.json().catch(() => ({}));
+    if (r) setStatus(r.already_running ? 'A pricing sweep is already running.'
       : r.queued ? `Pricing ${r.queued} card${r.queued > 1 ? 's' : ''} in the background…`
       : 'All scans already priced.', 'ok');
   }
@@ -1461,9 +1577,19 @@ $('#p-excl').addEventListener('click', async () => {
   const targets = scans.filter(s =>
     s.status === 'selected' && s.included && priceOf(s) != null && !passesFilters(s));
   if (!targets.length) { setStatus('Nothing to exclude.'); return; }
-  for (const s of targets) await jsend(`/api/scans/${s.id}`, 'PATCH', { included: false });
+  const cards = n => `${n} card${n > 1 ? 's' : ''}`;
+  let done = 0;
+  for (const s of targets) {
+    // A refusal stops it there and says how far it got (v59: a 403 read "Excluded 3 cards").
+    const left = targets.length - done;
+    const ok = await adminFetch(`/api/scans/${s.id}`, jsonOpts('PATCH', { included: false }),
+      `exclude ${done ? `the other ${cards(left)}` : cards(left)}`,
+      m => sayBad(done ? `Excluded ${cards(done)}. ${m}` : m));
+    if (!ok) { refreshScans(); return; }
+    done++;
+  }
   refreshScans();
-  setStatus(`Excluded ${targets.length} card${targets.length > 1 ? 's' : ''} from export.`, 'ok');
+  setStatus(`Excluded ${cards(done)} from export.`, 'ok');
 });
 
 scansBtn.addEventListener('click', () => {
@@ -2630,7 +2756,12 @@ async function renderScanDetail() {
   $('#p-search').addEventListener('keydown', e => { if (e.key==='Enter') doSearch(); });
 
   $('#p-delete')?.addEventListener('click', async () => {
-    await fetch(`/api/scans/${scan.id}`, { method: 'DELETE' });
+    const r = await fetch(`/api/scans/${scan.id}`, { method: 'DELETE' }).catch(() => null);
+    if (!r || !(r.ok || r.status === 404)) {         // refused or no answer: the card stays open, and says why
+      flash(deleteFailMsg(r ? r.status : 0, 0), 5000, true);
+      if (r && r.status === 403) refreshRole();
+      return;
+    }
     detailPanel.classList.remove('open');
     refreshScans();
   });
@@ -2638,13 +2769,14 @@ async function renderScanDetail() {
 function closePanelApp() {
   if (window.CardScannerApp) window.CardScannerApp.close(); else history.back();
 }
-/** A passing notice on the list (the camera page's #status is hidden in panel mode). */
+/** A passing notice over whatever is open (the camera page's #status is hidden in panel mode);
+ *  `bad` = something did not happen (a refused delete). */
 let flashTimer = null;
-function flash(msg) {
+function flash(msg, ms = 2500, bad = false) {
   const el = $('#flash');
-  el.textContent = msg; el.classList.add('show');
+  el.textContent = msg; el.classList.add('show'); el.classList.toggle('bad', bad);
   clearTimeout(flashTimer);
-  flashTimer = setTimeout(() => el.classList.remove('show'), 2500);
+  flashTimer = setTimeout(() => el.classList.remove('show'), ms);
 }
 /** Close the detail view onto the scan list (a pick, or Back). */
 function closeDetail() {

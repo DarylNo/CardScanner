@@ -56,3 +56,108 @@ def test_a_wanted_card_is_never_filtered_away_on_either_page():
         arg, lines = body.group(1), body.group(2)
         first_vote = lines.index("activeFilters()")
         assert re.search(rf"isWanted\({arg}\)\)? return true;", lines[:first_vote]), name
+
+
+def test_the_desktop_row_delete_is_admin_only_and_waits_for_undo():
+    """CLAUDE.md → "Roles" / desktop row delete (owner, 2026-11-05: "I want delete options
+    here in the list"): each scan row's 🗑 is admin-only, never opens the row, and holds the
+    DELETE for the same 5 s Undo as phone.html's swipe, sent on pagehide / a hidden tab with
+    keepalive. Driven for real in Chromium by scripts/check_row_delete_ui.py."""
+    page = (STATIC / "desktop.html").read_text(encoding="utf-8")
+    assert re.search(r'role === "admin" \? `<button type="button" class="rdel admin-only" data-del="\$\{s\.id\}"', page)
+    assert ('b.addEventListener("click", e => { e.stopPropagation(); if (e.detail > 1) return; '
+            'queueDelete(Number(b.dataset.del), e.detail === 0); })') in page
+    assert "const UNDO_MS = 5000;" in page and "const UNDO_MS = 5000;" in (STATIC / "phone.html").read_text(encoding="utf-8")
+    assert 'fetch(`/api/scans/${id}`, { method: "DELETE", keepalive })' in page
+    assert 'addEventListener("pagehide", () => commitDeletes(true));' in page
+    assert "if (document.hidden) { commitDeletes(true); return; }" in page
+    assert re.search(r"function visibleScans\(\)\{\n  const q = filterText\.toLowerCase\(\);\n  return liveScans\(\)\.filter", page)
+
+
+def test_a_refused_delete_says_why_on_every_path():
+    """Review of desktop d54 (d55 / phone v57): every delete path checks the answer — a 403
+    (full access turned off while the page was open) says "no longer has full access" and
+    re-asks /api/me, never "try again" (it cannot succeed); the Undo bar leaves room for the
+    last row's 🗑; a keyboard delete moves focus to Undo; Export sends the waiting DELETEs
+    first. Driven for real in Chromium by scripts/check_row_delete_ui.py."""
+    desk = (STATIC / "desktop.html").read_text(encoding="utf-8")
+    phone = (STATIC / "phone.html").read_text(encoding="utf-8")
+    for name, page in (("desktop.html", desk), ("phone.html", phone)):
+        assert re.search(r"function deleteFailMsg\(status, n\)", page), name
+        assert "no longer has full access" in page, name
+        assert re.search(r"function refreshRole\(\)", page), name
+        assert re.search(r"\.then\(r => r\.ok \|\| r\.status === 404 \? 0 : r\.status, \(\) => -1\)\)", page), name
+        assert "typeof r.deleted !== 'number'" in page or 'typeof r.deleted !== "number"' in page, name
+        assert "Deleted ${r.deleted}" in page, name
+        assert "deferredMsg" in page, name
+    assert "#list.undoing { padding-bottom: 76px; }" in desk
+    assert 'if (viaKeyboard) $("#undoBtn").focus();' in desk
+    assert "await Promise.race([commitDeletes(false), new Promise(r => setTimeout(r, 3000))]);" in desk
+    assert re.search(r"#flash \{ position:fixed;[^}]*z-index:30;", phone)
+    # review of d55 / v57: a 401 / another status get their own words; a mouse Undo never focuses a 🗑;
+    # phone.html's notice never covers (or takes the taps of) the Undo bar
+    for name, page in (("desktop.html", desk), ("phone.html", phone)):
+        assert "status === 401 ?" in page and "the phone refused it (HTTP ${status})" in page, name
+        assert "deleteFailMsg(worstStatus(bad), bad.length)" in page, name
+    assert "fromBar = e.detail === 0;" in desk
+    assert "#flash { pointer-events:none; }" in phone
+    assert "body.undoing #flash { bottom:calc(84px + env(safe-area-inset-bottom)); }" in phone
+
+
+def test_every_admin_control_says_why_and_the_role_follows_the_switch():
+    """Final review of desktop d56 / phone v58 (d57 / v59): a 🗑 double-click deletes ONE row; the
+    Undo bar stays left of the 🗑 column and lifts the toast; a keyboard delete left to run hands
+    focus to the row that took its place; every admin-only call (ScanServer.adminOnly) goes through
+    adminFetch, so a refusal says why instead of reading as an answer; both pages re-read /api/me
+    every 30 s and when shown again; phone.html keeps a sent DELETE out of Undo (sentDel) and out
+    of a refresh still in flight (settleDeletes), and Clear counts the list as shown. Driven for
+    real in Chromium by scripts/check_row_delete_ui.py."""
+    desk = (STATIC / "desktop.html").read_text(encoding="utf-8")
+    phone = (STATIC / "phone.html").read_text(encoding="utf-8")
+    for name, page in (("desktop.html", desk), ("phone.html", phone)):
+        assert re.search(r"function failMsg\(what, status, detail\)", page), name
+        assert re.search(r"async function adminFetch\(url, opts, what, say = ", page), name
+        assert "if (status === 403) refreshRole();" in page, name
+        # an /api answer in HTML is the gateway's join page: a lost session, never the file (d58 / v60)
+        assert re.search(r"!!res && res\.ok && /\^\\/api\\//\.test\(url\) && /text\\/html/i\.test\(", page), name
+        assert "const status = lost ? 401 : res ? res.status : 0;" in page, name
+        assert re.search(r"const ROLE_REFRESH_MS = 30000;", page), name
+        assert re.search(r"setInterval\(\(\) => \{ if \(!document\.hidden\) refreshRole\(\); \}, "
+                         r"window\.__roleRefreshMs \|\| ROLE_REFRESH_MS\);", page), name
+        assert "if (role === was) return;" in page, name          # a re-render only on a change
+        vis = re.search(r"addEventListener\(['\"]visibilitychange['\"], \(\) => \{\n  if \(document\.hidden\) "
+                        r"\{ commitDeletes\(true\); return; \}\n  refreshRole\(\);", page)
+        assert vis, name
+        # no admin route through the old helpers (they read a refusal as an answer) or by navigating to it
+        assert not re.search(r"jsend\(\s*[`'\"]/api/(price-sweep/stop|scans/price-missing|export|device)", page), name
+        assert not re.search(r"jget\(\s*[`'\"]/api/(export|device|debug)", page), name
+        assert not re.search(r"jsend\([^)]*PATCH['\"], \{ included", page), name
+        assert not re.search(r"window\.location = ['\"]/api/(export|debug)", page), name
+        clear = re.search(r"async function clearScans\(only\) ?\{(.*?)\n\}", page, re.S)
+        assert clear and "await Promise.race([commitDeletes(false), new Promise(r => setTimeout(r, 3000))]);" in clear.group(1), name
+    assert "#undoBar { position: fixed; left: 16px; bottom: 16px; width: 316px;" in desk
+    assert "body.undoing .toast { bottom: 76px; }" in desk
+    assert 'document.body.classList.toggle("undoing", on);' in desk
+    assert "kbNext = i < 0 ? [] : [...vis.slice(i + 1), ...vis.slice(0, i).reverse()];" in desk
+    assert 'const onUndo = document.activeElement === $("#undoBtn");' in desk
+    assert "?.focus({ preventScroll: true });" in desk
+    assert "adminDownload(\"/api/export\", \"cards.txt\"" in desk and "adminDownload(\"/api/export.csv\", \"cards.csv\"" in desk
+    # phone.html: desktop's delete model
+    assert "const sentDel = new Map();" in phone
+    assert "return pendingDel.size || sentDel.size ? scans.filter(s => !pendingDel.has(s.id) && !sentDel.has(s.id)) : scans;" in phone
+    assert "const owed = [...pendingDel, ...[...sentDel].filter(([, at]) => at === Infinity).map(([id]) => id)];" in phone
+    assert "if (mine < pollApplied) return;" in phone and "settleDeletes(mine);" in phone
+    assert re.search(r"async function clearScans\(only\) \{\n(\s*//[^\n]*\n)*\s*const live = liveScans\(\);", phone)
+
+
+def test_every_raw_admin_get_reads_the_join_page_as_a_lost_session():
+    """Review of desktop d58: the 📱 panel's GETs and the 🐞 App log poll fetch /api routes
+    directly; with no session the gateway answers them with its join page (200 text/html), which
+    read as "settings aren't available" and as a JSON error every 1.5 s. d59 asks lostSession()."""
+    desk = (STATIC / "desktop.html").read_text(encoding="utf-8")
+    assert "function lostSession(url, res){" in desk
+    assert "const lost = lostSession(url, res);" in desk                       # adminFetch
+    assert 'if (lostSession("/api/debug/log", r)) {' in desk                      # the 🐞 App log poll
+    assert 'if (!r.ok || lostSession("/api/device", r)) return null;' in desk     # devLoad
+    assert 'if (lostSession("/api/device/snapshot.jpg", r))' in desk              # Camera view
+    assert 'const status = lostSession("/api/device", res) ? 401 : res ? res.status : 0;' in desk   # openDev

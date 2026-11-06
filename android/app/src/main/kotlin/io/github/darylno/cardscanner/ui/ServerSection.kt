@@ -12,6 +12,7 @@ import android.widget.ScrollView
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import io.github.darylno.cardscanner.R
+import io.github.darylno.cardscanner.core.DebugLog
 import io.github.darylno.cardscanner.gateway.QrBitmap
 import io.github.darylno.cardscanner.ident.ArtPackStore
 import io.github.darylno.cardscanner.ident.LocalIdentify
@@ -21,7 +22,8 @@ import java.util.concurrent.Executors
 /**
  * Settings → "This phone's server" (Stage 4: the phone IS the scanner's server).
  * Where a computer opens it (address + guest code), pairing a computer as
- * admin (one-time code + QR) and forgetting paired computers, the card
+ * admin (one-time code + QR) and forgetting paired computers, whether
+ * Share-code guests get full access (owner, 2026-11-05; on by default), the card
  * database (art pack) with a check-now, and storage — scans, photo size, free
  * space; at 10,000 scans it turns into a warning (the owner's rule) but keeps
  * going.
@@ -31,6 +33,7 @@ class ServerSection(
     private val chrome: ScanChrome,
     private val phone: PhoneServer,
     private val identify: LocalIdentify,
+    private val settings: AppSettings,
 ) {
     private val ui = Handler(Looper.getMainLooper())
     private val io = Executors.newSingleThreadExecutor()
@@ -76,6 +79,18 @@ class ServerSection(
                 .setNegativeButton(R.string.cancel, null)
                 .show()
         }, lp(8))
+        card.addView(chrome.divider(), chrome.dividerParams())
+        // "Guests get full access" (owner, 2026-11-05: "Any guest to the web site to pick cards has
+        // full admin access"; on by default). The gateway asks it per request: live, open sessions too.
+        card.addView(chrome.switchRow(s(R.string.settings_guests_full), s(R.string.settings_guests_full_desc),
+            settings.guestsFullAccess) { on ->
+            if (on == settings.guestsFullAccess) return@switchRow
+            settings.guestsFullAccess = on
+            // Never the code: only what a Share-code guest may do from now on.
+            DebugLog.global.i("server", "guests get full access → " +
+                if (on) "on: anyone with the Share code can delete, clear, export and change the scanner's settings"
+                else "off: Share-code guests review, pick and flag only (sessions already open too)")
+        }, lp(4))
         card.addView(chrome.divider(), chrome.dividerParams())
         packText = chrome.text("", 12f, ScanChrome.Palette.TEXT_DIM).apply { setPadding(dp(4), dp(8), dp(4), 0) }
         card.addView(packText, lp())

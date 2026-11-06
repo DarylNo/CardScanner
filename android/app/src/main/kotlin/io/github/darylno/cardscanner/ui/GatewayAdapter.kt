@@ -18,4 +18,5 @@ class GatewayAdapter(private val context: Context) : GatewayPort {
     override fun localAddresses(): List<String> = LocalAddresses.list()
     override fun joinUrl(ip: String): String = LocalAddresses.joinUrl(ip, port, code())
     override fun qr(text: String, sizePx: Int): Bitmap = QrBitmap.encode(text, sizePx)
+    override val changes: kotlinx.coroutines.flow.Flow<Any> get() = GatewayService.status
 }

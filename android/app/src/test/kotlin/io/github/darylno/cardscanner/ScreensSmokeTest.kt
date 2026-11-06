@@ -22,6 +22,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -971,6 +972,67 @@ class ScreensSmokeTest {
         assertResumed(a)
     }
 
+    /** A running gateway whose code the test changes behind the Share screen's back. */
+    private class FakeSharing(code: String) : io.github.darylno.cardscanner.ui.GatewayPort {
+        val state = kotlinx.coroutines.flow.MutableStateFlow(code)
+        override val running = true
+        override val port = 8090
+        override val error: String? = null
+        override fun code() = state.value
+        override fun start() {}
+        override fun newGuestCode() {}
+        override fun localAddresses() = listOf("192.168.1.5")
+        override fun joinUrl(ip: String) = "http://$ip:$port/join?code=${code()}"
+        override fun qr(text: String, sizePx: Int): android.graphics.Bitmap =
+            android.graphics.Bitmap.createBitmap(8, 8, android.graphics.Bitmap.Config.ARGB_8888)
+        override val changes: kotlinx.coroutines.flow.Flow<Any> get() = state
+    }
+
+    /**
+     * Review of 1.1.19: the gateway changes the code by itself (a join pause; 20 wrong codes since it
+     * last changed — ordinary typos reach that), and the Share screen drew it only in onCreate /
+     * onResume / its own buttons, so it kept showing the OLD code and a QR for it on the mount — every
+     * guest who scanned it got "That code is not right" (and counted toward the next change). It now
+     * follows the gateway while it is on screen: the new code and the QR's URL at once.
+     */
+    @Test
+    @Config(qualifiers = "w411dp-h914dp-xxhdpi")
+    fun shareActivity_followsACodeTheGatewayChangedBehindIt() {
+        val real = app.gateway
+        val fake = FakeSharing("123456")
+        app.gateway = fake
+        try {
+            val a = launch(ShareActivity::class.java)
+            val root = a.window.decorView
+            assertNotNull("the code shows", findText(root, "123 456"))
+            fake.state.value = "654321"                  // the gateway rotated it (a pause, 20 wrong codes …)
+            ShadowLooper.idleMainLooper()
+            assertNotNull("the new code shows at once", findText(root, "654 321"))
+            assertNull("the old one is gone", findText(root, "123 456"))
+            fun qrUrls(v: View): List<String> = when (v) {
+                is android.widget.ImageView -> listOfNotNull(v.contentDescription?.toString())
+                is ViewGroup -> (0 until v.childCount).flatMap { qrUrls(v.getChildAt(it)) }
+                else -> emptyList()
+            }
+            assertEquals("the QR is the new code's", listOf("http://192.168.1.5:8090/join?code=654321"),
+                qrUrls(root).filter { it.contains("/join?code=") })
+        } finally {
+            app.gateway = real
+        }
+    }
+
+    /** The Share screen's amber card says what the code gives: everything with "Guests get full access" on (1.1.19). */
+    @Test
+    fun shareActivity_warningFollowsGuestsFullAccess() {
+        app.settings.guestsFullAccess = true
+        val a = launch(ShareActivity::class.java)
+        assertNotNull(findText(a.window.decorView, a.getString(R.string.share_warning_full)))
+        app.settings.guestsFullAccess = false
+        val b = launch(ShareActivity::class.java)
+        assertNotNull(findText(b.window.decorView, b.getString(R.string.share_warning)))
+        app.settings.guestsFullAccess = true
+    }
+
     /**
      * Settings → Camera (owner, 2026-10-02: testers bring other phones): the chooser
      * lists Automatic plus this phone's back cameras with what tells them apart; a pick
@@ -1107,6 +1169,62 @@ class ScreensSmokeTest {
         assertEquals(true, app.settings.zoomFit)
         row.performClick()
         assertEquals(false, app.settings.zoomFit)
+    }
+
+    /**
+     * Settings → This phone's server → "Guests get full access" (owner, 2026-11-05: "Any guest to the
+     * web site to pick cards has full admin access"; 1.1.19): the switch row is sized and on screen at
+     * the N200's size (scrolled to), ON by default, and toggles the setting; each change is logged once
+     * under `server` (never a code); the phone's gateway asks it per request — a server built BEFORE
+     * the flip reads the new value — and Diagnostics shows it.
+     */
+    @Test
+    @Config(qualifiers = "w411dp-h914dp-xxhdpi")
+    fun settings_guestsFullAccessSwitch_isOnScreenTogglesAndIsAskedLive() {
+        app.getSharedPreferences("ui_settings", android.content.Context.MODE_PRIVATE).edit().remove("guests_full_access").commit()
+        val a = launch(SettingsActivity::class.java)
+        val root = a.window.decorView
+        val title = findText(root, a.getString(R.string.settings_guests_full))
+        assertNotNull("the switch row", title)
+        var row: View = title!!
+        while (!row.isClickable) row = row.parent as View
+        val sw = findSwitch(row)
+        assertNotNull("a switch in the row", sw)
+        assertTrue("on by default (the owner's request)", sw!!.isChecked)
+        assertNotNull("the row says what it means", findText(row, a.getString(R.string.settings_guests_full_desc)))
+        val scroll = generateSequence(row.parent) { it.parent }.filterIsInstance<android.widget.ScrollView>().first()
+        val loc = IntArray(2); row.getLocationInWindow(loc)
+        val sloc = IntArray(2); scroll.getLocationInWindow(sloc)
+        scroll.scrollTo(0, loc[1] - sloc[1] - 100)
+        ShadowLooper.idleMainLooper()
+        val screenH = root.height; val screenW = root.width
+        for ((name, v) in listOf("row" to row, "switch" to sw)) {
+            val l = IntArray(2); v.getLocationInWindow(l)
+            assertTrue("$name has a size (${v.width}×${v.height})", v.width > 0 && v.height > 0)
+            assertTrue("$name is inside the screen (y ${l[1]}..${l[1] + v.height} of $screenH, x ${l[0]}..${l[0] + v.width} of $screenW)",
+                l[1] >= 0 && l[1] + v.height <= screenH && l[0] >= 0 && l[0] + v.width <= screenW)
+        }
+        val gateway = app.phoneServer.newServer(0)          // built (not started) before the flip
+        assertTrue(gateway.guestsFullAccess())
+        val log = io.github.darylno.cardscanner.core.DebugLog.global
+        val from = log.lastSeq
+        row.performClick()
+        assertEquals(false, app.settings.guestsFullAccess)
+        assertFalse("asked live: the running gateway sees it at once", gateway.guestsFullAccess())
+        assertFalse("and a new one", app.phoneServer.newServer(0).guestsFullAccess())
+        val off = log.since(from).filter { it.tag == "server" && it.msg.contains("guests") }.map { it.msg }
+        assertEquals(off.toString(), 1, off.size)
+        assertTrue(off[0], off[0].contains("off"))
+        assertTrue("never a code in the line", off.none { it.contains(app.phoneServer.code ?: "\u0000") })
+        val diagOff = io.github.darylno.cardscanner.ui.DiagnosticsText.build(app)
+        assertTrue(diagOff, diagOff.lines().any { it.startsWith("guests (Share code): review, pick and flag only") })
+        val mid = log.lastSeq
+        row.performClick()
+        assertEquals(true, app.settings.guestsFullAccess)
+        assertTrue(gateway.guestsFullAccess())
+        assertEquals(1, log.since(mid).count { it.tag == "server" && it.msg.contains("guests") })
+        val diagOn = io.github.darylno.cardscanner.ui.DiagnosticsText.build(app)
+        assertTrue(diagOn, diagOn.lines().any { it.startsWith("guests (Share code): FULL ACCESS") })
     }
 
     /**
@@ -1341,6 +1459,70 @@ class ScreensSmokeTest {
         a.cameraListenerForTest.onZoom(1.55, view, false)        // the camera is back at the Area's zoom
         ShadowLooper.idleMainLooper()
         assertNotNull(findText(bottom, label))
+    }
+
+    /**
+     * The aimer (owner, 2026-11-05: "if in zoom mode I want a aimer for card centre";
+     * 1.1.19): with Zoom to fit on, the overlay aims at the centre of the VIEW Area and
+     * the mark sits on screen at the N200's size; drawing an Area hides it, Cancel brings
+     * it back. Zoom to fit off: no aimer.
+     */
+    @Test
+    @Config(qualifiers = "w411dp-h914dp-xxhdpi")
+    fun mainActivity_zoomAimer_isAtTheViewAreaCentreAndOnScreen() {
+        val roi = io.github.darylno.cardscanner.core.RoiFrac(0.1, 0.2, 0.6, 0.7)
+        app.settings.roi = roi
+        app.settings.auto = false
+        app.settings.zoomFit = true
+        grantCamera(true)
+        val a = launch(MainActivity::class.java)
+        val root = a.window.decorView
+        val bottom = root.findViewWithTag<View>(TAG_BOTTOM_BAR)
+        val overlay = findOverlay(root)!!
+        val view = io.github.darylno.cardscanner.core.ZoomFit.toView(roi, 1.55)!!
+        a.cameraListenerForTest.onZoom(1.55, view, false)
+        ShadowLooper.idleMainLooper()
+        root.measure(View.MeasureSpec.makeMeasureSpec(root.width, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(root.height, View.MeasureSpec.EXACTLY))
+        root.layout(0, 0, root.width, root.height)
+        val aim = overlay.plan().aim
+        assertNotNull("Zoom to fit on: the aimer shows", aim)
+        assertEquals("the VIEW Area's centre (x)", ((view.x0 + view.x1) / 2).toFloat(), aim!![0], 1e-5f)
+        assertEquals("the VIEW Area's centre (y)", ((view.y0 + view.y1) / 2).toFloat(), aim[1], 1e-5f)
+        // Where it lands on screen: the overlay's letterbox (FIT_CENTER, as onDraw maps it).
+        val s = minOf(overlay.width.toFloat() / overlay.frameW, overlay.height.toFloat() / overlay.frameH)
+        val px = (overlay.width - overlay.frameW * s) / 2f + aim[0] * overlay.frameW * s
+        val py = (overlay.height - overlay.frameH * s) / 2f + aim[1] * overlay.frameH * s
+        val o = IntArray(2); overlay.getLocationInWindow(o)
+        assertTrue("the overlay has a size (${overlay.width}×${overlay.height})", overlay.width > 0 && overlay.height > 0)
+        assertTrue("the aimer is on screen (${o[0] + px}, ${o[1] + py} in ${root.width}×${root.height})",
+            o[0] + px in 0f..root.width.toFloat() && o[1] + py in 0f..root.height.toFloat() &&
+                px in 0f..overlay.width.toFloat() && py in 0f..overlay.height.toFloat())
+        // Drawing a new Area (Tap to scan: the chip draws) hides it; Cancel brings it back.
+        findText(bottom, a.getString(R.string.area_zoomed, "1.55"))!!.performClick()
+        ShadowLooper.idleMainLooper()
+        assertNotNull("drawing", findText(bottom, a.getString(R.string.cancel)))
+        assertNull("hidden while drawing", overlay.plan().aim)
+        findText(bottom, a.getString(R.string.cancel))!!.performClick()
+        ShadowLooper.idleMainLooper()
+        a.cameraListenerForTest.onZoom(1.55, view, false)
+        ShadowLooper.idleMainLooper()
+        assertNotNull("back after Cancel", overlay.plan().aim)
+        assertEquals(((view.x0 + view.x1) / 2).toFloat(), overlay.plan().aim!![0], 1e-5f)
+    }
+
+    @Test
+    @Config(qualifiers = "w411dp-h914dp-xxhdpi")
+    fun mainActivity_zoomAimer_isOffWithZoomToFitOff() {
+        app.settings.roi = io.github.darylno.cardscanner.core.RoiFrac(0.1, 0.2, 0.6, 0.7)
+        app.settings.auto = false
+        app.settings.zoomFit = false
+        grantCamera(true)
+        val a = launch(MainActivity::class.java)
+        ShadowLooper.idleMainLooper()
+        val overlay = findOverlay(a.window.decorView)!!
+        assertNull("Zoom to fit off: no aimer", overlay.plan().aim)
+        assertFalse(overlay.aimer)
     }
 
     /**

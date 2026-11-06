@@ -7,8 +7,12 @@ import java.util.Locale
  * The guest gateway's only secret: a 6-digit join code from [SecureRandom].
  *
  * [matches] compares in constant time (every digit is always examined), so response
- * timing says nothing about how many leading digits a guess got right. Brute force is
- * bounded separately by [GatewayServer]'s per-IP lockout.
+ * timing says nothing about how many leading digits a guess got right. Guessing is
+ * bounded separately by [GatewayServer]: 8 wrong codes lock one address out for 5 min, and
+ * 20 from all addresses together pause joining (and rotate this code) until the oldest is
+ * 5 min old — at most 20 guesses in any 5 min; this code also rotates after every 20 wrong
+ * codes since it last changed, however slowly they came, so no code faces more than 20
+ * guesses: ≈ 174 days expected to hit 1 in 10⁶ at any pace.
  */
 class JoinCode(private val random: SecureRandom = SecureRandom()) {
 

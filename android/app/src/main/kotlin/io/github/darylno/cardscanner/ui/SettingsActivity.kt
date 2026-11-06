@@ -226,7 +226,7 @@ class SettingsActivity : AppCompatActivity() {
 
         // ── This phone's server (Stage 4: the phone IS the server) ──
         serverSection?.destroy()
-        serverSection = ServerSection(this, chrome, app.phoneServer, app.identify).also { it.build(col) }
+        serverSection = ServerSection(this, chrome, app.phoneServer, app.identify, app.settings).also { it.build(col) }
 
         // ── Camera ──
         col.addView(chrome.sectionHeader(getString(R.string.settings_camera)))

@@ -190,8 +190,9 @@ def create_app(
     # ── who is asking: the pages hide admin-only controls for a guest ─────────
     # This server has one user (its Share gateway gives guests full access, the
     # owner's rule for the rig), so it always answers admin. The PHONE server
-    # answers from the gateway's session: its paired computer is admin, anyone
-    # with the 6-digit code is a guest.
+    # answers from the gateway's session: its paired computer is admin; anyone
+    # with the 6-digit code is admin too while Settings → "Guests get full
+    # access" is on (the default since 1.1.19), else a guest.
     @app.get("/api/me")
     def me():
         return {"role": "admin"}

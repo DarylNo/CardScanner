@@ -30,7 +30,8 @@ import java.util.concurrent.atomic.AtomicInteger
  * — the app's own review screen and any computer on the LAN — are served from
  * here through the gateway ([GatewayService] keeps it up while the app runs,
  * screen off included): LAN only, the paired computer is admin, the 6-digit
- * code makes a guest, lockouts as before.
+ * code is admin too while Settings → "Guests get full access" is on (the
+ * default) and a guest when it is off, lockouts as before.
  *
  * Storage: the owner's rule (2026-09-30) — at [WARN_AT] scans show the photo
  * size and free space as a warning, then keep going; nothing is pruned.
@@ -54,6 +55,12 @@ class PhoneServer(
      * task itself only queues the retry on [lifecycle]). Tests pass one they run by hand.
      */
     private val later: (Long, Runnable) -> Unit = { ms, r -> RETRY_TIMER.schedule(r, ms, TimeUnit.MILLISECONDS) },
+    /**
+     * Settings → "Guests get full access" now (AppSettings.guestsFullAccess): handed to the gateway,
+     * which asks it per request. Off by default HERE (tests build a PhoneServer without settings);
+     * the app passes the setting, which is on by default.
+     */
+    private val guestsFullAccess: () -> Boolean = { false },
 ) :
     GatewayService.Host {
     private val root = File(ctx.filesDir, "phoneserver")
@@ -116,7 +123,7 @@ class PhoneServer(
     private val f2f by lazy { PhoneF2f(ctx, File(ctx.cacheDir, "facetoface")) }
     private val sweepExec = Executors.newSingleThreadExecutor { r -> Thread(r, "price-sweep").apply { isDaemon = true } }
 
-    /** The paired computer(s): admin; everyone with the 6-digit code is a guest. */
+    /** The paired computer(s): admin. The 6-digit code's role is the "Guests get full access" setting, asked by [GatewayServer] per request. */
     val admins = AdminPairing(File(root, "admins.json"))
 
     /** The upload queue's door: identify on the phone, file here (see [LocalScanUploader]). */
@@ -156,7 +163,8 @@ class PhoneServer(
     // gateway asks for the backend per request (a server thread waits for the open), and the
     // worker is started / stopped on [lifecycle], in call order.
 
-    override fun newServer(port: Int) = GatewayServer(LocalUpstream { backend }, port, admins = admins)
+    override fun newServer(port: Int) =
+        GatewayServer(LocalUpstream { backend }, port, admins = admins, guestsFullAccess = guestsFullAccess)
 
     /**
      * Bumped by every [onServing] and [onStopped] (on the caller's thread, before their task is
