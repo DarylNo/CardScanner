@@ -236,4 +236,11 @@ interface GatewayPort {
     fun localAddresses(): List<String>
     fun joinUrl(ip: String): String
     fun qr(text: String, sizePx: Int): android.graphics.Bitmap
+    /**
+     * Emits whenever what the Share screen shows may have changed — the code above all: the
+     * gateway rotates it by itself (a join pause, 20 wrong codes since it last changed), and "New
+     * guest code" lands on the service's thread after the tap. The screen redraws on each
+     * (review of 1.1.19: it kept the old code and QR until left and re-opened).
+     */
+    val changes: kotlinx.coroutines.flow.Flow<Any> get() = kotlinx.coroutines.flow.emptyFlow()
 }

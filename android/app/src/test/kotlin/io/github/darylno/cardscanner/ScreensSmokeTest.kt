@@ -972,6 +972,55 @@ class ScreensSmokeTest {
         assertResumed(a)
     }
 
+    /** A running gateway whose code the test changes behind the Share screen's back. */
+    private class FakeSharing(code: String) : io.github.darylno.cardscanner.ui.GatewayPort {
+        val state = kotlinx.coroutines.flow.MutableStateFlow(code)
+        override val running = true
+        override val port = 8090
+        override val error: String? = null
+        override fun code() = state.value
+        override fun start() {}
+        override fun newGuestCode() {}
+        override fun localAddresses() = listOf("192.168.1.5")
+        override fun joinUrl(ip: String) = "http://$ip:$port/join?code=${code()}"
+        override fun qr(text: String, sizePx: Int): android.graphics.Bitmap =
+            android.graphics.Bitmap.createBitmap(8, 8, android.graphics.Bitmap.Config.ARGB_8888)
+        override val changes: kotlinx.coroutines.flow.Flow<Any> get() = state
+    }
+
+    /**
+     * Review of 1.1.19: the gateway changes the code by itself (a join pause; 20 wrong codes since it
+     * last changed — ordinary typos reach that), and the Share screen drew it only in onCreate /
+     * onResume / its own buttons, so it kept showing the OLD code and a QR for it on the mount — every
+     * guest who scanned it got "That code is not right" (and counted toward the next change). It now
+     * follows the gateway while it is on screen: the new code and the QR's URL at once.
+     */
+    @Test
+    @Config(qualifiers = "w411dp-h914dp-xxhdpi")
+    fun shareActivity_followsACodeTheGatewayChangedBehindIt() {
+        val real = app.gateway
+        val fake = FakeSharing("123456")
+        app.gateway = fake
+        try {
+            val a = launch(ShareActivity::class.java)
+            val root = a.window.decorView
+            assertNotNull("the code shows", findText(root, "123 456"))
+            fake.state.value = "654321"                  // the gateway rotated it (a pause, 20 wrong codes …)
+            ShadowLooper.idleMainLooper()
+            assertNotNull("the new code shows at once", findText(root, "654 321"))
+            assertNull("the old one is gone", findText(root, "123 456"))
+            fun qrUrls(v: View): List<String> = when (v) {
+                is android.widget.ImageView -> listOfNotNull(v.contentDescription?.toString())
+                is ViewGroup -> (0 until v.childCount).flatMap { qrUrls(v.getChildAt(it)) }
+                else -> emptyList()
+            }
+            assertEquals("the QR is the new code's", listOf("http://192.168.1.5:8090/join?code=654321"),
+                qrUrls(root).filter { it.contains("/join?code=") })
+        } finally {
+            app.gateway = real
+        }
+    }
+
     /** The Share screen's amber card says what the code gives: everything with "Guests get full access" on (1.1.19). */
     @Test
     fun shareActivity_warningFollowsGuestsFullAccess() {

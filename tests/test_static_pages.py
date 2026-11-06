@@ -119,7 +119,7 @@ def test_every_admin_control_says_why_and_the_role_follows_the_switch():
         assert re.search(r"async function adminFetch\(url, opts, what, say = ", page), name
         assert "if (status === 403) refreshRole();" in page, name
         # an /api answer in HTML is the gateway's join page: a lost session, never the file (d58 / v60)
-        assert re.search(r"const lost = !!res && res\.ok && /\^\\/api\\//\.test\(url\) && /text\\/html/i\.test\(", page), name
+        assert re.search(r"!!res && res\.ok && /\^\\/api\\//\.test\(url\) && /text\\/html/i\.test\(", page), name
         assert "const status = lost ? 401 : res ? res.status : 0;" in page, name
         assert re.search(r"const ROLE_REFRESH_MS = 30000;", page), name
         assert re.search(r"setInterval\(\(\) => \{ if \(!document\.hidden\) refreshRole\(\); \}, "
@@ -148,3 +148,16 @@ def test_every_admin_control_says_why_and_the_role_follows_the_switch():
     assert "const owed = [...pendingDel, ...[...sentDel].filter(([, at]) => at === Infinity).map(([id]) => id)];" in phone
     assert "if (mine < pollApplied) return;" in phone and "settleDeletes(mine);" in phone
     assert re.search(r"async function clearScans\(only\) \{\n(\s*//[^\n]*\n)*\s*const live = liveScans\(\);", phone)
+
+
+def test_every_raw_admin_get_reads_the_join_page_as_a_lost_session():
+    """Review of desktop d58: the 📱 panel's GETs and the 🐞 App log poll fetch /api routes
+    directly; with no session the gateway answers them with its join page (200 text/html), which
+    read as "settings aren't available" and as a JSON error every 1.5 s. d59 asks lostSession()."""
+    desk = (STATIC / "desktop.html").read_text(encoding="utf-8")
+    assert "function lostSession(url, res){" in desk
+    assert "const lost = lostSession(url, res);" in desk                       # adminFetch
+    assert 'if (lostSession("/api/debug/log", r)) {' in desk                      # the 🐞 App log poll
+    assert 'if (!r.ok || lostSession("/api/device", r)) return null;' in desk     # devLoad
+    assert 'if (lostSession("/api/device/snapshot.jpg", r))' in desk              # Camera view
+    assert 'const status = lostSession("/api/device", res) ? 401 : res ? res.status : 0;' in desk   # openDev

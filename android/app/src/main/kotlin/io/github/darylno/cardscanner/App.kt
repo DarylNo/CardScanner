@@ -36,9 +36,9 @@ class App : Application() {
         private set
     lateinit var uploads: UploadPort
         private set
-    /** The Share screen's view of the server (guest code, addresses, QR). */
+    /** The Share screen's view of the server (guest code, addresses, QR). Tests swap in a fake (internal set). */
     lateinit var gateway: GatewayPort
-        private set
+        internal set
     /** Stops scanning once a newer release is out (the owner's update lock). */
     lateinit var updates: io.github.darylno.cardscanner.update.UpdateLock
         private set

@@ -49,7 +49,7 @@ from pathlib import Path
 from playwright.sync_api import sync_playwright
 
 STATIC = Path(__file__).resolve().parents[1] / "server" / "static"
-VERSION = "d58"
+VERSION = "d59"
 PHONE_VERSION = "v60"
 
 
@@ -205,6 +205,7 @@ class H(BaseHTTPRequestHandler):
         self.send(200, {})
 
     def do_PUT(self):
+        if self.lost(): return self.send(401, JOIN_PAGE, "text/html")    # codePage: 401 to anything but GET
         p, body = self.path.split("?")[0], self.body()
         with STATE["lock"]: STATE["log"].append(("PUT", p))
         if p == "/api/export/layout":
@@ -783,6 +784,15 @@ with sync_playwright() as pw:
     t = toast_text(pg)
     check("no longer signed in" in t and not pg.evaluate("document.querySelector('#csvModal').classList.contains('open')"),
           f"opening Export: says so, opens nothing ({t[:70]})")
+    # d59: the raw admin GETs — the 📱 panel and the 🐞 App log — read the join page as a lost session too
+    pg.evaluate("openDev()"); pg.wait_for_timeout(600)
+    t = toast_text(pg)
+    check("no longer signed in" in t and not pg.evaluate("document.querySelector('#devModal').classList.contains('open')"),
+          f"opening 📱 Scanner: says the session is gone, not 'aren't available' ({t[:70]})")
+    pg.evaluate("setDbgTab('app')"); pg.wait_for_timeout(3600)       # two polls' worth
+    t = toast_text(pg)
+    check("no longer signed in" in t, f"the 🐞 App log says the session is gone ({t[:70]})")
+    check(pg.evaluate("f2fLogTimer === null"), "… and stops polling")
     check(pg.url == BASE + "/" and errs == [], f"the page stays, no page errors ({errs})")
     pg.close()
 

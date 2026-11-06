@@ -16,6 +16,11 @@ import android.widget.ScrollView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.launch
 import io.github.darylno.cardscanner.App
 import io.github.darylno.cardscanner.R
 
@@ -27,6 +32,12 @@ import io.github.darylno.cardscanner.R
  * pricing, the scanner's settings; off, they are GUESTS: review, pick, edit,
  * flag for deletion. "New guest code" ends every guest session (and any
  * lockout or join pause the gateway is holding); the server itself keeps running.
+ *
+ * The screen FOLLOWS the gateway while it is on screen ([GatewayPort.changes]): the gateway
+ * changes the code by itself (a join pause; 20 wrong codes since it last changed — ordinary
+ * typos reach that) and "New guest code" lands on the service's thread after the tap. Before
+ * (review of 1.1.19) it drew only in onCreate / onResume / its own buttons, so it kept the OLD
+ * code and a QR for it on the mount and every guest who scanned it was refused.
  */
 class ShareActivity : AppCompatActivity() {
     private lateinit var app: App
@@ -59,6 +70,10 @@ class ShareActivity : AppCompatActivity() {
         chrome.applyInsets(root)
         setContentView(root)
         render()
+        lifecycleScope.launch {
+            // drop(1): a StateFlow hands its current value to each new collector — onResume drew that.
+            repeatOnLifecycle(Lifecycle.State.STARTED) { app.gateway.changes.drop(1).collect { render() } }
+        }
     }
 
     override fun onResume() {

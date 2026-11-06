@@ -1076,7 +1076,12 @@ lens on testers' phones), minSdk 29, arm64-v8a.
   session (401: "no longer signed in … reload the page to join again") on both
   pages, so no admin call ever takes the join page for an answer; the check's
   stub has a "session gone" mode (4 checks fail on d57); 206 + the scrollbar
-  pass pass on d58 / v60.
+  pass pass on d58 / v60. **Its review (d59):** every raw admin GET asks the same
+  `lostSession(url, res)` — the 📱 panel opening ("aren't available" → "no longer
+  signed in"), its load and Camera view, and the 🐞 App log poll (it threw a JSON
+  error every 1.5 s and froze silently; now it says so once and stops); the stub's
+  session-gone mode answers PUT 401 too (the layout save is what Download CSV
+  meets first). 4 checks fail on d58.
 - **The live log** (`core/DebugLog.global`, a 3000-line ring, mirrored to
   logcat as `CardScanner`): triggers (box, mask %), captures (`done #k`:
   flattened or not, card px, the three frames' sharpness, the chosen frame's
@@ -1396,8 +1401,13 @@ lens on testers' phones), minSdk 29, arm64-v8a.
   the code never changed and it walked 10⁶ against ONE code, ≈ 91 days average;
   a probe joined at guess 132 708): no code faces more than 20 guesses, so the
   ≈ 174 days holds at any pace; one line per change ("… since the guest code
-  last changed — guest code rotated (… no pause)"), the Share screen shows the
-  new code. **A clock set back** (NTP, the owner) stretched a pause by the whole
+  last changed — guest code rotated (… no pause)"), and the Share screen shows the
+  new code at once — it FOLLOWS the gateway while on screen (`GatewayPort.changes`
+  = the service's status flow, collected under `repeatOnLifecycle(STARTED)`; its
+  final review: it drew only in onCreate / onResume / its buttons, so it kept the
+  OLD code and QR on the mount — a guest scanning it was refused — and "New guest
+  code" drew before the service had rotated; `shareActivity_followsACode…` at the
+  N200's size). **A clock set back** (NTP, the owner) stretched a pause by the whole
   step (a day → 1445 min): entries stamped after now count as now and no lockout
   runs past 5 min from now. A lockout and a pause are each logged ONCE
   under `server`, when they start ("8 wrong join codes from <ip> within 5 min —

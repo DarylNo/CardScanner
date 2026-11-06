@@ -537,12 +537,16 @@ function deleteFailMsg(status, n){
 // each control read a refusal as an answer: the builder threw on a 403 layout and never opened,
 // ▶ Sweep said "Nothing needs pricing", Exclude filtered "Excluded 3 cards", the include box stayed
 // as clicked, a download navigated away to the error.
+// With no session the gateway answers a GET with its join page (200 text/html): an /api route never
+// answers HTML, so that is a lost session (401) — not the answer. Before, the downloads saved the join
+// page as cards.txt / cardscanner-debug.txt and said nothing (final review); every raw /api GET of
+// an admin route asks this too (d59: the 📱 panel said "aren't available", the 🐞 log threw).
+function lostSession(url, res){
+  return !!res && res.ok && /^\/api\//.test(url) && /text\/html/i.test(res.headers.get("Content-Type") || "");
+}
 async function adminFetch(url, opts, what, say = m => toast(m, 5000)){
   const res = await fetch(url, opts).catch(() => null);
-  // With no session the gateway answers a GET with its join page (200 text/html): an /api route
-  // never answers HTML, so that is a lost session (401) — not the file. Before, the downloads
-  // saved the join page as cards.txt / cardscanner-debug.txt and said nothing (final review).
-  const lost = !!res && res.ok && /^\/api\//.test(url) && /text\/html/i.test(res.headers.get("Content-Type") || "");
+  const lost = lostSession(url, res);
   if (res && res.ok && !lost) return res;
   const status = lost ? 401 : res ? res.status : 0;
   const body = res && !lost ? await res.json().catch(() => null) : null;
@@ -2399,7 +2403,7 @@ function sigOf(scan){
 
 // Version banner — page version · server git hash. Same rationale as the
 // phone: without it, "is this the old page?" is undebuggable.
-const UI_VERSION = "d58";
+const UI_VERSION = "d59";
 
 // Who is asking: the phone server says "admin" for the paired computer and, while
 // Settings → "Guests get full access" is on (the default), for the 6-digit Share
@@ -2918,8 +2922,14 @@ function renderAppLog(){
 async function pollAppLog(){
   let r;
   try { r = await fetch(`/api/debug/log?since=${dbgSeq}`); } catch(e){ return; }
+  if (lostSession("/api/debug/log", r)) {            // the session is gone: say so once, stop polling
+    clearInterval(f2fLogTimer); f2fLogTimer = null;
+    toast(failMsg("read the app log", 401), 5000);
+    return;
+  }
   if (!r.ok) { if (dbgHasApp === null) { dbgHasApp = false; setDbgTab("f2f"); } return; }
-  const d = await r.json();
+  const d = await r.json().catch(() => null);
+  if (!d) return;
   if (dbgHasApp !== true) { dbgHasApp = true; $("#dbgTabApp").style.display = ""; }
   if (d.seq < dbgSeq) dbgLines = [];                  // the phone restarted: its log starts again
   dbgSeq = d.seq;
@@ -2999,7 +3009,7 @@ const devCamViewOk = () => Array.isArray(dev?.snapshot_views) && dev.snapshot_vi
 async function devLoad(){
   try {
     const r = await fetch("/api/device");
-    if (!r.ok) return null;
+    if (!r.ok || lostSession("/api/device", r)) return null;
     return await r.json();
   } catch(e){ return null; }
 }
@@ -3221,6 +3231,8 @@ function devSnapshot(){
   };
   devCamBusy = true;
   fetch("/api/device/snapshot.jpg?view=camera&t=" + Date.now()).then(async r => {
+    if (lostSession("/api/device/snapshot.jpg", r))
+      throw new Error("this browser is no longer signed in to the phone; reload the page to join again");
     if (!r.ok) {
       let e = ""; try { e = (await r.json()).error || ""; } catch(_){}
       throw new Error(e || `the phone answered ${r.status}`);
@@ -3242,9 +3254,10 @@ async function openDev(){
   // 401 / 403: say why (d57 — it read "aren't available"); a 404 = no phone behind this server.
   let d = null;
   const res = await fetch("/api/device").catch(() => null);
-  if (res && (res.status === 401 || res.status === 403)) {
-    toast(failMsg("open the scanner's settings", res.status), 5000);
-    if (res.status === 403) refreshRole();
+  const status = lostSession("/api/device", res) ? 401 : res ? res.status : 0;
+  if (status === 401 || status === 403) {
+    toast(failMsg("open the scanner's settings", status), 5000);
+    if (status === 403) refreshRole();
     return;
   }
   if (res && res.ok) d = await res.json().catch(() => null);

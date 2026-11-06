@@ -366,16 +366,17 @@ class GatewayServerTest {
     fun aSearchPacedUnderThePauseStillChangesTheCodeEveryTwentyWrongCodes() {
         val ips = listOf("192.168.43.10", "192.168.43.11", "fe80::1c2b:3a4d:5e6f:7081")
         val rotated = mutableListOf<String>()
-        gateway.onCodeRotated = { rotated += it }
+        var epoch = 0                                    // which code (counted by change, never by its digits:
+        gateway.onCodeRotated = { rotated += it; epoch++ }   // two of 100 random codes repeat 1 run in 200)
         val log = io.github.darylno.cardscanner.core.DebugLog.global
         val from = log.lastSeq
         val step = GatewayServer.FAIL_WINDOW_MS / (GatewayServer.GLOBAL_MAX_FAILURES - 1) + 1
-        val perCode = HashMap<String, Int>()
+        val perCode = HashMap<Int, Int>()
         var compared = 0
         var refused = 0
         val attempts = 2_000
         for (k in 0 until attempts) {
-            val target = gateway.code
+            val target = epoch
             val (r, c) = gateway.tryJoin(ips[k % ips.size], wrongCode(), now + k * step)
             if (c) { compared++; perCode.merge(target, 1, Int::plus) }
             if (r is GatewayServer.JoinResult.Locked) refused++
@@ -403,7 +404,7 @@ class GatewayServerTest {
      * a step back of a day leaves at most the usual 5 min.
      */
     @Test
-    fun aClockSetBackNeverStretchesAPauseOrALockout() {
+    fun aClockSetBackNeverLeavesMoreThanFiveMinutesOfPauseOrLockout() {
         now = 1_762_400_000_000L                // a real wall clock (2025-11), so a day back is still a real time
         val t0 = now
         val day = 24 * 60 * 60_000L
@@ -554,18 +555,20 @@ class GatewayServerTest {
     fun thePauseIsAWindowButTheCodeChangesAfterTwentyWrongCodesWhateverTheirPace() {
         val oldCode = gateway.code
         val wrong = if (oldCode == "000000") "111111" else "000000"
+        var rotations = 0
+        gateway.onCodeRotated = { rotations++ }
         for (i in 0 until 19) gateway.attemptJoin("10.0.0.${i + 2}", wrong, now)
-        assertEquals(oldCode, gateway.code)
+        assertEquals(0, rotations)
         now += GatewayServer.FAIL_WINDOW_MS + 1
         val twentieth = gateway.attemptJoin("10.0.1.1", wrong, now)
         assertTrue("the 20th, past the window, pauses nothing", twentieth is GatewayServer.JoinResult.Wrong)
         val newCode = gateway.code
-        assertNotEquals("…but the code changed", oldCode, newCode)
+        assertEquals("…but the code changed (a rotation — a new random code may repeat the digits, 1 in 10⁶)", 1, rotations)
         assertTrue("a guest with the new code joins at once (no pause)",
             gateway.attemptJoin("10.0.2.1", newCode, now) is GatewayServer.JoinResult.Joined)
         // right codes count toward neither
         repeat(30) { gateway.attemptJoin("10.0.2.${it + 2}", newCode, now) }
-        assertEquals(newCode, gateway.code)
+        assertEquals(1, rotations)
     }
 
     @Test

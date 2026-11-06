@@ -63,7 +63,8 @@ import java.util.logging.Logger
  *    guesses, so the ≈ 174 days above holds for any pace. Logged once per change.
  *  - The windows run on the wall clock: an entry stamped after now (a clock set back — NTP,
  *    the owner) counts as now and no lockout runs past 5 min from now, so a step back never
- *    stretches a pause or a lockout (a day's step kept joining paused 1445 min).
+ *    leaves more than 5 min of pause or lockout from now (a day's step kept joining paused
+ *    1445 min). A step shorter than that can still lengthen what is left, up to those 5 min.
  *  - LAN only: clients whose address is not private/link-local ([isLocalClient]) get a 403
  *    before anything else — the listener binds every interface, so without this the join
  *    page would be reachable over Tailscale (100.64/10) and over cellular public IPv6.
@@ -113,8 +114,9 @@ class GatewayServer(
     private val globalFailures = ArrayDeque<Long>()      // guarded by [failures]
 
     /**
-     * Called (off the lock, on the request thread) with the new code when a pause starts and
-     * rotates it (the 20th wrong code in 5 min from all addresses). Not called by [stopSharing],
+     * Called (off the lock, on the request thread) with the new code whenever a wrong code rotates
+     * it: a pause starting (the 20th wrong code in 5 min from all addresses) or the 20th wrong code
+     * since the code last changed, at any pace — once per rotation. Not called by [stopSharing],
      * whose caller has the code.
      */
     @Volatile
@@ -352,9 +354,9 @@ class GatewayServer(
      * later — or null. Never adds an entry, so a refused flood from fresh addresses costs no memory.
      */
     private fun refusal(ip: String, now: Long): JoinResult.Locked? {
-        // A wall clock set BACK (NTP fixing a fast clock, the owner) must never stretch a pause or a
-        // lockout (re-review: a day's step kept joining paused 1445 min): anything stamped after now
-        // counts as now, and no lockout runs past LOCKOUT_MS from now.
+        // A wall clock set BACK (NTP fixing a fast clock, the owner) must never leave more than 5 min
+        // of pause or lockout from now (re-review: a day's step kept joining paused 1445 min): anything
+        // stamped after now counts as now, and no lockout runs past LOCKOUT_MS from now.
         clampToNow(globalFailures, now)
         for (x in failures.values) {
             clampToNow(x.times, now)
