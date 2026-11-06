@@ -83,8 +83,8 @@ class GatewayService : Service() {
             return START_NOT_STICKY
         }
         val s = host.newServer(port)
-        // A brute-force budget trip rotates the code on a request thread:
-        // re-post the notification/status so the owner shows the new one.
+        // A join pause (20 wrong codes in 5 min from all addresses) rotates the code on a
+        // request thread: re-post the notification/status so the owner shows the new one.
         s.onCodeRotated = { android.os.Handler(android.os.Looper.getMainLooper()).post { if (server === s) publish(s) } }
         try {
             s.startServing()

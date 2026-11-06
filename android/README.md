@@ -256,7 +256,13 @@ access** (on by default; it applies at once, to guests already connected too):
   clear, export or run pricing (the phone refuses them, not just the page).
 
 **New guest code** ends every guest session; the server keeps running. 8 wrong
-codes from one device within 5 minutes lock it out for 5 minutes.
+codes from one device within 5 minutes lock it out for 5 minutes ("Too many
+wrong codes from this device"). 20 wrong codes from all devices together within
+5 minutes change the code and **pause joining** for everyone new ("Too many wrong
+codes on this network — joining is paused for N min") until the oldest of them
+is 5 minutes old — a right code waits too, so a search spread over many addresses
+gets at most 20 guesses in any 5 minutes. Guests already in, the paired computer
+and the phone's own review screen carry on; New guest code ends the pause.
 
 ## Signing setup
 
@@ -379,8 +385,8 @@ Run on the Nord N200 after installing a new build:
       Settings, its next delete is refused with no re-join — the page says
       "Couldn't delete … no longer has full access", puts the scan back and
       turns into the guest page (a swipe flags); wrong code 8×
-      → locked out; New guest code → the guest is signed out and the old code
-      fails, the computer stays in.
+      → "Too many wrong codes from this device"; New guest code → the guest is
+      signed out and the old code fails, the computer stays in.
 - [ ] The computer's list: 🗑 on a row (hover) → the row goes, Undo brings it
       back (an open card opens again); left alone 5 s the scan is gone from the
       phone too. Tab to a 🗑 and press Enter → focus jumps to Undo; Enter again

@@ -22,9 +22,11 @@ import io.github.darylno.cardscanner.R
 /**
  * Share: people on the phone's local network (shop Wi-Fi or this phone's
  * hotspot) scan the QR / type the 6-digit code and get the review pages the
- * phone serves — as GUESTS (review, pick, flag for deletion; deleting,
- * clearing and export are the paired computer's). "New guest code" ends every
- * guest session; the server itself keeps running.
+ * phone serves. With Settings → "Guests get full access" on (the default) they
+ * get everything the paired computer gets — delete (for good), clear, export,
+ * pricing, the scanner's settings; off, they are GUESTS: review, pick, edit,
+ * flag for deletion. "New guest code" ends every guest session (and any
+ * lockout or join pause the gateway is holding); the server itself keeps running.
  */
 class ShareActivity : AppCompatActivity() {
     private lateinit var app: App

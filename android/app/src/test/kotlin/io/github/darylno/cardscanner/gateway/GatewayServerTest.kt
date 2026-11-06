@@ -80,6 +80,26 @@ class GatewayServerTest {
         }
     }
 
+    private val rnd = java.util.Random(20_261_106)
+
+    /** A random 6-digit code that is NOT [g]'s code right now (so a "join" can only come from a sent right code). */
+    private fun wrongCode(g: GatewayServer = gateway): String {
+        while (true) {
+            val c = String.format(java.util.Locale.ROOT, "%06d", rnd.nextInt(1_000_000))
+            if (c != g.code) return c
+        }
+    }
+
+    /** One join attempt, and whether its code was actually compared (not refused by a lockout or the pause). */
+    private fun GatewayServer.tryJoin(ip: String, code: String, at: Long): Pair<GatewayServer.JoinResult, Boolean> {
+        val before = joinCodesCompared
+        val r = attemptJoin(ip, code, at)
+        return r to (joinCodesCompared != before)
+    }
+
+    /** The network-wide pause (20 wrong codes from all addresses in 5 min), not an address's own lockout. */
+    private fun isPause(r: GatewayServer.JoinResult) = r is GatewayServer.JoinResult.Locked && r.paused
+
     // ---- join flow -------------------------------------------------------------------
 
     /** The live log records joins — never the code itself (a guest could read a report pasted anywhere). */
@@ -149,20 +169,37 @@ class GatewayServerTest {
         assertNotEquals(a, b)
     }
 
+    /**
+     * An address's 8th wrong code in 5 min locks it for 5 min — logged ONCE, when the lock starts.
+     * Before, every refused join of a locked address logged a line ("join from … refused — locked
+     * out"), so one device hammering /join pushed everything else out of the 3000-line debug log.
+     */
     @Test
     fun lockoutAfterEightBadTriesForFiveMinutes() {
+        val log = io.github.darylno.cardscanner.core.DebugLog.global
+        val from = log.lastSeq
         val wrong = if (gateway.code == "000000") "111111" else "000000"
         repeat(7) { get("/join?code=$wrong").use { r -> assertEquals(403, r.code) } }
         get("/join?code=$wrong").use { r ->
             assertEquals(429, r.code)
             assertEquals("300", r.header("Retry-After"))
+            val body = r.body!!.string()
+            // this device's own lockout, not the network-wide pause (8 < 20 wrong codes in all)
+            assertTrue(body, body.contains("Too many wrong codes from this device. Wait 5 min"))
+            assertFalse(body, body.contains("on this network"))
         }
         // even the right code is refused while locked
         get("/join?code=${gateway.code}").use { r -> assertEquals(429, r.code); assertNull(r.header("Set-Cookie")) }
+        repeat(5) { get("/join?code=$wrong").use { r -> assertEquals(429, r.code) } }
         now += GatewayServer.LOCKOUT_MS - 1
         get("/join?code=${gateway.code}").use { r -> assertEquals(429, r.code) }
         now += 2
         get("/join?code=${gateway.code}").use { r -> assertEquals(302, r.code) }
+        val lines = log.since(from).filter { it.tag == "server" }.map { it.msg }
+        assertEquals(lines.toString(), 7, lines.count { it == "wrong join code from 127.0.0.1" })
+        assertEquals(lines.toString(), listOf("8 wrong join codes from 127.0.0.1 within 5 min — that address is locked out 5 min"),
+            lines.filter { it.contains("locked") })
+        assertTrue(lines.toString(), lines.none { it.contains(wrong) })
     }
 
     @Test
@@ -176,13 +213,22 @@ class GatewayServerTest {
 
     // ---- global budget / atomic attempts / LAN-only -----------------------------------
 
+    /**
+     * The 20th wrong code from all addresses still rotates the code — and now also PAUSES joining
+     * for every address until the oldest of the 20 leaves the 5-min window. Before (≤ 4064c73)
+     * this test asserted the opposite half: the rotation reset every count ("127.0.0.1's 7
+     * failures were reset") and the new code joined at once — the reset is what let a search
+     * spread over 3 addresses run forever (see [aSearchSpreadOverThreeAddressesComparesAtMostTwentyCodes]).
+     */
     @Test
-    fun globalBudgetRotatesCodeAfterTwentyDistributedFailures() {
+    fun globalBudgetRotatesTheCodeAndPausesJoiningAfterTwentyDistributedFailures() {
         val cookie = join()
         val oldCode = gateway.code
         val wrong = if (oldCode == "000000") "111111" else "000000"
         val rotated = mutableListOf<String>()
         gateway.onCodeRotated = { synchronized(rotated) { rotated += it } }
+        val log = io.github.darylno.cardscanner.core.DebugLog.global
+        val from = log.lastSeq
         // 7 over HTTP from 127.0.0.1 (one short of its per-IP lock) …
         repeat(7) { get("/join?code=$wrong").use { r -> assertEquals(403, r.code) } }
         // … and 12 more spread over addresses no per-IP lock ever sees twice.
@@ -192,20 +238,234 @@ class GatewayServerTest {
         }
         assertEquals(oldCode, gateway.code)
         assertTrue(rotated.isEmpty())
-        // the 20th failure in the window rotates the code
-        assertTrue(gateway.attemptJoin("fe80::beef", wrong, now) is GatewayServer.JoinResult.Wrong)
+        // the 20th failure in the window rotates the code and pauses joining (its own answer says so)
+        val twentieth = gateway.attemptJoin("fe80::beef", wrong, now)
+        assertTrue(isPause(twentieth))
+        assertEquals(GatewayServer.FAIL_WINDOW_MS, (twentieth as GatewayServer.JoinResult.Locked).remainingMs)
         val newCode = gateway.code
         assertNotEquals(oldCode, newCode)   // 1-in-a-million flake would need a retry here
         assertEquals(listOf(newCode), rotated)
 
-        // the old code no longer joins; 127.0.0.1's 7 failures were reset (this would be its 8th → 429)
-        get("/join?code=$oldCode").use { r -> assertEquals(403, r.code); assertNull(r.header("Set-Cookie")) }
+        // paused: the old code, the NEW code and a blank /join all get the network-wide 429
+        for (q in listOf("?code=$oldCode", "?code=$newCode", "")) {
+            get("/join$q").use { r ->
+                assertEquals(q, 429, r.code)
+                assertNull(r.header("Set-Cookie"))
+                assertEquals("300", r.header("Retry-After"))
+                val body = r.body!!.string()
+                assertTrue(body, body.contains("Too many wrong codes on this network — joining is paused for 5 min"))
+                assertFalse(body, body.contains("from this device"))
+                assertFalse(body, body.contains(newCode))
+            }
+        }
+        // logged ONCE (not per refused join), never with a code
+        val lines = log.since(from).filter { it.tag == "server" }.map { it.msg }
+        assertEquals(lines.toString(), 1, lines.count { it.contains("joining paused") })
+        assertTrue(lines.toString(), lines.any { it == "20 wrong join codes within 5 min — guest code rotated, joining paused 5 min" })
+        assertTrue(lines.toString(), lines.none { it.contains(oldCode) || it.contains(newCode) })
         // the existing session still works
         upstreamServer.enqueue(MockResponse().setBody("still in"))
         get("/api/version", cookie = cookie).use { r -> assertEquals("still in", r.body!!.string()) }
         assertEquals(1, gateway.sessionCount)
-        // and the new code joins
+        // once the oldest wrong code is 5 min old the pause is over: the old code is wrong, the new one joins
+        now += GatewayServer.FAIL_WINDOW_MS
+        get("/join?code=$oldCode").use { r -> assertEquals(403, r.code); assertNull(r.header("Set-Cookie")) }
         get("/join?code=$newCode").use { r -> assertEquals(302, r.code) }
+    }
+
+    /**
+     * The final review's attack on 1.1.19 (confirmed by a probe that joined after ~0.4–2.4 M
+     * guesses at one frozen instant, never locked): three LAN addresses — IPv4 aliases,
+     * link-local IPv6, all [GatewayServer.isLocalClient] — send 7 / 7 / 6 wrong codes in turn,
+     * one short of each per-IP lock; the 20th rotated the code and RESET every count, round after
+     * round, so guessing was bounded only by the request rate. Now 100 000 attempts at one
+     * instant compare at most 20 codes, rotate the code once, log once — and a guess that lands
+     * on the code (every 5 000th sends the right one) is refused like any other.
+     */
+    @Test
+    fun aSearchSpreadOverThreeAddressesComparesAtMostTwentyCodes() {
+        val rotated = mutableListOf<String>()
+        gateway.onCodeRotated = { rotated += it }
+        val log = io.github.darylno.cardscanner.core.DebugLog.global
+        val from = log.lastSeq
+        val plan = listOf("192.168.43.10" to 7, "192.168.43.11" to 7, "fe80::1c2b:3a4d:5e6f:7081" to 6)
+            .flatMap { (ip, n) -> List(n) { ip } }                       // one round = 20 attempts
+        var compared = 0
+        var joined = 0
+        var rightSent = 0
+        for (k in 0 until 100_000) {
+            val code = if (k % 5_000 == 4_999) gateway.code.also { rightSent++ } else wrongCode()
+            val (r, c) = gateway.tryJoin(plan[k % plan.size], code, now)
+            if (c) compared++
+            if (r is GatewayServer.JoinResult.Joined || r is GatewayServer.JoinResult.JoinedAdmin) joined++
+        }
+        val facts = "compared $compared of 100000, joined $joined, rotations ${rotated.size}"
+        println("3 addresses, 7 / 7 / 6, frozen clock: $facts")
+        assertEquals(20, rightSent)
+        assertEquals(facts, 0, joined)
+        assertTrue(facts, compared <= GatewayServer.GLOBAL_MAX_FAILURES)
+        assertEquals(facts, 1, rotated.size)
+        assertEquals(facts, 1, log.since(from).count { it.tag == "server" && it.msg.contains("joining paused") })
+        // a fresh address with the right code: still the pause, not a join
+        assertTrue(isPause(gateway.attemptJoin("192.168.43.99", gateway.code, now)))
+    }
+
+    /**
+     * The same search with time running: 50 attempts a second for an hour, round-robin over five
+     * addresses (IPv4, IPv6 link-local and ULA, IPv4-mapped). No 5-min window ever sees more than
+     * 20 codes compared — ≤ 12 × 20 + 20 in the hour — and nothing joins. Each slot the search
+     * refills as it frees starts a pause again (a rotation, one log line): the log grows with the
+     * codes compared, never with the 180 000 refused.
+     */
+    @Test
+    fun anHourOfAttackFromFiveAddressesComparesAtMostTwentyCodesPerFiveMinutes() {
+        val ips = listOf("192.168.1.20", "10.0.0.7", "fe80::a1b2:c3ff:fed4:e5f6", "fd7a:115c:a1e0::9", "::ffff:192.168.1.21")
+        val t0 = now
+        val comparedAt = ArrayList<Long>()
+        var joined = 0
+        var rotations = 0
+        gateway.onCodeRotated = { rotations++ }
+        val log = io.github.darylno.cardscanner.core.DebugLog.global
+        val from = log.lastSeq
+        val attempts = 3_600 * 50
+        for (k in 0 until attempts) {
+            val t = t0 + k * 20L
+            val (r, c) = gateway.tryJoin(ips[k % ips.size], wrongCode(), t)
+            if (c) comparedAt += t
+            if (r is GatewayServer.JoinResult.Joined || r is GatewayServer.JoinResult.JoinedAdmin) joined++
+        }
+        var worst = 0
+        var j = 0
+        for (i in comparedAt.indices) {                                  // the busiest 5-min window
+            while (comparedAt[i] - comparedAt[j] >= GatewayServer.FAIL_WINDOW_MS) j++
+            worst = maxOf(worst, i - j + 1)
+        }
+        val pauseLines = log.since(from, limit = 3_000).count { it.tag == "server" && it.msg.contains("joining paused") }
+        val facts = "compared ${comparedAt.size} of $attempts in the hour, busiest 5 min $worst, joined $joined, " +
+            "rotations $rotations, pause lines logged $pauseLines"
+        println("5 addresses, 50 / s for an hour: $facts")
+        assertEquals(facts, 0, joined)
+        assertTrue(facts, worst <= GatewayServer.GLOBAL_MAX_FAILURES)
+        assertTrue(facts, comparedAt.size <= 12 * GatewayServer.GLOBAL_MAX_FAILURES + GatewayServer.GLOBAL_MAX_FAILURES)
+        // one line per pause (a compared wrong code that fills the window), never one per refused join
+        assertEquals(facts, rotations, pauseLines)
+        assertTrue(facts, rotations <= comparedAt.size)
+    }
+
+    /** The pause is a wait, not a lock-out for good: once it lapses a guest with the code the phone shows NOW joins. */
+    @Test
+    fun afterThePauseLapsesAGuestWithTheCurrentCodeJoins() {
+        val t0 = now
+        // 20 wrong codes over 2 minutes from 20 addresses: the 20th rotates the code and starts the pause
+        for (i in 0 until GatewayServer.GLOBAL_MAX_FAILURES) gateway.attemptJoin("10.9.0.${i + 1}", wrongCode(), t0 + i * 6_000L)
+        val code = gateway.code
+        // until the first of them is 5 min old, even the current code is refused — from any address
+        now = t0 + 2 * 60_000L
+        get("/join?code=$code").use { resp ->
+            assertEquals(429, resp.code)
+            assertEquals("180", resp.header("Retry-After"))
+            val body = resp.body!!.string()
+            assertTrue(body, body.contains("joining is paused for 3 min"))
+        }
+        now = t0 + GatewayServer.FAIL_WINDOW_MS - 1
+        val r = gateway.attemptJoin("192.168.50.5", code, now)
+        assertTrue(isPause(r))
+        assertEquals(1L, (r as GatewayServer.JoinResult.Locked).remainingMs)
+        get("/join?code=$code").use { resp ->
+            assertEquals(429, resp.code)
+            assertEquals("1", resp.header("Retry-After"))
+            val body = resp.body!!.string()
+            assertTrue(body, body.contains("joining is paused for 1 s"))      // never "1 min" for the last millisecond
+        }
+        // …then the current code joins, over HTTP like a guest's phone
+        now = t0 + GatewayServer.FAIL_WINDOW_MS
+        get("/join?code=$code", ua = PHONE_UA).use { resp ->
+            assertEquals(302, resp.code)
+            assertEquals("/phone?panel=1", resp.header("Location"))
+        }
+        assertEquals(1, gateway.sessionCount)
+    }
+
+    /**
+     * The cost of the pause falls on NEW joins only: a guest already in, the paired computer
+     * (its `cs_admin` cookie) and the phone's own review screen (the owner token) never need a
+     * code, so they carry on with their roles as before. A pairing code made during the pause
+     * waits behind it like the 6-digit code, and pairs once it lapses.
+     */
+    @Test
+    fun duringThePauseSessionsAlreadyInThePairedComputerAndTheOwnerCarryOn() {
+        var full = true
+        val admins = AdminPairing(null, clock = { now })
+        val base = upstreamServer.url("/")
+        val g = GatewayServer(OkUpstream({ base }, upClient), port = 0, hostname = "127.0.0.1", clock = { now },
+            admins = admins, guestsFullAccess = { full })
+        g.startServing()
+        try {
+            fun call(p: String, cookie: String? = null): Response {
+                val b = Request.Builder().url("http://127.0.0.1:${g.listeningPort}$p")
+                cookie?.let { b.header("Cookie", it) }
+                return client.newCall(b.build()).execute()
+            }
+            fun roleSent(cookie: String): String? {
+                upstreamServer.enqueue(MockResponse().setBody("ok"))
+                call("/api/scans", cookie).use { r -> assertEquals(200, r.code); assertEquals("ok", r.body!!.string()) }
+                return upstreamServer.takeRequest(5, TimeUnit.SECONDS)!!.getHeader(GatewayServer.ROLE_HEADER)
+            }
+            val guest = call("/join?code=${g.code}").use { it.header("Set-Cookie")!!.substringBefore(';') }
+            val computer = call("/join?code=${admins.newCode()}").use { r ->
+                r.headers("Set-Cookie").first { it.startsWith(GatewayServer.ADMIN_COOKIE) }.substringBefore(';')
+            }
+            val owner = "${GatewayServer.ADMIN_COOKIE}=${admins.ownerToken}"
+            // the attack: 20 wrong codes from 20 addresses
+            for (i in 0 until GatewayServer.GLOBAL_MAX_FAILURES) g.attemptJoin("10.20.0.${i + 1}", wrongCode(g), now)
+            assertTrue(isPause(g.attemptJoin("10.20.1.1", g.code, now)))
+            // a NEW guest with the right code, and a pairing code made now: both refused, no cookie
+            val pairing = admins.newCode()
+            for (code in listOf(g.code, pairing)) {
+                call("/join?code=$code").use { r ->
+                    assertEquals(429, r.code)
+                    assertTrue(r.headers("Set-Cookie").isEmpty())
+                    assertTrue(r.body!!.string().contains("on this network"))
+                }
+            }
+            // everyone already in carries on, the role header as before
+            assertEquals("guest, full access on", GatewayServer.ROLE_ADMIN, roleSent(guest))
+            full = false
+            assertEquals("guest, full access off", GatewayServer.ROLE_GUEST, roleSent(guest))
+            assertEquals("paired computer", GatewayServer.ROLE_ADMIN, roleSent(computer))
+            assertEquals("the phone's own review screen", GatewayServer.ROLE_ADMIN, roleSent(owner))
+            // pause over: the pairing code (10 min) pairs
+            now += GatewayServer.FAIL_WINDOW_MS
+            call("/join?code=$pairing").use { r ->
+                assertEquals(302, r.code)
+                assertTrue(r.headers("Set-Cookie").any { it.startsWith(GatewayServer.ADMIN_COOKIE + "=") })
+            }
+        } finally {
+            g.stop()
+        }
+    }
+
+    /**
+     * What survives from the old rules: an address still locks at its 8th wrong code in 5 min
+     * (its own lockout, not the pause) — and its count now survives a rotation, which used to
+     * clear it (so 7 + 7 + … from one address after each rotation never locked).
+     */
+    @Test
+    fun anAddressStillLocksAtItsEighthAndItsCountSurvivesARotation() {
+        val t0 = now
+        val code0 = gateway.code
+        // 13 wrong from others at t0, then 7 from A a minute later: the 20th (A's 7th) rotates + pauses
+        for (i in 0 until 13) assertTrue(gateway.attemptJoin("10.30.0.${i + 1}", wrongCode(), t0) is GatewayServer.JoinResult.Wrong)
+        repeat(6) { assertTrue(gateway.attemptJoin("192.168.7.7", wrongCode(), t0 + 60_000) is GatewayServer.JoinResult.Wrong) }
+        assertTrue(isPause(gateway.attemptJoin("192.168.7.7", wrongCode(), t0 + 60_000)))
+        assertNotEquals(code0, gateway.code)
+        // the pause ends when the 13 leave the window (t0 + 5 min); A's 7 are still in it, so A's 8th locks A
+        val eighth = gateway.attemptJoin("192.168.7.7", wrongCode(), t0 + GatewayServer.FAIL_WINDOW_MS)
+        assertTrue("A's 8th wrong code in 5 min: $eighth", eighth is GatewayServer.JoinResult.Locked && !isPause(eighth))
+        assertEquals(GatewayServer.LOCKOUT_MS, (eighth as GatewayServer.JoinResult.Locked).remainingMs)
+        // A is locked — even with the right code — while another address joins
+        assertTrue(gateway.attemptJoin("192.168.7.7", gateway.code, t0 + GatewayServer.FAIL_WINDOW_MS + 1) is GatewayServer.JoinResult.Locked)
+        assertTrue(gateway.attemptJoin("192.168.7.8", gateway.code, t0 + GatewayServer.FAIL_WINDOW_MS + 1) is GatewayServer.JoinResult.Joined)
     }
 
     @Test
@@ -244,6 +504,51 @@ class GatewayServerTest {
         assertEquals(oldCode, gateway.code)
         // locked even for the right code
         assertTrue(gateway.attemptJoin("10.1.2.3", oldCode, now) is GatewayServer.JoinResult.Locked)
+    }
+
+    /**
+     * The pause check, the comparison and the failure record are one critical section for the
+     * network-wide count too: 64 addresses guessing at the same instant get 19 plain rejections,
+     * the 20th starts the pause, and the other 44 are refused without being compared.
+     */
+    @Test
+    fun parallelWrongCodesFromManyAddressesNeverCompareMoreThanTwenty() {
+        val codes = List(64) { wrongCode() }
+        val rotations = java.util.concurrent.atomic.AtomicInteger()
+        gateway.onCodeRotated = { rotations.incrementAndGet() }
+        val comparedBefore = gateway.joinCodesCompared
+        val pool = Executors.newFixedThreadPool(codes.size)
+        val start = CountDownLatch(1)
+        val results = try {
+            val futures = codes.mapIndexed { i, c ->
+                pool.submit<GatewayServer.JoinResult> { start.await(); gateway.attemptJoin("10.3.${i / 8}.${i % 8 + 1}", c, now) }
+            }
+            start.countDown()
+            futures.map { it.get(10, TimeUnit.SECONDS) }
+        } finally {
+            pool.shutdownNow()
+        }
+        assertEquals(GatewayServer.GLOBAL_MAX_FAILURES - 1, results.count { it is GatewayServer.JoinResult.Wrong })
+        assertEquals(codes.size - GatewayServer.GLOBAL_MAX_FAILURES + 1, results.count { isPause(it) })
+        assertEquals(GatewayServer.GLOBAL_MAX_FAILURES.toLong(), gateway.joinCodesCompared - comparedBefore)
+        assertEquals(1, rotations.get())
+    }
+
+    /**
+     * New guest code (the owner's own press on the Share screen, `stopSharing`) ends a pause along
+     * with every guest session: the phone's owner can always start over. A search still running
+     * then gets 20 more codes before joining pauses again.
+     */
+    @Test
+    fun newGuestCodeEndsAPause() {
+        for (i in 0 until GatewayServer.GLOBAL_MAX_FAILURES) gateway.attemptJoin("10.40.0.${i + 1}", wrongCode(), now)
+        assertTrue(isPause(gateway.attemptJoin("10.40.1.1", gateway.code, now)))
+        val code = gateway.stopSharing()
+        get("/join?code=$code").use { r -> assertEquals(302, r.code) }
+        for (i in 0 until GatewayServer.GLOBAL_MAX_FAILURES - 1) {
+            assertTrue(gateway.attemptJoin("10.40.2.${i + 1}", wrongCode(), now) is GatewayServer.JoinResult.Wrong)
+        }
+        assertTrue(isPause(gateway.attemptJoin("10.40.3.1", wrongCode(), now)))
     }
 
     @Test

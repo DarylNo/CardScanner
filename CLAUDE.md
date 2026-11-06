@@ -1295,9 +1295,10 @@ lens on testers' phones), minSdk 29, arm64-v8a.
   ("…" until then, one Delete-all dialog at a time); the debug log says
   "store … opened in N ms".
 - **Roles.** A computer pairs as ADMIN with a one-time 8-digit code (10 min,
-  single use, its own budget of 10 wrong tries, retired by a guest-code
-  rotation) → a long-lived `cs_admin` cookie (only its SHA-256 on disk;
-  "Forget paired computers" revokes). The phone's own review screen is admin
+  single use, its own budget of 10 wrong tries, behind the same lockout and
+  pause as the Share code, retired when a pause starts) → a long-lived
+  `cs_admin` cookie (only its SHA-256 on disk; "Forget paired computers"
+  revokes). The phone's own review screen is admin
   via `AdminPairing.ownerToken` (in memory, never persisted or counted,
   untouched by Forget). The 6-digit Share code's role is a SETTING —
   **"Guests get full access"** (Settings → This phone's server,
@@ -1321,10 +1322,35 @@ lens on testers' phones), minSdk 29, arm64-v8a.
   header = guest, fail closed). Pages start as guest (`<body class="guest">`)
   until `/api/me` answers; a guest's swipe flags, the admin gets "Delete
   flagged (n)" (only the ids it confirmed). The gateway answers LAN/hotspot
-  peers only (socket address, not headers), locks an IP at its 8th bad code in
-  5 min (for 5 min), and rotates the code after 20 bad codes from anywhere in
-  5 min. Tested: `GatewayServerTest` (the role header per request, flipped
-  live, a client's own dropped, no cookie refused), `PhoneServerTest` (end to
+  peers only (socket address, not headers) and locks an IP at its 8th bad code
+  in 5 min (for 5 min: 429 "Too many wrong codes from this device").
+  **The join pause (final review of 1.1.19, a probe that joined after ~0.4–2.4 M
+  guesses, never locked):** the 20th bad code in 5 min from ALL addresses (6-
+  or 8-digit) rotates the code, retires a waiting admin code and PAUSES joining
+  for every address — a right code is refused like any other (429 "Too many
+  wrong codes on this network — joining is paused for N min", Retry-After) —
+  until the oldest of the 20 is 5 min old. Before, that 20th RESET every count,
+  so 3 addresses sending 7 / 7 / 6 in turn (IPv4 aliases, fe80::/fc00:: — all
+  `isLocalClient`) never locked and guessed at the request rate (~10⁶ requests,
+  1–3 h — and a Share-code session is admin by default). Now nothing but time
+  (and the owner's New guest code, `stopSharing`) empties the count: ≤ 20
+  codes compared in any 5 min, ≈ 10⁶ / 20 × 5 min ≈ 174 days expected (≈ 0.6 %
+  per day of non-stop guessing). The cost: while bad codes keep coming nobody
+  NEW joins or pairs (the attacker takes each slot as it frees, and each slot
+  it fills starts a pause again — the code changes with it: 221 times in the
+  test's hour at 50/s); once they stop, ≤ 5 min. Sessions already in, the
+  paired computer (`cs_admin`) and the phone's own review screen (owner token)
+  never need a code and carry on. A lockout and a pause are each logged ONCE
+  under `server`, when they start ("8 wrong join codes from <ip> within 5 min —
+  that address is locked out 5 min", "20 wrong join codes within 5 min — guest
+  code rotated, joining paused 5 min"); a refused join is not logged (one device
+  hammering /join used to push the 3000-line log out). Tested: `GatewayServerTest`
+  (the role header per request, flipped live, a client's own dropped, no cookie
+  refused; the 7 / 7 / 6 attack — 100 000 tries at one instant compare 20 and
+  join none, where the old rule joined; an hour at 50/s from 5 addresses — 240
+  compared, busiest 5 min 20; 64 parallel addresses; the pause's words, Retry-After
+  and one log line; the pause lapsing; sessions, the paired computer and the
+  owner through a pause; an address's count surviving a rotation), `PhoneServerTest` (end to
   end on the real API), `AppSettingsTest`, `ScreensSmokeTest` (the switch row
   at the N200's size, the log line, the live provider, Diagnostics, the Share
   card) — not on the phone.

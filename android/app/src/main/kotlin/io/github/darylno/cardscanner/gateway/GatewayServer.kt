@@ -37,18 +37,30 @@ import java.util.logging.Logger
  *    waiting 8-digit admin code `cs_admin=<token>` (≈10 years) — both HttpOnly, SameSite=Lax,
  *    Path=/ — and 302s to `/phone?panel=1` (mobile UA) or `/`.
  *  - every other request without a live session cookie gets a small "enter the code" page.
- *  - 8 wrong codes from one IP within 5 minutes lock that IP out (429) for 5 minutes. The
- *    lockout check, the comparison and the failure record happen in ONE critical section,
- *    so parallel connections from one IP can never get more than 8 guesses evaluated.
- *  - 20 wrong codes within 5 minutes from ALL addresses combined rotate the code (existing
- *    sessions stay valid; [onCodeRotated] fires so the phone can show the new one), retire a
- *    waiting admin code, and reset the failure counters: a search spread over many source
- *    addresses (IPv6 privacy addresses, spare IPv4s) restarts against a new unknown code.
- *    Active lockouts stay.
+ *  - 8 wrong codes from one IP within 5 minutes lock that IP out (429 "from this device") for
+ *    5 minutes. The refusal check, the comparison and the failure record happen in ONE critical
+ *    section, so parallel connections from one IP can never get more than 8 guesses evaluated.
+ *  - THE PAUSE: 20 wrong codes within 5 minutes from ALL addresses combined (the 6-digit and
+ *    the 8-digit admin code alike) rotate the code (existing sessions stay valid;
+ *    [onCodeRotated] fires so the phone can show the new one), retire a waiting admin code,
+ *    and pause joining for EVERY address (429 "on this network") until the oldest of those 20
+ *    is 5 minutes old — a right code is refused like any other. Nothing resets the count but
+ *    time (and the owner's New guest code, [stopSharing]), so no 5 minutes compare more than
+ *    20 codes however many addresses (IPv6 privacy addresses, spare IPv4s) a search is spread
+ *    over: ≈ 10⁶ / 20 × 5 min ≈ 174 days expected to hit the code (≈ 0.6 % per day of
+ *    non-stop guessing). Before (final review of 1.1.19) the 20th RESET every count, and 3
+ *    addresses sending 7 / 7 / 6 wrong codes in turn guessed at the request rate, never
+ *    locked: ~10⁶ requests, 1–3 h. The cost: while wrong codes keep coming nobody NEW joins
+ *    or pairs (an attacker takes each slot as it frees — and each one it fills starts a pause
+ *    again, so the code changes with it); once they stop, ≤ 5 min. A session already in, the
+ *    paired computer and the phone's own review screen need no code and carry on. Lockouts
+ *    in force stay through a pause. Each lockout and each pause is logged once, when it
+ *    starts, under `server` — never a refused join, never a code.
  *  - LAN only: clients whose address is not private/link-local ([isLocalClient]) get a 403
  *    before anything else — the listener binds every interface, so without this the join
  *    page would be reachable over Tailscale (100.64/10) and over cellular public IPv6.
- *  - [stopSharing] rotates the code and forgets every guest session (paired computers stay).
+ *  - [stopSharing] rotates the code and forgets every guest session (paired computers stay)
+ *    and every wrong code, so it also ends lockouts and a pause.
  * Risks the owner accepted: anyone who reads the Share code (shoulder-surfing, a photo of the
  * QR) gets — with full access on — the paired computer's powers until sharing stops: deleting
  * scans for good (the phone holds the only copy), exporting, changing the scanner's settings; the
@@ -93,8 +105,9 @@ class GatewayServer(
     private val globalFailures = ArrayDeque<Long>()      // guarded by [failures]
 
     /**
-     * Called (off the lock, on the request thread) with the new code when the global
-     * brute-force budget rotates it. Not called by [stopSharing], whose caller has the code.
+     * Called (off the lock, on the request thread) with the new code when a pause starts and
+     * rotates it (the 20th wrong code in 5 min from all addresses). Not called by [stopSharing],
+     * whose caller has the code.
      */
     @Volatile
     var onCodeRotated: ((String) -> Unit)? = null
@@ -104,13 +117,24 @@ class GatewayServer(
         object Joined : JoinResult()
         class JoinedAdmin(val token: String) : JoinResult()
         object Wrong : JoinResult()
-        class Locked(val remainingMs: Long) : JoinResult()
+        /**
+         * Refused for [remainingMs] (429) — or the wrong code that just started the refusal.
+         * [paused]: the network-wide pause (20 wrong codes from ALL addresses in 5 min), not this
+         * address's own lockout (8 of its own); when both hold, the one that ends later is given,
+         * so the words ("on this network" / "from this device") always name what is in the way.
+         */
+        class Locked(val remainingMs: Long, val paused: Boolean = false) : JoinResult()
     }
 
     private class Attempts {
         val times = ArrayDeque<Long>()
         var lockedUntil = 0L
     }
+
+    private var compared = 0L                            // guarded by [failures]
+
+    /** Join codes actually compared since start — attempts a lockout or the pause did not refuse. */
+    internal val joinCodesCompared: Long get() = synchronized(failures) { compared }
 
     /** When an authenticated request last came from ANOTHER device (not this phone). 0 = never. */
     @Volatile var lastRemoteAt: Long = 0L
@@ -128,7 +152,9 @@ class GatewayServer(
 
     /**
      * Ends every guest session and rotates the join code (a new share needs the new code).
-     * Returns the new code. Does not stop the listener — call [stop] for that.
+     * Returns the new code. Does not stop the listener — call [stop] for that. It also forgets
+     * every wrong code: lockouts and a pause end — the owner's own press (New guest code) always
+     * starts over; a search still running gets 20 more codes before joining pauses again.
      */
     fun stopSharing(): String {
         sessions.clear()
@@ -182,12 +208,14 @@ class GatewayServer(
         val now = clock()
         val given = session.parameters["code"]?.firstOrNull()
         if (given.isNullOrBlank()) {
-            val locked = synchronized(failures) { failures[ip]?.lockedUntil?.takeIf { it > now }?.minus(now) }
-            return if (locked != null) tooMany(locked) else codePage(session, null)
+            val refused = synchronized(failures) { refusal(ip, now) }
+            return if (refused != null) tooMany(refused) else codePage(session, null)
         }
         val result = attemptJoin(ip, given, now)
         when (result) {       // never log the code itself
-            is JoinResult.Locked -> io.github.darylno.cardscanner.core.DebugLog.global.w("server", "join from $ip refused — locked out")
+            // A lockout and a pause are logged once, when they start (attemptJoin) — never per
+            // refused join: one device hammering /join would push everything else out of the log.
+            is JoinResult.Locked -> Unit
             JoinResult.Wrong -> io.github.darylno.cardscanner.core.DebugLog.global.w("server", "wrong join code from $ip")
             is JoinResult.JoinedAdmin -> io.github.darylno.cardscanner.core.DebugLog.global.i("server", "computer at $ip paired as admin")
             JoinResult.Joined -> io.github.darylno.cardscanner.core.DebugLog.global.i("server", "guest joined from $ip" +
@@ -198,7 +226,7 @@ class GatewayServer(
                 })
         }
         when (result) {
-            is JoinResult.Locked -> return tooMany(result.remainingMs)
+            is JoinResult.Locked -> return tooMany(result)
             JoinResult.Wrong ->
                 return codePage(session, "That code is not right — check the scanner phone and try again.", status = 403)
             is JoinResult.JoinedAdmin, JoinResult.Joined -> Unit
@@ -221,24 +249,31 @@ class GatewayServer(
     }
 
     /**
-     * One join attempt from [ip] with code [given]: lockout check → attempt reserved in the
-     * per-IP and global windows → constant-time compare → reservation kept (wrong) or
-     * released (right), all inside ONE critical section. Separate check/record blocks let N
-     * parallel connections from one IP all pass the check before any failure landed.
-     * The compare is a few nanoseconds, so holding the lock across it costs nothing.
+     * One join attempt from [ip] with code [given]: [refusal] check (this address's lockout, the
+     * network-wide pause) → attempt reserved in the per-IP and global windows → constant-time
+     * compare → reservation kept (wrong) or released (right), all inside ONE critical section.
+     * Separate check/record blocks let N parallel connections from one IP all pass the check
+     * before any failure landed. The compare is a few nanoseconds, so holding the lock across it
+     * costs nothing.
+     *
+     * The global window is never reset by a rotation (only time and [stopSharing] empty it):
+     * once it holds [GLOBAL_MAX_FAILURES] wrong codes, [refusal] answers EVERY address — a right
+     * code and the 8-digit admin code too — until the oldest leaves the window, so no 5 minutes
+     * ever compare more than 20 codes. Before, the 20th reset every count (and every address's
+     * own), and three addresses sending 7 / 7 / 6 wrong codes in turn guessed at the request
+     * rate, never locked (final review of 1.1.19).
      */
     internal fun attemptJoin(ip: String, given: String, now: Long): JoinResult {
         var rotatedTo: String? = null
+        var pausedFor = 0L
+        var lockedNow = false
         val result = synchronized(failures) {
-            // Forget IPs whose last failure is out of the window and who are not locked.
-            failures.entries.removeAll { (_, a) -> a.lockedUntil <= now && (a.times.lastOrNull() ?: 0L) <= now - FAIL_WINDOW_MS }
-            while (globalFailures.isNotEmpty() && globalFailures.first() <= now - FAIL_WINDOW_MS) globalFailures.removeFirst()
+            refusal(ip, now)?.let { return@synchronized it }
             val a = failures.getOrPut(ip) { Attempts() }
-            if (a.lockedUntil > now) return@synchronized JoinResult.Locked(a.lockedUntil - now)
-            while (a.times.isNotEmpty() && a.times.first() <= now - FAIL_WINDOW_MS) a.times.removeFirst()
             // Reserve before comparing.
             a.times.addLast(now)
             globalFailures.addLast(now)
+            compared++
             if (joinCode.matches(given)) {
                 failures.remove(ip)
                 globalFailures.removeLast()
@@ -249,34 +284,66 @@ class GatewayServer(
                 globalFailures.removeLast()
                 return@synchronized JoinResult.JoinedAdmin(token)
             }
-            val out: JoinResult = if (a.times.size >= MAX_FAILURES) {
+            if (a.times.size >= MAX_FAILURES) {
                 a.times.clear()
                 a.lockedUntil = now + LOCKOUT_MS
-                JoinResult.Locked(LOCKOUT_MS)
-            } else JoinResult.Wrong
+                lockedNow = true
+            }
             if (globalFailures.size >= GLOBAL_MAX_FAILURES) {
-                // A distributed search restarts against a new unknown code. Counters reset;
-                // lockouts in force stay (they are penalties, not counts); sessions stay.
+                // The pause starts ([refusal] now answers every address). The code rotates so each
+                // ≤ 20 guesses aim at a fresh unknown code; NO count is reset (that reset was the
+                // hole) and lockouts in force stay; sessions stay.
                 rotatedTo = joinCode.rotate()
                 admins?.cancelCode()        // a distributed search must not keep aiming at the admin code
-                globalFailures.clear()
-                failures.values.forEach { it.times.clear() }
-                failures.entries.removeAll { (_, x) -> x.lockedUntil <= now }
+                pausedFor = globalFailures.first() + FAIL_WINDOW_MS - now
             }
-            out
+            // This wrong code may itself have locked the address or started the pause: say so now.
+            refusal(ip, now) ?: JoinResult.Wrong
         }
+        // Once each, never with a code: a lockout and a pause start only on a compared wrong code.
+        if (lockedNow) io.github.darylno.cardscanner.core.DebugLog.global.w("server",
+            "$MAX_FAILURES wrong join codes from $ip within 5 min — that address is locked out ${waitWords(LOCKOUT_MS)}")
         rotatedTo?.let { code ->
-            LOG.log(Level.WARNING, "gateway: $GLOBAL_MAX_FAILURES wrong join codes within the window — code rotated")
-            io.github.darylno.cardscanner.core.DebugLog.global.w("server", "$GLOBAL_MAX_FAILURES wrong join codes within 5 min — guest code rotated")
+            val wait = waitWords(pausedFor)
+            LOG.log(Level.WARNING, "gateway: $GLOBAL_MAX_FAILURES wrong join codes within the window — code rotated, joining paused $wait")
+            io.github.darylno.cardscanner.core.DebugLog.global.w("server",
+                "$GLOBAL_MAX_FAILURES wrong join codes within 5 min — guest code rotated, joining paused $wait")
             try { onCodeRotated?.invoke(code) } catch (e: Exception) { LOG.log(Level.WARNING, "onCodeRotated failed", e) }
         }
         return result
     }
 
-    private fun tooMany(remainingMs: Long): Response {
-        val r = html(429, "Too many tries",
-            "<p>Too many wrong codes from this device. Wait ${(remainingMs + 59_999) / 60_000} min and try again.</p>")
-        r.addHeader("Retry-After", ((remainingMs + 999) / 1000).toString())
+    /**
+     * Under [failures]: forgets what left the window, then the refusal in force for [ip] at [now] —
+     * its own lockout, or the network-wide pause (the global window full: [GLOBAL_MAX_FAILURES]
+     * wrong codes from all addresses, until the oldest is [FAIL_WINDOW_MS] old), whichever ends
+     * later — or null. Never adds an entry, so a refused flood from fresh addresses costs no memory.
+     */
+    private fun refusal(ip: String, now: Long): JoinResult.Locked? {
+        // Forget IPs whose last failure is out of the window and who are not locked.
+        failures.entries.removeAll { (_, a) -> a.lockedUntil <= now && (a.times.lastOrNull() ?: 0L) <= now - FAIL_WINDOW_MS }
+        while (globalFailures.isNotEmpty() && globalFailures.first() <= now - FAIL_WINDOW_MS) globalFailures.removeFirst()
+        val a = failures[ip]
+        if (a != null) while (a.times.isNotEmpty() && a.times.first() <= now - FAIL_WINDOW_MS) a.times.removeFirst()
+        val own = (a?.lockedUntil ?: 0L) - now
+        val pause = if (globalFailures.size >= GLOBAL_MAX_FAILURES) globalFailures.first() + FAIL_WINDOW_MS - now else 0L
+        return when {
+            own <= 0L && pause <= 0L -> null
+            own >= pause -> JoinResult.Locked(own)
+            else -> JoinResult.Locked(pause, paused = true)
+        }
+    }
+
+    private fun tooMany(locked: JoinResult.Locked): Response {
+        val wait = waitWords(locked.remainingMs)
+        val r = html(429, "Too many tries", if (locked.paused) {
+            // Every pause starts with a new code, so a code read before it is stale.
+            "<p>Too many wrong codes on this network — joining is paused for $wait.</p>" +
+                "<p>Then enter the code the scanner phone shows now — it changed when the pause began.</p>"
+        } else {
+            "<p>Too many wrong codes from this device. Wait $wait and try again.</p>"
+        })
+        r.addHeader("Retry-After", ((locked.remainingMs + 999) / 1000).toString())
         return r
     }
 
@@ -561,6 +628,10 @@ button{font-size:1.1rem;padding:.55em 1.2em;margin-left:.4em;border-radius:6px;b
             for ((i, w) in words.withIndex()) { bytes[2 * i] = (w shr 8).toByte(); bytes[2 * i + 1] = w.toByte() }
             return bytes
         }
+
+        /** A wait for people: whole minutes (rounded up) from 1 min, else whole seconds — never "1 min" for 1 ms. */
+        internal fun waitWords(ms: Long): String =
+            if (ms >= 60_000L) "${(ms + 59_999) / 60_000} min" else "${(maxOf(ms, 1L) + 999) / 1000} s"
 
         internal fun isHopByHop(lowerName: String) = lowerName in HOP_BY_HOP || lowerName.startsWith("proxy-")
 

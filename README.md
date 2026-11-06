@@ -212,6 +212,13 @@ On the same Wi-Fi, or the phone's hotspot:
   The switch applies at once, to guests already connected too. **New guest
   code** ends every guest session.
 
+  Wrong codes are limited: 8 from one device within 5 minutes lock that device
+  out for 5 minutes, and 20 from all devices together **pause joining** for
+  everyone new (the code changes, and the page says "joining is paused") for
+  up to 5 minutes after the wrong codes stop. Whoever is already in — guests, the
+  paired computer, the phone itself — carries on; **New guest code** also ends
+  the pause.
+
 The connection on your network is plain HTTP — pair on a network you trust.
 The phone's server stops by itself after 30 minutes with the app in the
 background and nobody connected; opening the app starts it again.
