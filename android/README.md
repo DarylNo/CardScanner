@@ -29,7 +29,7 @@ CameraX Preview + ImageAnalysis (the Camera setting — camera 0 by default —
    ▼
 AutoScanner.tick()          :core — phone.html's detection + state machine, ported
    │  CardOutline + OutlineTracker on the same sample: the live, smoothed outline
-   │  Trigger (Tray) with no card outline → REFUSED (the card-shape gate)
+   │  Trigger (Tray) with no card outline and no printed detail → REFUSED (the card-shape gate)
    │  Trigger with an outline  or  shutter tap (Tap to scan, never gated)
    ▼
 CapturePipeline             last 3 ring frames → sharpest (Laplacian variance)
@@ -54,7 +54,7 @@ Modules and packages (`io.github.darylno.cardscanner`):
 
 | Where | What |
 |---|---|
-| `:core` (pure JVM) | `Detection`, `AutoScanner` (phone.html port), `CardQuad` (server `card_detect` port), `Flatten`, `ScanPhoto`, `CardOutline` + `OutlineTracker` (live outline, smoothing, the card-shape gate's evidence), `TextureChange` (shadow mode), `CameraChoice` (the Camera setting), `GraySampler`, `Sharpness`, `Rotation`, `RoiFrac`, `Nv21Frame`, `Nv21Bgr`. OpenCV is `compileOnly`; tests load `org.openpnp:opencv` natives. |
+| `:core` (pure JVM) | `Detection`, `AutoScanner` (phone.html port), `CardQuad` (server `card_detect` port), `Flatten`, `ScanPhoto`, `CardOutline` + `OutlineTracker` (live outline, smoothing, the card-shape gate's evidence), `TextureChange` (shadow mode), `CameraChoice` (the Camera setting), `PrintEvidence` (the printed-detail fallback), `FocusPoint`, `RefocusPolicy` + `CardFocusState` (card focus), `ZoomFit` / `ZoomCoordinator` / `ZoomSnapshot` / `ZoomProbe*` (Zoom to fit and its probe), `ScreenDim`, `DebugLog`, the identifier (`PHash` / `ArtHasher` / `ArtMatcher`, `IdentifyPipeline`, `PrintingRanker`, `OcrMatch`, `ListTwins`, `Popularity`, `CardList`), and `core/server` (`ScanStore`, `PhoneApi`, `PriceSweep` / `PriceWorker`, `Export`, `DeviceApi`, `DebugApi`, `ScanServer`); plus `GraySampler`, `Sharpness`, `Rotation`, `RoiFrac`, `Nv21Frame`, `Nv21Bgr`. OpenCV is `compileOnly`; tests load `org.openpnp:opencv` natives. |
 | `app/camera` | `CameraController` (bind, camera choice, focus, torch, AE/AWB lock, diagnostics), `CameraCatalog` (the phone's lenses from Camera2), `FrameRing`, `ScanAnalyzer` (the analysis-thread loop; all `AutoScanner` access is confined to it). |
 | `app/capture` | `CapturePipeline` (sharpest frame → quad → flatten → JPEG). |
 | `app/net` | `UploadQueue` (persistent FIFO, fallback retry, `ScanUploader`). |
@@ -62,7 +62,10 @@ Modules and packages (`io.github.darylno.cardscanner`):
 | `app/phoneserver` | `PhoneServer` (the phone's server: `SqliteScanStore`, `PhotoDir`, `PhoneBackend` over `:core`'s `PhoneApi`/`PriceSweep`/`Export`/`DeviceApi`), `LocalScanUploader`, `LocalUpstream`, `PhoneF2f`, `DeviceBridge`. |
 | `app/gateway` | `GatewayServer` (NanoHTTPD, roles: `AdminPairing`), `JoinCode`, `LocalAddresses`, `GatewayService` (foreground service that keeps the phone serving), `QrBitmap`. |
 | `app/f2f` | `F2fFetcher` (port of `facetoface._default_get_json` pacing/retry, parity-tested against `app/src/test/resources/f2f/pacing.json`), `F2fPricer` (query ladder + SKU confirmation), `F2fCache`, `OkHttpTransport` / `CronetTransport`, `F2fProbe` (the network test). |
-| `app/ui` | `MainActivity`, `OverlayView`, `PanelActivity` (review WebView of the phone's own pages), `ShareActivity` (guest code), `SettingsActivity` + `ServerSection` (this phone's server: pair a computer, Guests get full access, card database, storage), `AppSettings`. |
+| app (root package) | `MainActivity` (the scan screen), `App`. |
+| `app/ocr` | `MlKitOcrEngine`, `OcrText` (the collector-line OCR). |
+| `app/update` | `UpdateLock` (a newer release stops scanning). |
+| `app/ui` | `OverlayView`, `PanelActivity` (review WebView of the phone's own pages), `ShareActivity` (guest code), `SettingsActivity` + `ServerSection` (this phone's server: pair a computer, Guests get full access, card database, storage), `AppSettings`. |
 
 Rules the app keeps (see also CLAUDE.md → "Android app"):
 
@@ -71,7 +74,9 @@ Rules the app keeps (see also CLAUDE.md → "Android app"):
   (`core/src/test/resources/phone_harness.js`) and compares it with the Kotlin
   port step by step. The trigger is occupancy + stillness only; no geometry
   gates on the detection mask. The app's card-shape gate sits after it: a
-  Tray trigger with no card-shaped outline is refused (see CLAUDE.md).
+  Tray trigger with no card-shaped outline is refused, unless the trigger box
+  shows a card's printed detail against a smooth learned tray (the 1.1.14
+  `PrintEvidence` fallback; see CLAUDE.md).
 - **The identifier keeps the server's rules.** The phone flattens the card
   with a margin and the ported pipeline re-detects inside it, exactly as the
   server did (`IdentifyParityTest` against the real Python pipeline); no card
@@ -102,8 +107,9 @@ pytest tests/ -q                                   # server + flatten spec
 ./gradlew :app:assembleDebug          # → app/build/outputs/apk/debug/app-debug.apk
 ```
 
-CI (`.github/workflows/ci.yml`, job `android`) runs exactly these on every push
-and PR and uploads the debug APK as the `mtg-card-scanner-android-debug`
+CI (`.github/workflows/ci.yml`, job `android`, on pushes to master and on every
+PR) runs these plus every other `scripts/export_*_fixture*.py --check` (12 in
+all, see ci.yml) and uploads the debug APK as the `mtg-card-scanner-android-debug`
 artifact. The release build (`release.yml`, job `apk`) publishes
 `mtg-card-scanner-android.apk` on the GitHub Release — the only asset since
 1.1.0, and only when signed with the release key.
@@ -170,7 +176,8 @@ still, capture, file, wait for the next card. Draw the scan **Area** to crop
 sampling and capture to the tray; double-tap the preview to re-learn the empty
 tray. Focus: when the camera starts it locks on the centre of the scan Area
 (the screen centre with no Area) so the lens stops hunting; then the FIRST
-card is focused on properly — its capture waits (≤1.5 s, once) until the
+card is focused on properly — its capture waits (≤1.5 s; if that pass fails the
+next card tries again, 3 tries in all) until the
 lens has focused on the card's own centre — and the cards after shoot
 instantly with focus held. It focuses again when the Area changes, the camera
 reopens, you tap the preview (locks where you tapped), a capture comes out far
@@ -186,8 +193,9 @@ position go in the debug log under `focus`, and each capture line carries its
 three frames' sharpness and the chosen frame's AF state.
 Tray
 scans are hands-free. While a card sits there the app outlines it (blue with
-a ✓ when it is captured). A Tray scan only fires when that outline is there:
-glare, a shadow or a still hand reads "Something in the Area — no card shape
+a ✓ when it is captured). A Tray scan fires when that outline is there, or, if
+the outline missed the card, when the box shows a card's printed detail against
+the learned empty tray: glare, a shadow or a still hand reads "Something in the Area — no card shape
 yet…", and after a couple of seconds the app adopts it as the empty tray.
 
 **Camera** — the pill at the top right of the live view ("‹ Auto · 13 MP ›")
@@ -278,7 +286,10 @@ the release key** (no debug-key fallback any more): until the three secrets
 below exist, a tagged release fails with a summary saying so, and nothing is
 published.
 
-Do this once:
+**Done — the secrets exist and every release through v1.1.19 published the
+signed `mtg-card-scanner-android.apk`. Never generate or replace the release
+key: a new key forces every phone to uninstall, which wipes its scans.** For the
+record, the one-time setup was:
 
 1. From a repo checkout with the package installed (`pip install -e .`), in a
    folder that is NOT synced or inside the repo:
@@ -397,6 +408,19 @@ Run on the Nord N200 after installing a new build:
       phone too. Tab to a 🗑 and press Enter → focus jumps to Undo; Enter again
       restores it. Delete a row near the bottom → the last row's 🗑 is still
       clickable above the Undo bar.
+- [ ] Wrong Share code from 3+ devices, 20 in all within 5 minutes → "Too many
+      wrong codes on this network — joining is paused"; the Share screen shows
+      the NEW code at once (no leaving and coming back); 5 minutes after the
+      wrong codes stop the new code joins. Guests already in and the paired
+      computer carry on throughout.
+- [ ] Refocus on a card (default every 5 min): after 5 minutes of Tray, the
+      next card waits for a "periodic refocus" `focus` line; a tap on the
+      preview pauses it until a new Area or the scan screen re-opens.
+- [ ] Dim when idle: a minute with no touch or scan dims the screen (not on a
+      phone already that dark); a touch or the next scan brightens it.
+- [ ] Prices after the 1.1.17 / 1.1.18 re-checks: a List card, a meld half
+      (Midnight Scavengers EMN 96, Graf Rats EMN 91) and a promo with a letter
+      collector (e.g. 59s) all show their own F2F price.
 - [ ] Screen off for 10 minutes: the computer and guests still get through.
 - [ ] Settings → Diagnostics shows the camera setting, every offered lens,
       the bound camera, hardware level, analysis size and capture timings;

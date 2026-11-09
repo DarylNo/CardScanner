@@ -30,24 +30,38 @@ android/core/        pure Kotlin (JVM-testable): AutoScanner/Detection (the
                      + ZoomProbe/ZoomProbeRun/ZoomDetail (its probe),
                      PHash/ArtHasher/ArtMatcher (bit-exact
                      fingerprint), IdentifyPipeline, PrintingRanker,
-                     OcrMatch, Popularity, and core/server/ — ScanStore,
-                     PhoneApi (the /api surface), PriceSweep/PriceWorker,
-                     Export, DeviceApi, ScanServer (routing + admin-only rules)
-android/app/         Android: camera/ (CameraX, FrameRing, ScanAnalyzer,
-                     CameraCatalog, ZoomProbeGlue + ProbeMeasure),
-                     capture/, ident/ (ArtPackStore, PhoneIdentifier, ML Kit
-                     OCR), net/UploadQueue, phoneserver/ (PhoneServer,
-                     PhoneBackend, LocalScanUploader, SqliteScanStore, PhoneF2f),
-                     gateway/ (GatewayServer, GatewayService, AdminPairing),
-                     update/UpdateLock, ui/ (MainActivity = scan screen,
-                     PanelActivity = review WebView, Settings, Share)
+                     OcrMatch, ListTwins, Popularity, CardList (the external
+                     list), PrintEvidence (the printed-detail fallback),
+                     RefocusPolicy + CardFocusState (card focus), ScreenDim,
+                     DebugLog, and core/server/ — ScanStore, PhoneApi (the /api
+                     surface), PriceSweep/PriceWorker, Export, DeviceApi,
+                     DebugApi, ScanServer (routing + admin-only rules)
+android/app/         Android: MainActivity (package root = the scan screen),
+                     camera/ (CameraX, CameraController, FrameRing, ScanAnalyzer,
+                     FocusLog + FrameMetaRing, CameraCatalog, ZoomProbeGlue +
+                     ProbeMeasure), capture/, ident/ (ArtPackStore,
+                     PhoneIdentifier, LocalIdentify, ScryfallHttp), ocr/ (ML Kit:
+                     MlKitOcrEngine), f2f/ (F2fPricer, F2fFetcher, Cronet /
+                     OkHttp transports), net/UploadQueue, phoneserver/
+                     (PhoneServer, PhoneBackend, LocalScanUploader,
+                     SqliteScanStore, PhoneF2f, ExternalCardList, DeviceBridge),
+                     gateway/ (GatewayServer, GatewayService, AdminPairing,
+                     JoinCode), update/UpdateLock, ui/ (PanelActivity = review
+                     WebView, SettingsActivity, ShareActivity,
+                     DiagnosticsActivity, OverlayView, AppSettings,
+                     MeasureSession, ScreenAwake)
 server/              reference FastAPI app, store.py, export.py, static pages
-mtg_card_scanner/    reference pipeline: card_detect, art_index, art_pack,
-                     scryfall, visual_match, ocr_id, artwork, popularity,
-                     facetoface, card_list
-scripts/             export_*_fixtures.py (generate the Kotlin fixtures from the
-                     reference; `--check` in CI), make_android_keystore.py
-tests/               pytest (~470, all fakes — no camera/network)
+mtg_card_scanner/    reference pipeline: pipeline (scan_candidates,
+                     _ranked_candidates, _mark_art_decisive), card_detect,
+                     art_index, art_pack, scryfall, visual_match, ocr_id,
+                     list_twins, artwork, popularity, facetoface, card_list,
+                     change_signal, launch
+scripts/             export_*_fixture(s).py (generate the Kotlin fixtures from the
+                     reference; all 12 `--check`ed in CI), check_*_ui.py (drive
+                     the real pages in headless Chromium — NOT in CI, run by
+                     hand), score_card_edges / score_card_align (measurement),
+                     make_android_keystore.py
+tests/               pytest (642 at 1.1.19, all fakes — no camera/network)
 .github/workflows/   ci (pytest 3-OS, fixture --checks, android), release,
                      auto-tag, art-pack (weekly card database), pages
 ```
@@ -61,21 +75,35 @@ tests/               pytest (~470, all fakes — no camera/network)
 # Reference + fixtures
 pip install -e ".[test]"
 pytest tests/ -q
-python scripts/export_api_fixtures.py --check     # one per export_*_fixtures.py
+python scripts/export_api_fixtures.py --check     # and every other scripts/export_*_fixture*.py
+                                                  # (12, incl. export_pack_fixture.py and
+                                                  # export_f2f_pacing_fixture.py — the list ci.yml runs)
+
+# The review pages — NOT in CI; run every one after ANY phone.html / desktop.html edit
+pip install playwright                            # Chromium is preinstalled in cloud sessions
+for s in check_row_delete_ui check_compare_ui check_card_list_ui check_device_ui check_price_filter_ui; do
+  python scripts/$s.py; done                      # 219 / 92 / 44 / 135 / 16 checks at 1.1.19
 ```
+
+`pytest tests/` includes `tests/test_static_pages.py`, which pins page code
+(the compare block byte-identical in both pages, the Wanted exemption, the
+delete / Undo / refusal guards): an edit to one page alone fails CI.
 
 Run the reference server locally with `mtg-card-scanner --no-browser` (a
 supervisor, `mtg_card_scanner/launch.py`, serving HTTPS on :8443) — for
 reproducing reference behaviour only.
 
 **Bump `UI_VERSION`** in `phone.html` / `desktop.html` on every edit to them
-(the banner reads `d<N> · <version> (phone)`; stale-page debugging burned a
-full session before the banners existed).
+(desktop.html's banner reads `d<N> · <version>`, phone.html's `v<N> · <version>`;
+the phone's server adds " (phone)" to the version — d59 / v60 at 1.1.19; the
+`scripts/check_*_ui.py` drivers pin the current value, so update them with
+every bump; stale-page debugging burned a full session before the banners
+existed).
 
 ## Pipeline
 
 ```
-scan screen (Tray trigger — refused with no card outline — or shutter tap)
+scan screen (Tray trigger — refused with no card outline and no printed detail — or shutter tap)
   → CapturePipeline: sharpest of the last 3 frames → CardQuad → Flatten WITH A
     MARGIN (+ the 3 raw ROI crops as fallbacks)
   → UploadQueue (persistent, retried) → LocalScanUploader = the phone's POST /api/scan
@@ -98,8 +126,10 @@ geometry gates on the DIFF MASK (ratio/density/texture windows) each rejected
 real sleeved cards. The identification pipeline judges card content
 (texture-gated quads, blank-surface guard), never the trigger. Since 1.1.7
 the app refuses a Tray trigger when the live outline (`CardQuad.find` on the
-detection sample — found edges, not the mask) sees no card shape, and asks
-again on the next steady ticks (the card-shape gate, below). The scan Area
+detection sample — found edges, not the mask) sees no card shape AND (since
+1.1.14) the trigger box shows no printed detail (`PrintEvidence`), and asks
+again on the next steady ticks (the card-shape gate and its printed-detail
+fallback, below). The scan Area
 (ROI) crops sampling and capture.
 
 **Identification thresholds** (`art_index.py`): confident ≤110, or ≤140 with
@@ -599,7 +629,7 @@ lens on testers' phones), minSdk 29, arm64-v8a.
   `cameraId` and rebinds at once. GONE when the phone offers ≤ 1 lens — the
   one deliberate exception to "no buttons in the top bar". Tested in code (CameraChoiceTest, CameraCatalogTest
   on Robolectric's camera manager, DeviceApiTest, the Settings chooser in
-  ScreensSmokeTest, device_ui.py) — not on a second phone yet.
+  ScreensSmokeTest, scripts/check_device_ui.py) — not on a second phone yet.
 - Tap to scan always has an Area: with none set the app draws
   `HandheldGuide.defaultArea` (a centred card at 60% of the limiting side +
   15% pad — back from the card so the phone's shadow stays off it; a starting
@@ -608,14 +638,17 @@ lens on testers' phones), minSdk 29, arm64-v8a.
   then on the first card's own centre (below); tap the preview to lock elsewhere.
 - **Focus — "is it focusing?" (owner on 1.1.10: "No zoom? Focus working?";
   1.1.14; periodic refocus 1.1.18, below).** What the code does: every bind /
-  camera re-open / new Area / mode switch locks AF (CameraX AUTO + one trigger, the lens then stays put) at the
-  AREA CENTRE on the first frame — there is no card yet; Tray then holds the
+  camera re-open / new Area / zoom change locks AF (CameraX AUTO + one trigger, the lens then stays put) at the
+  AREA CENTRE on the first frame — there is no card yet (the Tray ↔ Tap to scan
+  switch, `CameraController.setAuto`, arms nothing); Tray then holds the
   FIRST card's capture (≤ `FOCUS_WAIT_NS` 1.5 s) for a pass metered ON THE
   CARD: the Trigger box's centre mapped out of the sample (`core/FocusPoint`,
   `FocusRequest` from the analyzer; before 1.1.14 that pass metered the Area
   centre too, and the card-box branch was dead code). A failed pass retries on
-  the next card, 3 in all, then gives up until a tap / new Area / re-open / the
-  soft-capture watchdog (a flattened Tray capture < 0.5 × the median of the
+  the next card, 3 in all (`CardFocusState.TRIES`), then gives up until a tap /
+  new Area / camera re-open / zoom change / the soft-capture watchdog, or
+  (1.1.18, unless Refocus on a card is Never or paused by a tap) the next
+  periodic refocus one interval after the give-up (a flattened Tray capture < 0.5 × the median of the
   last ≥ 5 re-arms the card pass — it never catches a session soft from the
   start). Taps lock where tapped. CameraX completes a pass that never
   converges NOT focused after 5 s (`FocusMeteringControl.AUTO_FOCUS_TIMEOUT_DURATION`,
@@ -838,7 +871,8 @@ lens on testers' phones), minSdk 29, arm64-v8a.
   `onZoom(1.55…)`, on screen, gone while drawing, back on Cancel, none with the
   switch off). Display only — nothing reaches the analyzer, detection, focus,
   the logs or `/api/device`. Tested in code, not on the phone. **What shows it:** the Area chip
-  reads "Area ✓ · 1.55×" while zoomed; the capture line ends "… @ 1.55×"; tag
+  reads "Area ✓ · 1.55×" while zoomed; the capture line (`done #k`) carries "… of FW×FH @ 1.55× · …" right after the
+  card size, before the chosen frame's AF / lens and the timings; tag
   `zoom` logs each request ("→ 1.55× requested (why) · 1.55× (limited by the
   Area fit)"), what the camera reports (CONTROL_ZOOM_RATIO, the crop region and
   whether it is centred), the gate ("analyzer paused — why" / "resumed at
@@ -1491,6 +1525,30 @@ lens on testers' phones), minSdk 29, arm64-v8a.
   an MX-inventory integration was built and REVERTED — ask before rebuilding.
 
 Open threads:
+- **State at the last handoff (2026-11-09):** v1.1.19 is released (2026-11-06,
+  `mtg-card-scanner-android.apk` published; PR #44 squash-merged as
+  `74cd69f`), so every older install is update-locked until it updates. No PR
+  is open. Every `claude/*` branch on the remote is merged (squash) except two
+  closed drafts, `claude/change-fixtures-deterministic` (#41) and
+  `claude/pin-pillow-12` (#38, its pin landed another way); deleting branches is
+  the owner's call. Nothing is scheduled for this repo. The owner's last asks
+  were all shipped in 1.1.19; the one question left open is below (delete
+  Undo in the desktop's detail pane).
+- **Owner to confirm on the rig (1.1.15–1.1.19, all tested in code, not on the
+  phone):** 1.1.15 Dim when idle on the N200's real brightness range
+  (Diagnostics' "phone brightness S/MAX"); 1.1.17 / 1.1.18 the one-time F2F
+  re-price migrations (stored prices came back; "store … opened in N ms"; List
+  cards and the meld halves Midnight Scavengers EMN 96 / Graf Rats EMN 91 now
+  priced); 1.1.18 Refocus on a card (a "periodic refocus" `focus` line after
+  5 min, a tap pausing it); 1.1.19 Guests get full access ON by default (a
+  Share-code browser can delete; turned off, its controls go within 30 s and a
+  refused action says why), the desktop row 🗑 + 5 s Undo (hover, keyboard,
+  touch; the last row's 🗑 clear of the bar with Windows' scrollbar), the join
+  pause / the code changing after 20 wrong codes and the Share screen showing
+  the new code at once, and the Zoom-to-fit aimer's visibility on the real tray.
+- **Awaiting the owner:** the desktop detail pane's "Delete this scan" still
+  deletes at once (no 5 s Undo, unlike the row 🗑) — offered at 1.1.19, not
+  answered; build it only if they say so.
 - Owner to confirm on the rig: no phantom scans (incl. after visiting other
   screens), the scan acknowledgement, the Tap-to-scan default Area's size
   (shadows vs collector-line OCR).
@@ -1501,21 +1559,24 @@ Open threads:
   no grey in between (also at a 250 ms check time), the grey dashed
   card-shaped watch window while waiting, the `outline` line per capture (card
   height in frame px — a shutter scan's window comes from the capture quad),
-  the analyzer line's outline / texture ms on the N200, the zoom line in
-  Diagnostics, and the `shadow` lines (≤ 1/s, ≤ 10 per wait + the "wait
-  over" summary).
+  the analyzer line's outline / texture ms on the N200, and the `shadow`
+  lines (≤ 1/s, ≤ 10 per wait; the per-wait maximum now rides the `detect`
+  "wait over" line). The camera-zoom question moved to the zoom-steps item
+  below.
 - Owner to confirm on the rig (1.1.7–1.1.9, all tested in code, not on the
   phone): the bottom row (Share over Scans · shutter · Area) is back on 1.1.8+;
   the outline stays on the card after a capture and ignores the odd "much
   bigger card" (Diagnostics' "outlier(s) dropped"); the card-shape gate — no
-  scans of an empty tray / glare, real sleeved, dark, foil and especially
-  WHITE-BORDERED cards still scan (watch the `detect` log for "TRIGGER
-  refused" and "adopted the view as the empty tray"); the camera pill (shows
+  scans of an empty tray / glare, real sleeved, dark and foil cards still scan
+  (watch the `detect` log for "TRIGGER refused" and "adopted the view as the
+  empty tray"; WHITE-BORDERED cards were answered on 1.1.10 — NOT picked up —
+  and are now the printed-detail fallback's DEBUG REPORT item below); the camera pill (shows
   only if Android exposes >1 back camera on the N200; is a 24 dp swipe
   comfortable?); the compare block's Scan size slider; and the Camera setting
   on a tester's phone.
-- Owner to send a DEBUG REPORT from 1.1.14 (Settings → Diagnostics → Share
-  debug report) of a Tray session with white-bordered and old-bordered cards,
+- Owner to send a DEBUG REPORT from the current build (1.1.19; any build from
+  1.1.14 on has these `detect` lines, and the update lock stops older ones
+  scanning) (Settings → Diagnostics → Share debug report) of a Tray session with white-bordered and old-bordered cards,
   including card SWAPS without lifting: the `detect` lines say whether the
   outline found each card ("TRIGGER box … outline found") or the printed-detail
   fallback took it ("accepted without an outline — printed detail N% … learned
@@ -1559,7 +1620,11 @@ Open threads:
   the 630×880 identification warp stops gaining pixels — raising it is a
   reference change, the owner's call. "Fit to cards" (suggesting an Area from
   where cards land) stays proposed, not approved.
-- Ranking time for heavily reprinted names (cache candidate images).
+- Ranking time for heavily reprinted names: candidate images are already
+  disk-cached (reference `visual_match` card_images cache; phone
+  `CachedImageSource`, a 4000-file / 80 MB LRU); what remains is the first
+  uncached fetch of up to 120 images (`_cap_candidates`). Measure it on the rig
+  before building more.
 - The List (1.1.17, tested in code, not on the phone — ML Kit's reading of a
   List strip is inferred from the shared rule): scans filed BEFORE 1.1.17
   that were auto-picked (⚠) from a 2015-frame collector line may be the List
@@ -1606,9 +1671,15 @@ Open threads:
 
 ## Testing
 
-`pytest tests/` (~470, fakes only, 3-OS CI) + the fixture `--check`s + the
-gradle line (CI job `android`). Real-scan artifacts live in `scan_images/`
-(e.g. scan 837 = the Diabolic Edict OCR proof). When tuning detection or
+`pytest tests/` (642 at 1.1.19, fakes only, 3-OS CI) + the 12 fixture
+`--check`s + the gradle line (CI job `android`) — CI runs on pushes to master
+and on every PR. The five `scripts/check_*_ui.py` Chromium drivers are NOT in
+CI: run them by hand after any page edit (Build / test, above). Real scans:
+`scan_images/` (the reference server's photo folder) is gitignored, so a fresh
+clone has none; the committed ones are
+`android/core/src/test/resources/ranker/scans/` (e.g. `edict_pal01.jpg`,
+Diabolic Edict — the OCR proof); ask the owner for rig photos or a debug report
+when you need more. When tuning detection or
 ranking, test against real scans before shipping — every threshold here was
 set by measurement, and several "obvious improvements" (geometry gates,
 hi-res region hashes) failed empirically first.
