@@ -46,10 +46,12 @@ the **Check mark time**, 2.5 s by default) plus two short buzzes — that is the
 only signal. The card stays outlined (grey) while it waits for the next one;
 the outline is averaged over the last few looks with outliers thrown away, so a
 single bad find cannot jump it. When the card is lost, a grey dashed card shape
-marks where it is watching. In Tray mode a scan only fires when that outline
-is there: glare, a shadow or a hand that holds still is "Something in the
-Area — no card shape yet…", never a scan, and after a couple of seconds the
-app adopts the still view as the empty tray. The shutter always scans.
+marks where it is watching. In Tray mode a scan fires only when that outline
+is there, or when the Area clearly shows a card's printed detail where the
+empty tray was plain: glare, a shadow or a hand that holds still is
+"Something in the Area — no card shape yet…", never a scan, and after a couple
+of seconds the app adopts the still view as the empty tray. The shutter always
+scans.
 
 **The phone never sleeps while the app is open** — on the camera, the scan list,
 Settings or Share. After a minute with no touch and no scan the screen dims
@@ -58,9 +60,10 @@ Screen → **Dim when idle** sets the time (30 s, 1, 2 or 5 min) or turns dimmin
 off.
 
 The top of the screen shows the version and the server state
-(`serving at <ip>:8090`), cards/min and a battery estimate. Every button is at
-the bottom, within thumb reach: Tray|Tap · **⚙ Settings**, then **Share** over
-**Scans** · shutter · **Area**.
+(`serving at <ip>:8090`), cards/min and a battery estimate. Every other button
+is at the bottom, within thumb reach: Tray|Tap · **⚙ Settings**, then **Share**
+over **Scans** · shutter · **Area** (the camera pill below is the one control at
+the top).
 
 **Camera** — the pill at the top of the live view shows which camera is
 scanning ("Auto · 13 MP", "Cam 3 · 2.0 MP fixed"). Swipe it left or right, or
@@ -301,7 +304,9 @@ docs/index.html     the download page (GitHub Pages)
 # Reference implementation + fixtures
 pip install -e ".[test]"
 pytest tests/ -q
-python scripts/export_api_fixtures.py --check      # and the other export_*_fixtures.py
+python scripts/export_api_fixtures.py --check      # and every other scripts/export_*_fixture*.py (12, as ci.yml)
+# the review pages are NOT in CI: after any phone.html / desktop.html edit run every
+# scripts/check_*_ui.py (pip install playwright; headless Chromium)
 ```
 
 Change behaviour in the Python reference first, regenerate the fixtures, then
