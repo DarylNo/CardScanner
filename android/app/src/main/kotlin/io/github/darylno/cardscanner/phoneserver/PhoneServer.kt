@@ -44,6 +44,8 @@ class PhoneServer(
     private val debugHeader: () -> String = { "" },
     /** The external card list now (null = off) — list_tags on every scan read. */
     private val cardList: () -> io.github.darylno.cardscanner.core.CardList.Parsed? = { null },
+    /** The play data now (null = none yet) — `play` on every scan read, GET /api/play-data. */
+    private val playData: () -> io.github.darylno.cardscanner.core.PlayData.Pack? = { null },
     /**
      * Where the store is opened and the pricing worker started / stopped: one thread, in
      * order, never the caller's ([onServing] / [onStopped] come from the service's main
@@ -116,6 +118,7 @@ class PhoneServer(
             debug = io.github.darylno.cardscanner.core.server.DebugApi(io.github.darylno.cardscanner.core.DebugLog.global, debugHeader),
             update = { updates?.let { u -> Triple(u.latest?.version, u.locked, u.latest?.apkUrl) } ?: Triple(null, false, null) },
             cardList = cardList,
+            playData = playData,
         )
     }
     /** Opens the store on first use (see [storeOpening]): off the main thread only. */

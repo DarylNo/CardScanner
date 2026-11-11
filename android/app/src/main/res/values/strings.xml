@@ -188,4 +188,7 @@
     <string name="pv_pack_checking">Checking for the card database…</string>
     <string name="pv_pack_failed">Last check failed: %1$s</string>
     <string name="pv_pack_check">Check for a newer card database</string>
+    <string name="pv_play">Play data: as of %1$s · %2$,d decks in %3$d formats (MTGO + paper, %4$d days)</string>
+    <string name="pv_play_none">Play data: none yet</string>
+    <string name="pv_play_loading">Play data: loading…</string>
 </resources>

@@ -2423,6 +2423,50 @@ class ScreensSmokeTest {
         val c = app.identify.lastCheck
         assertTrue("the start-up check is skipped, not fetched: $c",
             c is io.github.darylno.cardscanner.ident.ArtPackStore.Check.Skipped)
+        // nor the play data (1.1.20) — the same rule, and the same reason
+        val p = app.playData.lastCheck
+        assertEquals(io.github.darylno.cardscanner.ident.PlayDataStore.Check.Skipped("unit tests never download the play data"), p)
+    }
+
+    /**
+     * Settings → This phone's server: the play data's line (1.1.20) sits under the card database's —
+     * sized and on screen at the N200's size (scrolled to) — and reads "none yet" with no file;
+     * Diagnostics says the same; "Check for a newer card database" asks for the play data too.
+     */
+    @Test
+    @Config(qualifiers = "w411dp-h914dp-xxhdpi")
+    fun settings_playDataLine_isOnScreen_andDiagnosticsSaysItToo() {
+        val a = launch(SettingsActivity::class.java)
+        val root = a.window.decorView
+        ShadowLooper.idleMainLooper()
+        val line = findText(root, a.getString(R.string.pv_play_none))
+        assertNotNull("the play data line", line)
+        val pack = findText(root, a.getString(R.string.pv_pack_none))
+        assertNotNull("the card database line", pack)
+        val pl = IntArray(2); line!!.getLocationInWindow(pl)
+        val kl = IntArray(2); pack!!.getLocationInWindow(kl)
+        assertTrue("under the card database line (${pl[1]} vs ${kl[1]})", pl[1] > kl[1])
+        val scroll = generateSequence(line.parent) { it.parent }.filterIsInstance<android.widget.ScrollView>().first()
+        val sloc = IntArray(2); scroll.getLocationInWindow(sloc)
+        scroll.scrollTo(0, pl[1] - sloc[1] - 100)
+        ShadowLooper.idleMainLooper()
+        val screenH = root.height; val screenW = root.width
+        val l = IntArray(2); line.getLocationInWindow(l)
+        assertTrue("the line has a size (${line.width}×${line.height})", line.width > 0 && line.height > 0)
+        assertTrue("the line is inside the screen (y ${l[1]}..${l[1] + line.height} of $screenH, x ${l[0]}..${l[0] + line.width} of $screenW)",
+            l[1] >= 0 && l[1] + line.height <= screenH && l[0] >= 0 && l[0] + line.width <= screenW)
+        val diag = io.github.darylno.cardscanner.ui.DiagnosticsText.build(app)
+        assertTrue(diag, diag.lines().any { it == "play data none" })
+        // the check button asks for the play data too (Skipped here: unit tests never download it)
+        val before = app.playData.lastCheck
+        findText(root, a.getString(R.string.pv_pack_check))!!.let { b ->
+            var v: View = b
+            while (!v.isClickable) v = v.parent as View
+            v.performClick()
+        }
+        ShadowLooper.idleMainLooper()
+        assertTrue("asked: ${app.playData.lastCheck}", app.playData.lastCheck !== before &&
+            app.playData.lastCheck is io.github.darylno.cardscanner.ident.PlayDataStore.Check.Skipped)
     }
 
     @Test
