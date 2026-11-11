@@ -49,8 +49,8 @@ from pathlib import Path
 from playwright.sync_api import sync_playwright
 
 STATIC = Path(__file__).resolve().parents[1] / "server" / "static"
-VERSION = "d59"
-PHONE_VERSION = "v60"
+VERSION = "d60"
+PHONE_VERSION = "v61"
 
 
 def scan(i, name, sel=False):
