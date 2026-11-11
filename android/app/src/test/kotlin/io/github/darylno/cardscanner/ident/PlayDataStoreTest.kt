@@ -219,12 +219,34 @@ class PlayDataStoreTest {
         assertEquals(p.formats.values.sumOf { it.decks }, p.totalDecks)
         // Diagnostics: the line, none, a file not parsed yet, and the last failure
         assertEquals("play data as of 2026-11-10 · pioneer 1,437 (MTGO only) · modern 16,831 decks",
-            DiagnosticsText.playDataLine(p, true, PlayDataStore.Check.Installed("2026-11-10", null)))
+            DiagnosticsText.playDataLine(p, true, null))
         assertEquals("play data none", DiagnosticsText.playDataLine(null, false, null))
         assertEquals("play data none · last check failed: unreachable",
             DiagnosticsText.playDataLine(null, false, PlayDataStore.Check.Failed("unreachable")))
-        assertEquals("play data installed, not loaded yet", DiagnosticsText.playDataLine(null, true, PlayDataStore.Check.NoDataYet))
+        assertEquals("play data installed, not loaded yet", DiagnosticsText.playDataLine(null, true, null))
         assertEquals("play data as of 2026-11-10 · pioneer 1,437 (MTGO only) · modern 16,831 decks · last check failed: HTTP 500",
             DiagnosticsText.playDataLine(p, true, PlayDataStore.Check.Failed("HTTP 500")))
+    }
+
+    /**
+     * What Settings and Diagnostics show as the last failure ([PlayDataSync.lastFailure]): a failure
+     * replaces the last one, an answer clears it, a skipped check (not on Wi-Fi, checked recently,
+     * unit tests) leaves it — the scan screen's "not on Wi-Fi" used to hide the app start's
+     * "unreachable" (ScreensSmokeTest.playData_aSkippedCheckNeverHidesTheLastFailure_anAnswerClearsIt).
+     */
+    @Test
+    fun theLastFailure_survivesASkippedCheck_andAnAnswerClearsIt() {
+        val unreachable = PlayDataStore.Check.Failed("unreachable")
+        val refused = PlayDataStore.Check.Failed("unsupported version")
+        assertEquals(unreachable, PlayDataSync.failureAfter(null, unreachable))
+        assertEquals(refused, PlayDataSync.failureAfter(unreachable, refused))
+        for (skip in listOf("not on Wi-Fi", "checked recently", "unit tests never download the play data")) {
+            assertEquals(skip, unreachable, PlayDataSync.failureAfter(unreachable, PlayDataStore.Check.Skipped(skip)))
+            assertNull(skip, PlayDataSync.failureAfter(null, PlayDataStore.Check.Skipped(skip)))
+        }
+        for (answer in listOf(PlayDataStore.Check.NoDataYet, PlayDataStore.Check.UpToDate("2026-11-10", null),
+                PlayDataStore.Check.Installed("2026-11-10", "2026-11-10T07:41:02Z"))) {
+            assertNull("$answer", PlayDataSync.failureAfter(unreachable, answer))
+        }
     }
 }

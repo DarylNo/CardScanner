@@ -21,11 +21,21 @@ class PlayDataSync(
     /** False in unit tests (Robolectric): every check is Skipped, nothing is downloaded. */
     private val fetchAllowed: Boolean = true,
     val store: PlayDataStore = PlayDataStore(File(ctx.filesDir, "playdata")),
+    /** On Wi-Fi / an unmetered network now (tests pin it). */
+    private val unmetered: () -> Boolean = { LocalIdentify.unmetered(ctx) },
 ) {
     @Volatile var checking = false
         private set
-    /** The last check's answer (Skipped / NoDataYet / UpToDate / Installed / Failed), for Settings + Diagnostics. */
+    /** The last check's answer (Skipped / NoDataYet / UpToDate / Installed / Failed) — the log's view. */
     @Volatile var lastCheck: PlayDataStore.Check? = null
+        private set
+    /**
+     * The last check that FAILED, until an answer (no data yet / up to date / installed) clears it
+     * — a Skipped check never does ([failureAfter]). Settings and Diagnostics show this one: the app
+     * start's forced check on mobile data with no answer ("unreachable") was replaced at once by the
+     * scan screen's weekly check ("skipped — not on Wi-Fi"), so they never said why there was no play data.
+     */
+    @Volatile var lastFailure: PlayDataStore.Check.Failed? = null
         private set
 
     private val io = Executors.newSingleThreadExecutor { r ->
@@ -50,7 +60,7 @@ class PlayDataSync(
     /** [force] null = "now if the phone has no play data, else the weekly check" (decided off the main thread). */
     private fun run(force: Boolean?, done: (PlayDataStore.Check) -> Unit = {}) {
         if (!fetchAllowed) {
-            PlayDataStore.Check.Skipped("unit tests never download the play data").also { lastCheck = it; runCatching { done(it) } }
+            PlayDataStore.Check.Skipped("unit tests never download the play data").also { note(it); runCatching { done(it) } }
             return
         }
         try {
@@ -58,16 +68,31 @@ class PlayDataSync(
                 checking = true
                 val (c, now) = try {
                     val f = force ?: (runCatching { store.current() }.getOrNull() == null)
-                    store.check(f, LocalIdentify.unmetered(ctx)) to f
+                    store.check(f, unmetered()) to f
                 } catch (e: Exception) {
                     PlayDataStore.Check.Failed(e.javaClass.simpleName) to (force ?: false)
                 } finally { checking = false }
-                lastCheck = c
+                note(c)
                 DebugLog.global.i("play", "play data check (${if (now) "now" else "weekly"}): $c")
                 if (c is PlayDataStore.Check.Installed) store.loaded()?.let { DebugLog.global.i("play", PlayDataStore.logLine(it)) }
                 runCatching { store.current() }                 // load it off the main thread
                 runCatching { done(c) }
             }
         } catch (_: Exception) { }
+    }
+
+    /** The failure first, then the answer: whoever sees the new [lastCheck] sees its [lastFailure]. */
+    private fun note(c: PlayDataStore.Check) {
+        lastFailure = failureAfter(lastFailure, c)
+        lastCheck = c
+    }
+
+    companion object {
+        /** A failure replaces the last one, an answer clears it, a Skipped check leaves it as it was. */
+        fun failureAfter(last: PlayDataStore.Check.Failed?, c: PlayDataStore.Check): PlayDataStore.Check.Failed? = when (c) {
+            is PlayDataStore.Check.Failed -> c
+            is PlayDataStore.Check.Skipped -> last
+            else -> null
+        }
     }
 }

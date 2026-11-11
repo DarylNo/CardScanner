@@ -29,9 +29,9 @@ class App : Application() {
     /** The card database (art pack) + the on-phone identifier. */
     lateinit var identify: LocalIdentify
         private set
-    /** The play data (play-data.json: the share of recent decks running each card, per format). */
+    /** The play data (play-data.json: the share of recent decks running each card, per format). Tests swap in one that fetches (internal set). */
     lateinit var playData: io.github.darylno.cardscanner.ident.PlayDataSync
-        private set
+        internal set
     lateinit var phoneServer: PhoneServer
         private set
     /** The external card list (Settings → External card list): tags scans by name, read-only. */

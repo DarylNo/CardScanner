@@ -16,7 +16,6 @@ import io.github.darylno.cardscanner.core.DebugLog
 import io.github.darylno.cardscanner.gateway.QrBitmap
 import io.github.darylno.cardscanner.ident.ArtPackStore
 import io.github.darylno.cardscanner.ident.LocalIdentify
-import io.github.darylno.cardscanner.ident.PlayDataStore
 import io.github.darylno.cardscanner.ident.PlayDataSync
 import io.github.darylno.cardscanner.phoneserver.PhoneServer
 import java.util.concurrent.Executors
@@ -147,7 +146,7 @@ class ServerSection(
     /**
      * "Play data: as of … · N decks in K formats (…)", "none yet", or "loading…" while the
      * installed file is parsed on the play-data thread (the main thread never parses it),
-     * plus the last check's failure.
+     * plus the last failure (a skipped check never hides it — [PlayDataSync.lastFailure]).
      */
     private fun playLine(): String {
         val p = playData.loaded()
@@ -156,7 +155,7 @@ class ServerSection(
             playData.store.hasFile -> s(R.string.pv_play_loading)
             else -> s(R.string.pv_play_none)
         }
-        val failed = playData.lastCheck as? PlayDataStore.Check.Failed ?: return head
+        val failed = playData.lastFailure ?: return head
         return head + "\n" + s(R.string.pv_pack_failed, failed.message)
     }
 

@@ -2469,6 +2469,53 @@ class ScreensSmokeTest {
             app.playData.lastCheck is io.github.darylno.cardscanner.ident.PlayDataStore.Check.Skipped)
     }
 
+    /**
+     * Review of the play data (1.1.20): a phone with no play data that starts on mobile data and
+     * gets no answer failed the app start's forced check ("unreachable"), and the scan screen's
+     * weekly check right after it ("skipped — not on Wi-Fi") replaced that answer — Settings read
+     * only "Play data: none yet" and Diagnostics "play data none", never why. A skipped check
+     * never hides the last failure; an answer (here "no data yet") clears it.
+     */
+    @Test
+    fun playData_aSkippedCheckNeverHidesTheLastFailure_anAnswerClearsIt() {
+        val server = okhttp3.mockwebserver.MockWebServer().apply { start() }
+        try {
+            server.enqueue(okhttp3.mockwebserver.MockResponse().setResponseCode(404))
+            val offline = java.util.concurrent.atomic.AtomicBoolean(true)
+            val client = okhttp3.OkHttpClient.Builder()
+                .addInterceptor { chain -> if (offline.get()) throw java.io.IOException("no route") else chain.proceed(chain.request()) }
+                .build()
+            val store = io.github.darylno.cardscanner.ident.PlayDataStore(java.io.File(app.filesDir, "playdata-test"),
+                client, server.url("/play-data").toString().trimEnd('/'))
+            val sync = io.github.darylno.cardscanner.ident.PlayDataSync(app, fetchAllowed = true, store = store, unmetered = { false })
+            app.playData = sync
+            val started = java.util.concurrent.CountDownLatch(1)
+            sync.onAppStart { started.countDown() }             // no data: forced, on mobile data — no answer
+            assertTrue("the app start's check ran", started.await(10, java.util.concurrent.TimeUnit.SECONDS))
+            assertEquals(io.github.darylno.cardscanner.ident.PlayDataStore.Check.Failed("unreachable"), sync.lastCheck)
+            sync.onScreen()                                      // MainActivity.onStart right after it
+            val skipped = io.github.darylno.cardscanner.ident.PlayDataStore.Check.Skipped("not on Wi-Fi")
+            val deadline = System.currentTimeMillis() + 10_000
+            while (sync.lastCheck != skipped && System.currentTimeMillis() < deadline) Thread.sleep(20)
+            assertEquals(skipped, sync.lastCheck)
+            val diag = io.github.darylno.cardscanner.ui.DiagnosticsText.build(app)
+            assertTrue(diag, diag.lines().any { it == "play data none · last check failed: unreachable" })
+            val a = launch(SettingsActivity::class.java)
+            assertNotNull("Settings still says why there is no play data", findText(a.window.decorView,
+                a.getString(R.string.pv_play_none) + "\n" + a.getString(R.string.pv_pack_failed, "unreachable")))
+            // an answer clears it
+            offline.set(false)
+            val asked = java.util.concurrent.CountDownLatch(1)
+            sync.checkNow { asked.countDown() }
+            assertTrue(asked.await(10, java.util.concurrent.TimeUnit.SECONDS))
+            assertEquals(io.github.darylno.cardscanner.ident.PlayDataStore.Check.NoDataYet, sync.lastCheck)
+            val after = io.github.darylno.cardscanner.ui.DiagnosticsText.build(app)
+            assertTrue(after, after.lines().any { it == "play data none" })
+        } finally {
+            runCatching { server.shutdown() }
+        }
+    }
+
     @Test
     fun settingsActivity_showsThePhonesServer() {
         val a = launch(SettingsActivity::class.java)
