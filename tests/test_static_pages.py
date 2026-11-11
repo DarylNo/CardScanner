@@ -161,3 +161,103 @@ def test_every_raw_admin_get_reads_the_join_page_as_a_lost_session():
     assert 'if (!r.ok || lostSession("/api/device", r)) return null;' in desk     # devLoad
     assert 'if (lostSession("/api/device/snapshot.jpg", r))' in desk              # Camera view
     assert 'const status = lostSession("/api/device", res) ? 401 : res ? res.status : 0;' in desk   # openDev
+
+
+PLAY_BEGIN, PLAY_END = "/* ═══ play data (shared) ═══", "/* ═══ end play data ═══ */"
+
+
+def _play_block(name: str) -> str:
+    text = (STATIC / name).read_text(encoding="utf-8")
+    assert text.count(PLAY_BEGIN) == 1 and text.count(PLAY_END) == 1, name
+    return text[text.index(PLAY_BEGIN):text.index(PLAY_END)]
+
+
+def _fn(page: str, name: str) -> str:
+    m = re.search(rf"\nfunction {name}\(.*?\n\}}", page, re.S)
+    assert m, name
+    return m.group(0)
+
+
+def test_the_play_data_helpers_are_one_block_on_both_pages():
+    """CLAUDE.md → "Play data" / "List filters" (1.1.20, desktop d60 / phone v61): the share
+    formatting, the best format, the "Played in" floor's vote and the pill's percentile are ONE
+    block, byte for byte in both pages — a fix to one page alone fails here. Driven for real in
+    Chromium by scripts/check_price_filter_ui.py."""
+    assert _play_block("phone.html") == _play_block("desktop.html")
+    desk = (STATIC / "desktop.html").read_text(encoding="utf-8")
+    phone = (STATIC / "phone.html").read_text(encoding="utf-8")
+    for fn in ("fmtTop", "fmtShare", "bestPlay", "playPasses", "playVote"):
+        assert _fn(desk, fn) == _fn(phone, fn), fn
+        assert desk.count(f"\nfunction {fn}(") == 1 and phone.count(f"\nfunction {fn}(") == 1, fn
+    vote = _fn(desk, "playVote")
+    assert "if (P == null) return null;" in vote                 # absent / null = not known
+    assert "if (m == null) return null;" in vote                 # a format not in this week's file
+    assert "if (ms.some(m => m == null)) return null;" in vote and vote.rstrip().endswith("return false;\n}")
+    assert 'const PLAY_ORDER = ["staple", "played", "fringe", "unplayed", "basic", "banned", "not_legal"];' in desk
+
+
+def test_the_play_chip_sits_after_the_list_tags_and_the_floor_votes():
+    """The row's play chip comes AFTER the external list's chips (check_card_list_ui.py asserts
+    the first list chip follows the popularity pill); passesFilters pushes the Played-in vote
+    and keeps the "check" / Wanted exemptions before any bar votes; the pill's percentile is
+    printed only for a NUMBER (unranked cards and old scans: no "top undefined%")."""
+    desk = (STATIC / "desktop.html").read_text(encoding="utf-8")
+    phone = (STATIC / "phone.html").read_text(encoding="utf-8")
+    assert "${popPill(s)}${tagChips(s)}${playChip(s)}" in desk
+    assert "popPill(s) + tagChips(s) + playChip(s) +" in phone
+    for name, page in (("desktop.html", desk), ("phone.html", phone)):
+        body = re.search(r"function passesFilters\((\w+)\)\s*\{(.*?)\n\}", page, re.S)
+        assert body, name
+        arg, lines = body.group(1), body.group(2)
+        first_vote = lines.index("activeFilters()")
+        assert re.search(rf"isProblem\({arg}\)", lines[:first_vote]), name
+        assert re.search(rf"isWanted\({arg}\)\)? return true;", lines[:first_vote]), name
+        assert "if (!on.price && !on.pop && !on.play) return true;" in lines, name
+        assert f"if (on.play) votes.push(playVote({arg}));" in lines, name
+        assert "play: playMin != null" in _fn(page, "activeFilters"), name
+        pill = _fn(page, "popPill")
+        assert 'typeof p.top_percent === "number" ? ` · top ${fmtTop(p.top_percent)}%` : ""' in pill, name
+        # every field the row renders is in its signature
+        assert "playSig(s)" in page, name
+        # Premodern's legality chip (popularity.TRACKED_FORMATS from 1.1.20), between Pauper and Commander
+        assert re.search(r"pauper:\s*(['\"])Pauper\1,\s*premodern:\s*\1Premodern\1,\s*commander:", page), name
+        # the floor persists like the popularity bar
+        assert "play: playMin, playfmt: playFmt," in page, name
+    assert "playSig(scan)" in _fn(desk, "sigOf")
+    assert "'~' + playMin + '~' + playFmt + '~'" in phone
+    assert "Vintage, Pauper, Premodern or Commander" in desk
+
+
+def test_a_long_list_tag_wraps_inside_the_row():
+    """Review of desktop d60: its rows' pills stopped breaking inside themselves ("Fringe · top /
+    77%"), but an external list tag is free text — nowrap ran a long one out of the meta column,
+    under the price and the include box, cut off at the list's edge. A tag pill wraps inside
+    itself when it is wider than the column (and still moves whole when it fits). Driven by
+    scripts/check_price_filter_ui.py's row layout."""
+    desk = (STATIC / "desktop.html").read_text(encoding="utf-8")
+    nowrap = desk.index(".row .meta .pill { display: inline-block; white-space: nowrap; }")
+    tag = re.search(r"\n  \.row \.meta \.pill\.ltag \{([^}]*)\}", desk)
+    assert tag and tag.start() > nowrap
+    rules = tag.group(1)
+    assert "white-space: normal;" in rules and "overflow-wrap: anywhere;" in rules and "max-width: 100%;" in rules
+
+
+def test_the_pill_percentile_never_passes_100():
+    """Review of desktop d60 / phone v61 (the shared block; driven by
+    scripts/check_price_filter_ui.py): the pill's percentile never passes 100 — the reference
+    divides by a measured pool, 32,296, that EDHREC's ranks have outgrown: Spinny Ride, 32,710,
+    is stored as 101.3 and read "Fringe · top 101%"."""
+    for name in ("desktop.html", "phone.html"):
+        page = (STATIC / name).read_text(encoding="utf-8")
+        assert "if (n >= 10) return String(Math.round(Math.min(n, 100)));" in _fn(page, "fmtTop"), name
+
+
+def test_a_play_share_never_reads_past_its_tier():
+    """Review of desktop d60 / phone v61 (the shared block; driven at every bp 1..10000 by
+    scripts/check_price_filter_ui.py): a share is never rounded UP to a tier edge the card has
+    not reached (play_data.tier_for_bp: played from 200 bp, staple from 1000) — 1.99 % printed
+    "2%" while the tier was fringe (dim, hidden by the "2%+ of decks" floor), 9.99 % "10%" with
+    no ★, and 0.96 % "1.0%" beside 1 %'s "1%"."""
+    for name in ("desktop.html", "phone.html"):
+        page = (STATIC / name).read_text(encoding="utf-8")
+        assert "Math.min(Math.round(bp / 10), bp < 200 ? 19 : 99)" in _fn(page, "fmtShare"), name
