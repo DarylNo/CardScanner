@@ -64,7 +64,7 @@ scripts/             export_*_fixture(s).py (generate the Kotlin fixtures from t
                      the real pages in headless Chromium — NOT in CI, run by
                      hand), score_card_edges / score_card_align (measurement),
                      make_android_keystore.py
-tests/               pytest (642 at 1.1.19, all fakes — no camera/network)
+tests/               pytest (691 at 1.1.20, all fakes — no camera/network)
 .github/workflows/   ci (pytest 3-OS, fixture --checks, android), release,
                      auto-tag, art-pack (weekly card database), play-data
                      (weekly play data), pages
@@ -86,7 +86,7 @@ python scripts/export_api_fixtures.py --check     # and every other scripts/expo
 # The review pages — NOT in CI; run every one after ANY phone.html / desktop.html edit
 pip install playwright                            # Chromium is preinstalled in cloud sessions
 for s in check_row_delete_ui check_compare_ui check_card_list_ui check_device_ui check_price_filter_ui; do
-  python scripts/$s.py; done                      # 219 / 92 / 44 / 135 / 16 checks at 1.1.19
+  python scripts/$s.py; done                      # 219 / 92 / 44 / 135 / 182 checks at 1.1.20
 ```
 
 `pytest tests/` includes `tests/test_static_pages.py`, which pins page code
@@ -99,7 +99,7 @@ reproducing reference behaviour only.
 
 **Bump `UI_VERSION`** in `phone.html` / `desktop.html` on every edit to them
 (desktop.html's banner reads `d<N> · <version>`, phone.html's `v<N> · <version>`;
-the phone's server adds " (phone)" to the version — d59 / v60 at 1.1.19; the
+the phone's server adds " (phone)" to the version — d60 / v61 at 1.1.20; the
 `scripts/check_*_ui.py` drivers pin the current value, so update them with
 every bump; stale-page debugging burned a full session before the banners
 existed).
@@ -224,8 +224,11 @@ survive the pool growing. The selection carries its own copy: after a re-pick
 percentile** (owner, 2026-11-11: "Some how add the percentage to the pill for
 commander"; desktop d60, phone v61): "★ Staple · top 0.49%" — `fmtTop` rounds
 UP below 1 % (rank 1, stored 0.003, reads "top 0.01%", never "top 0%"), one
-decimal to 10 %, whole above; no suffix when `top_percent` is not a number
-(unranked, old scans). It is a rank percentile, not a share of decks — the play
+decimal to 10 %, whole above, capped at "top 100%" (`RANKED_CARD_COUNT`
+32,296 was measured 2026-09-19 and the live pool has grown — the highest rank
+seen 2026-11-11 is 32,710, which the reference stores as 101.3; re-measure the
+constant in the reference before trusting the very bottom); no suffix when
+`top_percent` is not a number (unranked, old scans). It is a rank percentile, not a share of decks — the play
 chip's "Modern 27%" is the share (next sections).
 
 **Formats beyond Commander — what exists and what doesn't.** Scryfall ships NO
@@ -317,11 +320,39 @@ running ≥ 1 copy, main OR side.
 - **The reference server** reads `PLAY_DATA_FILE` only (no default path — a test
   run must never pick up a file from the user's cache); `python -m
   mtg_card_scanner.play_data fetch` downloads the published file.
+- **The pages (desktop d60, phone v61):** each row shows ONE play chip after the
+  list-tag chips (`check_card_list_ui.py` pins the tags right after the
+  popularity pill) — the card's best format (`bestPlay`: highest bp, ties in
+  format order), "Legacy 31% +2" (+N = other formats at ≥ 2 %), gold staple /
+  blue played / dim fringe, desktop ★ on a staple and a title listing every
+  format; no chip when no format plays it. `fmtShare` never rounds a share past
+  its tier (bp 199 reads "1.9%", 999 "9.9%" — the review found "2%" on a fringe
+  card the 2 % floor then hid). The open card: desktop's "Played in" line (a
+  chip per format, highest first, "not played: …", the decks / sources / window
+  from `GET /api/play-data`, fetched at load and every 10 min); phone's compare
+  head and bare head get one row — the Commander pill + a chip per format. The
+  floor: "Played in" (`#playfmt` any / one format × `#playmin` any deck / 2 % /
+  staples) — List filters, below. Every rendered field is in the row / detail
+  signatures (`playSig`); the helpers are one block, identical on both pages
+  (`test_static_pages.py`).
+- **The phone's file** (`ident/PlayDataStore` + `PlayDataSync`, a MIN_PRIORITY
+  "play-data" thread, log tag `play`): forced at app start with no data, else
+  the scan screen's weekly check on Wi-Fi, and Settings → This phone's server →
+  "Check for a newer card database" checks it too; 404 → "no data yet", asked
+  again after a day; a file this build refuses (a future version, a bad CI
+  build) keeps the installed one and is asked again after a day, never on every
+  screen start (review: in Tap to scan that was a 1.1 MB download per scan); a
+  skip ("not on Wi-Fi") never hides the last failure (`lastFailure`, cleared by
+  an answer). Settings: "Play data: as of … · N decks in M formats (MTGO +
+  paper, 60 days)"; Diagnostics: "play data as of … · pioneer 1,437 (MTGO only) ·
+  … decks". Parsed off the main thread, cached, a corrupt file deleted;
+  Robolectric never downloads it.
 Golden: `scripts/export_play_data_fixtures.py` (parse refusals — a JSON 1.0 or
 "1" is not version 1, a 2689.0 is not a count, an unknown format is ignored —,
 the lookup table, scan answers, flags, status, and the REAL app.py's reads) →
-`PlayDataParityTest`; the builder is Python-only (`tests/test_play_data.py`).
-The pages: Popularity pill and "List filters", below.
+`PlayDataParityTest`; the builder is Python-only (`tests/test_play_data.py`);
+the review also diffed Python vs Kotlin on the REAL built file (12,530 cases,
+all equal). The pages: `check_price_filter_ui.py` (16 → 182 checks).
 
 **External card list (`card_list.py`, owner 2026-10-12) — generic, READ-ONLY.**
 Not the reverted MX-inventory integration: no store branding, nothing written
@@ -463,10 +494,12 @@ while holding a lock.
 every field a row renders MUST be in its signature or edits go stale.
 `/api/scans` returns newest-first. HTML is served `Cache-Control: no-store`.
 
-**List filters (both pages):** two bars — a price band and a popularity floor —
-combined by a match ANY/ALL toggle, ANY being the default. Each bar votes
+**List filters (both pages):** three bars — a price band, a Commander
+popularity floor and (1.1.20) a "Played in" floor — combined by a match ANY/ALL
+toggle, ANY being the default. Each bar votes
 **TRI-STATE**: pass, fail, or NULL = not known yet (unpriced, prints not all
-searched, or a scan carrying no popularity because it predates the feature).
+searched, a scan carrying no popularity because it predates the feature, or no
+play answer).
 That third state is load-bearing — collapsing it to "pass" is the bug that made
 ALL barely differ from ANY (an unpriced card "satisfied" a Min $ it had never
 been measured against). Rules that must hold:
@@ -494,8 +527,16 @@ been measured against). Rules that must hold:
   F2F has no listing for is an unknown price, so it can keep the card (NULL)
   but never hide it (`printInfo().priced`). Any print in band still passes.
 - **"Exclude filtered" still requires a known price** even when only the
-  popularity bar is on — never drop a card from the export on a price that was
-  never looked up.
+  popularity or Played-in bar is on — never drop a card from the export on a
+  price that was never looked up.
+- **The Played-in floor** (`playVote`): one format, or "Any format" = the card's
+  best. `unplayed` / `basic` / `banned` / `not_legal` are ANSWERS (they fail any
+  floor); an absent `play` key, a null answer, or a format missing from this
+  week's file is NULL. "Any format": any format passes → pass; else any NULL →
+  NULL; else fail. `#fhint` warns when it is on with no Min $ beside it
+  (Commander staples and basics are hidden), when the scanner has no play data
+  yet, and when the chosen format is not in this week's file. Persisted as
+  `listFilters.play` / `playfmt`.
 The bars, the mode and the view chip persist per viewer in localStorage
 (`listFilters`, owner 2026-09-30: the app's review screen reloads the page
 every time it opens); the name search box is not kept.
@@ -1606,6 +1647,25 @@ lens on testers' phones), minSdk 29, arm64-v8a.
   an MX-inventory integration was built and REVERTED — ask before rebuilding.
 
 Open threads:
+- **In flight (2026-11-11): 1.1.20 — the play data (every format the decklist
+  caches carry) + the Commander pill's percentage**, branch `claude/play-data`,
+  a DRAFT PR awaiting the owner's "merge". After the merge the phones have NO
+  play data until `play-data.yml` first runs (Monday 07:43 UTC) — run it once by
+  hand (Actions → play-data → Run workflow, or the API's workflow dispatch) so the
+  `play-data` release exists the day 1.1.20 ships. Its fetch + build steps were
+  dry-run here against the real sources (41,912 decks, 7 formats, the file
+  parses); the publish step runs for the first time in CI.
+- **Owner to confirm on the rig (1.1.20, tested in code, not on the phone):** the
+  play data arriving (Settings → This phone's server: "Play data: as of …"), the
+  play chip on real scans (a Modern staple reads gold "Modern 27%"), the
+  Commander pill's "top N%", the "Played in" filter on the phone's Filters fold,
+  and that old scans (no oracle_id) get chips by name.
+- Found by the 1.1.20 reviews, pre-existing, left as they are: phone.html's
+  `.spill` is `white-space: nowrap`, so a long free-text list tag runs across a
+  phone row (v60 measured the same; the desktop's was fixed in d60); and
+  `popularity.RANKED_CARD_COUNT` (32,296, 2026-09-19) is below today's highest
+  EDHREC rank (32,710) — the pill caps at "top 100%", but the bottom tiers read
+  a little low until the reference constant is re-measured (a fixtures change).
 - **State at the last handoff (2026-11-09):** v1.1.19 is released (2026-11-06,
   `mtg-card-scanner-android.apk` published; PR #44 squash-merged as
   `74cd69f`), so every older install is update-locked until it updates. No PR
@@ -1752,7 +1812,7 @@ Open threads:
 
 ## Testing
 
-`pytest tests/` (642 at 1.1.19, fakes only, 3-OS CI) + the 13 fixture
+`pytest tests/` (691 at 1.1.20, fakes only, 3-OS CI) + the 13 fixture
 `--check`s + the gradle line (CI job `android`) — CI runs on pushes to master
 and on every PR. The five `scripts/check_*_ui.py` Chromium drivers are NOT in
 CI: run them by hand after any page edit (Build / test, above). Real scans:
