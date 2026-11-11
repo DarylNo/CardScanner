@@ -16,6 +16,7 @@ import io.github.darylno.cardscanner.core.DebugLog
 import io.github.darylno.cardscanner.gateway.QrBitmap
 import io.github.darylno.cardscanner.ident.ArtPackStore
 import io.github.darylno.cardscanner.ident.LocalIdentify
+import io.github.darylno.cardscanner.ident.PlayDataSync
 import io.github.darylno.cardscanner.phoneserver.PhoneServer
 import java.util.concurrent.Executors
 
@@ -24,9 +25,9 @@ import java.util.concurrent.Executors
  * Where a computer opens it (address + guest code), pairing a computer as
  * admin (one-time code + QR) and forgetting paired computers, whether
  * Share-code guests get full access (owner, 2026-11-05; on by default), the card
- * database (art pack) with a check-now, and storage — scans, photo size, free
- * space; at 10,000 scans it turns into a warning (the owner's rule) but keeps
- * going.
+ * database (art pack) and the play data (1.1.20) with one check-now, and
+ * storage — scans, photo size, free space; at 10,000 scans it turns into a
+ * warning (the owner's rule) but keeps going.
  */
 class ServerSection(
     private val activity: Activity,
@@ -34,6 +35,7 @@ class ServerSection(
     private val phone: PhoneServer,
     private val identify: LocalIdentify,
     private val settings: AppSettings,
+    private val playData: PlayDataSync,
 ) {
     private val ui = Handler(Looper.getMainLooper())
     private val io = Executors.newSingleThreadExecutor()
@@ -48,6 +50,7 @@ class ServerSection(
     private fun onUi(block: () -> Unit) { ui.post { if (!destroyed) block() } }
     private lateinit var addressText: TextView
     private lateinit var packText: TextView
+    private lateinit var playText: TextView
     private lateinit var usageText: TextView
     private lateinit var pairedText: TextView
     private val tick = object : Runnable {
@@ -94,8 +97,12 @@ class ServerSection(
         card.addView(chrome.divider(), chrome.dividerParams())
         packText = chrome.text("", 12f, ScanChrome.Palette.TEXT_DIM).apply { setPadding(dp(4), dp(8), dp(4), 0) }
         card.addView(packText, lp())
+        // The play data (1.1.20) under it: fetched like the card database, by the same button.
+        playText = chrome.text("", 12f, ScanChrome.Palette.TEXT_DIM).apply { setPadding(dp(4), dp(4), dp(4), 0) }
+        card.addView(playText, lp())
         card.addView(chrome.secondaryButton(s(R.string.pv_pack_check)) {
             identify.checkAsync(force = true) { onUi { refresh() } }
+            playData.checkNow { onUi { refresh() } }
             refresh()
         }, lp(8))
         usageText = chrome.text("", 12f, ScanChrome.Palette.TEXT_DIM).apply {
@@ -136,6 +143,22 @@ class ServerSection(
             .show()
     }
 
+    /**
+     * "Play data: as of … · N decks in K formats (…)", "none yet", or "loading…" while the
+     * installed file is parsed on the play-data thread (the main thread never parses it),
+     * plus the last failure (a skipped check never hides it — [PlayDataSync.lastFailure]).
+     */
+    private fun playLine(): String {
+        val p = playData.loaded()
+        val head = when {
+            p != null -> s(R.string.pv_play, p.asOf, p.totalDecks, p.formats.size, p.windowDays)
+            playData.store.hasFile -> s(R.string.pv_play_loading)
+            else -> s(R.string.pv_play_none)
+        }
+        val failed = playData.lastFailure ?: return head
+        return head + "\n" + s(R.string.pv_pack_failed, failed.message)
+    }
+
     private fun refresh() {
         pairedText.text = s(R.string.pv_paired, phone.admins.count)
         addressText.text = when {
@@ -151,6 +174,7 @@ class ServerSection(
             else -> s(R.string.pv_pack_none) +
                 (identify.lastCheck as? ArtPackStore.Check.Failed)?.let { "\n" + s(R.string.pv_pack_failed, it.message) }.orEmpty()
         }
+        playText.text = playLine()
         runIo {
             val u = phone.usage()
             onUi {

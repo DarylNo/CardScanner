@@ -341,6 +341,7 @@ class MainActivity : AppCompatActivity() {
         app.phoneServer.start()          // the phone IS the server: keep it up while scanning
         // (visible to the server's idle stop through ScreenAwake, like every app screen)
         app.identify.onScreen()          // a missing card database is fetched again; weekly check
+        app.playData.onScreen()          // the play data's weekly Wi-Fi check
         app.updates.addListener(lockListener)
         app.updates.checkAsync()         // a newer release stops scanning (UpdateLock)
         applyLock()

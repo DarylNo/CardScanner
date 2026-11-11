@@ -21,6 +21,7 @@ object DiagnosticsText {
             else "guests (Share code): review, pick and flag only — delete, export and scanner settings are the paired computer's\n")
         append("card database ").append(app.identify.store.installedManifest()?.let { "${it.rows} rows · ${it.buildDate}" } ?: "none")
             .append('\n')
+        append(playDataLine(app.playData.loaded(), app.playData.store.hasFile, app.playData.lastFailure)).append('\n')
         append("mode ").append(if (app.settings.auto) "Tray" else "Tap to scan")
             .append(" · area ").append(app.settings.roi?.encode() ?: "full frame")
             .append(" · check ").append(app.settings.checkMs).append(" ms")
@@ -37,6 +38,23 @@ object DiagnosticsText {
         // Live while the scan screen has its camera; else the last snapshot, with its age.
         append(CameraDiagnostics.current()).append("\n\n")
         append("recent captures (ms):\n").append(app.settings.recentTimings.ifBlank { "—" })
+    }
+
+    /**
+     * The play data (1.1.20): "play data as of 2026-11-10 · standard 6,726 · pioneer 1,437 (MTGO only)
+     * · … decks", "play data none", or "play data installed, not loaded yet" (the main thread never
+     * parses it), then " · last check failed: …" while a failure stands ([io.github.darylno.cardscanner.ident.PlayDataSync.lastFailure]:
+     * a skipped check never hides it, an answer clears it).
+     */
+    fun playDataLine(pack: io.github.darylno.cardscanner.core.PlayData.Pack?, hasFile: Boolean,
+                     lastFailure: io.github.darylno.cardscanner.ident.PlayDataStore.Check.Failed?): String {
+        val head = when {
+            pack != null -> io.github.darylno.cardscanner.ident.PlayDataStore.diagnosticsLine(pack)
+            hasFile -> "play data installed, not loaded yet"
+            else -> "play data none"
+        }
+        val failed = lastFailure ?: return head
+        return "$head · last check failed: ${failed.message}"
     }
 
     /**

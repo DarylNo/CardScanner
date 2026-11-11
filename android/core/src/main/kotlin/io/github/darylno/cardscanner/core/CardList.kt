@@ -51,7 +51,8 @@ object CardList {
         return FACES.replace(s, FACE_SEP).trim(' ')
     }
 
-    private fun strip(s: String) = EDGE_WS.replace(s, "")
+    /** Python's `str.strip()` (the reference's whitespace set) — also PlayData's name test. */
+    internal fun strip(s: String) = EDGE_WS.replace(s, "")
 
     /** The full normalised name, then each face. */
     fun nameKeys(name: String): List<String> {

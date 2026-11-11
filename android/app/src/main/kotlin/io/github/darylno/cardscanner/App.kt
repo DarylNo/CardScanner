@@ -29,6 +29,9 @@ class App : Application() {
     /** The card database (art pack) + the on-phone identifier. */
     lateinit var identify: LocalIdentify
         private set
+    /** The play data (play-data.json: the share of recent decks running each card, per format). Tests swap in one that fetches (internal set). */
+    lateinit var playData: io.github.darylno.cardscanner.ident.PlayDataSync
+        internal set
     lateinit var phoneServer: PhoneServer
         private set
     /** The external card list (Settings → External card list): tags scans by name, read-only. */
@@ -57,13 +60,15 @@ class App : Application() {
         // Unit tests (Robolectric) never download the card database: each test's App fetched the real
         // pack from GitHub on its own thread, and 1.1.17's suite ran the test heap out of memory.
         identify = LocalIdentify(this, fetchAllowed = android.os.Build.FINGERPRINT != "robolectric")
+        // The play data the same way: unit tests (Robolectric) never download it.
+        playData = io.github.darylno.cardscanner.ident.PlayDataSync(this, fetchAllowed = android.os.Build.FINGERPRINT != "robolectric")
         cardList = io.github.darylno.cardscanner.phoneserver.ExternalCardList(this, settings,
             // Unit tests (Robolectric) never fetch a list.
             fetch = if (android.os.Build.FINGERPRINT == "robolectric") { { throw java.io.IOException("tests") } }
                 else io.github.darylno.cardscanner.phoneserver.ExternalCardList::httpGet)
         cardList.start()
         phoneServer = PhoneServer(this, identify, DeviceBridge(settings) { io.github.darylno.cardscanner.camera.CameraCatalog.lenses(this) }, updates,
-            debugHeader = { debugHeader() }, cardList = { cardList.current() },
+            debugHeader = { debugHeader() }, cardList = { cardList.current() }, playData = { playData.current() },
             guestsFullAccess = { settings.guestsFullAccess })
         GatewayService.hostProvider = { phoneServer }
         uploads = Adapters.uploads(this, phoneServer)
@@ -71,6 +76,8 @@ class App : Application() {
         // No card database yet → fetch it now (any network); queued scans wait for it.
         updates.checkAsync(force = true)
         identify.onAppStart { if (it is io.github.darylno.cardscanner.ident.ArtPackStore.Check.Installed) uploads.retryNow() }
+        // No play data yet → fetch it now (any network); else the weekly Wi-Fi check. Nothing waits for it.
+        playData.onAppStart()
     }
 
     /** Builds the scan screen's camera. Tests put a recording [CameraPort] here (Robolectric has no camera to bind). */

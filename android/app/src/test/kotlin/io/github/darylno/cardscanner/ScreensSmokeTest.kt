@@ -2423,6 +2423,97 @@ class ScreensSmokeTest {
         val c = app.identify.lastCheck
         assertTrue("the start-up check is skipped, not fetched: $c",
             c is io.github.darylno.cardscanner.ident.ArtPackStore.Check.Skipped)
+        // nor the play data (1.1.20) — the same rule, and the same reason
+        val p = app.playData.lastCheck
+        assertEquals(io.github.darylno.cardscanner.ident.PlayDataStore.Check.Skipped("unit tests never download the play data"), p)
+    }
+
+    /**
+     * Settings → This phone's server: the play data's line (1.1.20) sits under the card database's —
+     * sized and on screen at the N200's size (scrolled to) — and reads "none yet" with no file;
+     * Diagnostics says the same; "Check for a newer card database" asks for the play data too.
+     */
+    @Test
+    @Config(qualifiers = "w411dp-h914dp-xxhdpi")
+    fun settings_playDataLine_isOnScreen_andDiagnosticsSaysItToo() {
+        val a = launch(SettingsActivity::class.java)
+        val root = a.window.decorView
+        ShadowLooper.idleMainLooper()
+        val line = findText(root, a.getString(R.string.pv_play_none))
+        assertNotNull("the play data line", line)
+        val pack = findText(root, a.getString(R.string.pv_pack_none))
+        assertNotNull("the card database line", pack)
+        val pl = IntArray(2); line!!.getLocationInWindow(pl)
+        val kl = IntArray(2); pack!!.getLocationInWindow(kl)
+        assertTrue("under the card database line (${pl[1]} vs ${kl[1]})", pl[1] > kl[1])
+        val scroll = generateSequence(line.parent) { it.parent }.filterIsInstance<android.widget.ScrollView>().first()
+        val sloc = IntArray(2); scroll.getLocationInWindow(sloc)
+        scroll.scrollTo(0, pl[1] - sloc[1] - 100)
+        ShadowLooper.idleMainLooper()
+        val screenH = root.height; val screenW = root.width
+        val l = IntArray(2); line.getLocationInWindow(l)
+        assertTrue("the line has a size (${line.width}×${line.height})", line.width > 0 && line.height > 0)
+        assertTrue("the line is inside the screen (y ${l[1]}..${l[1] + line.height} of $screenH, x ${l[0]}..${l[0] + line.width} of $screenW)",
+            l[1] >= 0 && l[1] + line.height <= screenH && l[0] >= 0 && l[0] + line.width <= screenW)
+        val diag = io.github.darylno.cardscanner.ui.DiagnosticsText.build(app)
+        assertTrue(diag, diag.lines().any { it == "play data none" })
+        // the check button asks for the play data too (Skipped here: unit tests never download it)
+        val before = app.playData.lastCheck
+        findText(root, a.getString(R.string.pv_pack_check))!!.let { b ->
+            var v: View = b
+            while (!v.isClickable) v = v.parent as View
+            v.performClick()
+        }
+        ShadowLooper.idleMainLooper()
+        assertTrue("asked: ${app.playData.lastCheck}", app.playData.lastCheck !== before &&
+            app.playData.lastCheck is io.github.darylno.cardscanner.ident.PlayDataStore.Check.Skipped)
+    }
+
+    /**
+     * Review of the play data (1.1.20): a phone with no play data that starts on mobile data and
+     * gets no answer failed the app start's forced check ("unreachable"), and the scan screen's
+     * weekly check right after it ("skipped — not on Wi-Fi") replaced that answer — Settings read
+     * only "Play data: none yet" and Diagnostics "play data none", never why. A skipped check
+     * never hides the last failure; an answer (here "no data yet") clears it.
+     */
+    @Test
+    fun playData_aSkippedCheckNeverHidesTheLastFailure_anAnswerClearsIt() {
+        val server = okhttp3.mockwebserver.MockWebServer().apply { start() }
+        try {
+            server.enqueue(okhttp3.mockwebserver.MockResponse().setResponseCode(404))
+            val offline = java.util.concurrent.atomic.AtomicBoolean(true)
+            val client = okhttp3.OkHttpClient.Builder()
+                .addInterceptor { chain -> if (offline.get()) throw java.io.IOException("no route") else chain.proceed(chain.request()) }
+                .build()
+            val store = io.github.darylno.cardscanner.ident.PlayDataStore(java.io.File(app.filesDir, "playdata-test"),
+                client, server.url("/play-data").toString().trimEnd('/'))
+            val sync = io.github.darylno.cardscanner.ident.PlayDataSync(app, fetchAllowed = true, store = store, unmetered = { false })
+            app.playData = sync
+            val started = java.util.concurrent.CountDownLatch(1)
+            sync.onAppStart { started.countDown() }             // no data: forced, on mobile data — no answer
+            assertTrue("the app start's check ran", started.await(10, java.util.concurrent.TimeUnit.SECONDS))
+            assertEquals(io.github.darylno.cardscanner.ident.PlayDataStore.Check.Failed("unreachable"), sync.lastCheck)
+            sync.onScreen()                                      // MainActivity.onStart right after it
+            val skipped = io.github.darylno.cardscanner.ident.PlayDataStore.Check.Skipped("not on Wi-Fi")
+            val deadline = System.currentTimeMillis() + 10_000
+            while (sync.lastCheck != skipped && System.currentTimeMillis() < deadline) Thread.sleep(20)
+            assertEquals(skipped, sync.lastCheck)
+            val diag = io.github.darylno.cardscanner.ui.DiagnosticsText.build(app)
+            assertTrue(diag, diag.lines().any { it == "play data none · last check failed: unreachable" })
+            val a = launch(SettingsActivity::class.java)
+            assertNotNull("Settings still says why there is no play data", findText(a.window.decorView,
+                a.getString(R.string.pv_play_none) + "\n" + a.getString(R.string.pv_pack_failed, "unreachable")))
+            // an answer clears it
+            offline.set(false)
+            val asked = java.util.concurrent.CountDownLatch(1)
+            sync.checkNow { asked.countDown() }
+            assertTrue(asked.await(10, java.util.concurrent.TimeUnit.SECONDS))
+            assertEquals(io.github.darylno.cardscanner.ident.PlayDataStore.Check.NoDataYet, sync.lastCheck)
+            val after = io.github.darylno.cardscanner.ui.DiagnosticsText.build(app)
+            assertTrue(after, after.lines().any { it == "play data none" })
+        } finally {
+            runCatching { server.shutdown() }
+        }
     }
 
     @Test

@@ -72,6 +72,47 @@ class PhoneServerTest {
         assertEquals(emptyList<String>(), first()["list_tags"])
     }
 
+    /**
+     * The play data on the phone's real store (1.1.20): no `play` key and {"loaded": false} while there
+     * is none; with a pack every scan read carries {format: answer}, re-tagged when the pack changes,
+     * and GET /api/play-data says what it is — to a Share-code guest too.
+     */
+    @Test fun scanReadsCarryThePlayData() {
+        val seize = "00000000-0000-0000-0000-00000000000a"
+        fun packText(asOf: String, bp: Long) = """{"kind":"cardscanner-play-data","version":1,"as_of":"$asOf","window_days":60,
+            "built_at":"${asOf}T07:41:02Z","formats":{"modern":{"decks":16831,"events":256,"sources":{"mtgo":{"decks":6146,
+            "events":177,"weighted":true},"paper":{"decks":10685,"events":79,"weighted":true}},"cards":{"$seize":[$bp,9]}}},
+            "basic":[],"names":{"thoughtseize":"$seize"},"ambiguous":[]}"""
+        var pack: io.github.darylno.cardscanner.core.PlayData.Pack? = null
+        val b = PhoneBackend(store, PhotoDir(tmp.newFolder("p-play")), pages = { null }, version = "t",
+            search = { emptyList() }, lanIp = { null }, packRows = { 0 },
+            f2f = { _, _, _, _, _ -> F2fAnswer.NotListed }, launch = { it.run() }, now = { 0.0 },
+            playData = { pack })
+        val pop = mapOf("tier" to "played", "oracle_id" to seize, "formats" to mapOf("modern" to "legal", "legacy" to "legal"))
+        b.file(mapOf("identified" to true, "card_read" to mapOf("name" to "Thoughtseize"), "confidence" to mapOf("name" to "high"),
+            "candidates" to listOf(mapOf("id" to "t1", "name" to "Thoughtseize", "set" to "lrw", "collector_number" to "145",
+                "popularity" to pop))), null)
+        fun get(p: String, role: String = io.github.darylno.cardscanner.core.server.ROLE_ADMIN) = b.handle(ApiRequest("GET", p, role = role))
+        fun first(): Map<*, *> = (MiniJson.parse(String(get("/api/scans").body)) as List<*>)[0] as Map<*, *>
+        fun status(role: String = io.github.darylno.cardscanner.core.server.ROLE_ADMIN) = MiniJson.parse(String(get("/api/play-data", role).body)) as Map<*, *>
+        assertTrue("none: no play key", !first().containsKey("play"))
+        assertEquals(mapOf("loaded" to false), status())
+        pack = io.github.darylno.cardscanner.core.PlayData.parse(packText("2026-11-10", 2689))
+        assertEquals(mapOf("modern" to mapOf("tier" to "staple", "bp" to 2689L, "rank" to 9L)), first()["play"])
+        val one = MiniJson.parse(String(get("/api/scans/1").body)) as Map<*, *>
+        assertEquals(first()["play"], one["play"])
+        val st = status(io.github.darylno.cardscanner.core.server.ROLE_GUEST)
+        assertEquals(true, st["loaded"])
+        assertEquals("2026-11-10", st["as_of"])
+        assertEquals(1L, ((st["formats"] as Map<*, *>)["modern"] as Map<*, *>)["played"])
+        // a new week re-tags the scan already filed (never stored)
+        pack = io.github.darylno.cardscanner.core.PlayData.parse(packText("2026-11-17", 150))
+        assertEquals(mapOf("modern" to mapOf("tier" to "fringe", "bp" to 150L, "rank" to 9L)), first()["play"])
+        assertTrue("never stored", store.get(1)!!["play"] == null && !store.get(1)!!.containsKey("play"))
+        pack = null
+        assertTrue(!first().containsKey("play"))
+    }
+
     @Test fun theSqliteStoreAnswersTheGoldenSession() {
         var n = 0
         val result = GoldenApi.replay { clock ->
@@ -200,6 +241,8 @@ class PhoneServerTest {
         val me = client.newCall(Request.Builder().url("$base/api/me").header("Cookie", guest).build())
             .execute().use { MiniJson.parse(it.body!!.string()) }
         assertEquals(mapOf("role" to "guest"), me)
+        // what the play data is (the pages' play chips) is guest-readable through the gateway (1.1.20)
+        assertEquals(mapOf("loaded" to false), MiniJson.parse(page(base, guest, "/api/play-data")))
 
         // pair the computer with the one-time code: admin, remembered
         val code = admins.newCode()
@@ -421,10 +464,24 @@ class PhoneServerTest {
         fun runAll() { while (queued.isNotEmpty()) queued.removeFirst().second.run() }
     }
 
-    private fun phoneServerIn(dir: java.io.File, lifecycle: java.util.concurrent.Executor, later: Later = Later()): PhoneServer {
+    private fun phoneServerIn(dir: java.io.File, lifecycle: java.util.concurrent.Executor, later: Later = Later(),
+                              playData: () -> io.github.darylno.cardscanner.core.PlayData.Pack? = { null }): PhoneServer {
         val app = org.robolectric.RuntimeEnvironment.getApplication() as io.github.darylno.cardscanner.App
         val ctx = object : android.content.ContextWrapper(app) { override fun getFilesDir() = dir }
-        return PhoneServer(ctx, app.identify, DeviceBridge(app.settings), lifecycle = lifecycle, later = later).also { servers += it }
+        return PhoneServer(ctx, app.identify, DeviceBridge(app.settings), lifecycle = lifecycle, later = later,
+            playData = playData).also { servers += it }
+    }
+
+    /** PhoneServer hands its play-data provider to the API it serves (App passes PlayDataSync.current). */
+    @Test fun thePhoneServerServesItsPlayData() {
+        val pack = io.github.darylno.cardscanner.core.PlayData.parse("""{"kind":"cardscanner-play-data","version":1,
+            "as_of":"2026-11-10","window_days":60,"formats":{"legacy":{"decks":5768,"events":256,"sources":{},"cards":{}}},
+            "basic":[],"names":{},"ambiguous":[]}""")
+        val ps = phoneServerIn(tmp.newFolder("files-play"), ByHand(), playData = { pack })
+        val st = MiniJson.parse(String(ps.backend.handle(ApiRequest("GET", "/api/play-data")).body)) as Map<*, *>
+        assertEquals(true, st["loaded"])
+        assertEquals("2026-11-10", st["as_of"])
+        assertEquals(listOf("legacy"), (st["formats"] as Map<*, *>).keys.toList())
     }
 
     @Test fun newServerAndOnServingNeverOpenTheStoreOnTheCaller() {
