@@ -92,13 +92,18 @@ object Popularity {
         val formats = Formats.formatLegality(printing)
         if (formats.isNotEmpty()) out["formats"] = formats
         pennyRank(printing)?.let { out["penny_rank"] = it }
+        // The oracle card this summary describes (1.1.20): the play data
+        // ([PlayData]) is keyed by it — one NAME can be two oracle cards — and the
+        // selection carries its own copy of this map, so a pick keeps the key.
+        val oid = oracleKey(printing)
+        if (oid.isNotEmpty()) out["oracle_id"] = oid
         return out
     }
 }
 
 /**
  * popularity.format_legality: where a printing may legally be played, for the
- * 7 paper formats that drive singles demand. Legality is never popularity and
+ * 8 paper formats that drive singles demand. Legality is never popularity and
  * never moves a tier — but "banned" in Commander explains an UNRANKED tier.
  */
 object Formats {
@@ -110,6 +115,9 @@ object Formats {
         "legacy" to "Legacy",
         "vintage" to "Vintage",
         "pauper" to "Pauper",
+        // Premodern (1.1.20): the play data reads "not played in Premodern" off
+        // the scan's own legality, like every other format's.
+        "premodern" to "Premodern",
         "commander" to "Commander",
     )
     private val LEGALITY_VALUES = setOf("legal", "not_legal", "restricted", "banned")
