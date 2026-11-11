@@ -106,6 +106,9 @@ TRACKED_FORMATS: tuple[tuple[str, str], ...] = (
     ("legacy",    "Legacy"),
     ("vintage",   "Vintage"),
     ("pauper",    "Pauper"),
+    # Premodern (1.1.20): the play data (play_data.py) reads "not played in
+    # Premodern" off the scan's own legality, like every other format's.
+    ("premodern", "Premodern"),
     ("commander", "Commander"),
 )
 
@@ -224,4 +227,10 @@ def summarize(printing: dict[str, Any], print_count: Optional[int] = None) -> di
     penny = penny_rank(printing)
     if penny is not None:
         out["penny_rank"] = penny
+    # The oracle card this summary describes (1.1.20): the play data
+    # (play_data.py) is keyed by it — one NAME can be two oracle cards — and
+    # the selection carries its own copy of this dict, so a pick keeps the key.
+    oid = oracle_key(printing)
+    if oid:
+        out["oracle_id"] = oid
     return out

@@ -31,7 +31,8 @@ android/core/        pure Kotlin (JVM-testable): AutoScanner/Detection (the
                      PHash/ArtHasher/ArtMatcher (bit-exact
                      fingerprint), IdentifyPipeline, PrintingRanker,
                      OcrMatch, ListTwins, Popularity, CardList (the external
-                     list), PrintEvidence (the printed-detail fallback),
+                     list), PlayData (the play data, read side),
+                     PrintEvidence (the printed-detail fallback),
                      RefocusPolicy + CardFocusState (card focus), ScreenDim,
                      DebugLog, and core/server/ — ScanStore, PhoneApi (the /api
                      surface), PriceSweep/PriceWorker, Export, DeviceApi,
@@ -40,7 +41,8 @@ android/app/         Android: MainActivity (package root = the scan screen),
                      camera/ (CameraX, CameraController, FrameRing, ScanAnalyzer,
                      FocusLog + FrameMetaRing, CameraCatalog, ZoomProbeGlue +
                      ProbeMeasure), capture/, ident/ (ArtPackStore,
-                     PhoneIdentifier, LocalIdentify, ScryfallHttp), ocr/ (ML Kit:
+                     PlayDataStore, PhoneIdentifier, LocalIdentify,
+                     ScryfallHttp), ocr/ (ML Kit:
                      MlKitOcrEngine), f2f/ (F2fPricer, F2fFetcher, Cronet /
                      OkHttp transports), net/UploadQueue, phoneserver/
                      (PhoneServer, PhoneBackend, LocalScanUploader,
@@ -54,16 +56,18 @@ server/              reference FastAPI app, store.py, export.py, static pages
 mtg_card_scanner/    reference pipeline: pipeline (scan_candidates,
                      _ranked_candidates, _mark_art_decisive), card_detect,
                      art_index, art_pack, scryfall, visual_match, ocr_id,
-                     list_twins, artwork, popularity, facetoface, card_list,
-                     change_signal, launch
+                     list_twins, artwork, popularity, play_data (the play
+                     data: CI builder + read-time join), facetoface,
+                     card_list, change_signal, launch
 scripts/             export_*_fixture(s).py (generate the Kotlin fixtures from the
-                     reference; all 12 `--check`ed in CI), check_*_ui.py (drive
+                     reference; all 13 `--check`ed in CI), check_*_ui.py (drive
                      the real pages in headless Chromium — NOT in CI, run by
                      hand), score_card_edges / score_card_align (measurement),
                      make_android_keystore.py
-tests/               pytest (642 at 1.1.19, all fakes — no camera/network)
+tests/               pytest (691 at 1.1.20, all fakes — no camera/network)
 .github/workflows/   ci (pytest 3-OS, fixture --checks, android), release,
-                     auto-tag, art-pack (weekly card database), pages
+                     auto-tag, art-pack (weekly card database), play-data
+                     (weekly play data), pages
 ```
 
 ## Build / test
@@ -76,13 +80,13 @@ tests/               pytest (642 at 1.1.19, all fakes — no camera/network)
 pip install -e ".[test]"
 pytest tests/ -q
 python scripts/export_api_fixtures.py --check     # and every other scripts/export_*_fixture*.py
-                                                  # (12, incl. export_pack_fixture.py and
+                                                  # (13, incl. export_pack_fixture.py and
                                                   # export_f2f_pacing_fixture.py — the list ci.yml runs)
 
 # The review pages — NOT in CI; run every one after ANY phone.html / desktop.html edit
 pip install playwright                            # Chromium is preinstalled in cloud sessions
 for s in check_row_delete_ui check_compare_ui check_card_list_ui check_device_ui check_price_filter_ui; do
-  python scripts/$s.py; done                      # 219 / 92 / 44 / 135 / 16 checks at 1.1.19
+  python scripts/$s.py; done                      # 219 / 92 / 44 / 135 / 182 checks at 1.1.20
 ```
 
 `pytest tests/` includes `tests/test_static_pages.py`, which pins page code
@@ -95,7 +99,7 @@ reproducing reference behaviour only.
 
 **Bump `UI_VERSION`** in `phone.html` / `desktop.html` on every edit to them
 (desktop.html's banner reads `d<N> · <version>`, phone.html's `v<N> · <version>`;
-the phone's server adds " (phone)" to the version — d59 / v60 at 1.1.19; the
+the phone's server adds " (phone)" to the version — d60 / v61 at 1.1.20; the
 `scripts/check_*_ui.py` drivers pin the current value, so update them with
 every bump; stale-page debugging burned a full session before the banners
 existed).
@@ -216,15 +220,25 @@ EDHREC API client to "improve" it without asking. Three measured rules:
   `oracle_key()`.
 Tiers are percentiles of the ranked pool (32,296 cards), not raw ranks, so they
 survive the pool growing. The selection carries its own copy: after a re-pick
-`candidates[0]` is not necessarily what was chosen.
+`candidates[0]` is not necessarily what was chosen. **The pill shows that
+percentile** (owner, 2026-11-11: "Some how add the percentage to the pill for
+commander"; desktop d60, phone v61): "★ Staple · top 0.49%" — `fmtTop` rounds
+UP below 1 % (rank 1, stored 0.003, reads "top 0.01%", never "top 0%"), one
+decimal to 10 %, whole above, capped at "top 100%" (`RANKED_CARD_COUNT`
+32,296 was measured 2026-09-19 and the live pool has grown — the highest rank
+seen 2026-11-11 is 32,710, which the reference stores as 101.3; re-measure the
+constant in the reference before trusting the very bottom); no suffix when
+`top_percent` is not a number (unranked, old scans). It is a rank percentile, not a share of decks — the play
+chip's "Modern 27%" is the share (next sections).
 
 **Formats beyond Commander — what exists and what doesn't.** Scryfall ships NO
 play-rate ranking for Modern/Standard/Pioneer/Legacy/Pauper, and there is no
 free API for one (measured 2026-09-19: MTGDecks and Moxfield both 403 a
 non-browser client; MTGGoldfish and MTGTop8 are HTML only). Two things in the
 same payload are worth having, and neither is popularity:
-- **`legalities`** → `format_legality()` surfaces 7 paper formats that drive
-  singles demand (the other 16 are digital-only or buylist-irrelevant).
+- **`legalities`** → `format_legality()` surfaces 8 paper formats that drive
+  singles demand (the others are digital-only or buylist-irrelevant; Premodern
+  joined in 1.1.20 for the play data).
   Legality is WHERE a card may be played, never mixed into a tier — and it
   explains an UNRANKED tier at a glance: Black Lotus reads "banned" in
   Commander, which is exactly why EDHREC has no rank for it.
@@ -242,6 +256,103 @@ Lightning Bolt lands at 0.02 tix and Black Lotus at 61.08), and the open
 tournament dataset everyone cites, `Badaro/MTGODecklistCache`, **shut down in
 June 2025** (live successors: `fbettega/MTG_decklistcache`, and
 `davidfischer/modometa-mtgo-data` whose names are already Scryfall-normalized).
+Those two caches are what the play data (next) is built from.
+
+**Play data (`play_data.py`, owner 2026-11-10: "a system for identifying modern
+cards that are popular", "You make the call on the choices", then 2026-11-11 "All
+formats we can"; 1.1.20).** EDHREC rank says almost nothing about constructed
+play (measured: Thoughtseize EDHREC 4,442 but in 27 % of Modern decks; Murktide
+15,429 / 6 %; Smothering Tithe 68 / 0 %), so each format gets its OWN number,
+never mixed into the Commander tier: the share of that format's recent decks
+running ≥ 1 copy, main OR side.
+- **The formats** — every one the caches carry enough of (60 days to
+  2026-11-10, decks MTGO · paper): Standard 2,849 · 3,877, Pioneer 1,437 · 130
+  (paper too thin to weigh — MTGO only), Modern 6,146 · 10,684, Legacy 3,038 ·
+  2,730, Vintage 1,479 · 1,152, Pauper 3,196 · 5,079, Premodern 1,419 · 1,870 —
+  44,956 decks. NOT Commander (391 decks; EDHREC covers it far better) nor Duel
+  Commander (66). A format below 1,000 decks in a week is left out of that week's
+  file (`skipped`); the pages say so. Premodern joined `popularity.TRACKED_FORMATS`
+  (the legality chips, 8 formats now) because "not played" is read off the scan's
+  own legality.
+- **Built weekly in CI, never per scan** (`.github/workflows/play-data.yml`,
+  Monday 07:43 UTC): partial clones of `davidfischer/modometa-mtgo-data` (MIT —
+  MTGO Challenges' top decks + League 5-0s) and `fbettega/MTG_decklistcache`'s
+  `MTGmelee` + `Topdeck` folders (GPL-3: READ, never copied — only aggregate
+  shares are published; EVERY deck of each paper event) + Scryfall's
+  `oracle_cards` bulk → `play-data.json` (~1.1 MB, 550 KB gzipped) on the rolling
+  `play-data` PRERELEASE (pushed tag first, never latest — the art-pack rules). No
+  format left → the build fails and the last good file stays up. Popularity's
+  "costs NOTHING" rule holds: the phone downloads one file (first launch on any
+  network, then weekly on Wi-Fi — `PlayDataStore`), the join is a dictionary
+  lookup.
+- **The number**: 60-day window; per format the EQUAL-WEIGHT mean of MTGO's and
+  paper's shares (sources with ≥ 200 decks of it; one 1,228-deck paper event must
+  not swamp MTGO); integer basis points, half up, never 0 for a card seen at all;
+  rank per format. Tiers are ABSOLUTE (shares are already normalised): staple
+  ≥ 10 %, played 2–10 %, fringe below (Modern 87 / 224 / 2,135; Legacy 77 / 228 /
+  1,608; Vintage 117 / 287 / 1,725); Modern's counts barely move with the window
+  (30 / 60 / 90 days: ≥ 10 % 90 / 87 / 88). MTGO vs paper top-100 Jaccard 0.83;
+  month to month 0.72, 12 of 2,446 cards move two bands.
+- **Keyed by oracle_id** (`popularity.summarize` carries `oracle_id` from 1.1.20 —
+  13 Modern-legal names name two oracle cards, Lightning Bolt included). Scans
+  filed earlier fall back to the NAME (`card_list.name_keys`), never one in the
+  file's `ambiguous` list (any name/face naming 2+ oracle cards) → every format null.
+- **Answers, not unknowns** (per format): `unplayed` (legal there, in no deck —
+  ~89 % of the 23,012 Modern-legal cards), `basic` (Island is in 31 % of Modern
+  decks and worth nothing — never a chip, never passes a floor), `banned` /
+  `not_legal` (the scan's own `formats`); being in a deck beats a stale scan-time
+  legality. null = not known (old scan under an ambiguous name, or that format's
+  legality not recorded); NO `play` key = no data on this server yet.
+- **Evaluated at READ time, never stored** (`flag_play` beside `flag_list_tags`
+  on `/api/scans` + `/api/scans/{id}`; select / PATCH / file answers are not
+  flagged): a new week's file re-tags every scan already filed. It reads the same
+  printing as the pages' popularity pill (`popOf`: selection, else
+  candidates[0]). `GET /api/play-data` (guest-readable) says what the data is (as
+  of, decks per format, sources).
+- **Build-time name resolution:** exact full name, else a face / front face
+  naming ONE card, else ONE card legal in the deck's format ("Pick Your Poison"
+  in a Modern deck is MKM's, not the MB2 playtest card); Scryfall's `front_card`
+  layout (Jumpstart theme cards, 2026) is skipped like tokens; MTGO-only printed
+  names (Through the Omenpaths, `om1`: "Kavaero, Mind-Bitten" = Superior
+  Spider-Man) resolve through ONE `/cards/named?fuzzy=` lookup per name accepted
+  only on an exact `printed_name`; the rest are dropped and counted (95 names,
+  153 entries in 45k decks — Spanish and Portuguese card names from paper events).
+- **The reference server** reads `PLAY_DATA_FILE` only (no default path — a test
+  run must never pick up a file from the user's cache); `python -m
+  mtg_card_scanner.play_data fetch` downloads the published file.
+- **The pages (desktop d60, phone v61):** each row shows ONE play chip after the
+  list-tag chips (`check_card_list_ui.py` pins the tags right after the
+  popularity pill) — the card's best format (`bestPlay`: highest bp, ties in
+  format order), "Legacy 31% +2" (+N = other formats at ≥ 2 %), gold staple /
+  blue played / dim fringe, desktop ★ on a staple and a title listing every
+  format; no chip when no format plays it. `fmtShare` never rounds a share past
+  its tier (bp 199 reads "1.9%", 999 "9.9%" — the review found "2%" on a fringe
+  card the 2 % floor then hid). The open card: desktop's "Played in" line (a
+  chip per format, highest first, "not played: …", the decks / sources / window
+  from `GET /api/play-data`, fetched at load and every 10 min); phone's compare
+  head and bare head get one row — the Commander pill + a chip per format. The
+  floor: "Played in" (`#playfmt` any / one format × `#playmin` any deck / 2 % /
+  staples) — List filters, below. Every rendered field is in the row / detail
+  signatures (`playSig`); the helpers are one block, identical on both pages
+  (`test_static_pages.py`).
+- **The phone's file** (`ident/PlayDataStore` + `PlayDataSync`, a MIN_PRIORITY
+  "play-data" thread, log tag `play`): forced at app start with no data, else
+  the scan screen's weekly check on Wi-Fi, and Settings → This phone's server →
+  "Check for a newer card database" checks it too; 404 → "no data yet", asked
+  again after a day; a file this build refuses (a future version, a bad CI
+  build) keeps the installed one and is asked again after a day, never on every
+  screen start (review: in Tap to scan that was a 1.1 MB download per scan); a
+  skip ("not on Wi-Fi") never hides the last failure (`lastFailure`, cleared by
+  an answer). Settings: "Play data: as of … · N decks in M formats (MTGO +
+  paper, 60 days)"; Diagnostics: "play data as of … · pioneer 1,437 (MTGO only) ·
+  … decks". Parsed off the main thread, cached, a corrupt file deleted;
+  Robolectric never downloads it.
+Golden: `scripts/export_play_data_fixtures.py` (parse refusals — a JSON 1.0 or
+"1" is not version 1, a 2689.0 is not a count, an unknown format is ignored —,
+the lookup table, scan answers, flags, status, and the REAL app.py's reads) →
+`PlayDataParityTest`; the builder is Python-only (`tests/test_play_data.py`);
+the review also diffed Python vs Kotlin on the REAL built file (12,530 cases,
+all equal). The pages: `check_price_filter_ui.py` (16 → 182 checks).
 
 **External card list (`card_list.py`, owner 2026-10-12) — generic, READ-ONLY.**
 Not the reverted MX-inventory integration: no store branding, nothing written
@@ -383,10 +494,12 @@ while holding a lock.
 every field a row renders MUST be in its signature or edits go stale.
 `/api/scans` returns newest-first. HTML is served `Cache-Control: no-store`.
 
-**List filters (both pages):** two bars — a price band and a popularity floor —
-combined by a match ANY/ALL toggle, ANY being the default. Each bar votes
+**List filters (both pages):** three bars — a price band, a Commander
+popularity floor and (1.1.20) a "Played in" floor — combined by a match ANY/ALL
+toggle, ANY being the default. Each bar votes
 **TRI-STATE**: pass, fail, or NULL = not known yet (unpriced, prints not all
-searched, or a scan carrying no popularity because it predates the feature).
+searched, a scan carrying no popularity because it predates the feature, or no
+play answer).
 That third state is load-bearing — collapsing it to "pass" is the bug that made
 ALL barely differ from ANY (an unpriced card "satisfied" a Min $ it had never
 been measured against). Rules that must hold:
@@ -414,8 +527,16 @@ been measured against). Rules that must hold:
   F2F has no listing for is an unknown price, so it can keep the card (NULL)
   but never hide it (`printInfo().priced`). Any print in band still passes.
 - **"Exclude filtered" still requires a known price** even when only the
-  popularity bar is on — never drop a card from the export on a price that was
-  never looked up.
+  popularity or Played-in bar is on — never drop a card from the export on a
+  price that was never looked up.
+- **The Played-in floor** (`playVote`): one format, or "Any format" = the card's
+  best. `unplayed` / `basic` / `banned` / `not_legal` are ANSWERS (they fail any
+  floor); an absent `play` key, a null answer, or a format missing from this
+  week's file is NULL. "Any format": any format passes → pass; else any NULL →
+  NULL; else fail. `#fhint` warns when it is on with no Min $ beside it
+  (Commander staples and basics are hidden), when the scanner has no play data
+  yet, and when the chosen format is not in this week's file. Persisted as
+  `listFilters.play` / `playfmt`.
 The bars, the mode and the view chip persist per viewer in localStorage
 (`listFilters`, owner 2026-09-30: the app's review screen reloads the page
 every time it opens); the name search box is not kept.
@@ -1364,7 +1485,8 @@ lens on testers' phones), minSdk 29, arm64-v8a.
   Scans, review, export, the phone server and queued identification never
   stop — the phone holds the only copy of the scans. Offline changes nothing,
   but a newer release once seen stays locked; installing the update unlocks
-  (the lock is "latest seen > this build"). Prereleases (the `art-pack` tag),
+  (the lock is "latest seen > this build"). Prereleases (the `art-pack` and
+  `play-data` tags),
   drafts, releases without the APK and unparseable tags never lock. The phone
   server's `/api/update-check` reports it (the desktop's update banner).
   Robolectric tests never ask GitHub.
@@ -1525,6 +1647,25 @@ lens on testers' phones), minSdk 29, arm64-v8a.
   an MX-inventory integration was built and REVERTED — ask before rebuilding.
 
 Open threads:
+- **In flight (2026-11-11): 1.1.20 — the play data (every format the decklist
+  caches carry) + the Commander pill's percentage**, branch `claude/play-data`,
+  a DRAFT PR awaiting the owner's "merge". After the merge the phones have NO
+  play data until `play-data.yml` first runs (Monday 07:43 UTC) — run it once by
+  hand (Actions → play-data → Run workflow, or the API's workflow dispatch) so the
+  `play-data` release exists the day 1.1.20 ships. Its fetch + build steps were
+  dry-run here against the real sources (41,912 decks, 7 formats, the file
+  parses); the publish step runs for the first time in CI.
+- **Owner to confirm on the rig (1.1.20, tested in code, not on the phone):** the
+  play data arriving (Settings → This phone's server: "Play data: as of …"), the
+  play chip on real scans (a Modern staple reads gold "Modern 27%"), the
+  Commander pill's "top N%", the "Played in" filter on the phone's Filters fold,
+  and that old scans (no oracle_id) get chips by name.
+- Found by the 1.1.20 reviews, pre-existing, left as they are: phone.html's
+  `.spill` is `white-space: nowrap`, so a long free-text list tag runs across a
+  phone row (v60 measured the same; the desktop's was fixed in d60); and
+  `popularity.RANKED_CARD_COUNT` (32,296, 2026-09-19) is below today's highest
+  EDHREC rank (32,710) — the pill caps at "top 100%", but the bottom tiers read
+  a little low until the reference constant is re-measured (a fixtures change).
 - **State at the last handoff (2026-11-09):** v1.1.19 is released (2026-11-06,
   `mtg-card-scanner-android.apk` published; PR #44 squash-merged as
   `74cd69f`), so every older install is update-locked until it updates. No PR
@@ -1671,7 +1812,7 @@ Open threads:
 
 ## Testing
 
-`pytest tests/` (642 at 1.1.19, fakes only, 3-OS CI) + the 12 fixture
+`pytest tests/` (691 at 1.1.20, fakes only, 3-OS CI) + the 13 fixture
 `--check`s + the gradle line (CI job `android`) — CI runs on pushes to master
 and on every PR. The five `scripts/check_*_ui.py` Chromium drivers are NOT in
 CI: run them by hand after any page edit (Build / test, above). Real scans:

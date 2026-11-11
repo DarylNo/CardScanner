@@ -1,0 +1,126 @@
+# Build the play data — the share of recent decks running each card, for
+# Standard, Pioneer, Modern, Legacy, Vintage, Pauper and Premodern — and
+# publish it as one JSON file (~1 MB) the phone downloads
+# (mtg_card_scanner/play_data.py holds the rules and the numbers they were
+# measured on).
+#
+# Sources, read here and nowhere else — only aggregate shares are published:
+#   MTGO  — davidfischer/modometa-mtgo-data (MIT), every format's events
+#   paper — fbettega/MTG_decklistcache (GPL-3: read, never copied), its
+#           MTGmelee + Topdeck folders
+# Both are shallow, blob-less clones: only the event files of the months the
+# 60-day window can reach are checked out (~1,500 files, ~200 MB).
+#
+# Published to the rolling `play-data` release — a DATA release, exactly
+# like `art-pack`: created as a prerelease and never marked latest, so
+# releases/latest (the app's update lock, server/app.py _check_update, the
+# download page) never returns it; the tag doesn't match `v*`, so
+# release.yml / auto-tag.yml never see it. A format with too few decks is left
+# out of the file (play_data.py MIN_FORMAT_DECKS); a build with no format left
+# fails and publishes nothing — the last good file stays up.
+name: play-data
+on:
+  schedule:
+    - cron: "43 7 * * 1"     # weekly, Monday 07:43 UTC (after art-pack, off the hour)
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "Publish to the play-data release (untick = build only)"
+        type: boolean
+        default: true
+permissions:
+  contents: write            # create/update the play-data release + its asset
+concurrency:
+  group: play-data
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install .
+
+      - name: Fetch the decklist caches (the window's months only)
+        run: |
+          set -euo pipefail
+          # Every YYYY/MM folder the 60-day window (+ a margin) can reach.
+          months=$(python -c "
+          import datetime as dt
+          d = dt.date.today(); seen = []
+          for back in range(0, 70):
+              m = (d - dt.timedelta(days=back)).strftime('%Y/%m')
+              if m not in seen: seen.append(m)
+          print(' '.join(seen))")
+          echo "months: $months"
+          # clone_some <url> <dir> <path-regex> <tree-root>...
+          clone_some() {
+            local url=$1 dir=$2 pattern=$3; shift 3
+            git clone -q --depth 1 --filter=blob:none --no-checkout "$url" "$dir"
+            local list="$RUNNER_TEMP/$(basename "$dir").paths"
+            : > "$list"
+            for root in "$@"; do
+              for m in $months; do
+                git -C "$dir" ls-tree -r --name-only HEAD -- "$root/$m" | grep -E "$pattern" >> "$list" || true
+              done
+            done
+            echo "$dir: $(wc -l < "$list") event files"
+            if [ -s "$list" ]; then
+              (cd "$dir" && xargs -d '\n' -a "$list" git checkout -q HEAD --)
+            fi
+            echo "$dir: commit $(git -C "$dir" log -1 --format='%h %ci')"
+          }
+          clone_some https://github.com/davidfischer/modometa-mtgo-data decks/mtgo \
+            '\.json$' Tournaments/MTGO
+          clone_some https://github.com/fbettega/MTG_decklistcache decks/paper \
+            '\.json$' Tournaments/MTGmelee Tournaments/Topdeck
+
+      - name: Build the file
+        run: |
+          python -m mtg_card_scanner.play_data build \
+            --mtgo decks/mtgo --paper decks/paper \
+            --oracle "$RUNNER_TEMP/oracle-cards.jsonl.gz" \
+            --out out/play-data.json
+          # The phone refuses a file its parser refuses: check before publishing.
+          python -c "
+          from mtg_card_scanner.play_data import parse_pack
+          p = parse_pack(open('out/play-data.json', encoding='utf-8').read())
+          print('parses:', p['as_of'], ', '.join(f'{k} {f[\"decks\"]}' for k, f in p['formats'].items()))"
+
+      - name: Publish to the play-data release
+        if: ${{ github.event_name == 'schedule' || inputs.publish }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if ! gh release view play-data >/dev/null 2>&1; then
+            # Push the tag with git FIRST, then release on it — the API
+            # creating the tag (`gh release create --target`) is refused 403
+            # for the GITHUB_TOKEN (the same lesson as art-pack.yml).
+            if ! git ls-remote --exit-code --tags origin refs/tags/play-data >/dev/null; then
+              git tag play-data "$GITHUB_SHA"
+              git push origin refs/tags/play-data
+            fi
+            gh release create play-data --verify-tag \
+              --title "Play data" \
+              --notes "Rolling data release (play-data.yml): the share of recent decks (MTGO + paper) running each card in Standard, Pioneer, Modern, Legacy, Vintage, Pauper and Premodern, for the phone app's play chips and filter. Not an app release." \
+              --prerelease --latest=false
+          fi
+          # Keep it out of releases/latest even if someone edited it by hand.
+          gh release edit play-data --prerelease --latest=false
+          gh release upload play-data out/play-data.json --clobber
+          {
+            echo "### Play data published"
+            python -c "
+          import json
+          from mtg_card_scanner.play_data import summary_line
+          print(summary_line(json.load(open('out/play-data.json', encoding='utf-8'))))"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: play-data
+          path: out/
+          if-no-files-found: error

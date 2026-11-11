@@ -54,6 +54,9 @@ class GuestRoleTest {
     @Test fun aGuestPicksEditsPricesAndFlags() {
         seed(1)
         assertEquals(200, call(ROLE_GUEST, "GET", "/api/scans").status)
+        // what the play data is (the pages' play chips) — guest-readable, like the scans
+        assertEquals(mapOf("loaded" to false), MiniJson.parse(String(call(ROLE_GUEST, "GET", "/api/play-data").body)))
+        assertEquals(200, call(ROLE_GUEST, "GET", "/api/play-data").status)
         assertEquals(200, call(ROLE_GUEST, "POST", "/api/scans/1/select",
             """{"printing":{"id":"x0","name":"Opt","set":"xln","collector_number":"65"}}""").status)
         assertEquals(200, call(ROLE_GUEST, "PATCH", "/api/scans/1", """{"condition":"LP","quantity":2}""").status)

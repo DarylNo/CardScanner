@@ -91,6 +91,7 @@
                              background:#232834; color:#dfe3ea; font-size:14px; font-weight:600;
                              white-space:nowrap; display:inline-flex; align-items:center; justify-content:center; }
   #p-excl, .bar .mchip { flex:0 0 auto; }
+  #p-playfmt, #p-playmin { flex:1 1 0; }
   .bar input { padding:0 10px; -moz-appearance:textfield; }
   .bar input::-webkit-inner-spin-button, .bar input::-webkit-outer-spin-button { -webkit-appearance:none; margin:0; }
   .bar .mchip { cursor:pointer; user-select:none; font-weight:500; }
@@ -164,6 +165,12 @@
   .spill.pop.staple { background:#3a2e08; color:#fcd34d; font-weight:700; }
   .spill.pop.strong { background:#2e1065; color:#c4b5fd; }
   .spill.pop.solid  { background:#0c2a4d; color:#93c5fd; }
+  /* Play data (play_data.py): the share of a format's recent decks running the card — its own
+     fact, never a popularity tier. Staple / played borrow the popularity gold / blue; fringe
+     keeps the popularity pill's grey. */
+  .spill.play { background:var(--line); color:#aeb4bf; }
+  .spill.play.staple { background:#3a2e08; color:#fcd34d; font-weight:700; }
+  .spill.play.played { background:#0c2a4d; color:#93c5fd; }
   /* External card list tags (card_list.py): a yes/no fact, never a popularity colour. */
   .spill.ltag { background:#1f2937; color:#d1d5db; }
   .spill.ltag.wanted { background:#064e3b; color:#6ee7b7; }
@@ -335,6 +342,25 @@
         <span class="mchip" id="p-fmode" role="button">match <b>any</b></span>
         <span class="mchip" id="p-tagged" role="button" style="display:none" title="Only cards the external list tags">Tagged only</span>
       </div>
+      <div class="fcap">Played in</div>
+      <div class="bar">
+        <select id="p-playfmt" aria-label="Which format the floor reads (Any = the card's best format)">
+          <option value="any">Any format</option>
+          <option value="standard">Standard</option>
+          <option value="pioneer">Pioneer</option>
+          <option value="modern">Modern</option>
+          <option value="legacy">Legacy</option>
+          <option value="vintage">Vintage</option>
+          <option value="pauper">Pauper</option>
+          <option value="premodern">Premodern</option>
+        </select>
+        <select id="p-playmin" aria-label="Hide cards played less than this in recent decks of that format">
+          <option value="">Played: any</option>
+          <option value="fringe">In any deck</option>
+          <option value="played">2%+ of decks</option>
+          <option value="staple">Staples (10%+)</option>
+        </select>
+      </div>
       <div class="fcap">Bulk actions</div>
       <div class="bar">
         <button id="p-fill" class="admin-only">Price missing</button>
@@ -446,17 +472,136 @@ function popTag(scan){
   const tag = p && POP_CALLOUT[p.tier];
   return tag ? ` (${tag})` : '';
 }
+// The pill carries the rank's percentile (owner, 2026-11-11: "Some how add the percentage to
+// the pill for commander"): "Staple · top 0.49%". Only a NUMBER gets the suffix — unranked
+// cards and old scans have none, and never read "top undefined%".
 function popPill(scan){
   const p = popOf(scan);
   if (!p) return '';
-  return `<span class="spill pop ${escHtml(p.tier)}">${escHtml(p.label)}</span>`;
+  const top = typeof p.top_percent === "number" ? ` · top ${fmtTop(p.top_percent)}%` : "";
+  return `<span class="spill pop ${escHtml(p.tier)}">${escHtml(p.label)}${top}</span>`;
 }
 // Every popularity field the rows render, so the list signature covers it.
 // The format chips live in the detail panel, which re-fetches on open rather
 // than diffing, so they deliberately stay out of the list signature.
 function popSig(scan){
   const p = popOf(scan);
-  return p ? p.tier + ':' + p.label : '';
+  return p ? p.tier + ':' + p.label + ':' + p.top_percent : '';
+}
+/* ═══ play data (shared) ═══ — byte-identical in phone.html and desktop.html (tests/test_static_pages.py).
+   Popularity's percentile and the play data (mtg_card_scanner/play_data.py). scan.play is
+   added at READ time: NO key = the server has no play data yet; otherwise {format: answer |
+   null}, one key per format in this week's file, in the data's order (standard, pioneer,
+   modern, legacy, vintage, pauper, premodern). An answer is {tier: staple|played|fringe, bp,
+   rank} (in decks of that format; bp = basis points of its decks, 2689 = 26.89 %), or
+   {tier: unplayed|basic|banned|not_legal} — ANSWERS, which fail any floor; null = not known.
+   It describes the same card as popOf(scan). */
+// "top N%" of the EDHREC-ranked pool, as the pill prints it: whole from 10 %, one decimal (a
+// trailing ".0" dropped) from 1 %, and below 1 % rounded UP to the hundredth — rank 1 (stored
+// 0.003) reads "top 0.01%", never "top 0%". The 1e-9: 0.56 * 100 is 56.00000000000001 in
+// binary, and a plain ceil printed a stored 0.56 (rank 181) as "top 0.57%". Never past 100:
+// the pool size the reference divides by (popularity.RANKED_CARD_COUNT, 32,296) is a
+// measurement, and EDHREC's ranks have grown past it (Spinny Ride, 32,710, is stored as 101.3).
+function fmtTop(n) {
+  if (n >= 10) return String(Math.round(Math.min(n, 100)));
+  if (n >= 1) return n.toFixed(1).replace(/\.0$/, "");
+  return String(Math.max(0.01, Math.ceil(n * 100 - 1e-9) / 100));
+}
+// A share of a format's decks from basis points: 2689 → "27%", 232 → "2.3%", 25 → "0.3%", 1 → "<0.1%".
+// Below 10 % it is the nearest tenth, but never rounded UP to a tier edge the card has not
+// reached: the tiers break at 2 % and 10 % (play_data.tier_for_bp: 200 / 1000 bp), and a 1.99 %
+// card printed "2%" — dim, and hidden by the "2%+ of decks" floor — as a 9.99 % one printed
+// "10%" with no ★; 0.96 % printed "1.0%" beside 1 %'s "1%". bp is an integer, so a half is
+// exact in bp / 10 and rounds up (toFixed read 0.15 as 0.1499… and printed "0.1%"). From 10 %
+// up no tier breaks: whole, to the nearest.
+function fmtShare(bp) {
+  if (bp >= 1000) return Math.round(bp / 100) + "%";
+  if (bp < 10) return "<0.1%";
+  const tenths = Math.min(Math.round(bp / 10), bp < 200 ? 19 : 99);
+  return (tenths / 10).toFixed(1).replace(/\.0$/, "") + "%";
+}
+// An answer saying the card IS in recent decks of that format.
+function isPlayedAnswer(m) {
+  return m != null && typeof m === "object" && typeof m.bp === "number"
+    && (m.tier === "staple" || m.tier === "played" || m.tier === "fringe");
+}
+// Every format the card is played in, highest share first (a tie keeps the format order).
+function playedIn(scan) {
+  const P = scan && scan.play;
+  if (P == null || typeof P !== "object") return [];
+  return Object.keys(P).filter(k => isPlayedAnswer(P[k])).map(k => ({ key: k, m: P[k] }))
+    .sort((a, b) => b.m.bp - a.m.bp);
+}
+// The card's best format ({key, m}: the highest share); null when it is played in none.
+function bestPlay(scan) {
+  const list = playedIn(scan);
+  return list.length ? list[0] : null;
+}
+// The formats where the card is legal and in no recent deck.
+function playUnplayed(scan) {
+  const P = scan && scan.play;
+  if (P == null || typeof P !== "object") return [];
+  return Object.keys(P).filter(k => P[k] != null && P[k].tier === "unplayed");
+}
+// Everything the play chips render, for the signatures ("" = no key, "null" = a null play).
+function playSig(scan) {
+  if (!("play" in scan)) return "";
+  if (!scan.play) return "null";
+  return Object.keys(scan.play).map(k => {
+    const m = scan.play[k];
+    return `${k}=${m ? m.tier : ""}:${m && m.bp != null ? m.bp : ""}:${m && m.rank != null ? m.rank : ""}`;
+  }).join(",");
+}
+/* The "Played in" floor — a third bar that votes like the price and popularity bars:
+   TRI-STATE, true / false / null = not known. Tier order is play_data.py's; the answers below
+   "fringe" (unplayed, basic, banned, not_legal) fail every floor — they are what the card IS. */
+const PLAY_ORDER = ["staple", "played", "fringe", "unplayed", "basic", "banned", "not_legal"];
+function playPasses(m) {
+  return m != null && PLAY_ORDER.indexOf(m.tier) !== -1 && PLAY_ORDER.indexOf(m.tier) <= PLAY_ORDER.indexOf(playMin);
+}
+function playVote(s) {
+  if (playMin == null) return null;            // bar is off
+  const P = s.play;
+  if (P == null) return null;                  // no play data on this scan (absent or null): not known
+  if (playFmt !== "any") {
+    const m = P[playFmt];
+    if (m == null) return null;                // not in this week's file, or not known
+    return playPasses(m);
+  }
+  const ms = Object.values(P);
+  if (ms.some(playPasses)) return true;
+  if (ms.some(m => m == null)) return null;
+  return false;
+}
+// The server has no play data: it says so, or — with no answer from /api/play-data (an older
+// server) — no scan carries the key.
+function playDataMissing() {
+  if (playMeta && playMeta.loaded === false) return true;
+  return !(playMeta && playMeta.loaded === true) && !scans.some(s => s && "play" in s);
+}
+// The format the floor reads is not in this week's file (too few decks to publish it).
+function playFormatMissing() {
+  return playFmt !== "any" && !!playMeta && playMeta.loaded === true
+    && !!playMeta.formats && typeof playMeta.formats === "object" && !(playFmt in playMeta.formats);
+}
+/* ═══ end play data ═══ */
+// The row's play chip: ONE, the card's best format ("Legacy 31% +2" — +N other formats where
+// it is played in 2 %+ of decks). Phone pills carry no title.
+function playChip(scan){
+  const b = bestPlay(scan);
+  if (!b) return '';
+  const more = playedIn(scan).filter(x => x.key !== b.key && x.m.bp >= 200).length;
+  const text = `${FORMAT_LABELS[b.key] || b.key} ${fmtShare(b.m.bp)}${more ? ` +${more}` : ''}`;
+  return `<span class="spill play ${escHtml(b.m.tier)}">${escHtml(text)}</span>`;
+}
+// The open card's head row (the compare head and the bare head): the popularity pill, then a
+// compact chip per format the card is played in, highest share first ("Modern 27%"). A basic
+// land is played in no format here (its answer is "basic"), so it gets the pill alone.
+function playHeadHtml(scan){
+  const pill = popPill(scan);
+  const chips = playedIn(scan).map(({ key, m }) =>
+    `<span class="spill play ${escHtml(m.tier)}">${escHtml(`${FORMAT_LABELS[key] || key} ${fmtShare(m.bp)}`)}</span>`).join('');
+  return pill || chips ? `<div class="pfmt pplay">${pill}${chips}</div>` : '';
 }
 /* ── external card list (mtg_card_scanner/card_list.py) ──────────────────────
    The server adds list_tags to every scan READ (never stored), only while a list
@@ -476,7 +621,7 @@ const isWanted = scan => listTags(scan).includes('wanted');
 // it is played, so these never get a popularity colour. `not_legal` is dropped:
 // most cards are not legal in most formats and listing that buries the rest.
 const FORMAT_LABELS = { standard:'Standard', pioneer:'Pioneer', modern:'Modern',
-  legacy:'Legacy', vintage:'Vintage', pauper:'Pauper', commander:'Commander' };
+  legacy:'Legacy', vintage:'Vintage', pauper:'Pauper', premodern:'Premodern', commander:'Commander' };
 function formatChipsHtml(scan, pop = popOf(scan)){
   const f = pop?.formats;
   if (!f) return '';
@@ -492,7 +637,7 @@ function formatChipsHtml(scan, pop = popOf(scan)){
 }
 
 /* ── version banner — proves which page+server combo is running ────────────── */
-const UI_VERSION = 'v60';
+const UI_VERSION = 'v61';
 
 // Who is asking: the phone server says "admin" for the paired computer, the app's
 // own review screen and — while Settings → "Guests get full access" is on (the
@@ -1063,6 +1208,11 @@ let swipeDragging = false;
 // is the default: the price floor is what keeps an expensive UNRANKED card
 // visible when a popularity floor would otherwise drop it).
 let popMin = null, filterMode = 'any';
+// The "Played in" floor (play data — a third bar that votes like the other two): the least a
+// card must be played (staple / played / fringe; null = bar off) in which format ('any' = the
+// card's best format). playMeta is GET /api/play-data's last good answer (null = none yet).
+let playMin = null, playFmt = 'any';
+let playMeta = null, playMetaAt = 0;
 // "Tagged only" (external card list): narrows the VIEW like the All / Pending chips —
 // not a filter vote, so "Exclude filtered" never drops an untagged card from the export.
 let taggedOnly = false;
@@ -1158,7 +1308,7 @@ function popVote(s) {
 }
 function meetsPopularity(s) { return popVote(s) !== false; }
 function activeFilters() {
-  return { price: priceMin != null || priceMax != null, pop: popMin != null };
+  return { price: priceMin != null || priceMax != null, pop: popMin != null, play: playMin != null };
 }
 /* ANY: show on any PASS; with no pass but something unknown, show anyway —
    we cannot rule the card out. Hide only when every active bar FAILS.
@@ -1167,33 +1317,47 @@ function activeFilters() {
 function passesFilters(s) {
   if (isProblem(s) || isWanted(s)) return true;   // "check" and Wanted rows always show
   const on = activeFilters();
-  if (!on.price && !on.pop) return true;
+  if (!on.price && !on.pop && !on.play) return true;
   const votes = [];
   if (on.price) votes.push(priceVote(s));
   if (on.pop) votes.push(popVote(s));
+  if (on.play) votes.push(playVote(s));
   if (filterMode === 'all') return votes.every(v => v === true);
   return votes.some(v => v === true) || votes.some(v => v === null);
 }
+// First match wins — see desktop.html (the same cases, shorter words). Called on every list
+// render too: whether any scan carries play data changes with the refreshes.
 function renderFilterHint() {
   const el = $('#fhint');
   const on = activeFilters();
+  const all = filterMode === 'all';
+  const fmt = playFmt === 'any' ? 'any format' : (FORMAT_LABELS[playFmt] || playFmt);
   let msg = '';
-  if ((on.price || on.pop) && filterMode === 'all')
-    msg = '⚠ “match all” hides cards not yet priced, or with no popularity data. '
+  if (on.play && playDataMissing())
+    msg = all ? 'Play data isn\'t on the scanner yet — with “match all” the Played-in bar hides every card until it arrives.'
+              : 'Play data isn\'t on the scanner yet — the Played-in bar keeps every card until it arrives.';
+  else if (on.play && playFormatMissing())
+    msg = `No ${fmt} data this week (too few decks) — the Played-in bar ${all ? 'hides' : 'keeps'} every card.`;
+  else if ((on.price || on.pop || on.play) && all)
+    msg = '⚠ “match all” hides cards not yet priced, or with no popularity / play data. '
         + 'Switch to “any” to keep them.';
+  else if (on.play && priceMin == null && !on.pop)
+    msg = `⚠ Cards not played in ${fmt} (Commander staples, basics) are hidden — set a Min $ `
+        + 'so valuable ones still show.';
   else if (on.pop && priceMin == null)
     msg = '⚠ Unranked cards (basics, Commander-banned) are hidden — set a Min $ '
         + 'so valuable ones still show.';
-  el.style.display = msg ? 'block' : 'none';
-  el.textContent = msg;
+  const display = msg ? 'block' : 'none';
+  if (el.style.display !== display) el.style.display = display;
+  if (el.textContent !== msg) el.textContent = msg;
   renderFilterChip();
 }
 // The Filters chip folds the bars away, so it must say when one is ACTIVE:
-// a count of active bars (price band, popularity floor). Display only — the
+// a count of active bars (price band, popularity floor, Played-in floor). Display only — the
 // tri-state logic above is the single source of truth for what is shown.
 function renderFilterChip() {
   const on = activeFilters();
-  const n = (on.price ? 1 : 0) + (on.pop ? 1 : 0) + (taggedOnly && listOn() ? 1 : 0);
+  const n = (on.price ? 1 : 0) + (on.pop ? 1 : 0) + (on.play ? 1 : 0) + (taggedOnly && listOn() ? 1 : 0);
   $('#fltBtn').classList.toggle('active', n > 0);
   $('#fcount').textContent = n ? String(n) : '';
 }
@@ -1225,7 +1389,7 @@ function renderScansPanel() {
   const tagBtn = $('#p-tagged');
   tagBtn.style.display = listOn() ? '' : 'none';
   tagBtn.classList.toggle('on', taggedOnly);
-  renderFilterChip();
+  renderFilterHint();          // + the Filters chip
   const rows = scans.filter(s => passesFilters(s) &&
     (!taggedOnly || !listOn() || isProblem(s) || listTags(s).length > 0) && (
     scansView === 'all' ? true :
@@ -1236,7 +1400,7 @@ function renderScansPanel() {
   // name/set/number/thumb), condition/finish edits, qty, flags, prices,
   // popularity.
   const listSig = scansView + '~' + priceMin + '~' + priceMax +
-    '~' + popMin + '~' + filterMode + '~' + taggedOnly + '~' + listOn() + '~' +
+    '~' + popMin + '~' + playMin + '~' + playFmt + '~' + filterMode + '~' + taggedOnly + '~' + listOn() + '~' +
     rows.map(s => [s.id, s.status, s.included,
                    s.selection?.scryfall_id, s.selection?.condition,
                    s.selection?.finish, s.selection?.quantity,
@@ -1244,7 +1408,7 @@ function renderScansPanel() {
                    s.card_read?.name, s.error ? 'e' : '',
                    (s.candidates||[]).length, (s.candidates||[])[0]?.id,
                    JSON.stringify(s.f2f?.conditions||0),
-                   printInfo(s).vals.join(';'), popSig(s), tagSig(s), s.flagged ? 'f' : '', role].join(',')).join('|');
+                   printInfo(s).vals.join(';'), popSig(s), tagSig(s), playSig(s), s.flagged ? 'f' : '', role].join(',')).join('|');
   if (listSig === lastListSig || swipeDragging) return;
   lastListSig = listSig;
 
@@ -1260,7 +1424,7 @@ function renderScansPanel() {
     const pill = (isSel
       ? `<span class="spill sel">${s.selection?.auto_picked ? '⚠ auto' : 'selected'}</span>`
       : isProblem(s) ? `<span class="spill chk">check</span>`
-      : `<span class="spill">pending</span>`) + popPill(s) + tagChips(s) +
+      : `<span class="spill">pending</span>`) + popPill(s) + tagChips(s) + playChip(s) +
       (s.flagged ? `<span class="spill flag" title="flagged for deletion">🚩</span>` : '');
     const swipeWord = role === 'guest' ? (s.flagged ? 'Unflag' : '🚩 Flag') : 'Delete';
     return `<div class="sitem"><div class="sdel" aria-hidden="true"><span>${swipeWord}</span><span>${swipeWord}</span></div><div class="srow" data-sid="${s.id}" role="button">
@@ -1472,6 +1636,14 @@ $('#p-popmin').addEventListener('change', e => {
   popMin = e.target.value === '' ? null : e.target.value;
   renderFilterHint(); renderScansPanel();
 });
+$('#p-playmin').addEventListener('change', e => {
+  playMin = e.target.value === '' ? null : e.target.value;
+  renderFilterHint(); renderScansPanel();
+});
+$('#p-playfmt').addEventListener('change', e => {
+  playFmt = e.target.value || 'any';
+  renderFilterHint(); renderScansPanel();
+});
 $('#p-tagged').addEventListener('click', () => {
   taggedOnly = !taggedOnly;
   lastListSig = ''; renderFilterChip(); renderScansPanel(); saveFilters();
@@ -1498,7 +1670,8 @@ const FILTER_KEY = 'listFilters';
 function saveFilters() {
   try {
     localStorage.setItem(FILTER_KEY, JSON.stringify(
-      { min: priceMin, max: priceMax, pop: popMin, mode: filterMode, view: scansView, tagged: taggedOnly }));
+      { min: priceMin, max: priceMax, pop: popMin, play: playMin, playfmt: playFmt,
+        mode: filterMode, view: scansView, tagged: taggedOnly }));
   } catch (e) { /* storage blocked: filters just won't persist */ }
 }
 (function restoreFilters() {
@@ -1510,6 +1683,9 @@ function saveFilters() {
   $('#p-min').value = priceMin ?? ''; $('#p-max').value = priceMax ?? '';
   const pop = $('#p-popmin');
   if (f.pop && [...pop.options].some(o => o.value === f.pop)) { popMin = f.pop; pop.value = f.pop; }
+  const play = $('#p-playmin'), playfmt = $('#p-playfmt');
+  if (f.play && [...play.options].some(o => o.value === f.play)) { playMin = f.play; play.value = f.play; }
+  if (f.playfmt && [...playfmt.options].some(o => o.value === f.playfmt)) { playFmt = f.playfmt; playfmt.value = f.playfmt; }
   if (f.mode === 'all' || f.mode === 'any') filterMode = f.mode;
   taggedOnly = f.tagged === true;
   $('#p-fmode').innerHTML = `match <b>${filterMode}</b>`;
@@ -1522,8 +1698,30 @@ function saveFilters() {
 })();
 ['#p-min', '#p-max'].forEach(id => $(id).addEventListener('input', saveFilters));
 $('#p-popmin').addEventListener('change', saveFilters);
+$('#p-playmin').addEventListener('change', saveFilters);
+$('#p-playfmt').addEventListener('change', saveFilters);
 $('#p-fmode').addEventListener('click', saveFilters);
 document.querySelectorAll('.vchip').forEach(c => c.addEventListener('click', saveFilters));
+
+/* What the play data is (GET /api/play-data — guest-readable, a plain GET): asked at load,
+   every 10 min, and when the page is shown again with the last answer older than that. A
+   failure (no answer, a refusal, the join page's HTML) keeps the last answer. A CHANGED answer
+   re-renders the list: the hint reads whether the server has play data, and which formats. */
+const PLAY_META_MS = 600000;
+function loadPlayMeta() {
+  return fetch('/api/play-data').then(r => r.ok && /json/i.test(r.headers.get('Content-Type') || '') ? r.json() : null).then(d => {
+    if (!d || typeof d !== 'object' || typeof d.loaded !== 'boolean') return;
+    playMetaAt = Date.now();
+    if (JSON.stringify(d) === JSON.stringify(playMeta)) return;
+    playMeta = d;
+    lastListSig = ''; renderFilterHint(); renderScansPanel();
+  }).catch(() => {});
+}
+loadPlayMeta();
+setInterval(() => { if (!document.hidden) loadPlayMeta(); }, PLAY_META_MS);
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && Date.now() - playMetaAt > PLAY_META_MS) loadPlayMeta();
+});
 
 async function clearScans(only) {
   // Counted from the list as shown (v59: rows swiped away, still in their Undo window, were
@@ -2592,7 +2790,7 @@ function compareHtml(scan, cands, sel) {
       <div class="psub" id="cmp-name">${escHtml(c.set_name||'')} · <b>${tag}</b>${picked?` <span class="picked">✓ picked</span> · ×${sel.quantity}`:''}${c.multi_distance!=null?` <span class="pd">Δ${c.multi_distance}</span>`:''} <span class="pd">${cmpIndex+1}/${cands.length}</span></div>
       ${price}
       ${scan.error ? `<div class="perr">${escHtml(scan.error)}</div>` : ''}
-      ${formatChipsHtml(scan, c.popularity || popOf(scan))}${listTags(scan).length ? `<div class="pfmt">${tagChips(scan)}</div>` : ''}
+      ${formatChipsHtml(scan, c.popularity || popOf(scan))}${playHeadHtml(scan)}${listTags(scan).length ? `<div class="pfmt">${tagChips(scan)}</div>` : ''}
     </div>
     <div class="cmphead"><span class="pd">${picked ? 'Compare the scan with the picked printing' : sel ? 'Compare with another printing' : 'Compare — pick the printing that matches'}</span>
       <div class="cmpmodes">${[['side','Side by side'],['wipe','Wipe'],['blend','Blend']].map(([m,t]) =>
@@ -2678,7 +2876,7 @@ async function renderScanDetail() {
       <div class="psub">${sel ? `${escHtml(sel.set_name)} · <b>${escHtml((sel.set||'').toUpperCase())} #${escHtml(sel.collector_number)}</b> · ×${sel.quantity}` : 'no printing found — search below'}</div>
       ${sel ? `<div class="pprice" id="p-headprice">${headPriceHtml(scan)}</div>` : ''}
       ${scan.error ? `<div class="perr">${escHtml(scan.error)}</div>` : ''}
-      ${formatChipsHtml(scan)}${listTags(scan).length ? `<div class="pfmt">${tagChips(scan)}</div>` : ''}
+      ${formatChipsHtml(scan)}${playHeadHtml(scan)}${listTags(scan).length ? `<div class="pfmt">${tagChips(scan)}</div>` : ''}
     </div>
     <div class="cmpbody side"><div class="cmpbox"><img class="cmpscan" src="/api/scans/${scan.id}/image" alt="Scan photo"
       onload="fitScan(this)" onerror="this.style.visibility='hidden'"></div><span class="cmpcap">scan</span></div>

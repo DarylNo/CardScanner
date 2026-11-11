@@ -109,7 +109,7 @@ class CardListParityTest {
                 override fun read(id: Long): ByteArray? = null
                 override fun write(id: Long, jpeg: ByteArray) {}
                 override fun delete(id: Long) {}
-            }) { src.current() }
+            }, cardList = { src.current() })
             for (s in session["seeds"] as List<Map<String, Any?>>) {
                 store.create(s["identified"] as Boolean, s["card_read"] as Map<String, Any?>?,
                     s["confidence"] as Map<String, Any?>?, s["candidates"] as List<Any?>?, s["error"] as String?)

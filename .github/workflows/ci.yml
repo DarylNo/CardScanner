@@ -90,6 +90,10 @@ jobs:
         run: python scripts/export_api_fixtures.py --check
       - name: External card list fixtures match the reference
         run: python scripts/export_card_list_fixtures.py --check
+      # PlayDataParityTest: the phone reads the play data file and joins it to
+      # every scan exactly as mtg_card_scanner/play_data.py does.
+      - name: Play data fixtures match the reference
+        run: python scripts/export_play_data_fixtures.py --check
       - uses: actions/setup-java@v4
         with:
           distribution: temurin

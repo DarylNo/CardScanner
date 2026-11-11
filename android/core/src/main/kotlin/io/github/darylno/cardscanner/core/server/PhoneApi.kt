@@ -3,6 +3,7 @@ package io.github.darylno.cardscanner.core.server
 import io.github.darylno.cardscanner.core.ArtworkSplit
 import io.github.darylno.cardscanner.core.CardList
 import io.github.darylno.cardscanner.core.MiniJson
+import io.github.darylno.cardscanner.core.PlayData
 import io.github.darylno.cardscanner.core.Py
 
 /** One HTTP request, transport-free (the phone's NanoHTTPD server and the JVM tests both build these). */
@@ -39,13 +40,14 @@ interface ScanImages {
  * [ScanStore]. PORT, never re-tune: `PhoneApiParityTest` replays the golden
  * session scripts/export_api_fixtures.py records from the REAL server.
  *
- *  GET    /api/scans              newest first, other_art + list_tags derived per read
- *  GET    /api/scans/{id}         one row, other_art derived; 404 {"error":"not found"}
+ *  GET    /api/scans              newest first, other_art + list_tags + play derived per read
+ *  GET    /api/scans/{id}         one row, the same three derived; 404 {"error":"not found"}
  *  GET    /api/scans/{id}/image   the scan photo (404 {"error":"no image"})
  *  POST   /api/scans/{id}/select  pick a printing
  *  PATCH  /api/scans/{id}         included / condition / finish / quantity
  *  DELETE /api/scans/{id}         row + photo
  *  POST   /api/scans/delete-all   {"only":"unselected"} keeps picked rows; "flagged" = only flagged ones
+ *  GET    /api/play-data          what the play data is (as of, decks per format) — {"loaded": false} without
  *
  * and [fileScan], `/api/scan`'s filing once the phone has identified a capture.
  *
@@ -61,6 +63,8 @@ class PhoneApi(
     private val images: ScanImages,
     /** The external card list now (CardListSource.current): null = the feature off, no list_tags. */
     private val cardList: () -> CardList.Parsed? = { null },
+    /** The play data now (PlayDataStore.current): null = none yet, no `play` key on any scan. */
+    private val playData: () -> PlayData.Pack? = { null },
 ) {
     /** `select_lock`: every selection read-modify-write — picks, edits, the sweep's writes, retro picks. */
     val selectLock = Any()
@@ -69,6 +73,7 @@ class PhoneApi(
         val p = req.path
         if (p == "/api/me") return if (req.method == "GET") ApiResponse.json(200, mapOf("role" to req.role)) else null
         if (p == "/api/scans") return if (req.method == "GET") listScans() else null
+        if (p == "/api/play-data") return if (req.method == "GET") ApiResponse.json(200, PlayData.status(playData())) else null
         if (p == "/api/scans/delete-all") return if (req.method == "POST") deleteAll(req) else null
         val m = SCAN_PATH.matchEntire(p) ?: return null
         val id = m.groupValues[1].toLongOrNull() ?: return notFound()
@@ -83,14 +88,17 @@ class PhoneApi(
         }
     }
 
+    // other_art, list_tags and `play` are derived on every read, never stored: a refreshed
+    // list or a new week's play data re-tags every scan (app.py's list_scans / get_scan).
     private fun listScans(): ApiResponse {
         val list = cardList()
-        return ApiResponse.json(200, store.list().map { CardList.flag(ArtworkSplit.flagOtherArt(it), list) })
+        val pack = playData()
+        return ApiResponse.json(200, store.list().map { PlayData.flag(CardList.flag(ArtworkSplit.flagOtherArt(it), list), pack) })
     }
 
     private fun getScan(id: Long): ApiResponse {
         val scan = store.get(id) ?: return notFound()
-        return ApiResponse.json(200, CardList.flag(ArtworkSplit.flagOtherArt(scan), cardList()))
+        return ApiResponse.json(200, PlayData.flag(CardList.flag(ArtworkSplit.flagOtherArt(scan), cardList()), playData()))
     }
 
     private fun select(id: Long, req: ApiRequest): ApiResponse {
