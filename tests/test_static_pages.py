@@ -226,3 +226,17 @@ def test_the_play_chip_sits_after_the_list_tags_and_the_floor_votes():
     assert "playSig(scan)" in _fn(desk, "sigOf")
     assert "'~' + playMin + '~' + playFmt + '~'" in phone
     assert "Vintage, Pauper, Premodern or Commander" in desk
+
+
+def test_a_long_list_tag_wraps_inside_the_row():
+    """Review of desktop d60: its rows' pills stopped breaking inside themselves ("Fringe · top /
+    77%"), but an external list tag is free text — nowrap ran a long one out of the meta column,
+    under the price and the include box, cut off at the list's edge. A tag pill wraps inside
+    itself when it is wider than the column (and still moves whole when it fits). Driven by
+    scripts/check_price_filter_ui.py's row layout."""
+    desk = (STATIC / "desktop.html").read_text(encoding="utf-8")
+    nowrap = desk.index(".row .meta .pill { display: inline-block; white-space: nowrap; }")
+    tag = re.search(r"\n  \.row \.meta \.pill\.ltag \{([^}]*)\}", desk)
+    assert tag and tag.start() > nowrap
+    rules = tag.group(1)
+    assert "white-space: normal;" in rules and "overflow-wrap: anywhere;" in rules and "max-width: 100%;" in rules

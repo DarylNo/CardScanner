@@ -71,6 +71,11 @@
   /* A row's pills wrap BETWEEN pills, never inside one (d60: "Fringe · top / 77%" and
      "★ / Premodern 42% +3" broke at their spaces once the pill carried its percentile). */
   .row .meta .pill { display: inline-block; white-space: nowrap; }
+  /* …except an external list tag: free text the owner types, which can be longer than the
+     column. It still moves to the next line whole when it fits there, and wraps inside its own
+     pill only when it is wider than the column (nowrap ran it under the price and the include
+     box, cut off at the list's edge). */
+  .row .meta .pill.ltag { white-space: normal; overflow-wrap: anywhere; max-width: 100%; }
   /* Popularity tiers (popularity.py). Only the top three get a colour — a
      card being merely "played" is not news and must not compete with the
      pick/selected pills for attention. */

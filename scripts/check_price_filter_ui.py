@@ -20,7 +20,10 @@ Then the play data (1.1.20, desktop d60 / phone v61; CLAUDE.md → "Play data",
     null keep a card in ANY and hide it in ALL; unplayed / basic / not_legal fail),
     with a Min $ beside it, its hints, its reload, Wanted and "check" rows never
     hidden, and "Exclude filtered" PATCHing exactly the priced cards that fail it;
-  * desktop's "Played in" line and phone's head row on the open card.
+  * desktop's "Played in" line and phone's head row on the open card;
+  * desktop's rows at the 400 px column: the short pills never break inside, and a long
+    external list tag (free text, or one long word) stays inside the meta column — it
+    wraps inside its own pill instead of running under the price and the include box.
 
     pip install playwright        # Chromium: /opt/pw-browsers in a cloud session, or set CHROME
     python scripts/check_price_filter_ui.py
@@ -412,6 +415,51 @@ def play_checks(b, page):
     STATE.update(scans=SCANS, patches=[])
 
 
+LONG_TAG = "reserved: hold for a customer pickup on Friday afternoon, paid"
+ONE_WORD_TAG = "reserved-for-a-customer-pickup-on-friday-afternoon-paid"
+LAYOUT_SCANS = [
+    pscan(53, "Long Tag", pop("fringe", "Fringe", 25000, 77.4), play(legacy=(50, 400)), 1.00, tags=[LONG_TAG]),
+    pscan(52, "One Word Tag", pop("fringe", "Fringe", 25000, 77.4), UNSET, 1.00, tags=[ONE_WORD_TAG]),
+    pscan(51, "Lightning Bolt", pop("staple", "Staple", 158, 0.489),
+          play(modern=(2560, 12), legacy=(1200, 30), vintage=(150, 300), pauper=(3500, 3), premodern=(4200, 2)),
+          1.00, tags=["hold me", "wanted"]),
+]
+
+
+def row_layout(b):
+    """Desktop's list rows at the 400 px column: the short pills (selected, ×q, the popularity
+    pill, the play chip) wrap BETWEEN pills, never inside one ("Fringe · top / 77%"), and an
+    external list tag — free text — stays inside the row's meta column: a long one wraps inside
+    its own pill instead of running under the price and the include box (d60 drew it on one
+    line from x 64 to 403)."""
+    print("desktop.html — row layout")
+    STATE.update(scans=LAYOUT_SCANS, meta="loaded", as_of="2026-11-10", patches=[])
+    ctx = b.new_context(viewport={"width": 1400, "height": 950})
+    pg = ctx.new_page(); errs = []
+    pg.on("pageerror", lambda e: errs.append(str(e)))
+    pg.goto(BASE + "/"); pg.wait_for_selector("#list .row[data-id='53']")
+    pg.wait_for_function("playMeta !== null", timeout=8000); pg.wait_for_timeout(300)
+    rows = pg.evaluate("""() => [...document.querySelectorAll('#list .row')].map(r => {
+        const box = e => { const q = e.getBoundingClientRect(); return [q.left, q.right, q.top, q.bottom]; };
+        return { id: +r.dataset.id, meta: box(r.querySelector('.meta')), right: box(r.querySelector('.right')),
+                 list: box(document.querySelector('#list')),
+                 pills: [...r.querySelectorAll('.meta .pill')].map(p => ({ cls: p.className, text: p.textContent,
+                                                                         box: box(p), title: p.title || "" })) }; })""")
+    one_line = min(p["box"][3] - p["box"][2] for r in rows for p in r["pills"])
+    for r in rows:
+        for p in r["pills"]:
+            l, rt, t, btm = p["box"]
+            inside = l >= r["meta"][0] - 0.5 and rt <= r["meta"][1] + 0.5 and rt <= r["right"][0] and rt <= r["list"][1]
+            check(inside, f"row {r['id']}: {p['text'][:40]!r} inside the meta column "
+                          f"(x {l:.0f}–{rt:.0f}; meta ends {r['meta'][1]:.0f}, price column from {r['right'][0]:.0f})")
+            if "ltag" not in p["cls"] or len(p["text"]) < 20:
+                check(btm - t <= one_line + 1, f"row {r['id']}: {p['text']!r} on one line ({btm - t:.0f} px, one line {one_line:.0f})")
+    check(not errs, f"no page errors ({errs[:3]})")
+    pg.evaluate("localStorage.clear()")
+    ctx.close()
+    STATE.update(scans=SCANS, patches=[])
+
+
 with sync_playwright() as pw:
     b = pw.chromium.launch(executable_path=EXE) if EXE else pw.chromium.launch()
     for page, url, row, idattr, minsel in (("desktop.html", "/", "#list .row", "id", "#pmin"),
@@ -453,6 +501,7 @@ with sync_playwright() as pw:
         ctx.close()
     for page in ("desktop.html", "phone.html"):
         play_checks(b, page)
+    row_layout(b)
     b.close()
 
 srv.shutdown()
