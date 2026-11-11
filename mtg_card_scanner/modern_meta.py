@@ -76,7 +76,7 @@ PACK_FILE = "modern-meta.json"
 # The rolling DATA prerelease the weekly job publishes to (never `v*`, never
 # latest: releases/latest is how the app's update check finds APP releases).
 PACK_TAG = "modern-meta"
-PACK_URL = f"https://github.com/darylno/cardscanner/releases/download/{PACK_TAG}/{PACK_FILE}"
+PACK_URL = f"https://github.com/DarylNo/CardScanner/releases/download/{PACK_TAG}/{PACK_FILE}"
 
 WINDOW_DAYS = 60
 # A source with fewer decks than this in the window is left out of the mean
@@ -547,7 +547,7 @@ def load_oracle_entries(path: Path) -> list[dict[str, Any]]:
 
 # ─────────────────────────────── CLI ────────────────────────────────────────
 
-_UA = "MTGCardScanner/1.0 modern-meta (+https://github.com/darylno/cardscanner)"
+_UA = "MTGCardScanner/1.0 modern-meta (+https://github.com/DarylNo/CardScanner)"
 
 
 def _http_session():
@@ -618,7 +618,11 @@ def main(argv: Optional[list[str]] = None) -> int:
         if r.status_code != 200:
             print(f"fetch failed: HTTP {r.status_code}", file=sys.stderr)
             return 1
-        pack = parse_pack(r.text)
+        try:
+            pack = parse_pack(r.text)
+        except ModernMetaError as e:
+            print(f"fetch refused: {e}", file=sys.stderr)
+            return 1
         out.parent.mkdir(parents=True, exist_ok=True)
         tmp = out.with_suffix(".tmp")
         tmp.write_text(r.text, encoding="utf-8")
@@ -632,10 +636,15 @@ def main(argv: Optional[list[str]] = None) -> int:
     if oracle_path is None or not oracle_path.exists():
         oracle_path = _download_oracle(oracle_path or Path("oracle-cards.jsonl.gz"))
     oracle = OracleIndex(load_oracle_entries(oracle_path))
-    pack = build_pack(oracle, args.mtgo, args.paper, as_of,
-                      lookup=None if args.no_lookup else _scryfall_lookup(),
-                      built_at=now.strftime("%Y-%m-%dT%H:%M:%SZ"),
-                      log=lambda s: print(f"  [modern_meta] {s}"))
+    try:
+        pack = build_pack(oracle, args.mtgo, args.paper, as_of,
+                          lookup=None if args.no_lookup else _scryfall_lookup(),
+                          built_at=now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                          log=lambda s: print(f"  [modern_meta] {s}"))
+    except ModernMetaError as e:
+        # Too thin to publish: the last good file stays up (CI fails visibly).
+        print(f"refused: {e}", file=sys.stderr)
+        return 2
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(dump_pack(pack), encoding="utf-8")
     src = pack["sources"]

@@ -31,7 +31,8 @@ android/core/        pure Kotlin (JVM-testable): AutoScanner/Detection (the
                      PHash/ArtHasher/ArtMatcher (bit-exact
                      fingerprint), IdentifyPipeline, PrintingRanker,
                      OcrMatch, ListTwins, Popularity, CardList (the external
-                     list), PrintEvidence (the printed-detail fallback),
+                     list), ModernMeta (the Modern play data, read side),
+                     PrintEvidence (the printed-detail fallback),
                      RefocusPolicy + CardFocusState (card focus), ScreenDim,
                      DebugLog, and core/server/ — ScanStore, PhoneApi (the /api
                      surface), PriceSweep/PriceWorker, Export, DeviceApi,
@@ -40,7 +41,8 @@ android/app/         Android: MainActivity (package root = the scan screen),
                      camera/ (CameraX, CameraController, FrameRing, ScanAnalyzer,
                      FocusLog + FrameMetaRing, CameraCatalog, ZoomProbeGlue +
                      ProbeMeasure), capture/, ident/ (ArtPackStore,
-                     PhoneIdentifier, LocalIdentify, ScryfallHttp), ocr/ (ML Kit:
+                     ModernMetaStore, PhoneIdentifier, LocalIdentify,
+                     ScryfallHttp), ocr/ (ML Kit:
                      MlKitOcrEngine), f2f/ (F2fPricer, F2fFetcher, Cronet /
                      OkHttp transports), net/UploadQueue, phoneserver/
                      (PhoneServer, PhoneBackend, LocalScanUploader,
@@ -54,16 +56,18 @@ server/              reference FastAPI app, store.py, export.py, static pages
 mtg_card_scanner/    reference pipeline: pipeline (scan_candidates,
                      _ranked_candidates, _mark_art_decisive), card_detect,
                      art_index, art_pack, scryfall, visual_match, ocr_id,
-                     list_twins, artwork, popularity, facetoface, card_list,
-                     change_signal, launch
+                     list_twins, artwork, popularity, modern_meta (the Modern
+                     play data: CI builder + read-time join), facetoface,
+                     card_list, change_signal, launch
 scripts/             export_*_fixture(s).py (generate the Kotlin fixtures from the
-                     reference; all 12 `--check`ed in CI), check_*_ui.py (drive
+                     reference; all 13 `--check`ed in CI), check_*_ui.py (drive
                      the real pages in headless Chromium — NOT in CI, run by
                      hand), score_card_edges / score_card_align (measurement),
                      make_android_keystore.py
 tests/               pytest (642 at 1.1.19, all fakes — no camera/network)
 .github/workflows/   ci (pytest 3-OS, fixture --checks, android), release,
-                     auto-tag, art-pack (weekly card database), pages
+                     auto-tag, art-pack (weekly card database), modern-meta
+                     (weekly Modern play data), pages
 ```
 
 ## Build / test
@@ -76,7 +80,7 @@ tests/               pytest (642 at 1.1.19, all fakes — no camera/network)
 pip install -e ".[test]"
 pytest tests/ -q
 python scripts/export_api_fixtures.py --check     # and every other scripts/export_*_fixture*.py
-                                                  # (12, incl. export_pack_fixture.py and
+                                                  # (13, incl. export_pack_fixture.py and
                                                   # export_f2f_pacing_fixture.py — the list ci.yml runs)
 
 # The review pages — NOT in CI; run every one after ANY phone.html / desktop.html edit
@@ -216,7 +220,13 @@ EDHREC API client to "improve" it without asking. Three measured rules:
   `oracle_key()`.
 Tiers are percentiles of the ranked pool (32,296 cards), not raw ranks, so they
 survive the pool growing. The selection carries its own copy: after a re-pick
-`candidates[0]` is not necessarily what was chosen.
+`candidates[0]` is not necessarily what was chosen. **The pill shows that
+percentile** (owner, 2026-11-11: "Some how add the percentage to the pill for
+commander"; desktop d60, phone v61): "★ Staple · top 0.49%" — `fmtTop` rounds
+UP below 1 % (rank 1, stored 0.003, reads "top 0.01%", never "top 0%"), one
+decimal to 10 %, whole above; no suffix when `top_percent` is not a number
+(unranked, old scans). It is a rank percentile, not a share of decks — the Modern
+chip's "Modern 27%" is the share (next sections).
 
 **Formats beyond Commander — what exists and what doesn't.** Scryfall ships NO
 play-rate ranking for Modern/Standard/Pioneer/Legacy/Pauper, and there is no
@@ -242,6 +252,64 @@ Lightning Bolt lands at 0.02 tix and Black Lotus at 61.08), and the open
 tournament dataset everyone cites, `Badaro/MTGODecklistCache`, **shut down in
 June 2025** (live successors: `fbettega/MTG_decklistcache`, and
 `davidfischer/modometa-mtgo-data` whose names are already Scryfall-normalized).
+Those two caches are what the Modern play data (next) is built from.
+
+**Modern play data (`modern_meta.py`, owner 2026-11-10: "a system for
+identifying modern cards that are popular", then "You make the call on the
+choices"; 1.1.20).** EDHREC rank says almost nothing about Modern (measured:
+Thoughtseize EDHREC 4,442 but in 27 % of Modern decks; Murktide 15,429 / 6 %;
+Smothering Tithe 68 / 0 %), so Modern gets its OWN number, never mixed into the
+Commander tier: the share of recent Modern decks running ≥ 1 copy, main OR side.
+- **Built weekly in CI, never per scan** (`.github/workflows/modern-meta.yml`,
+  Monday 07:43 UTC): partial clones of `davidfischer/modometa-mtgo-data` (MIT —
+  MTGO Challenges' top decks + League 5-0s) and `fbettega/MTG_decklistcache`'s
+  `MTGmelee` + `Topdeck` folders (GPL-3: READ, never copied — only aggregate
+  shares are published; EVERY deck of each paper event) + Scryfall's
+  `oracle_cards` bulk → `modern-meta.json` (~280 KB) on the rolling `modern-meta`
+  PRERELEASE (pushed tag first, never latest — the art-pack rules). Fewer than
+  2,000 decks or 500 cards → the build fails and the last good file stays up.
+  Popularity's "costs NOTHING" rule holds: the phone downloads one file (first
+  launch on any network, then weekly on Wi-Fi — `ModernMetaStore`), the join is
+  a dictionary lookup.
+- **The number** (measured on the 60 days to 2026-11-10, 16,831 decks / 256
+  events: MTGO 6,146 · paper 10,685): 60-day window; the EQUAL-WEIGHT mean of
+  MTGO's and paper's shares (sources with ≥ 200 decks; one 1,228-deck paper
+  event must not swamp MTGO); integer basis points, half up, never 0 for a card
+  seen at all. Tiers are ABSOLUTE (shares are already normalised): staple ≥ 10 %
+  (87 cards), played 2–10 % (224), fringe below (2,136); the counts barely move
+  with the window (30 / 60 / 90 days: ≥ 10 % 90 / 87 / 88). MTGO vs paper top-100
+  Jaccard 0.83; month to month 0.72, 12 of 2,446 cards move two bands.
+- **Keyed by oracle_id** (`popularity.summarize` carries `oracle_id` from 1.1.20 —
+  13 Modern-legal names name two oracle cards, Lightning Bolt included). Scans
+  filed earlier fall back to the NAME (`card_list.name_keys`), never one in the
+  pack's `ambiguous` list (any name/face naming 2+ oracle cards) → null.
+- **Answers, not unknowns:** `unplayed` (legal, in no deck — ~89 % of the 23,012
+  legal cards), `basic` (Island is in 31 % of decks and worth nothing — never a
+  chip, never passes a floor), `banned` / `not_legal` (the scan's own
+  `formats.modern`); pack membership beats a stale scan-time legality. null =
+  not known (old scan under an ambiguous name, or no legality recorded); NO
+  `modern` key = no data on this server yet.
+- **Evaluated at READ time, never stored** (`flag_modern` beside
+  `flag_list_tags` on `/api/scans` + `/api/scans/{id}`; select / PATCH / file
+  answers are not flagged): a new week's file re-tags every scan already filed.
+  It reads the same printing as the pages' popularity pill (`popOf`: selection,
+  else candidates[0]). `GET /api/modern-meta` (guest-readable) says what the
+  data is (as of, decks, sources).
+- **Build-time name resolution:** exact full name, else a face / front face
+  naming ONE card, else ONE Modern-legal card of that name ("Pick Your Poison"
+  is MKM's, not the MB2 playtest card); Scryfall's `front_card` layout (Jumpstart
+  theme cards, 2026) is skipped like tokens; MTGO-only printed names (Through
+  the Omenpaths, `om1`: "Kavaero, Mind-Bitten" = Superior Spider-Man) resolve
+  through ONE `/cards/named?fuzzy=` lookup accepted only on an exact
+  `printed_name`; the rest are dropped and counted (22 Spanish names, 23 entries).
+- **The reference server** reads `MODERN_META_FILE` only (no default path — a
+  test run must never pick up a file from the user's cache); `python -m
+  mtg_card_scanner.modern_meta fetch` downloads the published file.
+Golden: `scripts/export_modern_meta_fixtures.py` (parse refusals — a JSON 1.0 or
+"1" is not version 1, a 2689.0 is not a count —, the lookup table, scan answers,
+flags, status, and the REAL app.py's reads) → `ModernMetaParityTest`; the builder
+is Python-only (`tests/test_modern_meta.py`). The pages: Popularity pill and
+"List filters", below.
 
 **External card list (`card_list.py`, owner 2026-10-12) — generic, READ-ONLY.**
 Not the reverted MX-inventory integration: no store branding, nothing written
@@ -1364,7 +1432,8 @@ lens on testers' phones), minSdk 29, arm64-v8a.
   Scans, review, export, the phone server and queued identification never
   stop — the phone holds the only copy of the scans. Offline changes nothing,
   but a newer release once seen stays locked; installing the update unlocks
-  (the lock is "latest seen > this build"). Prereleases (the `art-pack` tag),
+  (the lock is "latest seen > this build"). Prereleases (the `art-pack` and
+  `modern-meta` tags),
   drafts, releases without the APK and unparseable tags never lock. The phone
   server's `/api/update-check` reports it (the desktop's update banner).
   Robolectric tests never ask GitHub.
@@ -1671,7 +1740,7 @@ Open threads:
 
 ## Testing
 
-`pytest tests/` (642 at 1.1.19, fakes only, 3-OS CI) + the 12 fixture
+`pytest tests/` (642 at 1.1.19, fakes only, 3-OS CI) + the 13 fixture
 `--check`s + the gradle line (CI job `android`) — CI runs on pushes to master
 and on every PR. The five `scripts/check_*_ui.py` Chromium drivers are NOT in
 CI: run them by hand after any page edit (Build / test, above). Real scans:

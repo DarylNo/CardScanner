@@ -58,7 +58,7 @@ Modules and packages (`io.github.darylno.cardscanner`):
 | `app/camera` | `CameraController` (bind, camera choice, focus, torch, AE/AWB lock, diagnostics), `CameraCatalog` (the phone's lenses from Camera2), `FrameRing`, `ScanAnalyzer` (the analysis-thread loop; all `AutoScanner` access is confined to it). |
 | `app/capture` | `CapturePipeline` (sharpest frame → quad → flatten → JPEG). |
 | `app/net` | `UploadQueue` (persistent FIFO, fallback retry, `ScanUploader`). |
-| `app/ident` | `LocalIdentify` (the art pack — the phone's card database — and the one `PhoneIdentifier`), `ArtPackStore`, Scryfall over Cronet, `CachedImageSource`. |
+| `app/ident` | `LocalIdentify` (the art pack — the phone's card database — and the one `PhoneIdentifier`), `ArtPackStore`, `ModernMetaStore` (the Modern play data file), Scryfall over Cronet, `CachedImageSource`. |
 | `app/phoneserver` | `PhoneServer` (the phone's server: `SqliteScanStore`, `PhotoDir`, `PhoneBackend` over `:core`'s `PhoneApi`/`PriceSweep`/`Export`/`DeviceApi`), `LocalScanUploader`, `LocalUpstream`, `PhoneF2f`, `DeviceBridge`. |
 | `app/gateway` | `GatewayServer` (NanoHTTPD, roles: `AdminPairing`), `JoinCode`, `LocalAddresses`, `GatewayService` (foreground service that keeps the phone serving), `QrBitmap`. |
 | `app/f2f` | `F2fFetcher` (port of `facetoface._default_get_json` pacing/retry, parity-tested against `app/src/test/resources/f2f/pacing.json`), `F2fPricer` (query ladder + SKU confirmation), `F2fCache`, `OkHttpTransport` / `CronetTransport`, `F2fProbe` (the network test). |
@@ -108,7 +108,7 @@ pytest tests/ -q                                   # server + flatten spec
 ```
 
 CI (`.github/workflows/ci.yml`, job `android`, on pushes to master and on every
-PR) runs these plus every other `scripts/export_*_fixture*.py --check` (12 in
+PR) runs these plus every other `scripts/export_*_fixture*.py --check` (13 in
 all, see ci.yml) and uploads the debug APK as the `mtg-card-scanner-android-debug`
 artifact. The release build (`release.yml`, job `apk`) publishes
 `mtg-card-scanner-android.apk` on the GitHub Release — the only asset since
@@ -165,6 +165,12 @@ identified once it does. Identifying needs internet for Scryfall's printing
 list; offline scans wait in the queue the same way. If that first download
 fails (no connection), the queue retries it at most once a minute — no need
 to restart the app.
+
+The **Modern play data** (the share of recent Modern decks running each card —
+`modern-meta.json`, which CI publishes weekly to the `modern-meta` release,
+~280 KB) is fetched the same way: at the first launch on any network, then
+weekly on Wi-Fi, and by the same **Check for a newer card database** button.
+Nothing waits for it: until it lands the scans simply have no Modern chip.
 
 ## Tray / Tap to scan
 
