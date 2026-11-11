@@ -224,4 +224,10 @@ def summarize(printing: dict[str, Any], print_count: Optional[int] = None) -> di
     penny = penny_rank(printing)
     if penny is not None:
         out["penny_rank"] = penny
+    # The oracle card this summary describes (1.1.20): the Modern play data
+    # (modern_meta.py) is keyed by it — one NAME can be two oracle cards — and
+    # the selection carries its own copy of this dict, so a pick keeps the key.
+    oid = oracle_key(printing)
+    if oid:
+        out["oracle_id"] = oid
     return out
