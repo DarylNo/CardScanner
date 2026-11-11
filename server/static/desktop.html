@@ -68,6 +68,9 @@
   .pill.sel { background: #14532d; color: #86efac; }
   .pill.cand { background: #3f2d10; color: var(--warn); }
   .pill.err { background: #3a1c1c; color: var(--bad); }
+  /* A row's pills wrap BETWEEN pills, never inside one (d60: "Fringe · top / 77%" and
+     "★ / Premodern 42% +3" broke at their spaces once the pill carried its percentile). */
+  .row .meta .pill { display: inline-block; white-space: nowrap; }
   /* Popularity tiers (popularity.py). Only the top three get a colour — a
      card being merely "played" is not news and must not compete with the
      pick/selected pills for attention. */
@@ -923,14 +926,15 @@ function playDetailHtml(scan){
   const played = playedIn(scan), un = playUnplayed(scan);
   if (!played.length && !un.length) return "";
   const chips = played.map(({ key, m }) => `<span class="pill play ${esc(m.tier)}">`
-    + `${esc(FORMAT_LABELS[key] || key)} ${esc(fmtShare(m.bp))}${typeof m.rank === "number" ? ` · #${m.rank}` : ""}</span>`).join("");
+    + `${esc(FORMAT_LABELS[key] || key)} ${esc(fmtShare(m.bp))}${typeof m.rank === "number" ? ` · #${m.rank}` : ""}</span>`).join(" ");
   const unTxt = un.length ? `<span class="pdim">${played.length ? "" : "in no recent deck — "}not played: ${esc(un.map(k => FORMAT_LABELS[k] || k).join(", "))}</span>` : "";
   let about = "";
   if (playMetaLoaded()){
     const decks = Object.values(playMeta.formats).reduce((t, f) => t + (f && typeof f.decks === "number" ? f.decks : 0), 0);
     about = `<span class="pdim">· ${esc([`${decks.toLocaleString()} decks`, playSources(), playWhen()].filter(Boolean).join(", "))}</span>`;
   }
-  return `<div class="dpop dplay"><b>Played in</b>${chips}${unTxt}${about}</div>`;
+  // (the spaces are for copy / a screen reader: a flex row lays the items out by its gap)
+  return `<div class="dpop dplay"><b>Played in</b> ${chips} ${unTxt} ${about}</div>`;
 }
 
 /* ── popularity floor + how the two bars combine ────────────────────────────
