@@ -25,7 +25,8 @@ import java.util.concurrent.TimeUnit
  * (and again after a restart, without the network); the same file is up to date and
  * never rewritten; "no data yet" (404) is re-asked after a day; the weekly / Wi-Fi
  * gate; a file [PlayData.parse] refuses, a server error or no answer keep the
- * installed file and record no check; a corrupt installed file is dropped.
+ * installed file and record no check — a refused file is asked again only after a
+ * day, never on every screen start; a corrupt installed file is dropped.
  */
 class PlayDataStoreTest {
     @get:Rule val tmp = TemporaryFolder()
@@ -178,6 +179,83 @@ class PlayDataStoreTest {
             assertEquals("no check recorded", installedAt, s.lastCheckedAt())
         }
         assertEquals("2026-11-10", store().current()!!.asOf)
+    }
+
+    /**
+     * Review of 1.1.20: a published file this build refuses (a version-2 file before the app updates,
+     * a bad CI build, a captive portal's page) recorded nothing, so the check stayed due and every
+     * scan-screen start on Wi-Fi downloaded the whole file again — in Tap to scan once per scan. A
+     * file that came and could not be used is asked again only a day after the last refusal
+     * ([PlayDataStore.REFUSED_RETRY_MS]); a forced check (Settings, a phone with no data at app
+     * start) still asks at once; no check is recorded, the installed file stays, and an answer
+     * forgets the refusal.
+     */
+    @Test
+    fun aRefusedFile_isAskedAgainAfterADay_notOnEveryScreenStart() {
+        val v2 = file().replace("\"version\":1", "\"version\":2")
+        server.enqueue(ok(file()))
+        val s = store()
+        s.check(force = true, unmetered = true)
+        val installedAt = clock
+        clock += PlayDataStore.CHECK_INTERVAL_MS                 // the weekly check is due
+        assertTrue(s.due(unmetered = true))
+        server.enqueue(ok(v2))
+        assertEquals(PlayDataStore.Check.Failed("unsupported version"), s.check(force = false, unmetered = true))
+        assertEquals(2, server.requestCount)
+        assertEquals("no check recorded", installedAt, s.lastCheckedAt())
+        assertEquals("2026-11-10", s.current()!!.asOf)
+        // the scan screen opening again and again (Tap to scan: once per scan) downloads nothing
+        repeat(5) {
+            clock += 60_000L
+            assertEquals(PlayDataStore.Check.Skipped("checked recently"), s.check(force = false, unmetered = true))
+        }
+        assertEquals(2, server.requestCount)
+        assertFalse("across an app restart too", store().due(unmetered = true))
+        // the user can always ask (Settings → Check for a newer card database)
+        server.enqueue(ok(v2))
+        assertEquals(PlayDataStore.Check.Failed("unsupported version"), s.check(force = true, unmetered = false))
+        assertEquals(3, server.requestCount)
+        // a day after the LAST refusal it is due again; a good file installs and the refusal is forgotten
+        clock += PlayDataStore.REFUSED_RETRY_MS - 1
+        assertFalse(s.due(unmetered = true))
+        clock += 1
+        assertTrue(s.due(unmetered = true))
+        server.enqueue(ok(file(asOf = "2026-11-17")))
+        assertEquals(PlayDataStore.Check.Installed("2026-11-17", "2026-11-10T07:41:02Z"), s.check(force = false, unmetered = true))
+        clock += PlayDataStore.REFUSED_RETRY_MS
+        assertFalse("weekly again, nothing left of the refusal", s.due(unmetered = true))
+        clock += PlayDataStore.CHECK_INTERVAL_MS
+        assertTrue(s.due(unmetered = true))
+    }
+
+    /**
+     * No play data at all: a captive portal's page (200, HTML) is refused like any unusable file —
+     * the app start's forced check still asks every start, the weekly Wi-Fi check waits a day; a
+     * clock set back before the refusal forgets it (asked again, never stuck for the jump).
+     */
+    @Test
+    fun aRefusedFile_withNoDataInstalled_waitsADay_andAClockSetBackForgetsIt() {
+        val s = store()
+        server.enqueue(ok("<html>Sign in to the Wi-Fi</html>"))
+        assertEquals(PlayDataStore.Check.Failed("not JSON"), s.check(force = false, unmetered = true))
+        assertNull(s.current())
+        assertNull("no check recorded", s.lastCheckedAt())
+        clock += 3_600_000L
+        assertFalse(s.due(unmetered = true))
+        assertEquals(PlayDataStore.Check.Skipped("checked recently"), s.check(force = false, unmetered = true))
+        assertEquals(1, server.requestCount)
+        server.enqueue(ok("<html>Sign in to the Wi-Fi</html>"))
+        assertEquals("forced (app start, no data): asked at once",
+            PlayDataStore.Check.Failed("not JSON"), s.check(force = true, unmetered = false))
+        clock -= 2 * 24 * 3_600_000L                               // the clock set back two days
+        assertTrue(s.due(unmetered = true))
+        // a server error or no answer after a refusal records nothing and leaves the refusal's wait
+        clock += 3 * 24 * 3_600_000L
+        server.enqueue(ok("<html>Sign in to the Wi-Fi</html>"))
+        assertEquals(PlayDataStore.Check.Failed("not JSON"), s.check(force = false, unmetered = true))
+        server.enqueue(MockResponse().setResponseCode(503))
+        assertEquals(PlayDataStore.Check.Failed("HTTP 503"), s.check(force = true, unmetered = true))
+        assertFalse(s.due(unmetered = true))
     }
 
     @Test

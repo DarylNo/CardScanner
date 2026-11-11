@@ -25,16 +25,24 @@ import java.util.concurrent.TimeUnit
  *    answer was "no data yet" (404 — the first CI build) → a day; none, never
  *    checked → now. A 404 is [Check.NoDataYet] (recorded); a file [PlayData.parse]
  *    refuses is [Check.Failed] with its reason, the installed file kept and NO check
- *    recorded (so it is asked again soon); the same as_of AND built_at as the
- *    installed file is [Check.UpToDate] (recorded, nothing rewritten); anything else
- *    good is written tmp + atomic rename → [Check.Installed]. Any other HTTP status
- *    → Failed("HTTP n"), no answer at all → Failed("unreachable"); neither recorded.
+ *    recorded; the same as_of AND built_at as the installed file is [Check.UpToDate]
+ *    (recorded, nothing rewritten); anything else good is written tmp + atomic
+ *    rename → [Check.Installed]. Any other HTTP status → Failed("HTTP n"), no answer
+ *    at all → Failed("unreachable"); neither recorded, so the next non-forced check
+ *    asks again.
+ *  - A file that CAME and could not be used (refused, over [MAX_BYTES], not saved)
+ *    is noted (`refused_at`): non-forced checks wait [REFUSED_RETRY_MS] after the
+ *    last one (review of 1.1.20: it stayed due, so every scan-screen start on Wi-Fi
+ *    downloaded the whole file again — in Tap to scan once per scan; a version-2
+ *    file before the app updates, a bad CI build or a captive portal's page);
+ *    forced checks ask at once; any recorded answer forgets it; a clock set back
+ *    before it forgets it too.
  *  - [current]: parsed once and kept in memory; replaced by an install; a corrupt
  *    installed file is deleted (null). Thread-safe — the phone server's threads read
  *    it per request. It may parse (~1 MB) on first use: never call it on the main
  *    thread; the UI reads [loaded] (never touches the disk).
  *
- * Files (in [dir]): `play-data.json`, `state.json` ({checked_at, no_data}). Plain
+ * Files (in [dir]): `play-data.json`, `state.json` ({checked_at, no_data[, refused_at]}). Plain
  * OkHttp (it follows the release asset's redirect to object storage). Blocking: call
  * off the main thread.
  */
@@ -112,7 +120,14 @@ class PlayDataStore(
             s["no_data"] == true -> NO_DATA_RETRY_MS
             else -> 0L
         }
+        if (refusedRecently(s)) return false
         return now() - last >= interval
+    }
+
+    /** A file came less than [REFUSED_RETRY_MS] ago and could not be used (a clock set back before it forgets it). */
+    private fun refusedRecently(s: Map<String, Any?>): Boolean {
+        val at = s["refused_at"] as? Long ?: return false
+        return (now() - at) in 0L until REFUSED_RETRY_MS
     }
 
     /**
@@ -126,7 +141,7 @@ class PlayDataStore(
         when (result) {
             is Check.NoDataYet -> writeState(noData = true)
             is Check.UpToDate, is Check.Installed -> writeState(noData = false)
-            else -> {}                                       // a failure records nothing: asked again soon
+            else -> {}                                       // a failure records no check (a refused file: attempt noted it)
         }
         record(result)
     }
@@ -140,7 +155,7 @@ class PlayDataStore(
                 if (r.code == 404) return Check.NoDataYet
                 if (r.code != 200) return Check.Failed("HTTP ${r.code}")
                 val body = r.body ?: return Check.Failed("empty answer")
-                readCapped(body.byteStream()) ?: return Check.Failed("file larger than ${MAX_BYTES shr 20} MB")
+                readCapped(body.byteStream()) ?: return refused("file larger than ${MAX_BYTES shr 20} MB")
             }
         } catch (e: IOException) {
             return Check.Failed("unreachable")
@@ -148,9 +163,9 @@ class PlayDataStore(
         val fresh = try {
             PlayData.parse(text)
         } catch (e: PlayData.PlayDataException) {
-            return Check.Failed(e.message ?: "malformed")
+            return refused(e.message ?: "malformed")
         } catch (e: StackOverflowError) {
-            return Check.Failed("not JSON")
+            return refused("not JSON")
         }
         val installed = current()
         if (installed != null && installed.asOf == fresh.asOf && installed.builtAt == fresh.builtAt) {
@@ -164,7 +179,7 @@ class PlayDataStore(
                 pack = fresh
             }
         } catch (e: IOException) {
-            return Check.Failed("could not save it: ${e.javaClass.simpleName}")
+            return refused("could not save it: ${e.javaClass.simpleName}")
         } finally {
             tmp.delete()
         }
@@ -194,10 +209,19 @@ class PlayDataStore(
         emptyMap()
     }
 
-    private fun writeState(noData: Boolean) {
+    /** A recorded answer: a fresh state (it forgets any refusal). */
+    private fun writeState(noData: Boolean) = putState(linkedMapOf("checked_at" to now(), "no_data" to noData))
+
+    /** The file came and could not be used: note it (the recorded check, if any, stays as it was). */
+    private fun refused(message: String): Check.Failed {
+        putState(LinkedHashMap(readState()).apply { put("refused_at", now()) })
+        return Check.Failed(message)
+    }
+
+    private fun putState(state: Map<String, Any?>) {
         try {
             val tmp = File(dir, "$STATE_FILE.tmp")
-            tmp.writeText(MiniJson.stringify(linkedMapOf("checked_at" to now(), "no_data" to noData)))
+            tmp.writeText(MiniJson.stringify(state))
             Files.move(tmp.toPath(), stateFile.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
         } catch (_: IOException) { /* not recorded: the next check comes sooner, nothing worse */ }
     }
@@ -207,6 +231,8 @@ class PlayDataStore(
         private const val STATE_FILE = "state.json"
         const val CHECK_INTERVAL_MS = 7L * 24 * 3600 * 1000
         const val NO_DATA_RETRY_MS = 24L * 3600 * 1000
+        /** A published file this build could not use is asked again (non-forced) this long after: a day, like no data. */
+        const val REFUSED_RETRY_MS = 24L * 3600 * 1000
         /** The file is ~1.1 MB today. */
         const val MAX_BYTES = 16 shl 20
         const val USER_AGENT = "CardScanner-Android play-data (+https://github.com/DarylNo/CardScanner)"
