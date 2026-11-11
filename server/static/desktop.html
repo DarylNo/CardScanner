@@ -801,9 +801,11 @@ function popSig(scan){
 // "top N%" of the EDHREC-ranked pool, as the pill prints it: whole from 10 %, one decimal (a
 // trailing ".0" dropped) from 1 %, and below 1 % rounded UP to the hundredth — rank 1 (stored
 // 0.003) reads "top 0.01%", never "top 0%". The 1e-9: 0.56 * 100 is 56.00000000000001 in
-// binary, and a plain ceil printed a stored 0.56 (rank 181) as "top 0.57%".
+// binary, and a plain ceil printed a stored 0.56 (rank 181) as "top 0.57%". Never past 100:
+// the pool size the reference divides by (popularity.RANKED_CARD_COUNT, 32,296) is a
+// measurement, and EDHREC's ranks have grown past it (Spinny Ride, 32,710, is stored as 101.3).
 function fmtTop(n) {
-  if (n >= 10) return String(Math.round(n));
+  if (n >= 10) return String(Math.round(Math.min(n, 100)));
   if (n >= 1) return n.toFixed(1).replace(/\.0$/, "");
   return String(Math.max(0.01, Math.ceil(n * 100 - 1e-9) / 100));
 }

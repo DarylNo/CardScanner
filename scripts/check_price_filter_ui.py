@@ -13,7 +13,8 @@ Then the play data (1.1.20, desktop d60 / phone v61; CLAUDE.md → "Play data",
 (loaded / not loaded / loaded without Pioneer) and scans carrying popularity and
 `play` in every state:
   * the Commander pill's percentile ("★ Staple · top 0.49%", rank 1 → "top 0.01%",
-    none for Unranked or a stub without top_percent) and fmtTop / fmtShare;
+    a rank past the reference's pool → "top 100%", never 101; none for Unranked or a
+    stub without top_percent) and fmtTop / fmtShare;
   * the row's play chip: the best format, "+N" counting only 2 %+ formats, its tier
     colour, after the list tags; none when nothing is played / basics / null / absent;
   * the "Played in" floor with "Any format" and one format, in ANY and ALL (absent /
@@ -287,8 +288,11 @@ def play_checks(b, page):
     check("pop" in (got["36"][3] or ""), f"…and right after the popularity pill when there are none ({got['36'][3]!r})")
     junk = pg.evaluate(f"document.querySelector({'#list' if d else '#scansList'!r}).textContent")
     check(not re.search(r"undefined|NaN|top null|null%", junk), "no row reads undefined / NaN / null")
-    tops = pg.evaluate("[0.003, 0.489, 0.5, 0.56, 0.999, 4.4, 5.0, 9.96, 34.4].map(fmtTop)")
-    check(tops == ["0.01", "0.49", "0.5", "0.56", "1", "4.4", "5", "10", "34"], f"fmtTop {tops}")
+    # past the measured pool (a rank above popularity.RANKED_CARD_COUNT: Spinny Ride, 32,710, is
+    # stored as 101.3) the pill still reads "top 100%", never "top 101%"
+    tops = pg.evaluate("[0.003, 0.489, 0.5, 0.56, 0.999, 4.4, 5.0, 9.96, 34.4, 99.6, 100, 101.3, 250].map(fmtTop)")
+    check(tops == ["0.01", "0.49", "0.5", "0.56", "1", "4.4", "5", "10", "34", "100", "100", "100", "100"],
+          f"fmtTop {tops}")
     shares = pg.evaluate("[2689, 1000, 232, 178, 25, 1, 9500].map(fmtShare)")
     check(shares == ["27%", "10%", "2.3%", "1.8%", "0.3%", "<0.1%", "95%"], f"fmtShare {shares}")
     best = pg.evaluate("[37, 36, 29, 34, 33, 32, 28].map(i => (bestPlay(scans.find(s => s.id === i)) || {}).key || null)")
@@ -423,6 +427,9 @@ LAYOUT_SCANS = [
     pscan(51, "Lightning Bolt", pop("staple", "Staple", 158, 0.489),
           play(modern=(2560, 12), legacy=(1200, 30), vintage=(150, 300), pauper=(3500, 3), premodern=(4200, 2)),
           1.00, tags=["hold me", "wanted"]),
+    # ranked past the pool the reference measured (popularity.RANKED_CARD_COUNT 32,296 — Spinny Ride
+    # is 32,710: top_percent 101.3)
+    pscan(50, "Spinny Ride", pop("fringe", "Fringe", 32710, 101.3), play(modern=(199, 400)), 1.00),
 ]
 
 
@@ -454,6 +461,10 @@ def row_layout(b):
                           f"(x {l:.0f}–{rt:.0f}; meta ends {r['meta'][1]:.0f}, price column from {r['right'][0]:.0f})")
             if "ltag" not in p["cls"] or len(p["text"]) < 20:
                 check(btm - t <= one_line + 1, f"row {r['id']}: {p['text']!r} on one line ({btm - t:.0f} px, one line {one_line:.0f})")
+    by = {r["id"]: r for r in rows}
+    pill = next(p for p in by[50]["pills"] if "pop" in p["cls"])
+    check(pill["text"] == "Fringe · top 100%" and "top 100% of Commander-played cards" in pill["title"],
+          f"ranked past the pool: \"top 100%\", never 101 ({pill['text']!r} / {pill['title'][:70]!r})")
     check(not errs, f"no page errors ({errs[:3]})")
     pg.evaluate("localStorage.clear()")
     ctx.close()

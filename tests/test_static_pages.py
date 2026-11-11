@@ -240,3 +240,13 @@ def test_a_long_list_tag_wraps_inside_the_row():
     assert tag and tag.start() > nowrap
     rules = tag.group(1)
     assert "white-space: normal;" in rules and "overflow-wrap: anywhere;" in rules and "max-width: 100%;" in rules
+
+
+def test_the_pill_percentile_never_passes_100():
+    """Review of desktop d60 / phone v61 (the shared block; driven by
+    scripts/check_price_filter_ui.py): the pill's percentile never passes 100 — the reference
+    divides by a measured pool, 32,296, that EDHREC's ranks have outgrown: Spinny Ride, 32,710,
+    is stored as 101.3 and read "Fringe · top 101%"."""
+    for name in ("desktop.html", "phone.html"):
+        page = (STATIC / name).read_text(encoding="utf-8")
+        assert "if (n >= 10) return String(Math.round(Math.min(n, 100)));" in _fn(page, "fmtTop"), name
