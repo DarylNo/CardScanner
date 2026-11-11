@@ -1,0 +1,4686 @@
+{
+ "constants": {
+  "kind": "cardscanner-play-data",
+  "version": 1,
+  "staple_bp": 1000,
+  "played_bp": 200,
+  "tiers": [
+   "staple",
+   "played",
+   "fringe",
+   "unplayed",
+   "basic",
+   "banned",
+   "not_legal"
+  ],
+  "file": "play-data.json",
+  "tag": "play-data",
+  "window_days": 60,
+  "formats": [
+   [
+    "standard",
+    "Standard"
+   ],
+   [
+    "pioneer",
+    "Pioneer"
+   ],
+   [
+    "modern",
+    "Modern"
+   ],
+   [
+    "legacy",
+    "Legacy"
+   ],
+   [
+    "vintage",
+    "Vintage"
+   ],
+   [
+    "pauper",
+    "Pauper"
+   ],
+   [
+    "premodern",
+    "Premodern"
+   ]
+  ],
+  "tracked_formats": [
+   "standard",
+   "pioneer",
+   "modern",
+   "legacy",
+   "vintage",
+   "pauper",
+   "premodern",
+   "commander"
+  ]
+ },
+ "tier_for_bp": [
+  [
+   1,
+   "fringe"
+  ],
+  [
+   2,
+   "fringe"
+  ],
+  [
+   199,
+   "fringe"
+  ],
+  [
+   200,
+   "played"
+  ],
+  [
+   201,
+   "played"
+  ],
+  [
+   999,
+   "played"
+  ],
+  [
+   1000,
+   "staple"
+  ],
+  [
+   1001,
+   "staple"
+  ],
+  [
+   9999,
+   "staple"
+  ],
+  [
+   10000,
+   "staple"
+  ]
+ ],
+ "parse": [
+  {
+   "text": "{\"ambiguous\":[\"lightning bolt\",\"pick your poison\"],\"as_of\":\"2026-11-10\",\"basic\":[\"00000000-0000-0000-0000-00000000000f\"],\"built_at\":\"2026-11-10T07:41:02Z\",\"formats\":{\"legacy\":{\"cards\":{\"00000000-0000-0000-0000-00000000000a\":[3100,4],\"00000000-0000-0000-0000-00000000000e\":[2200,15],\"00000000-0000-0000-0000-000000000011\":[450,80]},\"decks\":5768,\"events\":256,\"sources\":{\"mtgo\":{\"decks\":3038,\"events\":177,\"weighted\":true},\"paper\":{\"decks\":2730,\"events\":79,\"weighted\":true}}},\"modern\":{\"cards\":{\"00000000-0000-0000-0000-00000000000a\":[2689,9],\"00000000-0000-0000-0000-00000000000b\":[1000,50],\"00000000-0000-0000-0000-00000000000c\":[232,297],\"00000000-0000-0000-0000-00000000000d\":[178,325],\"00000000-0000-0000-0000-00000000000e\":[2560,12],\"00000000-0000-0000-0000-000000000011\":[1,2400]},\"decks\":16831,\"events\":256,\"sources\":{\"mtgo\":{\"decks\":6146,\"events\":177,\"weighted\":true},\"paper\":{\"decks\":10685,\"events\":79,\"weighted\":true}}},\"pioneer\":{\"cards\":{\"00000000-0000-0000-0000-00000000000a\":[1500,30]},\"decks\":1437,\"events\":97,\"sources\":{\"mtgo\":{\"decks\":1437,\"events\":177,\"weighted\":true},\"paper\":{\"decks\":130,\"events\":79,\"weighted\":false}}},\"vintage\":{\"cards\":{\"00000000-0000-0000-0000-000000000011\":[1200,30],\"00000000-0000-0000-0000-000000000012\":[9500,1]},\"decks\":2631,\"events\":256,\"sources\":{\"mtgo\":{\"decks\":1479,\"events\":177,\"weighted\":true},\"paper\":{\"decks\":1152,\"events\":79,\"weighted\":true}}}},\"kind\":\"cardscanner-play-data\",\"names\":{\"black lotus\":\"00000000-0000-0000-0000-000000000012\",\"fable of the mirror-breaker\":\"00000000-0000-0000-0000-00000000000c\",\"fable of the mirror-breaker // reflection of kiki-jiki\":\"00000000-0000-0000-0000-00000000000c\",\"fatal push\":\"00000000-0000-0000-0000-00000000000b\",\"island\":\"00000000-0000-0000-0000-00000000000f\",\"reflection of kiki-jiki\":\"00000000-0000-0000-0000-00000000000c\",\"superior spider-man\":\"00000000-0000-0000-0000-00000000000d\",\"thoughtseize\":\"00000000-0000-0000-0000-00000000000a\",\"æther vial\":\"00000000-0000-0000-0000-000000000011\"},\"skipped\":{\"standard\":{\"decks\":0,\"reason\":\"too few decks\"}},\"unmatched_entries\":23,\"unmatched_names\":22,\"version\":1,\"window_days\":60}\n",
+   "pack": {
+    "as_of": "2026-11-10",
+    "window_days": 60,
+    "built_at": "2026-11-10T07:41:02Z",
+    "formats": {
+     "pioneer": {
+      "decks": 1437,
+      "events": 97,
+      "sources": {
+       "mtgo": {
+        "decks": 1437,
+        "events": 177,
+        "weighted": true
+       },
+       "paper": {
+        "decks": 130,
+        "events": 79,
+        "weighted": false
+       }
+      },
+      "cards": {
+       "00000000-0000-0000-0000-00000000000a": [
+        1500,
+        30
+       ]
+      }
+     },
+     "modern": {
+      "decks": 16831,
+      "events": 256,
+      "sources": {
+       "mtgo": {
+        "decks": 6146,
+        "events": 177,
+        "weighted": true
+       },
+       "paper": {
+        "decks": 10685,
+        "events": 79,
+        "weighted": true
+       }
+      },
+      "cards": {
+       "00000000-0000-0000-0000-00000000000a": [
+        2689,
+        9
+       ],
+       "00000000-0000-0000-0000-00000000000b": [
+        1000,
+        50
+       ],
+       "00000000-0000-0000-0000-00000000000c": [
+        232,
+        297
+       ],
+       "00000000-0000-0000-0000-00000000000d": [
+        178,
+        325
+       ],
+       "00000000-0000-0000-0000-00000000000e": [
+        2560,
+        12
+       ],
+       "00000000-0000-0000-0000-000000000011": [
+        1,
+        2400
+       ]
+      }
+     },
+     "legacy": {
+      "decks": 5768,
+      "events": 256,
+      "sources": {
+       "mtgo": {
+        "decks": 3038,
+        "events": 177,
+        "weighted": true
+       },
+       "paper": {
+        "decks": 2730,
+        "events": 79,
+        "weighted": true
+       }
+      },
+      "cards": {
+       "00000000-0000-0000-0000-00000000000a": [
+        3100,
+        4
+       ],
+       "00000000-0000-0000-0000-00000000000e": [
+        2200,
+        15
+       ],
+       "00000000-0000-0000-0000-000000000011": [
+        450,
+        80
+       ]
+      }
+     },
+     "vintage": {
+      "decks": 2631,
+      "events": 256,
+      "sources": {
+       "mtgo": {
+        "decks": 1479,
+        "events": 177,
+        "weighted": true
+       },
+       "paper": {
+        "decks": 1152,
+        "events": 79,
+        "weighted": true
+       }
+      },
+      "cards": {
+       "00000000-0000-0000-0000-000000000011": [
+        1200,
+        30
+       ],
+       "00000000-0000-0000-0000-000000000012": [
+        9500,
+        1
+       ]
+      }
+     }
+    },
+    "basic": [
+     "00000000-0000-0000-0000-00000000000f"
+    ],
+    "names": {
+     "black lotus": "00000000-0000-0000-0000-000000000012",
+     "fable of the mirror-breaker": "00000000-0000-0000-0000-00000000000c",
+     "fable of the mirror-breaker // reflection of kiki-jiki": "00000000-0000-0000-0000-00000000000c",
+     "fatal push": "00000000-0000-0000-0000-00000000000b",
+     "island": "00000000-0000-0000-0000-00000000000f",
+     "reflection of kiki-jiki": "00000000-0000-0000-0000-00000000000c",
+     "superior spider-man": "00000000-0000-0000-0000-00000000000d",
+     "thoughtseize": "00000000-0000-0000-0000-00000000000a",
+     "æther vial": "00000000-0000-0000-0000-000000000011"
+    },
+    "ambiguous": [
+     "lightning bolt",
+     "pick your poison"
+    ]
+   }
+  },
+  {
+   "text": "{\"ambiguous\":[\"lightning bolt\",\"pick your poison\"],\"as_of\":\"2026-11-17\",\"basic\":[\"00000000-0000-0000-0000-00000000000f\"],\"built_at\":\"2026-11-10T07:41:02Z\",\"formats\":{\"modern\":{\"cards\":{\"00000000-0000-0000-0000-00000000000a\":[2400,11],\"00000000-0000-0000-0000-000000000010\":[3,1900]},\"decks\":17000,\"events\":256,\"sources\":{\"mtgo\":{\"decks\":6200,\"events\":177,\"weighted\":true},\"paper\":{\"decks\":10800,\"events\":79,\"weighted\":true}}},\"premodern\":{\"cards\":{\"00000000-0000-0000-0000-00000000000e\":[5000,3]},\"decks\":3289,\"events\":256,\"sources\":{\"mtgo\":{\"decks\":1419,\"events\":177,\"weighted\":true},\"paper\":{\"decks\":1870,\"events\":79,\"weighted\":true}}}},\"kind\":\"cardscanner-play-data\",\"names\":{\"black lotus\":\"00000000-0000-0000-0000-000000000012\",\"fable of the mirror-breaker\":\"00000000-0000-0000-0000-00000000000c\",\"fable of the mirror-breaker // reflection of kiki-jiki\":\"00000000-0000-0000-0000-00000000000c\",\"fatal push\":\"00000000-0000-0000-0000-00000000000b\",\"island\":\"00000000-0000-0000-0000-00000000000f\",\"reflection of kiki-jiki\":\"00000000-0000-0000-0000-00000000000c\",\"superior spider-man\":\"00000000-0000-0000-0000-00000000000d\",\"thoughtseize\":\"00000000-0000-0000-0000-00000000000a\",\"æther vial\":\"00000000-0000-0000-0000-000000000011\"},\"skipped\":{\"standard\":{\"decks\":0,\"reason\":\"too few decks\"}},\"unmatched_entries\":23,\"unmatched_names\":22,\"version\":1,\"window_days\":60}\n",
+   "pack": {
+    "as_of": "2026-11-17",
+    "window_days": 60,
+    "built_at": "2026-11-10T07:41:02Z",
+    "formats": {
+     "modern": {
+      "decks": 17000,
+      "events": 256,
+      "sources": {
+       "mtgo": {
+        "decks": 6200,
+        "events": 177,
+        "weighted": true
+       },
+       "paper": {
+        "decks": 10800,
+        "events": 79,
+        "weighted": true
+       }
+      },
+      "cards": {
+       "00000000-0000-0000-0000-00000000000a": [
+        2400,
+        11
+       ],
+       "00000000-0000-0000-0000-000000000010": [
+        3,
+        1900
+       ]
+      }
+     },
+     "premodern": {
+      "decks": 3289,
+      "events": 256,
+      "sources": {
+       "mtgo": {
+        "decks": 1419,
+        "events": 177,
+        "weighted": true
+       },
+       "paper": {
+        "decks": 1870,
+        "events": 79,
+        "weighted": true
+       }
+      },
+      "cards": {
+       "00000000-0000-0000-0000-00000000000e": [
+        5000,
+        3
+       ]
+      }
+     }
+    },
+    "basic": [
+     "00000000-0000-0000-0000-00000000000f"
+    ],
+    "names": {
+     "black lotus": "00000000-0000-0000-0000-000000000012",
+     "fable of the mirror-breaker": "00000000-0000-0000-0000-00000000000c",
+     "fable of the mirror-breaker // reflection of kiki-jiki": "00000000-0000-0000-0000-00000000000c",
+     "fatal push": "00000000-0000-0000-0000-00000000000b",
+     "island": "00000000-0000-0000-0000-00000000000f",
+     "reflection of kiki-jiki": "00000000-0000-0000-0000-00000000000c",
+     "superior spider-man": "00000000-0000-0000-0000-00000000000d",
+     "thoughtseize": "00000000-0000-0000-0000-00000000000a",
+     "æther vial": "00000000-0000-0000-0000-000000000011"
+    },
+    "ambiguous": [
+     "lightning bolt",
+     "pick your poison"
+    ]
+   }
+  },
+  {
+   "text": "{\"kind\": \"cardscanner-play-data\", \"version\": 1, \"as_of\": \"2026-11-10\", \"window_days\": 60, \"built_at\": null, \"formats\": {\"pioneer\": {\"decks\": 1437, \"events\": 97, \"sources\": {\"mtgo\": {\"decks\": 1437, \"events\": 177, \"weighted\": true}, \"paper\": {\"decks\": 130, \"events\": 79, \"weighted\": false}}, \"cards\": {\"00000000-0000-0000-0000-00000000000a\": [1500, 30]}}, \"modern\": {\"decks\": 16831, \"events\": 256, \"sources\": {\"mtgo\": {\"decks\": 6146, \"events\": 177, \"weighted\": true}, \"paper\": {\"decks\": 10685, \"events\": 79, \"weighted\": true}}, \"cards\": {\"00000000-0000-0000-0000-00000000000a\": [2689, 9], \"00000000-0000-0000-0000-00000000000e\": [2560, 12], \"00000000-0000-0000-0000-00000000000b\": [1000, 50], \"00000000-0000-0000-0000-00000000000c\": [232, 297], \"00000000-0000-0000-0000-00000000000d\": [178, 325], \"00000000-0000-0000-0000-000000000011\": [1, 2400]}}, \"legacy\": {\"decks\": 5768, \"events\": 256, \"sources\": {\"mtgo\": {\"decks\": 3038, \"events\": 177, \"weighted\": true}, \"paper\": {\"decks\": 2730, \"events\": 79, \"weighted\": true}}, \"cards\": {\"00000000-0000-0000-0000-00000000000a\": [3100, 4], \"00000000-0000-0000-0000-00000000000e\": [2200, 15], \"00000000-0000-0000-0000-000000000011\": [450, 80]}}, \"vintage\": {\"decks\": 2631, \"events\": 256, \"sources\": {\"mtgo\": {\"decks\": 1479, \"events\": 177, \"weighted\": true}, \"paper\": {\"decks\": 1152, \"events\": 79, \"weighted\": true}}, \"cards\": {\"00000000-0000-0000-0000-000000000012\": [9500, 1], \"00000000-0000-0000-0000-000000000011\": [1200, 30]}}}, \"skipped\": {\"standard\": {\"decks\": 0, \"reason\": \"too few decks\"}}, \"unmatched_names\": 22, \"unmatched_entries\": 23, \"basic\": [\"00000000-0000-0000-0000-00000000000f\"], \"names\": {\"thoughtseize\": \"00000000-0000-0000-0000-00000000000a\", \"fatal push\": \"00000000-0000-0000-0000-00000000000b\", \"fable of the mirror-breaker // reflection of kiki-jiki\": \"00000000-0000-0000-0000-00000000000c\", \"fable of the mirror-breaker\": \"00000000-0000-0000-0000-00000000000c\", \"reflection of kiki-jiki\": \"00000000-0000-0000-0000-00000000000c\", \"superior spider-man\": \"00000000-0000-0000-0000-00000000000d\", \"island\": \"00000000-0000-0000-0000-00000000000f\", \"\\u00e6ther vial\": \"00000000-0000-0000-0000-000000000011\", \"black lotus\": \"00000000-0000-0000-0000-000000000012\"}, \"ambiguous\": [\"lightning bolt\", \"pick your poison\"]}",
+   "pack": {
+    "as_of": "2026-11-10",
+    "window_days": 60,
+    "built_at": null,
+    "formats": {
+     "pioneer": {
+      "decks": 1437,
+      "events": 97,
+      "sources": {
+       "mtgo": {
+        "decks": 1437,
+        "events": 177,
+        "weighted": true
+       },
+       "paper": {
+        "decks": 130,
+        "events": 79,
+        "weighted": false
+       }
+      },
+      "cards": {
+       "00000000-0000-0000-0000-00000000000a": [
+        1500,
+        30
+       ]
+      }
+     },
+     "modern": {
+      "decks": 16831,
+      "events": 256,
+      "sources": {
+       "mtgo": {
+        "decks": 6146,
+        "events": 177,
+        "weighted": true
+       },
+       "paper": {
+        "decks": 10685,
+        "events": 79,
+        "weighted": true
+       }
+      },
+      "cards": {
+       "00000000-0000-0000-0000-00000000000a": [
+        2689,
+        9
+       ],
+       "00000000-0000-0000-0000-00000000000b": [
+        1000,
+        50
+       ],
+       "00000000-0000-0000-0000-00000000000c": [
+        232,
+        297
+       ],
+       "00000000-0000-0000-0000-00000000000d": [
+        178,
+        325
+       ],
+       "00000000-0000-0000-0000-00000000000e": [
+        2560,
+        12
+       ],
+       "00000000-0000-0000-0000-000000000011": [
+        1,
+        2400
+       ]
+      }
+     },
+     "legacy": {
+      "decks": 5768,
+      "events": 256,
+      "sources": {
+       "mtgo": {
+        "decks": 3038,
+        "events": 177,
+        "weighted": true
+       },
+       "paper": {
+        "decks": 2730,
+        "events": 79,
+        "weighted": true
+       }
+      },
+      "cards": {
+       "00000000-0000-0000-0000-00000000000a": [
+        3100,
+        4
+       ],
+       "00000000-0000-0000-0000-00000000000e": [
+        2200,
+        15
+       ],
+       "00000000-0000-0000-0000-000000000011": [
+        450,
+        80
+       ]
+      }
+     },
+     "vintage": {
+      "decks": 2631,
+      "events": 256,
+      "sources": {
+       "mtgo": {
+        "decks": 1479,
+        "events": 177,
+        "weighted": true
+       },
+       "paper": {
+        "decks": 1152,
+        "events": 79,
+        "weighted": true
+       }
+      },
+      "cards": {
+       "00000000-0000-0000-0000-000000000011": [
+        1200,
+        30
+       ],
+       "00000000-0000-0000-0000-000000000012": [
+        9500,
+        1
+       ]
+      }
+     }
+    },
+    "basic": [
+     "00000000-0000-0000-0000-00000000000f"
+    ],
+    "names": {
+     "black lotus": "00000000-0000-0000-0000-000000000012",
+     "fable of the mirror-breaker": "00000000-0000-0000-0000-00000000000c",
+     "fable of the mirror-breaker // reflection of kiki-jiki": "00000000-0000-0000-0000-00000000000c",
+     "fatal push": "00000000-0000-0000-0000-00000000000b",
+     "island": "00000000-0000-0000-0000-00000000000f",
+     "reflection of kiki-jiki": "00000000-0000-0000-0000-00000000000c",
+     "superior spider-man": "00000000-0000-0000-0000-00000000000d",
+     "thoughtseize": "00000000-0000-0000-0000-00000000000a",
+     "æther vial": "00000000-0000-0000-0000-000000000011"
+    },
+    "ambiguous": [
+     "lightning bolt",
+     "pick your poison"
+    ]
+   }
+  },
+  {
+   "text": "{\"kind\": \"cardscanner-play-data\", \"version\": 1, \"as_of\": \"2026-11-10\", \"window_days\": 60, \"built_at\": 7, \"formats\": {\"pioneer\": {\"decks\": 1437, \"events\": 97, \"sources\": {\"mtgo\": {\"decks\": 1437, \"events\": 177, \"weighted\": true}, \"paper\": {\"decks\": 130, \"events\": 79, \"weighted\": false}}, \"cards\": {\"00000000-0000-0000-0000-00000000000a\": [1500, 30]}}, \"modern\": {\"decks\": 16831, \"events\": 256, \"sources\": {\"mtgo\": {\"decks\": 6146, \"events\": 177, \"weighted\": true}, \"paper\": {\"decks\": 10685, \"events\": 79, \"weighted\": true}}, \"cards\": {\"00000000-0000-0000-0000-00000000000a\": [2689, 9], \"00000000-0000-0000-0000-00000000000e\": [2560, 12], \"00000000-0000-0000-0000-00000000000b\": [1000, 50], \"00000000-0000-0000-0000-00000000000c\": [232, 297], \"00000000-0000-0000-0000-00000000000d\": [178, 325], \"00000000-0000-0000-0000-000000000011\": [1, 2400]}}, \"legacy\": {\"decks\": 5768, \"events\": 256, \"sources\": {\"mtgo\": {\"decks\": 3038, \"events\": 177, \"weighted\": true}, \"paper\": {\"decks\": 2730, \"events\": 79, \"weighted\": true}}, \"cards\": {\"00000000-0000-0000-0000-00000000000a\": [3100, 4], \"00000000-0000-0000-0000-00000000000e\": [2200, 15], \"00000000-0000-0000-0000-000000000011\": [450, 80]}}, \"vintage\": {\"decks\": 2631, \"events\": 256, \"sources\": {\"mtgo\": {\"decks\": 1479, \"events\": 177, \"weighted\": true}, \"paper\": {\"decks\": 1152, \"events\": 79, \"weighted\": true}}, \"cards\": {\"00000000-0000-0000-0000-000000000012\": [9500, 1], \"00000000-0000-0000-0000-000000000011\": [1200, 30]}}}, \"skipped\": {\"standard\": {\"decks\": 0, \"reason\": \"too few decks\"}}, \"unmatched_names\": 22, \"unmatched_entries\": 23, \"basic\": [\"00000000-0000-0000-0000-00000000000f\"], \"names\": {\"thoughtseize\": \"00000000-0000-0000-0000-00000000000a\", \"fatal push\": \"00000000-0000-0000-0000-00000000000b\", \"fable of the mirror-breaker // reflection of kiki-jiki\": \"00000000-0000-0000-0000-00000000000c\", \"fable of the mirror-breaker\": \"00000000-0000-0000-0000-00000000000c\", \"reflection of kiki-jiki\": \"00000000-0000-0000-0000-00000000000c\", \"superior spider-man\": \"00000000-0000-0000-0000-00000000000d\", \"island\": \"00000000-0000-0000-0000-00000000000f\", \"\\u00e6ther vial\": \"00000000-0000-0000-0000-000000000011\", \"black lotus\": \"00000000-0000-0000-0000-000000000012\"}, \"ambiguous\": [\"lightning bolt\", \"pick your poison\"]}",
+   "pack": {
+    "as_of": "2026-11-10",
+    "window_days": 60,
+    "built_at": null,
+    "formats": {
+     "pioneer": {
+      "decks": 1437,
+      "events": 97,
+      "sources": {
+       "mtgo": {
+        "decks": 1437,
+        "events": 177,
+        "weighted": true
+       },
+       "paper": {
+        "decks": 130,
+        "events": 79,
+        "weighted": false
+       }
+      },
+      "cards": {
+       "00000000-0000-0000-0000-00000000000a": [
+        1500,
+        30
+       ]
+      }
+     },
+     "modern": {
+      "decks": 16831,
+      "events": 256,
+      "sources": {
+       "mtgo": {
+        "decks": 6146,
+        "events": 177,
+        "weighted": true
+       },
+       "paper": {
+        "decks": 10685,
+        "events": 79,
+        "weighted": true
+       }
+      },
+      "cards": {
+       "00000000-0000-0000-0000-00000000000a": [
+        2689,
+        9
+       ],
+       "00000000-0000-0000-0000-00000000000b": [
+        1000,
+        50
+       ],
+       "00000000-0000-0000-0000-00000000000c": [
+        232,
+        297
+       ],
+       "00000000-0000-0000-0000-00000000000d": [
+        178,
+        325
+       ],
+       "00000000-0000-0000-0000-00000000000e": [
+        2560,
+        12
+       ],
+       "00000000-0000-0000-0000-000000000011": [
+        1,
+        2400
+       ]
+      }
+     },
+     "legacy": {
+      "decks": 5768,
+      "events": 256,
+      "sources": {
+       "mtgo": {
+        "decks": 3038,
+        "events": 177,
+        "weighted": true
+       },
+       "paper": {
+        "decks": 2730,
+        "events": 79,
+        "weighted": true
+       }
+      },
+      "cards": {
+       "00000000-0000-0000-0000-00000000000a": [
+        3100,
+        4
+       ],
+       "00000000-0000-0000-0000-00000000000e": [
+        2200,
+        15
+       ],
+       "00000000-0000-0000-0000-000000000011": [
+        450,
+        80
+       ]
+      }
+     },
+     "vintage": {
+      "decks": 2631,
+      "events": 256,
+      "sources": {
+       "mtgo": {
+        "decks": 1479,
+        "events": 177,
+        "weighted": true
+       },
+       "paper": {
+        "decks": 1152,
+        "events": 79,
+        "weighted": true
+       }
+      },
+      "cards": {
+       "00000000-0000-0000-0000-000000000011": [
+        1200,
+        30
+       ],
+       "00000000-0000-0000-0000-000000000012": [
+        9500,
+        1
+       ]
+      }
+     }
+    },
+    "basic": [
+     "00000000-0000-0000-0000-00000000000f"
+    ],
+    "names": {
+     "black lotus": "00000000-0000-0000-0000-000000000012",
+     "fable of the mirror-breaker": "00000000-0000-0000-0000-00000000000c",
+     "fable of the mirror-breaker // reflection of kiki-jiki": "00000000-0000-0000-0000-00000000000c",
+     "fatal push": "00000000-0000-0000-0000-00000000000b",
+     "island": "00000000-0000-0000-0000-00000000000f",
+     "reflection of kiki-jiki": "00000000-0000-0000-0000-00000000000c",
+     "superior spider-man": "00000000-0000-0000-0000-00000000000d",
+     "thoughtseize": "00000000-0000-0000-0000-00000000000a",
+     "æther vial": "00000000-0000-0000-0000-000000000011"
+    },
+    "ambiguous": [
+     "lightning bolt",
+     "pick your poison"
+    ]
+   }
+  },
+  {
+   "text": "{\"kind\": \"cardscanner-play-data\", \"version\": 1, \"as_of\": \"2026-11-10\", \"window_days\": 60, \"built_at\": \"2026-11-10T07:41:02Z\", \"formats\": {\"pioneer\": {\"decks\": 1437, \"events\": 97, \"sources\": {\"mtgo\": {\"decks\": 1437, \"events\": 177, \"weighted\": true}, \"paper\": {\"decks\": 130, \"events\": 79, \"weighted\": false}}, \"cards\": {\"00000000-0000-0000-0000-00000000000a\": [1500, 30]}}, \"modern\": {\"decks\": 16831, \"events\": 256, \"sources\": {\"mtgo\": {\"decks\": 6146, \"events\": 177, \"weighted\": true}, \"paper\": {\"decks\": 10685, \"events\": 79, \"weighted\": true}}, \"cards\": {\"00000000-0000-0000-0000-00000000000a\": [2689, 9], \"00000000-0000-0000-0000-00000000000e\": [2560, 12], \"00000000-0000-0000-0000-00000000000b\": [1000, 50], \"00000000-0000-0000-0000-00000000000c\": [232, 297], \"00000000-0000-0000-0000-00000000000d\": [178, 325], \"00000000-0000-0000-0000-000000000011\": [1, 2400]}}, \"legacy\": {\"decks\": 5768, \"events\": 256, \"sources\": {\"mtgo\": {\"decks\": 3038, \"events\": 177, \"weighted\": true}, \"paper\": {\"decks\": 2730, \"events\": 79, \"weighted\": true}}, \"cards\": {\"00000000-0000-0000-0000-00000000000a\": [3100, 4], \"00000000-0000-0000-0000-00000000000e\": [2200, 15], \"00000000-0000-0000-0000-000000000011\": [450, 80]}}, \"vintage\": {\"decks\": 2631, \"events\": 256, \"sources\": {\"mtgo\": {\"decks\": 1479, \"events\": 177, \"weighted\": true}, \"paper\": {\"decks\": 1152, \"events\": 79, \"weighted\": true}}, \"cards\": {\"00000000-0000-0000-0000-000000000012\": [9500, 1], \"00000000-0000-0000-0000-000000000011\": [1200, 30]}}}, \"skipped\": {\"standard\": {\"decks\": 0, \"reason\": \"too few decks\"}}, \"unmatched_names\": 22, \"unmatched_entries\": 23, \"basic\": [\"00000000-0000-0000-0000-00000000000f\"], \"names\": {\"thoughtseize\": \"00000000-0000-0000-0000-00000000000a\", \"fatal push\": \"00000000-0000-0000-0000-00000000000b\", \"fable of the mirror-breaker // reflection of kiki-jiki\": \"00000000-0000-0000-0000-00000000000c\", \"fable of the mirror-breaker\": \"00000000-0000-0000-0000-00000000000c\", \"reflection of kiki-jiki\": \"00000000-0000-0000-0000-00000000000c\", \"superior spider-man\": \"00000000-0000-0000-0000-00000000000d\", \"island\": \"00000000-0000-0000-0000-00000000000f\", \"\\u00e6ther vial\": \"00000000-0000-0000-0000-000000000011\", \"black lotus\": \"00000000-0000-0000-0000-000000000012\"}, \"ambiguous\": [\"lightning bolt\", \"pick your poison\"], \"extra_key\": \"ignored\"}",
+   "pack": {
+    "as_of": "2026-11-10",
+    "window_days": 60,
+    "built_at": "2026-11-10T07:41:02Z",
+    "formats": {
+     "pioneer": {
+      "decks": 1437,
+      "events": 97,
+      "sources": {
+       "mtgo": {
+        "decks": 1437,
+        "events": 177,
+        "weighted": true
+       },
+       "paper": {
+        "decks": 130,
+        "events": 79,
+        "weighted": false
+       }
+      },
+      "cards": {
+       "00000000-0000-0000-0000-00000000000a": [
+        1500,
+        30
+       ]
+      }
+     },
+     "modern": {
+      "decks": 16831,
+      "events": 256,
+      "sources": {
+       "mtgo": {
+        "decks": 6146,
+        "events": 177,
+        "weighted": true
+       },
+       "paper": {
+        "decks": 10685,
+        "events": 79,
+        "weighted": true
+       }
+      },
+      "cards": {
+       "00000000-0000-0000-0000-00000000000a": [
+        2689,
+        9
+       ],
+       "00000000-0000-0000-0000-00000000000b": [
+        1000,
+        50
+       ],
+       "00000000-0000-0000-0000-00000000000c": [
+        232,
+        297
+       ],
+       "00000000-0000-0000-0000-00000000000d": [
+        178,
+        325
+       ],
+       "00000000-0000-0000-0000-00000000000e": [
+        2560,
+        12
+       ],
+       "00000000-0000-0000-0000-000000000011": [
+        1,
+        2400
+       ]
+      }
+     },
+     "legacy": {
+      "decks": 5768,
+      "events": 256,
+      "sources": {
+       "mtgo": {
+        "decks": 3038,
+        "events": 177,
+        "weighted": true
+       },
+       "paper": {
+        "decks": 2730,
+        "events": 79,
+        "weighted": true
+       }
+      },
+      "cards": {
+       "00000000-0000-0000-0000-00000000000a": [
+        3100,
+        4
+       ],
+       "00000000-0000-0000-0000-00000000000e": [
+        2200,
+        15
+       ],
+       "00000000-0000-0000-0000-000000000011": [
+        450,
+        80
+       ]
+      }
+     },
+     "vintage": {
+      "decks": 2631,
+      "events": 256,
+      "sources": {
+       "mtgo": {
+        "decks": 1479,
+        "events": 177,
+        "weighted": true
+       },
+       "paper": {
+        "decks": 1152,
+        "events": 79,
+        "weighted": true
+       }
+      },
+      "cards": {
+       "00000000-0000-0000-0000-000000000011": [
+        1200,
+        30
+       ],
+       "00000000-0000-0000-0000-000000000012": [
+        9500,
+        1
+       ]
+      }
+     }
+    },
+    "basic": [
+     "00000000-0000-0000-0000-00000000000f"
+    ],
+    "names": {
+     "black lotus": "00000000-0000-0000-0000-000000000012",
+     "fable of the mirror-breaker": "00000000-0000-0000-0000-00000000000c",
+     "fable of the mirror-breaker // reflection of kiki-jiki": "00000000-0000-0000-0000-00000000000c",
+     "fatal push": "00000000-0000-0000-0000-00000000000b",
+     "island": "00000000-0000-0000-0000-00000000000f",
+     "reflection of kiki-jiki": "00000000-0000-0000-0000-00000000000c",
+     "superior spider-man": "00000000-0000-0000-0000-00000000000d",
+     "thoughtseize": "00000000-0000-0000-0000-00000000000a",
+     "æther vial": "00000000-0000-0000-0000-000000000011"
+    },
+    "ambiguous": [
+     "lightning bolt",
+     "pick your poison"
+    ]
+   }
+  },
+  {
+   "text": "{\"kind\": \"cardscanner-play-data\", \"version\": 1, \"as_of\": \"2026-11-10\", \"window_days\": 60, \"built_at\": \"2026-11-10T07:41:02Z\", \"formats\": {\"modern\": {\"decks\": 1, \"events\": 256, \"sources\": {\"mtgo\": {\"decks\": 1, \"events\": 177, \"weighted\": false}, \"paper\": {\"decks\": 0, \"events\": 79, \"weighted\": false}}, \"cards\": {\"00000000-0000-0000-0000-00000000000a\": [1, 1]}}, \"brawl\": {\"x\": 1}}, \"skipped\": {\"standard\": {\"decks\": 0, \"reason\": \"too few decks\"}}, \"unmatched_names\": 22, \"unmatched_entries\": 23, \"basic\": [\"00000000-0000-0000-0000-00000000000f\"], \"names\": {\"thoughtseize\": \"00000000-0000-0000-0000-00000000000a\", \"fatal push\": \"00000000-0000-0000-0000-00000000000b\", \"fable of the mirror-breaker // reflection of kiki-jiki\": \"00000000-0000-0000-0000-00000000000c\", \"fable of the mirror-breaker\": \"00000000-0000-0000-0000-00000000000c\", \"reflection of kiki-jiki\": \"00000000-0000-0000-0000-00000000000c\", \"superior spider-man\": \"00000000-0000-0000-0000-00000000000d\", \"island\": \"00000000-0000-0000-0000-00000000000f\", \"\\u00e6ther vial\": \"00000000-0000-0000-0000-000000000011\", \"black lotus\": \"00000000-0000-0000-0000-000000000012\"}, \"ambiguous\": [\"lightning bolt\", \"pick your poison\"]}",
+   "pack": {
+    "as_of": "2026-11-10",
+    "window_days": 60,
+    "built_at": "2026-11-10T07:41:02Z",
+    "formats": {
+     "modern": {
+      "decks": 1,
+      "events": 256,
+      "sources": {
+       "mtgo": {
+        "decks": 1,
+        "events": 177,
+        "weighted": false
+       },
+       "paper": {
+        "decks": 0,
+        "events": 79,
+        "weighted": false
+       }
+      },
+      "cards": {
+       "00000000-0000-0000-0000-00000000000a": [
+        1,
+        1
+       ]
+      }
+     }
+    },
+    "basic": [
+     "00000000-0000-0000-0000-00000000000f"
+    ],
+    "names": {
+     "black lotus": "00000000-0000-0000-0000-000000000012",
+     "fable of the mirror-breaker": "00000000-0000-0000-0000-00000000000c",
+     "fable of the mirror-breaker // reflection of kiki-jiki": "00000000-0000-0000-0000-00000000000c",
+     "fatal push": "00000000-0000-0000-0000-00000000000b",
+     "island": "00000000-0000-0000-0000-00000000000f",
+     "reflection of kiki-jiki": "00000000-0000-0000-0000-00000000000c",
+     "superior spider-man": "00000000-0000-0000-0000-00000000000d",
+     "thoughtseize": "00000000-0000-0000-0000-00000000000a",
+     "æther vial": "00000000-0000-0000-0000-000000000011"
+    },
+    "ambiguous": [
+     "lightning bolt",
+     "pick your poison"
+    ]
+   }
+  },
+  {
+   "text": "{nope",
+   "error": "not JSON"
+  },
+  {
+   "text": "",
+   "error": "not JSON"
+  },
+  {
+   "text": "null",
+   "error": "not a play data file"
+  },
+  {
+   "text": "[]",
+   "error": "not a play data file"
+  },
+  {
+   "text": "42",
+   "error": "not a play data file"
+  },
+  {
+   "text": "{\"kind\": \"something else\"}",
+   "error": "not a play data file"
+  },
+  {
+   "text": "{\"kind\": \"cardscanner-modern-meta\", \"version\": 1}",
+   "error": "not a play data file"
+  },
+  {
+   "text": "{\"kind\": \"cardscanner-play-data\", \"version\": 2, \"as_of\": \"2026-11-10\", \"window_days\": 60, \"built_at\": \"2026-11-10T07:41:02Z\", \"formats\": {\"pioneer\": {\"decks\": 1437, \"events\": 97, \"sources\": {\"mtgo\": {\"decks\": 1437, \"events\": 177, \"weighted\": true}, \"paper\": {\"decks\": 130, \"events\": 79, \"weighted\": false}}, \"cards\": {\"00000000-0000-0000-0000-00000000000a\": [1500, 30]}}, \"modern\": {\"decks\": 16831, \"events\": 256, \"sources\": {\"mtgo\": {\"decks\": 6146, \"events\": 177, \"weighted\": true}, \"paper\": {\"decks\": 10685, \"events\": 79, \"weighted\": true}}, \"cards\": {\"00000000-0000-0000-0000-00000000000a\": [2689, 9], \"00000000-0000-0000-0000-00000000000e\": [2560, 12], \"00000000-0000-0000-0000-00000000000b\": [1000, 50], \"00000000-0000-0000-0000-00000000000c\": [232, 297], \"00000000-0000-0000-0000-00000000000d\": [178, 325], \"00000000-0000-0000-0000-000000000011\": [1, 2400]}}, \"legacy\": {\"decks\": 5768, \"events\": 256, \"sources\": {\"mtgo\": {\"decks\": 3038, \"events\": 177, \"weighted\": true}, \"paper\": {\"decks\": 2730, \"events\": 79, \"weighted\": true}}, \"cards\": {\"00000000-0000-0000-0000-00000000000a\": [3100, 4], \"00000000-0000-0000-0000-00000000000e\": [2200, 15], \"00000000-0000-0000-0000-000000000011\": [450, 80]}}, \"vintage\": {\"decks\": 2631, \"events\": 256, \"sources\": {\"mtgo\": {\"decks\": 1479, \"events\": 177, \"weighted\": true}, \"paper\": {\"decks\": 1152, \"events\": 79, \"weighted\": true}}, \"cards\": {\"00000000-0000-0000-0000-000000000012\": [9500, 1], \"00000000-0000-0000-0000-000000000011\": [1200, 30]}}}, \"skipped\": {\"standard\": {\"decks\": 0, \"reason\": \"too few decks\"}}, \"unmatched_names\": 22, \"unmatched_entries\": 23, \"basic\": [\"00000000-0000-0000-0000-00000000000f\"], \"names\": {\"thoughtseize\": \"00000000-0000-0000-0000-00000000000a\", \"fatal push\": \"00000000-0000-0000-0000-00000000000b\", \"fable of the mirror-breaker // reflection of kiki-jiki\": \"00000000-0000-0000-0000-00000000000c\", \"fable of the mirror-breaker\": \"00000000-0000-0000-0000-00000000000c\", \"reflection of kiki-jiki\": \"00000000-0000-0000-0000-00000000000c\", \"superior spider-man\": \"00000000-0000-0000-0000-00000000000d\", \"island\": \"00000000-0000-0000-0000-00000000000f\", \"\\u00e6ther vial\": \"00000000-0000-0000-0000-000000000011\", \"black lotus\": \"00000000-0000-0000-0000-000000000012\"}, \"ambiguous\": [\"lightning bolt\", \"pick your poison\"]}",
+   "error": "unsupported version"
+  },
+  {
+   "text": "{\"kind\": \"cardscanner-play-data\", \"version\": \"1\", \"as_of\": \"2026-11-10\", \"window_days\": 60, \"built_at\": \"2026-11-10T07:41:02Z\", \"formats\": {\"pioneer\": {\"decks\": 1437, \"events\": 97, \"sources\": {\"mtgo\": {\"decks\": 1437, \"events\": 177, \"weighted\": true}, \"paper\": {\"decks\": 130, \"events\": 79, \"weighted\": false}}, \"cards\": {\"00000000-0000-0000-0000-00000000000a\": [1500, 30]}}, \"modern\": {\"decks\": 16831, \"events\": 256, \"sources\": {\"mtgo\": {\"decks\": 6146, \"events\": 177, \"weighted\": true}, \"paper\": {\"decks\": 10685, \"events\": 79, \"weighted\": true}}, \"cards\": {\"00000000-0000-0000-0000-00000000000a\": [2689, 9], \"00000000-0000-0000-0000-00000000000e\": [2560, 12], \"00000000-0000-0000-0000-00000000000b\": [1000, 50], \"00000000-0000-0000-0000-00000000000c\": [232, 297], \"00000000-0000-0000-0000-00000000000d\": [178, 325], \"00000000-0000-0000-0000-000000000011\": [1, 2400]}}, \"legacy\": {\"decks\": 5768, \"events\": 256, \"sources\": {\"mtgo\": {\"decks\": 3038, \"events\": 177, \"weighted\": true}, \"paper\": {\"decks\": 2730, \"events\": 79, \"weighted\": true}}, \"cards\": {\"00000000-0000-0000-0000-00000000000a\": [3100, 4], \"00000000-0000-0000-0000-00000000000e\": [2200, 15], \"00000000-0000-0000-0000-000000000011\": [450, 80]}}, \"vintage\": {\"decks\": 2631, \"events\": 256, \"sources\": {\"mtgo\": {\"decks\": 1479, \"events\": 177, \"weighted\": true}, \"paper\": {\"decks\": 1152, \"events\": 79, \"weighted\": true}}, \"cards\": {\"00000000-0000-0000-0000-000000000012\": [9500, 1], \"00000000-0000-0000-0000-000000000011\": [1200, 30]}}}, \"skipped\": {\"standard\": {\"decks\": 0, \"reason\": \"too few decks\"}}, \"unmatched_names\": 22, \"unmatched_entries\": 23, \"basic\": [\"00000000-0000-0000-0000-00000000000f\"], \"names\": {\"thoughtseize\": \"00000000-0000-0000-0000-00000000000a\", \"fatal push\": \"00000000-0000-0000-0000-00000000000b\", \"fable of the mirror-breaker // reflection of kiki-jiki\": \"00000000-0000-0000-0000-00000000000c\", \"fable of the mirror-breaker\": \"00000000-0000-0000-0000-00000000000c\", \"reflection of kiki-jiki\": \"00000000-0000-0000-0000-00000000000c\", \"superior spider-man\": \"00000000-0000-0000-0000-00000000000d\", \"island\": \"00000000-0000-0000-0000-00000000000f\", \"\\u00e6ther vial\": \"00000000-0000-0000-0000-000000000011\", \"black lotus\": \"00000000-0000-0000-0000-000000000012\"}, \"ambiguous\": [\"lightning bolt\", \"pick your poison\"]}",
+   "error": "unsupported version"
+  },
+  {
+   "text": "{\"kind\": \"cardscanner-play-data\", \"version\": 1.0, \"as_of\": \"2026-11-10\", \"window_days\": 60, \"built_at\": \"2026-11-10T07:41:02Z\", \"formats\": {\"pioneer\": {\"decks\": 1437, \"events\": 97, \"sources\": {\"mtgo\": {\"decks\": 1437, \"events\": 177, \"weighted\": true}, \"paper\": {\"decks\": 130, \"events\": 79, \"weighted\": false}}, \"cards\": {\"00000000-0000-0000-0000-00000000000a\": [1500, 30]}}, \"modern\": {\"decks\": 16831, \"events\": 256, \"sources\": {\"mtgo\": {\"decks\": 6146, \"events\": 177, \"weighted\": true}, \"paper\": {\"decks\": 10685, \"events\": 79, \"weighted\": true}}, \"cards\": {\"00000000-0000-0000-0000-00000000000a\": [2689, 9], \"00000000-0000-0000-0000-00000000000e\": [2560, 12], \"00000000-0000-0000-0000-00000000000b\": [1000, 50], \"00000000-0000-0000-0000-00000000000c\": [232, 297], \"00000000-0000-0000-0000-00000000000d\": [178, 325], \"00000000-0000-0000-0000-000000000011\": [1, 2400]}}, \"legacy\": {\"decks\": 5768, \"events\": 256, \"sources\": {\"mtgo\": {\"decks\": 3038, \"events\": 177, \"weighted\": true}, \"paper\": {\"decks\": 2730, \"events\": 79, \"weighted\": true}}, \"cards\": {\"00000000-0000-0000-0000-00000000000a\": [3100, 4], \"00000000-0000-0000-0000-00000000000e\": [2200, 15], \"00000000-0000-0000-0000-000000000011\": [450, 80]}}, \"vintage\": {\"decks\": 2631, \"events\": 256, \"sources\": {\"mtgo\": {\"decks\": 1479, \"events\": 177, \"weighted\": true}, \"paper\": {\"decks\": 1152, \"events\": 79, \"weighted\": true}}, \"cards\": {\"00000000-0000-0000-0000-000000000012\": [9500, 1], \"00000000-0000-0000-0000-000000000011\": [1200, 30]}}}, \"skipped\": {\"standard\": {\"decks\": 0, \"reason\": \"too few decks\"}}, \"unmatched_names\": 22, \"unmatched_entries\": 23, \"basic\": [\"00000000-0000-0000-0000-00000000000f\"], \"names\": {\"thoughtseize\": \"00000000-0000-0000-0000-00000000000a\", \"fatal push\": \"00000000-0000-0000-0000-00000000000b\", \"fable of the mirror-breaker // reflection of kiki-jiki\": \"00000000-0000-0000-0000-00000000000c\", \"fable of the mirror-breaker\": \"00000000-0000-0000-0000-00000000000c\", \"reflection of kiki-jiki\": \"00000000-0000-0000-0000-00000000000c\", \"superior spider-man\": \"00000000-0000-0000-0000-00000000000d\", \"island\": \"00000000-0000-0000-0000-00000000000f\", \"\\u00e6ther vial\": \"00000000-0000-0000-0000-000000000011\", \"black lotus\": \"00000000-0000-0000-0000-000000000012\"}, \"ambiguous\": [\"lightning bolt\", \"pick your poison\"]}",
+   "error": "unsupported version"
+  },
+  {
+   "text": "{\"kind\": \"cardscanner-play-data\", \"version\": true, \"as_of\": \"2026-11-10\", \"window_days\": 60, \"built_at\": \"2026-11-10T07:41:02Z\", \"formats\": {\"pioneer\": {\"decks\": 1437, \"events\": 97, \"sources\": {\"mtgo\": {\"decks\": 1437, \"events\": 177, \"weighted\": true}, \"paper\": {\"decks\": 130, \"events\": 79, \"weighted\": false}}, \"cards\": {\"00000000-0000-0000-0000-00000000000a\": [1500, 30]}}, \"modern\": {\"decks\": 16831, \"events\": 256, \"sources\": {\"mtgo\": {\"decks\": 6146, \"events\": 177, \"weighted\": true}, \"paper\": {\"decks\": 10685, \"events\": 79, \"weighted\": true}}, \"cards\": {\"00000000-0000-0000-0000-00000000000a\": [2689, 9], \"00000000-0000-0000-0000-00000000000e\": [2560, 12], \"00000000-0000-0000-0000-00000000000b\": [1000, 50], \"00000000-0000-0000-0000-00000000000c\": [232, 297], \"00000000-0000-0000-0000-00000000000d\": [178, 325], \"00000000-0000-0000-0000-000000000011\": [1, 2400]}}, \"legacy\": {\"decks\": 5768, \"events\": 256, \"sources\": {\"mtgo\": {\"decks\": 3038, \"events\": 177, \"weighted\": true}, \"paper\": {\"decks\": 2730, \"events\": 79, \"weighted\": true}}, \"cards\": {\"00000000-0000-0000-0000-00000000000a\": [3100, 4], \"00000000-0000-0000-0000-00000000000e\": [2200, 15], \"00000000-0000-0000-0000-000000000011\": [450, 80]}}, \"vintage\": {\"decks\": 2631, \"events\": 256, \"sources\": {\"mtgo\": {\"decks\": 1479, \"events\": 177, \"weighted\": true}, \"paper\": {\"decks\": 1152, \"events\": 79, \"weighted\": true}}, \"cards\": {\"00000000-0000-0000-0000-000000000012\": [9500, 1], \"00000000-0000-0000-0000-000000000011\": [1200, 30]}}}, \"skipped\": {\"standard\": {\"decks\": 0, \"reason\": \"too few decks\"}}, \"unmatched_names\": 22, \"unmatched_entries\": 23, \"basic\": [\"00000000-0000-0000-0000-00000000000f\"], \"names\": {\"thoughtseize\": \"00000000-0000-0000-0000-00000000000a\", \"fatal push\": \"00000000-0000-0000-0000-00000000000b\", \"fable of the mirror-breaker // reflection of kiki-jiki\": \"00000000-0000-0000-0000-00000000000c\", \"fable of the mirror-breaker\": \"00000000-0000-0000-0000-00000000000c\", \"reflection of kiki-jiki\": \"00000000-0000-0000-0000-00000000000c\", \"superior spider-man\": \"00000000-0000-0000-0000-00000000000d\", \"island\": \"00000000-0000-0000-0000-00000000000f\", \"\\u00e6ther vial\": \"00000000-0000-0000-0000-000000000011\", \"black lotus\": \"00000000-0000-0000-0000-000000000012\"}, \"ambiguous\": [\"lightning bolt\", \"pick your poison\"]}",
+   "error": "unsupported version"
+  },
+  {
+   "text": "{\"kind\": \"cardscanner-play-data\", \"version\": 1, \"as_of\": \"2026-11-10\", \"window_days\": 60, \"built_at\": \"2026-11-10T07:41:02Z\", \"formats\": {}, \"skipped\": {\"standard\": {\"decks\": 0, \"reason\": \"too few decks\"}}, \"unmatched_names\": 22, \"unmatched_entries\": 23, \"basic\": [\"00000000-0000-0000-0000-00000000000f\"], \"names\": {\"thoughtseize\": \"00000000-0000-0000-0000-00000000000a\", \"fatal push\": \"00000000-0000-0000-0000-00000000000b\", \"fable of the mirror-breaker // reflection of kiki-jiki\": \"00000000-0000-0000-0000-00000000000c\", \"fable of the mirror-breaker\": \"00000000-0000-0000-0000-00000000000c\", \"reflection of kiki-jiki\": \"00000000-0000-0000-0000-00000000000c\", \"superior spider-man\": \"00000000-0000-0000-0000-00000000000d\", \"island\": \"00000000-0000-0000-0000-00000000000f\", \"\\u00e6ther vial\": \"00000000-0000-0000-0000-000000000011\", \"black lotus\": \"00000000-0000-0000-0000-000000000012\"}, \"ambiguous\": [\"lightning bolt\", \"pick your poison\"]}",
+   "error": "no formats"
+  },
+  {
+   "text": "{\"kind\": \"cardscanner-play-data\", \"version\": 1, \"as_of\": \"2026-11-10\", \"window_days\": 60, \"built_at\": \"2026-11-10T07:41:02Z\", \"formats\": {\"commander\": {\"decks\": 1}}, \"skipped\": {\"standard\": {\"decks\": 0, \"reason\": \"too few decks\"}}, \"unmatched_names\": 22, \"unmatched_entries\": 23, \"basic\": [\"00000000-0000-0000-0000-00000000000f\"], \"names\": {\"thoughtseize\": \"00000000-0000-0000-0000-00000000000a\", \"fatal push\": \"00000000-0000-0000-0000-00000000000b\", \"fable of the mirror-breaker // reflection of kiki-jiki\": \"00000000-0000-0000-0000-00000000000c\", \"fable of the mirror-breaker\": \"00000000-0000-0000-0000-00000000000c\", \"reflection of kiki-jiki\": \"00000000-0000-0000-0000-00000000000c\", \"superior spider-man\": \"00000000-0000-0000-0000-00000000000d\", \"island\": \"00000000-0000-0000-0000-00000000000f\", \"\\u00e6ther vial\": \"00000000-0000-0000-0000-000000000011\", \"black lotus\": \"00000000-0000-0000-0000-000000000012\"}, \"ambiguous\": [\"lightning bolt\", \"pick your poison\"]}",
+   "error": "no formats"
+  },
+  {
+   "text": "{\"kind\": \"cardscanner-play-data\", \"version\": 1, \"as_of\": \"2026-11-10\", \"window_days\": 60, \"built_at\": \"2026-11-10T07:41:02Z\", \"formats\": {\"modern\": {\"decks\": 16831, \"events\": 256, \"sources\": {\"mtgo\": {\"decks\": 6146, \"events\": 177, \"weighted\": true}, \"paper\": {\"decks\": 10685, \"events\": 79, \"weighted\": true}}, \"cards\": {\"00000000-0000-0000-0000-00000000000a\": [0, 1]}}}, \"skipped\": {\"standard\": {\"decks\": 0, \"reason\": \"too few decks\"}}, \"unmatched_names\": 22, \"unmatched_entries\": 23, \"basic\": [\"00000000-0000-0000-0000-00000000000f\"], \"names\": {\"thoughtseize\": \"00000000-0000-0000-0000-00000000000a\", \"fatal push\": \"00000000-0000-0000-0000-00000000000b\", \"fable of the mirror-breaker // reflection of kiki-jiki\": \"00000000-0000-0000-0000-00000000000c\", \"fable of the mirror-breaker\": \"00000000-0000-0000-0000-00000000000c\", \"reflection of kiki-jiki\": \"00000000-0000-0000-0000-00000000000c\", \"superior spider-man\": \"00000000-0000-0000-0000-00000000000d\", \"island\": \"00000000-0000-0000-0000-00000000000f\", \"\\u00e6ther vial\": \"00000000-0000-0000-0000-000000000011\", \"black lotus\": \"00000000-0000-0000-0000-000000000012\"}, \"ambiguous\": [\"lightning bolt\", \"pick your poison\"]}",
+   "error": "malformed"
+  },
+  {
+   "text": "{\"kind\": \"cardscanner-play-data\", \"version\": 1, \"as_of\": \"2026-11-10\", \"window_days\": 60, \"built_at\": \"2026-11-10T07:41:02Z\", \"formats\": {\"modern\": {\"decks\": 16831, \"events\": 256, \"sources\": {\"mtgo\": {\"decks\": 6146, \"events\": 177, \"weighted\": true}, \"paper\": {\"decks\": 10685, \"events\": 79, \"weighted\": true}}, \"cards\": {\"00000000-0000-0000-0000-00000000000a\": [1, 0]}}}, \"skipped\": {\"standard\": {\"decks\": 0, \"reason\": \"too few decks\"}}, \"unmatched_names\": 22, \"unmatched_entries\": 23, \"basic\": [\"00000000-0000-0000-0000-00000000000f\"], \"names\": {\"thoughtseize\": \"00000000-0000-0000-0000-00000000000a\", \"fatal push\": \"00000000-0000-0000-0000-00000000000b\", \"fable of the mirror-breaker // reflection of kiki-jiki\": \"00000000-0000-0000-0000-00000000000c\", \"fable of the mirror-breaker\": \"00000000-0000-0000-0000-00000000000c\", \"reflection of kiki-jiki\": \"00000000-0000-0000-0000-00000000000c\", \"superior spider-man\": \"00000000-0000-0000-0000-00000000000d\", \"island\": \"00000000-0000-0000-0000-00000000000f\", \"\\u00e6ther vial\": \"00000000-0000-0000-0000-000000000011\", \"black lotus\": \"00000000-0000-0000-0000-000000000012\"}, \"ambiguous\": [\"lightning bolt\", \"pick your poison\"]}",
+   "error": "malformed"
+  },
+  {
+   "text": "{\"kind\": \"cardscanner-play-data\", \"version\": 1, \"as_of\": \"2026-11-10\", \"window_days\": 60, \"built_at\": \"2026-11-10T07:41:02Z\", \"formats\": {\"modern\": {\"decks\": 16831, \"events\": 256, \"sources\": {\"mtgo\": {\"decks\": 6146, \"events\": 177, \"weighted\": true}, \"paper\": {\"decks\": 10685, \"events\": 79, \"weighted\": true}}, \"cards\": {\"00000000-0000-0000-0000-00000000000a\": [2689]}}}, \"skipped\": {\"standard\": {\"decks\": 0, \"reason\": \"too few decks\"}}, \"unmatched_names\": 22, \"unmatched_entries\": 23, \"basic\": [\"00000000-0000-0000-0000-00000000000f\"], \"names\": {\"thoughtseize\": \"00000000-0000-0000-0000-00000000000a\", \"fatal push\": \"00000000-0000-0000-0000-00000000000b\", \"fable of the mirror-breaker // reflection of kiki-jiki\": \"00000000-0000-0000-0000-00000000000c\", \"fable of the mirror-breaker\": \"00000000-0000-0000-0000-00000000000c\", \"reflection of kiki-jiki\": \"00000000-0000-0000-0000-00000000000c\", \"superior spider-man\": \"00000000-0000-0000-0000-00000000000d\", \"island\": \"00000000-0000-0000-0000-00000000000f\", \"\\u00e6ther vial\": \"00000000-0000-0000-0000-000000000011\", \"black lotus\": \"00000000-0000-0000-0000-000000000012\"}, \"ambiguous\": [\"lightning bolt\", \"pick your poison\"]}",
+   "error": "malformed"
+  },
+  {
+   "text": "{\"kind\": \"cardscanner-play-data\", \"version\": 1, \"as_of\": \"2026-11-10\", \"window_days\": 60, \"built_at\": \"2026-11-10T07:41:02Z\", \"formats\": {\"modern\": {\"decks\": 16831, \"events\": 256, \"sources\": {\"mtgo\": {\"decks\": 6146, \"events\": 177, \"weighted\": true}, \"paper\": {\"decks\": 10685, \"events\": 79, \"weighted\": true}}, \"cards\": {\"00000000-0000-0000-0000-00000000000a\": [2689, 9, 1]}}}, \"skipped\": {\"standard\": {\"decks\": 0, \"reason\": \"too few decks\"}}, \"unmatched_names\": 22, \"unmatched_entries\": 23, \"basic\": [\"00000000-0000-0000-0000-00000000000f\"], \"names\": {\"thoughtseize\": \"00000000-0000-0000-0000-00000000000a\", \"fatal push\": \"00000000-0000-0000-0000-00000000000b\", \"fable of the mirror-breaker // reflection of kiki-jiki\": \"00000000-0000-0000-0000-00000000000c\", \"fable of the mirror-breaker\": \"00000000-0000-0000-0000-00000000000c\", \"reflection of kiki-jiki\": \"00000000-0000-0000-0000-00000000000c\", \"superior spider-man\": \"00000000-0000-0000-0000-00000000000d\", \"island\": \"00000000-0000-0000-0000-00000000000f\", \"\\u00e6ther vial\": \"00000000-0000-0000-0000-000000000011\", \"black lotus\": \"00000000-0000-0000-0000-000000000012\"}, \"ambiguous\": [\"lightning bolt\", \"pick your poison\"]}",
+   "error": "malformed"
+  },
+  {
+   "text": "{\"kind\": \"cardscanner-play-data\", \"version\": 1, \"as_of\": \"2026-11-10\", \"window_days\": 60, \"built_at\": \"2026-11-10T07:41:02Z\", \"formats\": {\"modern\": {\"decks\": 16831, \"events\": 256, \"sources\": {\"mtgo\": {\"decks\": 6146, \"events\": 177, \"weighted\": true}, \"paper\": {\"decks\": 10685, \"events\": 79, \"weighted\": true}}, \"cards\": {\"00000000-0000-0000-0000-00000000000a\": [true, 1]}}}, \"skipped\": {\"standard\": {\"decks\": 0, \"reason\": \"too few decks\"}}, \"unmatched_names\": 22, \"unmatched_entries\": 23, \"basic\": [\"00000000-0000-0000-0000-00000000000f\"], \"names\": {\"thoughtseize\": \"00000000-0000-0000-0000-00000000000a\", \"fatal push\": \"00000000-0000-0000-0000-00000000000b\", \"fable of the mirror-breaker // reflection of kiki-jiki\": \"00000000-0000-0000-0000-00000000000c\", \"fable of the mirror-breaker\": \"00000000-0000-0000-0000-00000000000c\", \"reflection of kiki-jiki\": \"00000000-0000-0000-0000-00000000000c\", \"superior spider-man\": \"00000000-0000-0000-0000-00000000000d\", \"island\": \"00000000-0000-0000-0000-00000000000f\", \"\\u00e6ther vial\": \"00000000-0000-0000-0000-000000000011\", \"black lotus\": \"00000000-0000-0000-0000-000000000012\"}, \"ambiguous\": [\"lightning bolt\", \"pick your poison\"]}",
+   "error": "malformed"
+  },
+  {
+   "text": "{\"kind\": \"cardscanner-play-data\", \"version\": 1, \"as_of\": \"2026-11-10\", \"window_days\": 60, \"built_at\": \"2026-11-10T07:41:02Z\", \"formats\": {\"modern\": {\"decks\": 16831, \"events\": 256, \"sources\": {\"mtgo\": {\"decks\": 6146, \"events\": 177, \"weighted\": true}, \"paper\": {\"decks\": 10685, \"events\": 79, \"weighted\": true}}, \"cards\": {\"00000000-0000-0000-0000-00000000000a\": [2689.0, 9]}}}, \"skipped\": {\"standard\": {\"decks\": 0, \"reason\": \"too few decks\"}}, \"unmatched_names\": 22, \"unmatched_entries\": 23, \"basic\": [\"00000000-0000-0000-0000-00000000000f\"], \"names\": {\"thoughtseize\": \"00000000-0000-0000-0000-00000000000a\", \"fatal push\": \"00000000-0000-0000-0000-00000000000b\", \"fable of the mirror-breaker // reflection of kiki-jiki\": \"00000000-0000-0000-0000-00000000000c\", \"fable of the mirror-breaker\": \"00000000-0000-0000-0000-00000000000c\", \"reflection of kiki-jiki\": \"00000000-0000-0000-0000-00000000000c\", \"superior spider-man\": \"00000000-0000-0000-0000-00000000000d\", \"island\": \"00000000-0000-0000-0000-00000000000f\", \"\\u00e6ther vial\": \"00000000-0000-0000-0000-000000000011\", \"black lotus\": \"00000000-0000-0000-0000-000000000012\"}, \"ambiguous\": [\"lightning bolt\", \"pick your poison\"]}",
+   "error": "malformed"
+  },
+  {
+   "text": "{\"kind\": \"cardscanner-play-data\", \"version\": 1, \"as_of\": \"2026-11-10\", \"window_days\": 60, \"built_at\": \"2026-11-10T07:41:02Z\", \"formats\": {\"modern\": {\"decks\": 16831, \"events\": 256, \"sources\": {\"mtgo\": {\"decks\": 6146, \"events\": 177, \"weighted\": true}, \"paper\": {\"decks\": 10685, \"events\": 79, \"weighted\": true}}, \"cards\": {\"00000000-0000-0000-0000-00000000000a\": [\"2689\", 9]}}}, \"skipped\": {\"standard\": {\"decks\": 0, \"reason\": \"too few decks\"}}, \"unmatched_names\": 22, \"unmatched_entries\": 23, \"basic\": [\"00000000-0000-0000-0000-00000000000f\"], \"names\": {\"thoughtseize\": \"00000000-0000-0000-0000-00000000000a\", \"fatal push\": \"00000000-0000-0000-0000-00000000000b\", \"fable of the mirror-breaker // reflection of kiki-jiki\": \"00000000-0000-0000-0000-00000000000c\", \"fable of the mirror-breaker\": \"00000000-0000-0000-0000-00000000000c\", \"reflection of kiki-jiki\": \"00000000-0000-0000-0000-00000000000c\", \"superior spider-man\": \"00000000-0000-0000-0000-00000000000d\", \"island\": \"00000000-0000-0000-0000-00000000000f\", \"\\u00e6ther vial\": \"00000000-0000-0000-0000-000000000011\", \"black lotus\": \"00000000-0000-0000-0000-000000000012\"}, \"ambiguous\": [\"lightning bolt\", \"pick your poison\"]}",
+   "error": "malformed"
+  },
+  {
+   "text": "{\"kind\": \"cardscanner-play-data\", \"version\": 1, \"as_of\": \"2026-11-10\", \"window_days\": 60, \"built_at\": \"2026-11-10T07:41:02Z\", \"formats\": {\"modern\": {\"decks\": 16831, \"events\": 256, \"sources\": {\"mtgo\": {\"decks\": 6146, \"events\": 177, \"weighted\": true}, \"paper\": {\"decks\": 10685, \"events\": 79, \"weighted\": true}}, \"cards\": {\"00000000-0000-0000-0000-00000000000a\": null}}}, \"skipped\": {\"standard\": {\"decks\": 0, \"reason\": \"too few decks\"}}, \"unmatched_names\": 22, \"unmatched_entries\": 23, \"basic\": [\"00000000-0000-0000-0000-00000000000f\"], \"names\": {\"thoughtseize\": \"00000000-0000-0000-0000-00000000000a\", \"fatal push\": \"00000000-0000-0000-0000-00000000000b\", \"fable of the mirror-breaker // reflection of kiki-jiki\": \"00000000-0000-0000-0000-00000000000c\", \"fable of the mirror-breaker\": \"00000000-0000-0000-0000-00000000000c\", \"reflection of kiki-jiki\": \"00000000-0000-0000-0000-00000000000c\", \"superior spider-man\": \"00000000-0000-0000-0000-00000000000d\", \"island\": \"00000000-0000-0000-0000-00000000000f\", \"\\u00e6ther vial\": \"00000000-0000-0000-0000-000000000011\", \"black lotus\": \"00000000-0000-0000-0000-000000000012\"}, \"ambiguous\": [\"lightning bolt\", \"pick your poison\"]}",
+   "error": "malformed"
+  },
+  {
+   "text": "{\"kind\": \"cardscanner-play-data\", \"version\": 1, \"as_of\": \"2026-11-10\", \"window_days\": 60, \"built_at\": \"2026-11-10T07:41:02Z\", \"formats\": {\"modern\": {\"decks\": 16831, \"events\": 256, \"sources\": {\"mtgo\": {\"decks\": 6146, \"events\": 177, \"weighted\": true}, \"paper\": {\"decks\": 10685, \"events\": 79, \"weighted\": true}}, \"cards\": []}}, \"skipped\": {\"standard\": {\"decks\": 0, \"reason\": \"too few decks\"}}, \"unmatched_names\": 22, \"unmatched_entries\": 23, \"basic\": [\"00000000-0000-0000-0000-00000000000f\"], \"names\": {\"thoughtseize\": \"00000000-0000-0000-0000-00000000000a\", \"fatal push\": \"00000000-0000-0000-0000-00000000000b\", \"fable of the mirror-breaker // reflection of kiki-jiki\": \"00000000-0000-0000-0000-00000000000c\", \"fable of the mirror-breaker\": \"00000000-0000-0000-0000-00000000000c\", \"reflection of kiki-jiki\": \"00000000-0000-0000-0000-00000000000c\", \"superior spider-man\": \"00000000-0000-0000-0000-00000000000d\", \"island\": \"00000000-0000-0000-0000-00000000000f\", \"\\u00e6ther vial\": \"00000000-0000-0000-0000-000000000011\", \"black lotus\": \"00000000-0000-0000-0000-000000000012\"}, \"ambiguous\": [\"lightning bolt\", \"pick your poison\"]}",
+   "error": "malformed"
+  },
+  {
+   "text": "{\"kind\": \"cardscanner-play-data\", \"version\": 1, \"as_of\": \"2026-11-10\", \"window_days\": 60, \"built_at\": \"2026-11-10T07:41:02Z\", \"formats\": {\"modern\": {\"decks\": \"many\", \"events\": 256, \"sources\": {\"mtgo\": {\"decks\": 6146, \"events\": 177, \"weighted\": true}, \"paper\": {\"decks\": 10685, \"events\": 79, \"weighted\": true}}, \"cards\": {\"00000000-0000-0000-0000-00000000000a\": [2689, 9]}}}, \"skipped\": {\"standard\": {\"decks\": 0, \"reason\": \"too few decks\"}}, \"unmatched_names\": 22, \"unmatched_entries\": 23, \"basic\": [\"00000000-0000-0000-0000-00000000000f\"], \"names\": {\"thoughtseize\": \"00000000-0000-0000-0000-00000000000a\", \"fatal push\": \"00000000-0000-0000-0000-00000000000b\", \"fable of the mirror-breaker // reflection of kiki-jiki\": \"00000000-0000-0000-0000-00000000000c\", \"fable of the mirror-breaker\": \"00000000-0000-0000-0000-00000000000c\", \"reflection of kiki-jiki\": \"00000000-0000-0000-0000-00000000000c\", \"superior spider-man\": \"00000000-0000-0000-0000-00000000000d\", \"island\": \"00000000-0000-0000-0000-00000000000f\", \"\\u00e6ther vial\": \"00000000-0000-0000-0000-000000000011\", \"black lotus\": \"00000000-0000-0000-0000-000000000012\"}, \"ambiguous\": [\"lightning bolt\", \"pick your poison\"]}",
+   "error": "malformed"
+  },
+  {
+   "text": "{\"kind\": \"cardscanner-play-data\", \"version\": 1, \"as_of\": \"2026-11-10\", \"window_days\": 60, \"built_at\": \"2026-11-10T07:41:02Z\", \"formats\": {\"modern\": {\"decks\": true, \"events\": 256, \"sources\": {\"mtgo\": {\"decks\": 6146, \"events\": 177, \"weighted\": true}, \"paper\": {\"decks\": 10685, \"events\": 79, \"weighted\": true}}, \"cards\": {\"00000000-0000-0000-0000-00000000000a\": [2689, 9]}}}, \"skipped\": {\"standard\": {\"decks\": 0, \"reason\": \"too few decks\"}}, \"unmatched_names\": 22, \"unmatched_entries\": 23, \"basic\": [\"00000000-0000-0000-0000-00000000000f\"], \"names\": {\"thoughtseize\": \"00000000-0000-0000-0000-00000000000a\", \"fatal push\": \"00000000-0000-0000-0000-00000000000b\", \"fable of the mirror-breaker // reflection of kiki-jiki\": \"00000000-0000-0000-0000-00000000000c\", \"fable of the mirror-breaker\": \"00000000-0000-0000-0000-00000000000c\", \"reflection of kiki-jiki\": \"00000000-0000-0000-0000-00000000000c\", \"superior spider-man\": \"00000000-0000-0000-0000-00000000000d\", \"island\": \"00000000-0000-0000-0000-00000000000f\", \"\\u00e6ther vial\": \"00000000-0000-0000-0000-000000000011\", \"black lotus\": \"00000000-0000-0000-0000-000000000012\"}, \"ambiguous\": [\"lightning bolt\", \"pick your poison\"]}",
+   "error": "malformed"
+  },
+  {
+   "text": "{\"kind\": \"cardscanner-play-data\", \"version\": 1, \"as_of\": \"2026-11-10\", \"window_days\": 60, \"built_at\": \"2026-11-10T07:41:02Z\", \"formats\": {\"modern\": {\"decks\": 16831, \"events\": null, \"sources\": {\"mtgo\": {\"decks\": 6146, \"events\": 177, \"weighted\": true}, \"paper\": {\"decks\": 10685, \"events\": 79, \"weighted\": true}}, \"cards\": {\"00000000-0000-0000-0000-00000000000a\": [2689, 9]}}}, \"skipped\": {\"standard\": {\"decks\": 0, \"reason\": \"too few decks\"}}, \"unmatched_names\": 22, \"unmatched_entries\": 23, \"basic\": [\"00000000-0000-0000-0000-00000000000f\"], \"names\": {\"thoughtseize\": \"00000000-0000-0000-0000-00000000000a\", \"fatal push\": \"00000000-0000-0000-0000-00000000000b\", \"fable of the mirror-breaker // reflection of kiki-jiki\": \"00000000-0000-0000-0000-00000000000c\", \"fable of the mirror-breaker\": \"00000000-0000-0000-0000-00000000000c\", \"reflection of kiki-jiki\": \"00000000-0000-0000-0000-00000000000c\", \"superior spider-man\": \"00000000-0000-0000-0000-00000000000d\", \"island\": \"00000000-0000-0000-0000-00000000000f\", \"\\u00e6ther vial\": \"00000000-0000-0000-0000-000000000011\", \"black lotus\": \"00000000-0000-0000-0000-000000000012\"}, \"ambiguous\": [\"lightning bolt\", \"pick your poison\"]}",
+   "error": "malformed"
+  },
+  {
+   "text": "{\"kind\": \"cardscanner-play-data\", \"version\": 1, \"as_of\": \"2026-11-10\", \"window_days\": 60, \"built_at\": \"2026-11-10T07:41:02Z\", \"formats\": {\"modern\": {\"decks\": 16831.0, \"events\": 256, \"sources\": {\"mtgo\": {\"decks\": 6146, \"events\": 177, \"weighted\": true}, \"paper\": {\"decks\": 10685, \"events\": 79, \"weighted\": true}}, \"cards\": {\"00000000-0000-0000-0000-00000000000a\": [2689, 9]}}}, \"skipped\": {\"standard\": {\"decks\": 0, \"reason\": \"too few decks\"}}, \"unmatched_names\": 22, \"unmatched_entries\": 23, \"basic\": [\"00000000-0000-0000-0000-00000000000f\"], \"names\": {\"thoughtseize\": \"00000000-0000-0000-0000-00000000000a\", \"fatal push\": \"00000000-0000-0000-0000-00000000000b\", \"fable of the mirror-breaker // reflection of kiki-jiki\": \"00000000-0000-0000-0000-00000000000c\", \"fable of the mirror-breaker\": \"00000000-0000-0000-0000-00000000000c\", \"reflection of kiki-jiki\": \"00000000-0000-0000-0000-00000000000c\", \"superior spider-man\": \"00000000-0000-0000-0000-00000000000d\", \"island\": \"00000000-0000-0000-0000-00000000000f\", \"\\u00e6ther vial\": \"00000000-0000-0000-0000-000000000011\", \"black lotus\": \"00000000-0000-0000-0000-000000000012\"}, \"ambiguous\": [\"lightning bolt\", \"pick your poison\"]}",
+   "error": "malformed"
+  },
+  {
+   "text": "{\"kind\": \"cardscanner-play-data\", \"version\": 1, \"as_of\": \"2026-11-10\", \"window_days\": 60, \"built_at\": \"2026-11-10T07:41:02Z\", \"formats\": {\"modern\": {\"decks\": 16831, \"events\": 256, \"sources\": {\"mtgo\": {\"decks\": 1}}, \"cards\": {\"00000000-0000-0000-0000-00000000000a\": [2689, 9]}}}, \"skipped\": {\"standard\": {\"decks\": 0, \"reason\": \"too few decks\"}}, \"unmatched_names\": 22, \"unmatched_entries\": 23, \"basic\": [\"00000000-0000-0000-0000-00000000000f\"], \"names\": {\"thoughtseize\": \"00000000-0000-0000-0000-00000000000a\", \"fatal push\": \"00000000-0000-0000-0000-00000000000b\", \"fable of the mirror-breaker // reflection of kiki-jiki\": \"00000000-0000-0000-0000-00000000000c\", \"fable of the mirror-breaker\": \"00000000-0000-0000-0000-00000000000c\", \"reflection of kiki-jiki\": \"00000000-0000-0000-0000-00000000000c\", \"superior spider-man\": \"00000000-0000-0000-0000-00000000000d\", \"island\": \"00000000-0000-0000-0000-00000000000f\", \"\\u00e6ther vial\": \"00000000-0000-0000-0000-000000000011\", \"black lotus\": \"00000000-0000-0000-0000-000000000012\"}, \"ambiguous\": [\"lightning bolt\", \"pick your poison\"]}",
+   "error": "malformed"
+  },
+  {
+   "text": "{\"kind\": \"cardscanner-play-data\", \"version\": 1, \"as_of\": \"2026-11-10\", \"window_days\": 60, \"built_at\": \"2026-11-10T07:41:02Z\", \"formats\": {\"modern\": {\"decks\": 16831, \"events\": 256, \"sources\": {\"mtgo\": {\"decks\": 1, \"events\": 1, \"weighted\": 1}}, \"cards\": {\"00000000-0000-0000-0000-00000000000a\": [2689, 9]}}}, \"skipped\": {\"standard\": {\"decks\": 0, \"reason\": \"too few decks\"}}, \"unmatched_names\": 22, \"unmatched_entries\": 23, \"basic\": [\"00000000-0000-0000-0000-00000000000f\"], \"names\": {\"thoughtseize\": \"00000000-0000-0000-0000-00000000000a\", \"fatal push\": \"00000000-0000-0000-0000-00000000000b\", \"fable of the mirror-breaker // reflection of kiki-jiki\": \"00000000-0000-0000-0000-00000000000c\", \"fable of the mirror-breaker\": \"00000000-0000-0000-0000-00000000000c\", \"reflection of kiki-jiki\": \"00000000-0000-0000-0000-00000000000c\", \"superior spider-man\": \"00000000-0000-0000-0000-00000000000d\", \"island\": \"00000000-0000-0000-0000-00000000000f\", \"\\u00e6ther vial\": \"00000000-0000-0000-0000-000000000011\", \"black lotus\": \"00000000-0000-0000-0000-000000000012\"}, \"ambiguous\": [\"lightning bolt\", \"pick your poison\"]}",
+   "error": "malformed"
+  },
+  {
+   "text": "{\"kind\": \"cardscanner-play-data\", \"version\": 1, \"as_of\": \"2026-11-10\", \"window_days\": 60, \"built_at\": \"2026-11-10T07:41:02Z\", \"formats\": {\"modern\": {\"decks\": 16831, \"events\": 256, \"sources\": [], \"cards\": {\"00000000-0000-0000-0000-00000000000a\": [2689, 9]}}}, \"skipped\": {\"standard\": {\"decks\": 0, \"reason\": \"too few decks\"}}, \"unmatched_names\": 22, \"unmatched_entries\": 23, \"basic\": [\"00000000-0000-0000-0000-00000000000f\"], \"names\": {\"thoughtseize\": \"00000000-0000-0000-0000-00000000000a\", \"fatal push\": \"00000000-0000-0000-0000-00000000000b\", \"fable of the mirror-breaker // reflection of kiki-jiki\": \"00000000-0000-0000-0000-00000000000c\", \"fable of the mirror-breaker\": \"00000000-0000-0000-0000-00000000000c\", \"reflection of kiki-jiki\": \"00000000-0000-0000-0000-00000000000c\", \"superior spider-man\": \"00000000-0000-0000-0000-00000000000d\", \"island\": \"00000000-0000-0000-0000-00000000000f\", \"\\u00e6ther vial\": \"00000000-0000-0000-0000-000000000011\", \"black lotus\": \"00000000-0000-0000-0000-000000000012\"}, \"ambiguous\": [\"lightning bolt\", \"pick your poison\"]}",
+   "error": "malformed"
+  },
+  {
+   "text": "{\"kind\": \"cardscanner-play-data\", \"version\": 1, \"as_of\": \"2026-11-10\", \"window_days\": 60, \"built_at\": \"2026-11-10T07:41:02Z\", \"formats\": {\"modern\": \"x\"}, \"skipped\": {\"standard\": {\"decks\": 0, \"reason\": \"too few decks\"}}, \"unmatched_names\": 22, \"unmatched_entries\": 23, \"basic\": [\"00000000-0000-0000-0000-00000000000f\"], \"names\": {\"thoughtseize\": \"00000000-0000-0000-0000-00000000000a\", \"fatal push\": \"00000000-0000-0000-0000-00000000000b\", \"fable of the mirror-breaker // reflection of kiki-jiki\": \"00000000-0000-0000-0000-00000000000c\", \"fable of the mirror-breaker\": \"00000000-0000-0000-0000-00000000000c\", \"reflection of kiki-jiki\": \"00000000-0000-0000-0000-00000000000c\", \"superior spider-man\": \"00000000-0000-0000-0000-00000000000d\", \"island\": \"00000000-0000-0000-0000-00000000000f\", \"\\u00e6ther vial\": \"00000000-0000-0000-0000-000000000011\", \"black lotus\": \"00000000-0000-0000-0000-000000000012\"}, \"ambiguous\": [\"lightning bolt\", \"pick your poison\"]}",
+   "error": "malformed"
+  },
+  {
+   "text": "{\"kind\": \"cardscanner-play-data\", \"version\": 1, \"as_of\": \"2026-11-10\", \"window_days\": 60, \"built_at\": \"2026-11-10T07:41:02Z\", \"formats\": [], \"skipped\": {\"standard\": {\"decks\": 0, \"reason\": \"too few decks\"}}, \"unmatched_names\": 22, \"unmatched_entries\": 23, \"basic\": [\"00000000-0000-0000-0000-00000000000f\"], \"names\": {\"thoughtseize\": \"00000000-0000-0000-0000-00000000000a\", \"fatal push\": \"00000000-0000-0000-0000-00000000000b\", \"fable of the mirror-breaker // reflection of kiki-jiki\": \"00000000-0000-0000-0000-00000000000c\", \"fable of the mirror-breaker\": \"00000000-0000-0000-0000-00000000000c\", \"reflection of kiki-jiki\": \"00000000-0000-0000-0000-00000000000c\", \"superior spider-man\": \"00000000-0000-0000-0000-00000000000d\", \"island\": \"00000000-0000-0000-0000-00000000000f\", \"\\u00e6ther vial\": \"00000000-0000-0000-0000-000000000011\", \"black lotus\": \"00000000-0000-0000-0000-000000000012\"}, \"ambiguous\": [\"lightning bolt\", \"pick your poison\"]}",
+   "error": "malformed"
+  },
+  {
+   "text": "{\"kind\": \"cardscanner-play-data\", \"version\": 1, \"as_of\": \"2026-11-10\", \"window_days\": 60, \"built_at\": \"2026-11-10T07:41:02Z\", \"formats\": {\"pioneer\": {\"decks\": 1437, \"events\": 97, \"sources\": {\"mtgo\": {\"decks\": 1437, \"events\": 177, \"weighted\": true}, \"paper\": {\"decks\": 130, \"events\": 79, \"weighted\": false}}, \"cards\": {\"00000000-0000-0000-0000-00000000000a\": [1500, 30]}}, \"modern\": {\"decks\": 16831, \"events\": 256, \"sources\": {\"mtgo\": {\"decks\": 6146, \"events\": 177, \"weighted\": true}, \"paper\": {\"decks\": 10685, \"events\": 79, \"weighted\": true}}, \"cards\": {\"00000000-0000-0000-0000-00000000000a\": [2689, 9], \"00000000-0000-0000-0000-00000000000e\": [2560, 12], \"00000000-0000-0000-0000-00000000000b\": [1000, 50], \"00000000-0000-0000-0000-00000000000c\": [232, 297], \"00000000-0000-0000-0000-00000000000d\": [178, 325], \"00000000-0000-0000-0000-000000000011\": [1, 2400]}}, \"legacy\": {\"decks\": 5768, \"events\": 256, \"sources\": {\"mtgo\": {\"decks\": 3038, \"events\": 177, \"weighted\": true}, \"paper\": {\"decks\": 2730, \"events\": 79, \"weighted\": true}}, \"cards\": {\"00000000-0000-0000-0000-00000000000a\": [3100, 4], \"00000000-0000-0000-0000-00000000000e\": [2200, 15], \"00000000-0000-0000-0000-000000000011\": [450, 80]}}, \"vintage\": {\"decks\": 2631, \"events\": 256, \"sources\": {\"mtgo\": {\"decks\": 1479, \"events\": 177, \"weighted\": true}, \"paper\": {\"decks\": 1152, \"events\": 79, \"weighted\": true}}, \"cards\": {\"00000000-0000-0000-0000-000000000012\": [9500, 1], \"00000000-0000-0000-0000-000000000011\": [1200, 30]}}}, \"skipped\": {\"standard\": {\"decks\": 0, \"reason\": \"too few decks\"}}, \"unmatched_names\": 22, \"unmatched_entries\": 23, \"basic\": \"island\", \"names\": {\"thoughtseize\": \"00000000-0000-0000-0000-00000000000a\", \"fatal push\": \"00000000-0000-0000-0000-00000000000b\", \"fable of the mirror-breaker // reflection of kiki-jiki\": \"00000000-0000-0000-0000-00000000000c\", \"fable of the mirror-breaker\": \"00000000-0000-0000-0000-00000000000c\", \"reflection of kiki-jiki\": \"00000000-0000-0000-0000-00000000000c\", \"superior spider-man\": \"00000000-0000-0000-0000-00000000000d\", \"island\": \"00000000-0000-0000-0000-00000000000f\", \"\\u00e6ther vial\": \"00000000-0000-0000-0000-000000000011\", \"black lotus\": \"00000000-0000-0000-0000-000000000012\"}, \"ambiguous\": [\"lightning bolt\", \"pick your poison\"]}",
+   "error": "malformed"
+  },
+  {
+   "text": "{\"kind\": \"cardscanner-play-data\", \"version\": 1, \"as_of\": \"2026-11-10\", \"window_days\": 60, \"built_at\": \"2026-11-10T07:41:02Z\", \"formats\": {\"pioneer\": {\"decks\": 1437, \"events\": 97, \"sources\": {\"mtgo\": {\"decks\": 1437, \"events\": 177, \"weighted\": true}, \"paper\": {\"decks\": 130, \"events\": 79, \"weighted\": false}}, \"cards\": {\"00000000-0000-0000-0000-00000000000a\": [1500, 30]}}, \"modern\": {\"decks\": 16831, \"events\": 256, \"sources\": {\"mtgo\": {\"decks\": 6146, \"events\": 177, \"weighted\": true}, \"paper\": {\"decks\": 10685, \"events\": 79, \"weighted\": true}}, \"cards\": {\"00000000-0000-0000-0000-00000000000a\": [2689, 9], \"00000000-0000-0000-0000-00000000000e\": [2560, 12], \"00000000-0000-0000-0000-00000000000b\": [1000, 50], \"00000000-0000-0000-0000-00000000000c\": [232, 297], \"00000000-0000-0000-0000-00000000000d\": [178, 325], \"00000000-0000-0000-0000-000000000011\": [1, 2400]}}, \"legacy\": {\"decks\": 5768, \"events\": 256, \"sources\": {\"mtgo\": {\"decks\": 3038, \"events\": 177, \"weighted\": true}, \"paper\": {\"decks\": 2730, \"events\": 79, \"weighted\": true}}, \"cards\": {\"00000000-0000-0000-0000-00000000000a\": [3100, 4], \"00000000-0000-0000-0000-00000000000e\": [2200, 15], \"00000000-0000-0000-0000-000000000011\": [450, 80]}}, \"vintage\": {\"decks\": 2631, \"events\": 256, \"sources\": {\"mtgo\": {\"decks\": 1479, \"events\": 177, \"weighted\": true}, \"paper\": {\"decks\": 1152, \"events\": 79, \"weighted\": true}}, \"cards\": {\"00000000-0000-0000-0000-000000000012\": [9500, 1], \"00000000-0000-0000-0000-000000000011\": [1200, 30]}}}, \"skipped\": {\"standard\": {\"decks\": 0, \"reason\": \"too few decks\"}}, \"unmatched_names\": 22, \"unmatched_entries\": 23, \"basic\": [1], \"names\": {\"thoughtseize\": \"00000000-0000-0000-0000-00000000000a\", \"fatal push\": \"00000000-0000-0000-0000-00000000000b\", \"fable of the mirror-breaker // reflection of kiki-jiki\": \"00000000-0000-0000-0000-00000000000c\", \"fable of the mirror-breaker\": \"00000000-0000-0000-0000-00000000000c\", \"reflection of kiki-jiki\": \"00000000-0000-0000-0000-00000000000c\", \"superior spider-man\": \"00000000-0000-0000-0000-00000000000d\", \"island\": \"00000000-0000-0000-0000-00000000000f\", \"\\u00e6ther vial\": \"00000000-0000-0000-0000-000000000011\", \"black lotus\": \"00000000-0000-0000-0000-000000000012\"}, \"ambiguous\": [\"lightning bolt\", \"pick your poison\"]}",
+   "error": "malformed"
+  },
+  {
+   "text": "{\"kind\": \"cardscanner-play-data\", \"version\": 1, \"as_of\": \"2026-11-10\", \"window_days\": 60, \"built_at\": \"2026-11-10T07:41:02Z\", \"formats\": {\"pioneer\": {\"decks\": 1437, \"events\": 97, \"sources\": {\"mtgo\": {\"decks\": 1437, \"events\": 177, \"weighted\": true}, \"paper\": {\"decks\": 130, \"events\": 79, \"weighted\": false}}, \"cards\": {\"00000000-0000-0000-0000-00000000000a\": [1500, 30]}}, \"modern\": {\"decks\": 16831, \"events\": 256, \"sources\": {\"mtgo\": {\"decks\": 6146, \"events\": 177, \"weighted\": true}, \"paper\": {\"decks\": 10685, \"events\": 79, \"weighted\": true}}, \"cards\": {\"00000000-0000-0000-0000-00000000000a\": [2689, 9], \"00000000-0000-0000-0000-00000000000e\": [2560, 12], \"00000000-0000-0000-0000-00000000000b\": [1000, 50], \"00000000-0000-0000-0000-00000000000c\": [232, 297], \"00000000-0000-0000-0000-00000000000d\": [178, 325], \"00000000-0000-0000-0000-000000000011\": [1, 2400]}}, \"legacy\": {\"decks\": 5768, \"events\": 256, \"sources\": {\"mtgo\": {\"decks\": 3038, \"events\": 177, \"weighted\": true}, \"paper\": {\"decks\": 2730, \"events\": 79, \"weighted\": true}}, \"cards\": {\"00000000-0000-0000-0000-00000000000a\": [3100, 4], \"00000000-0000-0000-0000-00000000000e\": [2200, 15], \"00000000-0000-0000-0000-000000000011\": [450, 80]}}, \"vintage\": {\"decks\": 2631, \"events\": 256, \"sources\": {\"mtgo\": {\"decks\": 1479, \"events\": 177, \"weighted\": true}, \"paper\": {\"decks\": 1152, \"events\": 79, \"weighted\": true}}, \"cards\": {\"00000000-0000-0000-0000-000000000012\": [9500, 1], \"00000000-0000-0000-0000-000000000011\": [1200, 30]}}}, \"skipped\": {\"standard\": {\"decks\": 0, \"reason\": \"too few decks\"}}, \"unmatched_names\": 22, \"unmatched_entries\": 23, \"basic\": [\"00000000-0000-0000-0000-00000000000f\"], \"names\": {\"x\": 1}, \"ambiguous\": [\"lightning bolt\", \"pick your poison\"]}",
+   "error": "malformed"
+  },
+  {
+   "text": "{\"kind\": \"cardscanner-play-data\", \"version\": 1, \"as_of\": \"2026-11-10\", \"window_days\": 60, \"built_at\": \"2026-11-10T07:41:02Z\", \"formats\": {\"pioneer\": {\"decks\": 1437, \"events\": 97, \"sources\": {\"mtgo\": {\"decks\": 1437, \"events\": 177, \"weighted\": true}, \"paper\": {\"decks\": 130, \"events\": 79, \"weighted\": false}}, \"cards\": {\"00000000-0000-0000-0000-00000000000a\": [1500, 30]}}, \"modern\": {\"decks\": 16831, \"events\": 256, \"sources\": {\"mtgo\": {\"decks\": 6146, \"events\": 177, \"weighted\": true}, \"paper\": {\"decks\": 10685, \"events\": 79, \"weighted\": true}}, \"cards\": {\"00000000-0000-0000-0000-00000000000a\": [2689, 9], \"00000000-0000-0000-0000-00000000000e\": [2560, 12], \"00000000-0000-0000-0000-00000000000b\": [1000, 50], \"00000000-0000-0000-0000-00000000000c\": [232, 297], \"00000000-0000-0000-0000-00000000000d\": [178, 325], \"00000000-0000-0000-0000-000000000011\": [1, 2400]}}, \"legacy\": {\"decks\": 5768, \"events\": 256, \"sources\": {\"mtgo\": {\"decks\": 3038, \"events\": 177, \"weighted\": true}, \"paper\": {\"decks\": 2730, \"events\": 79, \"weighted\": true}}, \"cards\": {\"00000000-0000-0000-0000-00000000000a\": [3100, 4], \"00000000-0000-0000-0000-00000000000e\": [2200, 15], \"00000000-0000-0000-0000-000000000011\": [450, 80]}}, \"vintage\": {\"decks\": 2631, \"events\": 256, \"sources\": {\"mtgo\": {\"decks\": 1479, \"events\": 177, \"weighted\": true}, \"paper\": {\"decks\": 1152, \"events\": 79, \"weighted\": true}}, \"cards\": {\"00000000-0000-0000-0000-000000000012\": [9500, 1], \"00000000-0000-0000-0000-000000000011\": [1200, 30]}}}, \"skipped\": {\"standard\": {\"decks\": 0, \"reason\": \"too few decks\"}}, \"unmatched_names\": 22, \"unmatched_entries\": 23, \"basic\": [\"00000000-0000-0000-0000-00000000000f\"], \"names\": [], \"ambiguous\": [\"lightning bolt\", \"pick your poison\"]}",
+   "error": "malformed"
+  },
+  {
+   "text": "{\"kind\": \"cardscanner-play-data\", \"version\": 1, \"as_of\": \"2026-11-10\", \"window_days\": 60, \"built_at\": \"2026-11-10T07:41:02Z\", \"formats\": {\"pioneer\": {\"decks\": 1437, \"events\": 97, \"sources\": {\"mtgo\": {\"decks\": 1437, \"events\": 177, \"weighted\": true}, \"paper\": {\"decks\": 130, \"events\": 79, \"weighted\": false}}, \"cards\": {\"00000000-0000-0000-0000-00000000000a\": [1500, 30]}}, \"modern\": {\"decks\": 16831, \"events\": 256, \"sources\": {\"mtgo\": {\"decks\": 6146, \"events\": 177, \"weighted\": true}, \"paper\": {\"decks\": 10685, \"events\": 79, \"weighted\": true}}, \"cards\": {\"00000000-0000-0000-0000-00000000000a\": [2689, 9], \"00000000-0000-0000-0000-00000000000e\": [2560, 12], \"00000000-0000-0000-0000-00000000000b\": [1000, 50], \"00000000-0000-0000-0000-00000000000c\": [232, 297], \"00000000-0000-0000-0000-00000000000d\": [178, 325], \"00000000-0000-0000-0000-000000000011\": [1, 2400]}}, \"legacy\": {\"decks\": 5768, \"events\": 256, \"sources\": {\"mtgo\": {\"decks\": 3038, \"events\": 177, \"weighted\": true}, \"paper\": {\"decks\": 2730, \"events\": 79, \"weighted\": true}}, \"cards\": {\"00000000-0000-0000-0000-00000000000a\": [3100, 4], \"00000000-0000-0000-0000-00000000000e\": [2200, 15], \"00000000-0000-0000-0000-000000000011\": [450, 80]}}, \"vintage\": {\"decks\": 2631, \"events\": 256, \"sources\": {\"mtgo\": {\"decks\": 1479, \"events\": 177, \"weighted\": true}, \"paper\": {\"decks\": 1152, \"events\": 79, \"weighted\": true}}, \"cards\": {\"00000000-0000-0000-0000-000000000012\": [9500, 1], \"00000000-0000-0000-0000-000000000011\": [1200, 30]}}}, \"skipped\": {\"standard\": {\"decks\": 0, \"reason\": \"too few decks\"}}, \"unmatched_names\": 22, \"unmatched_entries\": 23, \"basic\": [\"00000000-0000-0000-0000-00000000000f\"], \"names\": {\"thoughtseize\": \"00000000-0000-0000-0000-00000000000a\", \"fatal push\": \"00000000-0000-0000-0000-00000000000b\", \"fable of the mirror-breaker // reflection of kiki-jiki\": \"00000000-0000-0000-0000-00000000000c\", \"fable of the mirror-breaker\": \"00000000-0000-0000-0000-00000000000c\", \"reflection of kiki-jiki\": \"00000000-0000-0000-0000-00000000000c\", \"superior spider-man\": \"00000000-0000-0000-0000-00000000000d\", \"island\": \"00000000-0000-0000-0000-00000000000f\", \"\\u00e6ther vial\": \"00000000-0000-0000-0000-000000000011\", \"black lotus\": \"00000000-0000-0000-0000-000000000012\"}, \"ambiguous\": \"x\"}",
+   "error": "malformed"
+  },
+  {
+   "text": "{\"kind\": \"cardscanner-play-data\", \"version\": 1, \"as_of\": \"2026-11-10\", \"window_days\": 60, \"built_at\": \"2026-11-10T07:41:02Z\", \"formats\": {\"pioneer\": {\"decks\": 1437, \"events\": 97, \"sources\": {\"mtgo\": {\"decks\": 1437, \"events\": 177, \"weighted\": true}, \"paper\": {\"decks\": 130, \"events\": 79, \"weighted\": false}}, \"cards\": {\"00000000-0000-0000-0000-00000000000a\": [1500, 30]}}, \"modern\": {\"decks\": 16831, \"events\": 256, \"sources\": {\"mtgo\": {\"decks\": 6146, \"events\": 177, \"weighted\": true}, \"paper\": {\"decks\": 10685, \"events\": 79, \"weighted\": true}}, \"cards\": {\"00000000-0000-0000-0000-00000000000a\": [2689, 9], \"00000000-0000-0000-0000-00000000000e\": [2560, 12], \"00000000-0000-0000-0000-00000000000b\": [1000, 50], \"00000000-0000-0000-0000-00000000000c\": [232, 297], \"00000000-0000-0000-0000-00000000000d\": [178, 325], \"00000000-0000-0000-0000-000000000011\": [1, 2400]}}, \"legacy\": {\"decks\": 5768, \"events\": 256, \"sources\": {\"mtgo\": {\"decks\": 3038, \"events\": 177, \"weighted\": true}, \"paper\": {\"decks\": 2730, \"events\": 79, \"weighted\": true}}, \"cards\": {\"00000000-0000-0000-0000-00000000000a\": [3100, 4], \"00000000-0000-0000-0000-00000000000e\": [2200, 15], \"00000000-0000-0000-0000-000000000011\": [450, 80]}}, \"vintage\": {\"decks\": 2631, \"events\": 256, \"sources\": {\"mtgo\": {\"decks\": 1479, \"events\": 177, \"weighted\": true}, \"paper\": {\"decks\": 1152, \"events\": 79, \"weighted\": true}}, \"cards\": {\"00000000-0000-0000-0000-000000000012\": [9500, 1], \"00000000-0000-0000-0000-000000000011\": [1200, 30]}}}, \"skipped\": {\"standard\": {\"decks\": 0, \"reason\": \"too few decks\"}}, \"unmatched_names\": 22, \"unmatched_entries\": 23, \"basic\": [\"00000000-0000-0000-0000-00000000000f\"], \"names\": {\"thoughtseize\": \"00000000-0000-0000-0000-00000000000a\", \"fatal push\": \"00000000-0000-0000-0000-00000000000b\", \"fable of the mirror-breaker // reflection of kiki-jiki\": \"00000000-0000-0000-0000-00000000000c\", \"fable of the mirror-breaker\": \"00000000-0000-0000-0000-00000000000c\", \"reflection of kiki-jiki\": \"00000000-0000-0000-0000-00000000000c\", \"superior spider-man\": \"00000000-0000-0000-0000-00000000000d\", \"island\": \"00000000-0000-0000-0000-00000000000f\", \"\\u00e6ther vial\": \"00000000-0000-0000-0000-000000000011\", \"black lotus\": \"00000000-0000-0000-0000-000000000012\"}, \"ambiguous\": [null]}",
+   "error": "malformed"
+  },
+  {
+   "text": "{\"kind\": \"cardscanner-play-data\", \"version\": 1, \"as_of\": \"2026-11-10\", \"window_days\": 60.5, \"built_at\": \"2026-11-10T07:41:02Z\", \"formats\": {\"pioneer\": {\"decks\": 1437, \"events\": 97, \"sources\": {\"mtgo\": {\"decks\": 1437, \"events\": 177, \"weighted\": true}, \"paper\": {\"decks\": 130, \"events\": 79, \"weighted\": false}}, \"cards\": {\"00000000-0000-0000-0000-00000000000a\": [1500, 30]}}, \"modern\": {\"decks\": 16831, \"events\": 256, \"sources\": {\"mtgo\": {\"decks\": 6146, \"events\": 177, \"weighted\": true}, \"paper\": {\"decks\": 10685, \"events\": 79, \"weighted\": true}}, \"cards\": {\"00000000-0000-0000-0000-00000000000a\": [2689, 9], \"00000000-0000-0000-0000-00000000000e\": [2560, 12], \"00000000-0000-0000-0000-00000000000b\": [1000, 50], \"00000000-0000-0000-0000-00000000000c\": [232, 297], \"00000000-0000-0000-0000-00000000000d\": [178, 325], \"00000000-0000-0000-0000-000000000011\": [1, 2400]}}, \"legacy\": {\"decks\": 5768, \"events\": 256, \"sources\": {\"mtgo\": {\"decks\": 3038, \"events\": 177, \"weighted\": true}, \"paper\": {\"decks\": 2730, \"events\": 79, \"weighted\": true}}, \"cards\": {\"00000000-0000-0000-0000-00000000000a\": [3100, 4], \"00000000-0000-0000-0000-00000000000e\": [2200, 15], \"00000000-0000-0000-0000-000000000011\": [450, 80]}}, \"vintage\": {\"decks\": 2631, \"events\": 256, \"sources\": {\"mtgo\": {\"decks\": 1479, \"events\": 177, \"weighted\": true}, \"paper\": {\"decks\": 1152, \"events\": 79, \"weighted\": true}}, \"cards\": {\"00000000-0000-0000-0000-000000000012\": [9500, 1], \"00000000-0000-0000-0000-000000000011\": [1200, 30]}}}, \"skipped\": {\"standard\": {\"decks\": 0, \"reason\": \"too few decks\"}}, \"unmatched_names\": 22, \"unmatched_entries\": 23, \"basic\": [\"00000000-0000-0000-0000-00000000000f\"], \"names\": {\"thoughtseize\": \"00000000-0000-0000-0000-00000000000a\", \"fatal push\": \"00000000-0000-0000-0000-00000000000b\", \"fable of the mirror-breaker // reflection of kiki-jiki\": \"00000000-0000-0000-0000-00000000000c\", \"fable of the mirror-breaker\": \"00000000-0000-0000-0000-00000000000c\", \"reflection of kiki-jiki\": \"00000000-0000-0000-0000-00000000000c\", \"superior spider-man\": \"00000000-0000-0000-0000-00000000000d\", \"island\": \"00000000-0000-0000-0000-00000000000f\", \"\\u00e6ther vial\": \"00000000-0000-0000-0000-000000000011\", \"black lotus\": \"00000000-0000-0000-0000-000000000012\"}, \"ambiguous\": [\"lightning bolt\", \"pick your poison\"]}",
+   "error": "malformed"
+  },
+  {
+   "text": "{\"kind\": \"cardscanner-play-data\", \"version\": 1, \"as_of\": \"2026-11-10\", \"window_days\": null, \"built_at\": \"2026-11-10T07:41:02Z\", \"formats\": {\"pioneer\": {\"decks\": 1437, \"events\": 97, \"sources\": {\"mtgo\": {\"decks\": 1437, \"events\": 177, \"weighted\": true}, \"paper\": {\"decks\": 130, \"events\": 79, \"weighted\": false}}, \"cards\": {\"00000000-0000-0000-0000-00000000000a\": [1500, 30]}}, \"modern\": {\"decks\": 16831, \"events\": 256, \"sources\": {\"mtgo\": {\"decks\": 6146, \"events\": 177, \"weighted\": true}, \"paper\": {\"decks\": 10685, \"events\": 79, \"weighted\": true}}, \"cards\": {\"00000000-0000-0000-0000-00000000000a\": [2689, 9], \"00000000-0000-0000-0000-00000000000e\": [2560, 12], \"00000000-0000-0000-0000-00000000000b\": [1000, 50], \"00000000-0000-0000-0000-00000000000c\": [232, 297], \"00000000-0000-0000-0000-00000000000d\": [178, 325], \"00000000-0000-0000-0000-000000000011\": [1, 2400]}}, \"legacy\": {\"decks\": 5768, \"events\": 256, \"sources\": {\"mtgo\": {\"decks\": 3038, \"events\": 177, \"weighted\": true}, \"paper\": {\"decks\": 2730, \"events\": 79, \"weighted\": true}}, \"cards\": {\"00000000-0000-0000-0000-00000000000a\": [3100, 4], \"00000000-0000-0000-0000-00000000000e\": [2200, 15], \"00000000-0000-0000-0000-000000000011\": [450, 80]}}, \"vintage\": {\"decks\": 2631, \"events\": 256, \"sources\": {\"mtgo\": {\"decks\": 1479, \"events\": 177, \"weighted\": true}, \"paper\": {\"decks\": 1152, \"events\": 79, \"weighted\": true}}, \"cards\": {\"00000000-0000-0000-0000-000000000012\": [9500, 1], \"00000000-0000-0000-0000-000000000011\": [1200, 30]}}}, \"skipped\": {\"standard\": {\"decks\": 0, \"reason\": \"too few decks\"}}, \"unmatched_names\": 22, \"unmatched_entries\": 23, \"basic\": [\"00000000-0000-0000-0000-00000000000f\"], \"names\": {\"thoughtseize\": \"00000000-0000-0000-0000-00000000000a\", \"fatal push\": \"00000000-0000-0000-0000-00000000000b\", \"fable of the mirror-breaker // reflection of kiki-jiki\": \"00000000-0000-0000-0000-00000000000c\", \"fable of the mirror-breaker\": \"00000000-0000-0000-0000-00000000000c\", \"reflection of kiki-jiki\": \"00000000-0000-0000-0000-00000000000c\", \"superior spider-man\": \"00000000-0000-0000-0000-00000000000d\", \"island\": \"00000000-0000-0000-0000-00000000000f\", \"\\u00e6ther vial\": \"00000000-0000-0000-0000-000000000011\", \"black lotus\": \"00000000-0000-0000-0000-000000000012\"}, \"ambiguous\": [\"lightning bolt\", \"pick your poison\"]}",
+   "error": "malformed"
+  },
+  {
+   "text": "{\"kind\": \"cardscanner-play-data\", \"version\": 1, \"as_of\": 20261110, \"window_days\": 60, \"built_at\": \"2026-11-10T07:41:02Z\", \"formats\": {\"pioneer\": {\"decks\": 1437, \"events\": 97, \"sources\": {\"mtgo\": {\"decks\": 1437, \"events\": 177, \"weighted\": true}, \"paper\": {\"decks\": 130, \"events\": 79, \"weighted\": false}}, \"cards\": {\"00000000-0000-0000-0000-00000000000a\": [1500, 30]}}, \"modern\": {\"decks\": 16831, \"events\": 256, \"sources\": {\"mtgo\": {\"decks\": 6146, \"events\": 177, \"weighted\": true}, \"paper\": {\"decks\": 10685, \"events\": 79, \"weighted\": true}}, \"cards\": {\"00000000-0000-0000-0000-00000000000a\": [2689, 9], \"00000000-0000-0000-0000-00000000000e\": [2560, 12], \"00000000-0000-0000-0000-00000000000b\": [1000, 50], \"00000000-0000-0000-0000-00000000000c\": [232, 297], \"00000000-0000-0000-0000-00000000000d\": [178, 325], \"00000000-0000-0000-0000-000000000011\": [1, 2400]}}, \"legacy\": {\"decks\": 5768, \"events\": 256, \"sources\": {\"mtgo\": {\"decks\": 3038, \"events\": 177, \"weighted\": true}, \"paper\": {\"decks\": 2730, \"events\": 79, \"weighted\": true}}, \"cards\": {\"00000000-0000-0000-0000-00000000000a\": [3100, 4], \"00000000-0000-0000-0000-00000000000e\": [2200, 15], \"00000000-0000-0000-0000-000000000011\": [450, 80]}}, \"vintage\": {\"decks\": 2631, \"events\": 256, \"sources\": {\"mtgo\": {\"decks\": 1479, \"events\": 177, \"weighted\": true}, \"paper\": {\"decks\": 1152, \"events\": 79, \"weighted\": true}}, \"cards\": {\"00000000-0000-0000-0000-000000000012\": [9500, 1], \"00000000-0000-0000-0000-000000000011\": [1200, 30]}}}, \"skipped\": {\"standard\": {\"decks\": 0, \"reason\": \"too few decks\"}}, \"unmatched_names\": 22, \"unmatched_entries\": 23, \"basic\": [\"00000000-0000-0000-0000-00000000000f\"], \"names\": {\"thoughtseize\": \"00000000-0000-0000-0000-00000000000a\", \"fatal push\": \"00000000-0000-0000-0000-00000000000b\", \"fable of the mirror-breaker // reflection of kiki-jiki\": \"00000000-0000-0000-0000-00000000000c\", \"fable of the mirror-breaker\": \"00000000-0000-0000-0000-00000000000c\", \"reflection of kiki-jiki\": \"00000000-0000-0000-0000-00000000000c\", \"superior spider-man\": \"00000000-0000-0000-0000-00000000000d\", \"island\": \"00000000-0000-0000-0000-00000000000f\", \"\\u00e6ther vial\": \"00000000-0000-0000-0000-000000000011\", \"black lotus\": \"00000000-0000-0000-0000-000000000012\"}, \"ambiguous\": [\"lightning bolt\", \"pick your poison\"]}",
+   "error": "malformed"
+  },
+  {
+   "text": "{\"kind\": \"cardscanner-play-data\", \"version\": 1, \"as_of\": \"2026-11-10\", \"window_days\": 60, \"built_at\": \"2026-11-10T07:41:02Z\", \"skipped\": {\"standard\": {\"decks\": 0, \"reason\": \"too few decks\"}}, \"unmatched_names\": 22, \"unmatched_entries\": 23, \"basic\": [\"00000000-0000-0000-0000-00000000000f\"], \"names\": {\"thoughtseize\": \"00000000-0000-0000-0000-00000000000a\", \"fatal push\": \"00000000-0000-0000-0000-00000000000b\", \"fable of the mirror-breaker // reflection of kiki-jiki\": \"00000000-0000-0000-0000-00000000000c\", \"fable of the mirror-breaker\": \"00000000-0000-0000-0000-00000000000c\", \"reflection of kiki-jiki\": \"00000000-0000-0000-0000-00000000000c\", \"superior spider-man\": \"00000000-0000-0000-0000-00000000000d\", \"island\": \"00000000-0000-0000-0000-00000000000f\", \"\\u00e6ther vial\": \"00000000-0000-0000-0000-000000000011\", \"black lotus\": \"00000000-0000-0000-0000-000000000012\"}, \"ambiguous\": [\"lightning bolt\", \"pick your poison\"]}",
+   "error": "malformed"
+  },
+  {
+   "text": "{\"kind\": \"cardscanner-play-data\", \"version\": 1, \"window_days\": 60, \"built_at\": \"2026-11-10T07:41:02Z\", \"formats\": {\"pioneer\": {\"decks\": 1437, \"events\": 97, \"sources\": {\"mtgo\": {\"decks\": 1437, \"events\": 177, \"weighted\": true}, \"paper\": {\"decks\": 130, \"events\": 79, \"weighted\": false}}, \"cards\": {\"00000000-0000-0000-0000-00000000000a\": [1500, 30]}}, \"modern\": {\"decks\": 16831, \"events\": 256, \"sources\": {\"mtgo\": {\"decks\": 6146, \"events\": 177, \"weighted\": true}, \"paper\": {\"decks\": 10685, \"events\": 79, \"weighted\": true}}, \"cards\": {\"00000000-0000-0000-0000-00000000000a\": [2689, 9], \"00000000-0000-0000-0000-00000000000e\": [2560, 12], \"00000000-0000-0000-0000-00000000000b\": [1000, 50], \"00000000-0000-0000-0000-00000000000c\": [232, 297], \"00000000-0000-0000-0000-00000000000d\": [178, 325], \"00000000-0000-0000-0000-000000000011\": [1, 2400]}}, \"legacy\": {\"decks\": 5768, \"events\": 256, \"sources\": {\"mtgo\": {\"decks\": 3038, \"events\": 177, \"weighted\": true}, \"paper\": {\"decks\": 2730, \"events\": 79, \"weighted\": true}}, \"cards\": {\"00000000-0000-0000-0000-00000000000a\": [3100, 4], \"00000000-0000-0000-0000-00000000000e\": [2200, 15], \"00000000-0000-0000-0000-000000000011\": [450, 80]}}, \"vintage\": {\"decks\": 2631, \"events\": 256, \"sources\": {\"mtgo\": {\"decks\": 1479, \"events\": 177, \"weighted\": true}, \"paper\": {\"decks\": 1152, \"events\": 79, \"weighted\": true}}, \"cards\": {\"00000000-0000-0000-0000-000000000012\": [9500, 1], \"00000000-0000-0000-0000-000000000011\": [1200, 30]}}}, \"skipped\": {\"standard\": {\"decks\": 0, \"reason\": \"too few decks\"}}, \"unmatched_names\": 22, \"unmatched_entries\": 23, \"basic\": [\"00000000-0000-0000-0000-00000000000f\"], \"names\": {\"thoughtseize\": \"00000000-0000-0000-0000-00000000000a\", \"fatal push\": \"00000000-0000-0000-0000-00000000000b\", \"fable of the mirror-breaker // reflection of kiki-jiki\": \"00000000-0000-0000-0000-00000000000c\", \"fable of the mirror-breaker\": \"00000000-0000-0000-0000-00000000000c\", \"reflection of kiki-jiki\": \"00000000-0000-0000-0000-00000000000c\", \"superior spider-man\": \"00000000-0000-0000-0000-00000000000d\", \"island\": \"00000000-0000-0000-0000-00000000000f\", \"\\u00e6ther vial\": \"00000000-0000-0000-0000-000000000011\", \"black lotus\": \"00000000-0000-0000-0000-000000000012\"}, \"ambiguous\": [\"lightning bolt\", \"pick your poison\"]}",
+   "error": "malformed"
+  },
+  {
+   "text": "{\"kind\": \"cardscanner-play-data\", \"version\": 1, \"as_of\": \"2026-11-10\", \"window_days\": 60, \"built_at\": \"2026-11-10T07:41:02Z\", \"formats\": {\"pioneer\": {\"decks\": 1437, \"events\": 97, \"sources\": {\"mtgo\": {\"decks\": 1437, \"events\": 177, \"weighted\": true}, \"paper\": {\"decks\": 130, \"events\": 79, \"weighted\": false}}, \"cards\": {\"00000000-0000-0000-0000-00000000000a\": [1500, 30]}}, \"modern\": {\"decks\": 16831, \"events\": 256, \"sources\": {\"mtgo\": {\"decks\": 6146, \"events\": 177, \"weighted\": true}, \"paper\": {\"decks\": 10685, \"events\": 79, \"weighted\": true}}, \"cards\": {\"00000000-0000-0000-0000-00000000000a\": [2689, 9], \"00000000-0000-0000-0000-00000000000e\": [2560, 12], \"00000000-0000-0000-0000-00000000000b\": [1000, 50], \"00000000-0000-0000-0000-00000000000c\": [232, 297], \"00000000-0000-0000-0000-00000000000d\": [178, 325], \"00000000-0000-0000-0000-000000000011\": [1, 2400]}}, \"legacy\": {\"decks\": 5768, \"events\": 256, \"sources\": {\"mtgo\": {\"decks\": 3038, \"events\": 177, \"weighted\": true}, \"paper\": {\"decks\": 2730, \"events\": 79, \"weighted\": true}}, \"cards\": {\"00000000-0000-0000-0000-00000000000a\": [3100, 4], \"00000000-0000-0000-0000-00000000000e\": [2200, 15], \"00000000-0000-0000-0000-000000000011\": [450, 80]}}, \"vintage\": {\"decks\": 2631, \"events\": 256, \"sources\": {\"mtgo\": {\"decks\": 1479, \"events\": 177, \"weighted\": true}, \"paper\": {\"decks\": 1152, \"events\": 79, \"weighted\": true}}, \"cards\": {\"00000000-0000-0000-0000-000000000012\": [9500, 1], \"00000000-0000-0000-0000-000000000011\": [1200, 30]}}}, \"skipped\": {\"standard\": {\"decks\": 0, \"reason\": \"too few decks\"}}, \"unmatched_names\": 22, \"unmatched_entries\": 23, \"basic\": [\"00000000-0000-0000-0000-00000000000f\"], \"ambiguous\": [\"lightning bolt\", \"pick your poison\"]}",
+   "error": "malformed"
+  }
+ ],
+ "pack_text": "{\"ambiguous\":[\"lightning bolt\",\"pick your poison\"],\"as_of\":\"2026-11-10\",\"basic\":[\"00000000-0000-0000-0000-00000000000f\"],\"built_at\":\"2026-11-10T07:41:02Z\",\"formats\":{\"legacy\":{\"cards\":{\"00000000-0000-0000-0000-00000000000a\":[3100,4],\"00000000-0000-0000-0000-00000000000e\":[2200,15],\"00000000-0000-0000-0000-000000000011\":[450,80]},\"decks\":5768,\"events\":256,\"sources\":{\"mtgo\":{\"decks\":3038,\"events\":177,\"weighted\":true},\"paper\":{\"decks\":2730,\"events\":79,\"weighted\":true}}},\"modern\":{\"cards\":{\"00000000-0000-0000-0000-00000000000a\":[2689,9],\"00000000-0000-0000-0000-00000000000b\":[1000,50],\"00000000-0000-0000-0000-00000000000c\":[232,297],\"00000000-0000-0000-0000-00000000000d\":[178,325],\"00000000-0000-0000-0000-00000000000e\":[2560,12],\"00000000-0000-0000-0000-000000000011\":[1,2400]},\"decks\":16831,\"events\":256,\"sources\":{\"mtgo\":{\"decks\":6146,\"events\":177,\"weighted\":true},\"paper\":{\"decks\":10685,\"events\":79,\"weighted\":true}}},\"pioneer\":{\"cards\":{\"00000000-0000-0000-0000-00000000000a\":[1500,30]},\"decks\":1437,\"events\":97,\"sources\":{\"mtgo\":{\"decks\":1437,\"events\":177,\"weighted\":true},\"paper\":{\"decks\":130,\"events\":79,\"weighted\":false}}},\"vintage\":{\"cards\":{\"00000000-0000-0000-0000-000000000011\":[1200,30],\"00000000-0000-0000-0000-000000000012\":[9500,1]},\"decks\":2631,\"events\":256,\"sources\":{\"mtgo\":{\"decks\":1479,\"events\":177,\"weighted\":true},\"paper\":{\"decks\":1152,\"events\":79,\"weighted\":true}}}},\"kind\":\"cardscanner-play-data\",\"names\":{\"black lotus\":\"00000000-0000-0000-0000-000000000012\",\"fable of the mirror-breaker\":\"00000000-0000-0000-0000-00000000000c\",\"fable of the mirror-breaker // reflection of kiki-jiki\":\"00000000-0000-0000-0000-00000000000c\",\"fatal push\":\"00000000-0000-0000-0000-00000000000b\",\"island\":\"00000000-0000-0000-0000-00000000000f\",\"reflection of kiki-jiki\":\"00000000-0000-0000-0000-00000000000c\",\"superior spider-man\":\"00000000-0000-0000-0000-00000000000d\",\"thoughtseize\":\"00000000-0000-0000-0000-00000000000a\",\"æther vial\":\"00000000-0000-0000-0000-000000000011\"},\"skipped\":{\"standard\":{\"decks\":0,\"reason\":\"too few decks\"}},\"unmatched_entries\":23,\"unmatched_names\":22,\"version\":1,\"window_days\":60}\n",
+ "play_for": [
+  {
+   "popularity": {
+    "tier": "solid",
+    "label": "Popular",
+    "top_percent": 7.4,
+    "oracle_id": "00000000-0000-0000-0000-00000000000a",
+    "formats": {
+     "standard": "legal",
+     "pioneer": "legal",
+     "modern": "legal",
+     "legacy": "legal",
+     "vintage": "legal",
+     "pauper": "legal",
+     "premodern": "legal",
+     "commander": "legal"
+    }
+   },
+   "name": "Thoughtseize",
+   "expected": {
+    "pioneer": {
+     "tier": "staple",
+     "bp": 1500,
+     "rank": 30
+    },
+    "modern": {
+     "tier": "staple",
+     "bp": 2689,
+     "rank": 9
+    },
+    "legacy": {
+     "tier": "staple",
+     "bp": 3100,
+     "rank": 4
+    },
+    "vintage": {
+     "tier": "unplayed"
+    }
+   }
+  },
+  {
+   "popularity": {
+    "tier": "solid",
+    "label": "Popular",
+    "top_percent": 7.4,
+    "oracle_id": "00000000-0000-0000-0000-00000000000b",
+    "formats": {
+     "standard": "legal",
+     "pioneer": "not_legal",
+     "modern": "legal",
+     "legacy": "banned",
+     "vintage": "legal",
+     "pauper": "legal",
+     "premodern": "legal",
+     "commander": "legal"
+    }
+   },
+   "name": "Fatal Push",
+   "expected": {
+    "pioneer": {
+     "tier": "not_legal"
+    },
+    "modern": {
+     "tier": "staple",
+     "bp": 1000,
+     "rank": 50
+    },
+    "legacy": {
+     "tier": "banned"
+    },
+    "vintage": {
+     "tier": "unplayed"
+    }
+   }
+  },
+  {
+   "popularity": {
+    "tier": "solid",
+    "label": "Popular",
+    "top_percent": 7.4,
+    "oracle_id": "00000000-0000-0000-0000-00000000000c",
+    "formats": {
+     "standard": "legal",
+     "pioneer": "legal",
+     "modern": "legal",
+     "legacy": "legal",
+     "vintage": "legal",
+     "pauper": "legal",
+     "premodern": "legal",
+     "commander": "legal"
+    }
+   },
+   "name": "x",
+   "expected": {
+    "pioneer": {
+     "tier": "unplayed"
+    },
+    "modern": {
+     "tier": "played",
+     "bp": 232,
+     "rank": 297
+    },
+    "legacy": {
+     "tier": "unplayed"
+    },
+    "vintage": {
+     "tier": "unplayed"
+    }
+   }
+  },
+  {
+   "popularity": {
+    "tier": "solid",
+    "label": "Popular",
+    "top_percent": 7.4,
+    "oracle_id": "00000000-0000-0000-0000-00000000000d",
+    "formats": {
+     "standard": "legal",
+     "pioneer": "legal",
+     "modern": "legal",
+     "legacy": "legal",
+     "vintage": "legal",
+     "pauper": "legal",
+     "premodern": "legal",
+     "commander": "legal"
+    }
+   },
+   "name": null,
+   "expected": {
+    "pioneer": {
+     "tier": "unplayed"
+    },
+    "modern": {
+     "tier": "fringe",
+     "bp": 178,
+     "rank": 325
+    },
+    "legacy": {
+     "tier": "unplayed"
+    },
+    "vintage": {
+     "tier": "unplayed"
+    }
+   }
+  },
+  {
+   "popularity": {
+    "tier": "solid",
+    "label": "Popular",
+    "top_percent": 7.4,
+    "oracle_id": "00000000-0000-0000-0000-000000000011",
+    "formats": {
+     "standard": "legal",
+     "pioneer": "legal",
+     "modern": "legal",
+     "legacy": "legal",
+     "vintage": "legal",
+     "pauper": "legal",
+     "premodern": "legal",
+     "commander": "legal"
+    }
+   },
+   "name": "Aether Vial",
+   "expected": {
+    "pioneer": {
+     "tier": "unplayed"
+    },
+    "modern": {
+     "tier": "fringe",
+     "bp": 1,
+     "rank": 2400
+    },
+    "legacy": {
+     "tier": "played",
+     "bp": 450,
+     "rank": 80
+    },
+    "vintage": {
+     "tier": "staple",
+     "bp": 1200,
+     "rank": 30
+    }
+   }
+  },
+  {
+   "popularity": {
+    "tier": "solid",
+    "label": "Popular",
+    "top_percent": 7.4,
+    "oracle_id": "00000000-0000-0000-0000-000000000012",
+    "formats": {
+     "standard": "legal",
+     "pioneer": "not_legal",
+     "modern": "not_legal",
+     "legacy": "banned",
+     "vintage": "restricted",
+     "pauper": "legal",
+     "premodern": "legal",
+     "commander": "legal"
+    }
+   },
+   "name": "Black Lotus",
+   "expected": {
+    "pioneer": {
+     "tier": "not_legal"
+    },
+    "modern": {
+     "tier": "not_legal"
+    },
+    "legacy": {
+     "tier": "banned"
+    },
+    "vintage": {
+     "tier": "staple",
+     "bp": 9500,
+     "rank": 1
+    }
+   }
+  },
+  {
+   "popularity": {
+    "tier": "solid",
+    "label": "Popular",
+    "top_percent": 7.4,
+    "oracle_id": "00000000-0000-0000-0000-00000000000f",
+    "formats": {
+     "standard": "legal",
+     "pioneer": "legal",
+     "modern": "legal",
+     "legacy": "legal",
+     "vintage": "legal",
+     "pauper": "legal",
+     "premodern": "legal",
+     "commander": "legal"
+    }
+   },
+   "name": "Island",
+   "expected": {
+    "pioneer": {
+     "tier": "basic"
+    },
+    "modern": {
+     "tier": "basic"
+    },
+    "legacy": {
+     "tier": "basic"
+    },
+    "vintage": {
+     "tier": "basic"
+    }
+   }
+  },
+  {
+   "popularity": {
+    "tier": "solid",
+    "label": "Popular",
+    "top_percent": 7.4,
+    "oracle_id": "00000000-0000-0000-0000-00000000000f"
+   },
+   "name": null,
+   "expected": {
+    "pioneer": {
+     "tier": "basic"
+    },
+    "modern": {
+     "tier": "basic"
+    },
+    "legacy": {
+     "tier": "basic"
+    },
+    "vintage": {
+     "tier": "basic"
+    }
+   }
+  },
+  {
+   "popularity": {
+    "tier": "solid",
+    "label": "Popular",
+    "top_percent": 7.4,
+    "oracle_id": "00000000-0000-0000-0000-000000000010",
+    "formats": {
+     "standard": "legal",
+     "pioneer": "legal",
+     "modern": "legal",
+     "legacy": "legal",
+     "vintage": "legal",
+     "pauper": "legal",
+     "premodern": "legal",
+     "commander": "legal"
+    }
+   },
+   "name": "Smothering Tithe",
+   "expected": {
+    "pioneer": {
+     "tier": "unplayed"
+    },
+    "modern": {
+     "tier": "unplayed"
+    },
+    "legacy": {
+     "tier": "unplayed"
+    },
+    "vintage": {
+     "tier": "unplayed"
+    }
+   }
+  },
+  {
+   "popularity": {
+    "tier": "solid",
+    "label": "Popular",
+    "top_percent": 7.4,
+    "oracle_id": "00000000-0000-0000-0000-000000000010",
+    "formats": {
+     "standard": "legal",
+     "pioneer": "legal",
+     "modern": "legal",
+     "legacy": "legal",
+     "vintage": "restricted",
+     "pauper": "legal",
+     "premodern": "legal",
+     "commander": "legal"
+    }
+   },
+   "name": "Smothering Tithe",
+   "expected": {
+    "pioneer": {
+     "tier": "unplayed"
+    },
+    "modern": {
+     "tier": "unplayed"
+    },
+    "legacy": {
+     "tier": "unplayed"
+    },
+    "vintage": {
+     "tier": "unplayed"
+    }
+   }
+  },
+  {
+   "popularity": {
+    "tier": "solid",
+    "label": "Popular",
+    "top_percent": 7.4,
+    "oracle_id": "00000000-0000-0000-0000-000000000010",
+    "formats": {
+     "standard": "legal",
+     "pioneer": "legal",
+     "modern": "banned",
+     "legacy": "not_legal",
+     "vintage": "legal",
+     "pauper": "legal",
+     "premodern": "legal",
+     "commander": "legal"
+    }
+   },
+   "name": "Smothering Tithe",
+   "expected": {
+    "pioneer": {
+     "tier": "unplayed"
+    },
+    "modern": {
+     "tier": "banned"
+    },
+    "legacy": {
+     "tier": "not_legal"
+    },
+    "vintage": {
+     "tier": "unplayed"
+    }
+   }
+  },
+  {
+   "popularity": {
+    "tier": "solid",
+    "label": "Popular",
+    "top_percent": 7.4,
+    "oracle_id": "00000000-0000-0000-0000-000000000010",
+    "formats": {
+     "standard": "legal",
+     "pioneer": "legal",
+     "modern": "something new",
+     "legacy": "legal",
+     "vintage": "legal",
+     "pauper": "legal",
+     "premodern": "legal",
+     "commander": "legal"
+    }
+   },
+   "name": "Smothering Tithe",
+   "expected": {
+    "pioneer": {
+     "tier": "unplayed"
+    },
+    "modern": null,
+    "legacy": {
+     "tier": "unplayed"
+    },
+    "vintage": {
+     "tier": "unplayed"
+    }
+   }
+  },
+  {
+   "popularity": {
+    "tier": "solid",
+    "label": "Popular",
+    "top_percent": 7.4,
+    "oracle_id": "00000000-0000-0000-0000-000000000010",
+    "formats": {
+     "modern": "legal"
+    }
+   },
+   "name": "Smothering Tithe",
+   "expected": {
+    "pioneer": null,
+    "modern": {
+     "tier": "unplayed"
+    },
+    "legacy": null,
+    "vintage": null
+   }
+  },
+  {
+   "popularity": {
+    "tier": "solid",
+    "label": "Popular",
+    "top_percent": 7.4,
+    "oracle_id": "00000000-0000-0000-0000-000000000010"
+   },
+   "name": "Smothering Tithe",
+   "expected": {
+    "pioneer": null,
+    "modern": null,
+    "legacy": null,
+    "vintage": null
+   }
+  },
+  {
+   "popularity": {
+    "tier": "solid",
+    "label": "Popular",
+    "top_percent": 7.4,
+    "oracle_id": "00000000-0000-0000-0000-00000000000a",
+    "formats": {
+     "standard": "legal",
+     "pioneer": "legal",
+     "modern": "not_legal",
+     "legacy": "legal",
+     "vintage": "legal",
+     "pauper": "legal",
+     "premodern": "legal",
+     "commander": "legal"
+    }
+   },
+   "name": "Thoughtseize",
+   "expected": {
+    "pioneer": {
+     "tier": "staple",
+     "bp": 1500,
+     "rank": 30
+    },
+    "modern": {
+     "tier": "staple",
+     "bp": 2689,
+     "rank": 9
+    },
+    "legacy": {
+     "tier": "staple",
+     "bp": 3100,
+     "rank": 4
+    },
+    "vintage": {
+     "tier": "unplayed"
+    }
+   }
+  },
+  {
+   "popularity": {
+    "tier": "solid",
+    "label": "Popular",
+    "top_percent": 7.4,
+    "formats": {
+     "standard": "legal",
+     "pioneer": "legal",
+     "modern": "legal",
+     "legacy": "legal",
+     "vintage": "legal",
+     "pauper": "legal",
+     "premodern": "legal",
+     "commander": "legal"
+    }
+   },
+   "name": "Thoughtseize",
+   "expected": {
+    "pioneer": {
+     "tier": "staple",
+     "bp": 1500,
+     "rank": 30
+    },
+    "modern": {
+     "tier": "staple",
+     "bp": 2689,
+     "rank": 9
+    },
+    "legacy": {
+     "tier": "staple",
+     "bp": 3100,
+     "rank": 4
+    },
+    "vintage": {
+     "tier": "unplayed"
+    }
+   }
+  },
+  {
+   "popularity": {
+    "tier": "solid",
+    "label": "Popular",
+    "top_percent": 7.4,
+    "formats": {
+     "standard": "legal",
+     "pioneer": "legal",
+     "modern": "legal",
+     "legacy": "legal",
+     "vintage": "legal",
+     "pauper": "legal",
+     "premodern": "legal",
+     "commander": "legal"
+    }
+   },
+   "name": "  THOUGHTSEIZE  ",
+   "expected": {
+    "pioneer": {
+     "tier": "staple",
+     "bp": 1500,
+     "rank": 30
+    },
+    "modern": {
+     "tier": "staple",
+     "bp": 2689,
+     "rank": 9
+    },
+    "legacy": {
+     "tier": "staple",
+     "bp": 3100,
+     "rank": 4
+    },
+    "vintage": {
+     "tier": "unplayed"
+    }
+   }
+  },
+  {
+   "popularity": {
+    "tier": "solid",
+    "label": "Popular",
+    "top_percent": 7.4,
+    "formats": {
+     "standard": "legal",
+     "pioneer": "legal",
+     "modern": "legal",
+     "legacy": "legal",
+     "vintage": "legal",
+     "pauper": "legal",
+     "premodern": "legal",
+     "commander": "legal"
+    }
+   },
+   "name": "Fable of the Mirror-Breaker // Reflection of Kiki-Jiki",
+   "expected": {
+    "pioneer": {
+     "tier": "unplayed"
+    },
+    "modern": {
+     "tier": "played",
+     "bp": 232,
+     "rank": 297
+    },
+    "legacy": {
+     "tier": "unplayed"
+    },
+    "vintage": {
+     "tier": "unplayed"
+    }
+   }
+  },
+  {
+   "popularity": {
+    "tier": "solid",
+    "label": "Popular",
+    "top_percent": 7.4,
+    "formats": {
+     "standard": "legal",
+     "pioneer": "legal",
+     "modern": "legal",
+     "legacy": "legal",
+     "vintage": "legal",
+     "pauper": "legal",
+     "premodern": "legal",
+     "commander": "legal"
+    }
+   },
+   "name": "Fable of the Mirror-Breaker",
+   "expected": {
+    "pioneer": {
+     "tier": "unplayed"
+    },
+    "modern": {
+     "tier": "played",
+     "bp": 232,
+     "rank": 297
+    },
+    "legacy": {
+     "tier": "unplayed"
+    },
+    "vintage": {
+     "tier": "unplayed"
+    }
+   }
+  },
+  {
+   "popularity": {
+    "tier": "solid",
+    "label": "Popular",
+    "top_percent": 7.4,
+    "formats": {
+     "standard": "legal",
+     "pioneer": "legal",
+     "modern": "legal",
+     "legacy": "legal",
+     "vintage": "legal",
+     "pauper": "legal",
+     "premodern": "legal",
+     "commander": "legal"
+    }
+   },
+   "name": "Reflection of Kiki-Jiki",
+   "expected": {
+    "pioneer": {
+     "tier": "unplayed"
+    },
+    "modern": {
+     "tier": "played",
+     "bp": 232,
+     "rank": 297
+    },
+    "legacy": {
+     "tier": "unplayed"
+    },
+    "vintage": {
+     "tier": "unplayed"
+    }
+   }
+  },
+  {
+   "popularity": {
+    "tier": "solid",
+    "label": "Popular",
+    "top_percent": 7.4,
+    "formats": {
+     "standard": "legal",
+     "pioneer": "legal",
+     "modern": "legal",
+     "legacy": "legal",
+     "vintage": "legal",
+     "pauper": "legal",
+     "premodern": "legal",
+     "commander": "legal"
+    }
+   },
+   "name": "Æther Vial",
+   "expected": {
+    "pioneer": {
+     "tier": "unplayed"
+    },
+    "modern": {
+     "tier": "fringe",
+     "bp": 1,
+     "rank": 2400
+    },
+    "legacy": {
+     "tier": "played",
+     "bp": 450,
+     "rank": 80
+    },
+    "vintage": {
+     "tier": "staple",
+     "bp": 1200,
+     "rank": 30
+    }
+   }
+  },
+  {
+   "popularity": {
+    "tier": "solid",
+    "label": "Popular",
+    "top_percent": 7.4,
+    "formats": {
+     "standard": "legal",
+     "pioneer": "legal",
+     "modern": "legal",
+     "legacy": "legal",
+     "vintage": "legal",
+     "pauper": "legal",
+     "premodern": "legal",
+     "commander": "legal"
+    }
+   },
+   "name": "Æther Vial",
+   "expected": {
+    "pioneer": {
+     "tier": "unplayed"
+    },
+    "modern": {
+     "tier": "fringe",
+     "bp": 1,
+     "rank": 2400
+    },
+    "legacy": {
+     "tier": "played",
+     "bp": 450,
+     "rank": 80
+    },
+    "vintage": {
+     "tier": "staple",
+     "bp": 1200,
+     "rank": 30
+    }
+   }
+  },
+  {
+   "popularity": {
+    "tier": "solid",
+    "label": "Popular",
+    "top_percent": 7.4,
+    "formats": {
+     "standard": "legal",
+     "pioneer": "legal",
+     "modern": "legal",
+     "legacy": "legal",
+     "vintage": "legal",
+     "pauper": "legal",
+     "premodern": "legal",
+     "commander": "legal"
+    }
+   },
+   "name": "Lightning Bolt",
+   "expected": {
+    "pioneer": null,
+    "modern": null,
+    "legacy": null,
+    "vintage": null
+   }
+  },
+  {
+   "popularity": {
+    "tier": "solid",
+    "label": "Popular",
+    "top_percent": 7.4,
+    "formats": {
+     "standard": "legal",
+     "pioneer": "legal",
+     "modern": "legal",
+     "legacy": "legal",
+     "vintage": "legal",
+     "pauper": "legal",
+     "premodern": "legal",
+     "commander": "legal"
+    }
+   },
+   "name": "Lightning Bolt // Something",
+   "expected": {
+    "pioneer": null,
+    "modern": null,
+    "legacy": null,
+    "vintage": null
+   }
+  },
+  {
+   "popularity": {
+    "tier": "solid",
+    "label": "Popular",
+    "top_percent": 7.4,
+    "oracle_id": "00000000-0000-0000-0000-00000000000e",
+    "formats": {
+     "standard": "legal",
+     "pioneer": "legal",
+     "modern": "legal",
+     "legacy": "legal",
+     "vintage": "legal",
+     "pauper": "legal",
+     "premodern": "legal",
+     "commander": "legal"
+    }
+   },
+   "name": "Lightning Bolt",
+   "expected": {
+    "pioneer": {
+     "tier": "unplayed"
+    },
+    "modern": {
+     "tier": "staple",
+     "bp": 2560,
+     "rank": 12
+    },
+    "legacy": {
+     "tier": "staple",
+     "bp": 2200,
+     "rank": 15
+    },
+    "vintage": {
+     "tier": "unplayed"
+    }
+   }
+  },
+  {
+   "popularity": {
+    "tier": "solid",
+    "label": "Popular",
+    "top_percent": 7.4,
+    "formats": {
+     "standard": "legal",
+     "pioneer": "legal",
+     "modern": "legal",
+     "legacy": "legal",
+     "vintage": "legal",
+     "pauper": "legal",
+     "premodern": "legal",
+     "commander": "legal"
+    }
+   },
+   "name": "Pick Your Poison",
+   "expected": {
+    "pioneer": null,
+    "modern": null,
+    "legacy": null,
+    "vintage": null
+   }
+  },
+  {
+   "popularity": {
+    "tier": "solid",
+    "label": "Popular",
+    "top_percent": 7.4,
+    "formats": {
+     "standard": "legal",
+     "pioneer": "legal",
+     "modern": "legal",
+     "legacy": "legal",
+     "vintage": "legal",
+     "pauper": "legal",
+     "premodern": "legal",
+     "commander": "legal"
+    }
+   },
+   "name": "Smothering Tithe",
+   "expected": {
+    "pioneer": {
+     "tier": "unplayed"
+    },
+    "modern": {
+     "tier": "unplayed"
+    },
+    "legacy": {
+     "tier": "unplayed"
+    },
+    "vintage": {
+     "tier": "unplayed"
+    }
+   }
+  },
+  {
+   "popularity": {
+    "tier": "solid",
+    "label": "Popular",
+    "top_percent": 7.4,
+    "formats": {
+     "standard": "legal",
+     "pioneer": "legal",
+     "modern": "banned",
+     "legacy": "legal",
+     "vintage": "legal",
+     "pauper": "legal",
+     "premodern": "legal",
+     "commander": "legal"
+    }
+   },
+   "name": "Hogaak, Arisen Necropolis",
+   "expected": {
+    "pioneer": {
+     "tier": "unplayed"
+    },
+    "modern": {
+     "tier": "banned"
+    },
+    "legacy": {
+     "tier": "unplayed"
+    },
+    "vintage": {
+     "tier": "unplayed"
+    }
+   }
+  },
+  {
+   "popularity": {
+    "tier": "solid",
+    "label": "Popular",
+    "top_percent": 7.4
+   },
+   "name": "Smothering Tithe",
+   "expected": {
+    "pioneer": null,
+    "modern": null,
+    "legacy": null,
+    "vintage": null
+   }
+  },
+  {
+   "popularity": {
+    "tier": "solid",
+    "label": "Popular",
+    "top_percent": 7.4,
+    "formats": {
+     "standard": "legal",
+     "pioneer": "legal",
+     "modern": "legal",
+     "legacy": "legal",
+     "vintage": "legal",
+     "pauper": "legal",
+     "premodern": "legal",
+     "commander": "legal"
+    }
+   },
+   "name": null,
+   "expected": {
+    "pioneer": null,
+    "modern": null,
+    "legacy": null,
+    "vintage": null
+   }
+  },
+  {
+   "popularity": {
+    "tier": "solid",
+    "label": "Popular",
+    "top_percent": 7.4,
+    "formats": {
+     "standard": "legal",
+     "pioneer": "legal",
+     "modern": "legal",
+     "legacy": "legal",
+     "vintage": "legal",
+     "pauper": "legal",
+     "premodern": "legal",
+     "commander": "legal"
+    }
+   },
+   "name": "",
+   "expected": {
+    "pioneer": null,
+    "modern": null,
+    "legacy": null,
+    "vintage": null
+   }
+  },
+  {
+   "popularity": {
+    "tier": "solid",
+    "label": "Popular",
+    "top_percent": 7.4,
+    "formats": {
+     "standard": "legal",
+     "pioneer": "legal",
+     "modern": "legal",
+     "legacy": "legal",
+     "vintage": "legal",
+     "pauper": "legal",
+     "premodern": "legal",
+     "commander": "legal"
+    }
+   },
+   "name": "   ",
+   "expected": {
+    "pioneer": null,
+    "modern": null,
+    "legacy": null,
+    "vintage": null
+   }
+  },
+  {
+   "popularity": {
+    "tier": "solid",
+    "label": "Popular",
+    "top_percent": 7.4,
+    "oracle_id": "",
+    "formats": {
+     "standard": "legal",
+     "pioneer": "legal",
+     "modern": "legal",
+     "legacy": "legal",
+     "vintage": "legal",
+     "pauper": "legal",
+     "premodern": "legal",
+     "commander": "legal"
+    }
+   },
+   "name": "Thoughtseize",
+   "expected": {
+    "pioneer": {
+     "tier": "staple",
+     "bp": 1500,
+     "rank": 30
+    },
+    "modern": {
+     "tier": "staple",
+     "bp": 2689,
+     "rank": 9
+    },
+    "legacy": {
+     "tier": "staple",
+     "bp": 3100,
+     "rank": 4
+    },
+    "vintage": {
+     "tier": "unplayed"
+    }
+   }
+  },
+  {
+   "popularity": {
+    "tier": "solid",
+    "label": "Popular",
+    "top_percent": 7.4,
+    "oracle_id": 7,
+    "formats": {
+     "standard": "legal",
+     "pioneer": "legal",
+     "modern": "legal",
+     "legacy": "legal",
+     "vintage": "legal",
+     "pauper": "legal",
+     "premodern": "legal",
+     "commander": "legal"
+    }
+   },
+   "name": "Thoughtseize",
+   "expected": {
+    "pioneer": {
+     "tier": "staple",
+     "bp": 1500,
+     "rank": 30
+    },
+    "modern": {
+     "tier": "staple",
+     "bp": 2689,
+     "rank": 9
+    },
+    "legacy": {
+     "tier": "staple",
+     "bp": 3100,
+     "rank": 4
+    },
+    "vintage": {
+     "tier": "unplayed"
+    }
+   }
+  },
+  {
+   "popularity": {
+    "formats": "x"
+   },
+   "name": "Smothering Tithe",
+   "expected": {
+    "pioneer": null,
+    "modern": null,
+    "legacy": null,
+    "vintage": null
+   }
+  },
+  {
+   "popularity": {
+    "formats": {
+     "modern": 1,
+     "legacy": null
+    }
+   },
+   "name": "Smothering Tithe",
+   "expected": {
+    "pioneer": null,
+    "modern": null,
+    "legacy": null,
+    "vintage": null
+   }
+  },
+  {
+   "popularity": {},
+   "name": "Thoughtseize",
+   "expected": {
+    "pioneer": {
+     "tier": "staple",
+     "bp": 1500,
+     "rank": 30
+    },
+    "modern": {
+     "tier": "staple",
+     "bp": 2689,
+     "rank": 9
+    },
+    "legacy": {
+     "tier": "staple",
+     "bp": 3100,
+     "rank": 4
+    },
+    "vintage": null
+   }
+  },
+  {
+   "popularity": null,
+   "name": "Thoughtseize",
+   "expected": {
+    "pioneer": {
+     "tier": "staple",
+     "bp": 1500,
+     "rank": 30
+    },
+    "modern": {
+     "tier": "staple",
+     "bp": 2689,
+     "rank": 9
+    },
+    "legacy": {
+     "tier": "staple",
+     "bp": 3100,
+     "rank": 4
+    },
+    "vintage": null
+   }
+  },
+  {
+   "popularity": null,
+   "name": "Smothering Tithe",
+   "expected": {
+    "pioneer": null,
+    "modern": null,
+    "legacy": null,
+    "vintage": null
+   }
+  },
+  {
+   "popularity": null,
+   "name": null,
+   "expected": {
+    "pioneer": null,
+    "modern": null,
+    "legacy": null,
+    "vintage": null
+   }
+  },
+  {
+   "popularity": "not a dict",
+   "name": "Island",
+   "expected": {
+    "pioneer": {
+     "tier": "basic"
+    },
+    "modern": {
+     "tier": "basic"
+    },
+    "legacy": {
+     "tier": "basic"
+    },
+    "vintage": {
+     "tier": "basic"
+    }
+   }
+  },
+  {
+   "popularity": {
+    "tier": "solid",
+    "label": "Popular",
+    "top_percent": 7.4,
+    "oracle_id": "00000000-0000-0000-0000-00000000000a",
+    "formats": {
+     "standard": "legal",
+     "pioneer": "legal",
+     "modern": "legal",
+     "legacy": "legal",
+     "vintage": "legal",
+     "pauper": "legal",
+     "premodern": "legal",
+     "commander": "legal"
+    }
+   },
+   "name": "Thoughtseize",
+   "no_pack": true,
+   "expected": null
+  }
+ ],
+ "scan_play": [
+  {
+   "scan": {
+    "id": 1,
+    "candidates": [
+     {
+      "id": "p-Thoughtseize",
+      "name": "Thoughtseize",
+      "set": "tst",
+      "collector_number": "1",
+      "popularity": {
+       "tier": "solid",
+       "label": "Popular",
+       "top_percent": 7.4,
+       "oracle_id": "00000000-0000-0000-0000-00000000000a",
+       "formats": {
+        "standard": "legal",
+        "pioneer": "legal",
+        "modern": "legal",
+        "legacy": "legal",
+        "vintage": "legal",
+        "pauper": "legal",
+        "premodern": "legal",
+        "commander": "legal"
+       }
+      }
+     },
+     {
+      "id": "p-Fatal Push",
+      "name": "Fatal Push",
+      "set": "tst",
+      "collector_number": "1",
+      "popularity": {
+       "tier": "solid",
+       "label": "Popular",
+       "top_percent": 7.4,
+       "oracle_id": "00000000-0000-0000-0000-00000000000b",
+       "formats": {
+        "standard": "legal",
+        "pioneer": "legal",
+        "modern": "legal",
+        "legacy": "legal",
+        "vintage": "legal",
+        "pauper": "legal",
+        "premodern": "legal",
+        "commander": "legal"
+       }
+      }
+     }
+    ]
+   },
+   "expected": {
+    "pioneer": {
+     "tier": "staple",
+     "bp": 1500,
+     "rank": 30
+    },
+    "modern": {
+     "tier": "staple",
+     "bp": 2689,
+     "rank": 9
+    },
+    "legacy": {
+     "tier": "staple",
+     "bp": 3100,
+     "rank": 4
+    },
+    "vintage": {
+     "tier": "unplayed"
+    }
+   }
+  },
+  {
+   "scan": {
+    "id": 2,
+    "candidates": [
+     {
+      "id": "p-Thoughtseize",
+      "name": "Thoughtseize",
+      "set": "tst",
+      "collector_number": "1",
+      "popularity": {
+       "tier": "solid",
+       "label": "Popular",
+       "top_percent": 7.4,
+       "oracle_id": "00000000-0000-0000-0000-00000000000a",
+       "formats": {
+        "standard": "legal",
+        "pioneer": "legal",
+        "modern": "legal",
+        "legacy": "legal",
+        "vintage": "legal",
+        "pauper": "legal",
+        "premodern": "legal",
+        "commander": "legal"
+       }
+      }
+     }
+    ],
+    "selection": {
+     "name": "Fatal Push",
+     "popularity": {
+      "tier": "solid",
+      "label": "Popular",
+      "top_percent": 7.4,
+      "oracle_id": "00000000-0000-0000-0000-00000000000b",
+      "formats": {
+       "standard": "legal",
+       "pioneer": "legal",
+       "modern": "legal",
+       "legacy": "legal",
+       "vintage": "legal",
+       "pauper": "legal",
+       "premodern": "legal",
+       "commander": "legal"
+      }
+     }
+    }
+   },
+   "expected": {
+    "pioneer": {
+     "tier": "unplayed"
+    },
+    "modern": {
+     "tier": "staple",
+     "bp": 1000,
+     "rank": 50
+    },
+    "legacy": {
+     "tier": "unplayed"
+    },
+    "vintage": {
+     "tier": "unplayed"
+    }
+   }
+  },
+  {
+   "scan": {
+    "id": 3,
+    "candidates": [
+     {
+      "id": "p-Thoughtseize",
+      "name": "Thoughtseize",
+      "set": "tst",
+      "collector_number": "1",
+      "popularity": {
+       "tier": "solid",
+       "label": "Popular",
+       "top_percent": 7.4,
+       "oracle_id": "00000000-0000-0000-0000-00000000000a",
+       "formats": {
+        "standard": "legal",
+        "pioneer": "legal",
+        "modern": "legal",
+        "legacy": "legal",
+        "vintage": "legal",
+        "pauper": "legal",
+        "premodern": "legal",
+        "commander": "legal"
+       }
+      }
+     }
+    ],
+    "selection": {
+     "name": "Fatal Push",
+     "popularity": null
+    }
+   },
+   "expected": {
+    "pioneer": {
+     "tier": "staple",
+     "bp": 1500,
+     "rank": 30
+    },
+    "modern": {
+     "tier": "staple",
+     "bp": 2689,
+     "rank": 9
+    },
+    "legacy": {
+     "tier": "staple",
+     "bp": 3100,
+     "rank": 4
+    },
+    "vintage": {
+     "tier": "unplayed"
+    }
+   }
+  },
+  {
+   "scan": {
+    "id": 4,
+    "candidates": [
+     {
+      "id": "p-Thoughtseize",
+      "name": "Thoughtseize",
+      "set": "tst",
+      "collector_number": "1",
+      "popularity": {}
+     }
+    ],
+    "selection": {
+     "name": "Fatal Push",
+     "popularity": {}
+    }
+   },
+   "expected": {
+    "pioneer": null,
+    "modern": {
+     "tier": "staple",
+     "bp": 1000,
+     "rank": 50
+    },
+    "legacy": null,
+    "vintage": null
+   }
+  },
+  {
+   "scan": {
+    "id": 5,
+    "candidates": [],
+    "card_read": {
+     "name": "Thoughtseize"
+    }
+   },
+   "expected": {
+    "pioneer": {
+     "tier": "staple",
+     "bp": 1500,
+     "rank": 30
+    },
+    "modern": {
+     "tier": "staple",
+     "bp": 2689,
+     "rank": 9
+    },
+    "legacy": {
+     "tier": "staple",
+     "bp": 3100,
+     "rank": 4
+    },
+    "vintage": null
+   }
+  },
+  {
+   "scan": {
+    "id": 6,
+    "candidates": []
+   },
+   "expected": {
+    "pioneer": null,
+    "modern": null,
+    "legacy": null,
+    "vintage": null
+   }
+  },
+  {
+   "scan": {
+    "id": 7,
+    "candidates": [
+     {
+      "id": "p-Island",
+      "name": "Island",
+      "set": "tst",
+      "collector_number": "1",
+      "popularity": {
+       "tier": "solid",
+       "label": "Popular",
+       "top_percent": 7.4,
+       "formats": {
+        "standard": "legal",
+        "pioneer": "legal",
+        "modern": "legal",
+        "legacy": "legal",
+        "vintage": "legal",
+        "pauper": "legal",
+        "premodern": "legal",
+        "commander": "legal"
+       }
+      }
+     }
+    ]
+   },
+   "expected": {
+    "pioneer": {
+     "tier": "basic"
+    },
+    "modern": {
+     "tier": "basic"
+    },
+    "legacy": {
+     "tier": "basic"
+    },
+    "vintage": {
+     "tier": "basic"
+    }
+   }
+  },
+  {
+   "scan": {
+    "id": 8,
+    "candidates": [
+     {
+      "id": "p-Smothering Tithe",
+      "name": "Smothering Tithe",
+      "set": "tst",
+      "collector_number": "1",
+      "popularity": {
+       "tier": "solid",
+       "label": "Popular",
+       "top_percent": 7.4,
+       "formats": {
+        "standard": "legal",
+        "pioneer": "legal",
+        "modern": "legal",
+        "legacy": "legal",
+        "vintage": "legal",
+        "pauper": "legal",
+        "premodern": "legal",
+        "commander": "legal"
+       }
+      }
+     }
+    ]
+   },
+   "expected": {
+    "pioneer": {
+     "tier": "unplayed"
+    },
+    "modern": {
+     "tier": "unplayed"
+    },
+    "legacy": {
+     "tier": "unplayed"
+    },
+    "vintage": {
+     "tier": "unplayed"
+    }
+   }
+  },
+  {
+   "scan": {
+    "id": 9,
+    "candidates": [
+     {
+      "id": "p-Smothering Tithe",
+      "name": "Smothering Tithe",
+      "set": "tst",
+      "collector_number": "1"
+     }
+    ],
+    "card_read": {
+     "name": "Island"
+    }
+   },
+   "expected": {
+    "pioneer": null,
+    "modern": null,
+    "legacy": null,
+    "vintage": null
+   }
+  },
+  {
+   "scan": {
+    "id": 10,
+    "candidates": [
+     {
+      "id": "x",
+      "popularity": {
+       "tier": "solid",
+       "label": "Popular",
+       "top_percent": 7.4,
+       "formats": {
+        "standard": "legal",
+        "pioneer": "legal",
+        "modern": "legal",
+        "legacy": "legal",
+        "vintage": "legal",
+        "pauper": "legal",
+        "premodern": "legal",
+        "commander": "legal"
+       }
+      }
+     }
+    ],
+    "card_read": {
+     "name": "Thoughtseize"
+    }
+   },
+   "expected": {
+    "pioneer": {
+     "tier": "staple",
+     "bp": 1500,
+     "rank": 30
+    },
+    "modern": {
+     "tier": "staple",
+     "bp": 2689,
+     "rank": 9
+    },
+    "legacy": {
+     "tier": "staple",
+     "bp": 3100,
+     "rank": 4
+    },
+    "vintage": {
+     "tier": "unplayed"
+    }
+   }
+  },
+  {
+   "scan": {
+    "id": 11,
+    "candidates": [
+     {
+      "id": "x",
+      "name": " ",
+      "popularity": {
+       "tier": "solid",
+       "label": "Popular",
+       "top_percent": 7.4,
+       "formats": {
+        "standard": "legal",
+        "pioneer": "legal",
+        "modern": "legal",
+        "legacy": "legal",
+        "vintage": "legal",
+        "pauper": "legal",
+        "premodern": "legal",
+        "commander": "legal"
+       }
+      }
+     }
+    ],
+    "selection": {
+     "name": "Fatal Push"
+    }
+   },
+   "expected": {
+    "pioneer": {
+     "tier": "unplayed"
+    },
+    "modern": {
+     "tier": "staple",
+     "bp": 1000,
+     "rank": 50
+    },
+    "legacy": {
+     "tier": "unplayed"
+    },
+    "vintage": {
+     "tier": "unplayed"
+    }
+   }
+  },
+  {
+   "scan": {
+    "id": 12,
+    "candidates": "not a list",
+    "selection": "not a dict",
+    "card_read": {
+     "name": "Island"
+    }
+   },
+   "expected": {
+    "pioneer": {
+     "tier": "basic"
+    },
+    "modern": {
+     "tier": "basic"
+    },
+    "legacy": {
+     "tier": "basic"
+    },
+    "vintage": {
+     "tier": "basic"
+    }
+   }
+  },
+  {
+   "scan": {
+    "id": 13,
+    "candidates": [
+     null,
+     {
+      "id": "p-Thoughtseize",
+      "name": "Thoughtseize",
+      "set": "tst",
+      "collector_number": "1",
+      "popularity": {
+       "tier": "solid",
+       "label": "Popular",
+       "top_percent": 7.4,
+       "oracle_id": "00000000-0000-0000-0000-00000000000a",
+       "formats": {
+        "standard": "legal",
+        "pioneer": "legal",
+        "modern": "legal",
+        "legacy": "legal",
+        "vintage": "legal",
+        "pauper": "legal",
+        "premodern": "legal",
+        "commander": "legal"
+       }
+      }
+     }
+    ]
+   },
+   "expected": {
+    "pioneer": null,
+    "modern": null,
+    "legacy": null,
+    "vintage": null
+   }
+  },
+  {
+   "scan": {
+    "id": 14,
+    "candidates": [
+     {
+      "id": "p-Lightning Bolt",
+      "name": "Lightning Bolt",
+      "set": "tst",
+      "collector_number": "1",
+      "popularity": {
+       "tier": "solid",
+       "label": "Popular",
+       "top_percent": 7.4,
+       "formats": {
+        "standard": "legal",
+        "pioneer": "legal",
+        "modern": "legal",
+        "legacy": "legal",
+        "vintage": "legal",
+        "pauper": "legal",
+        "premodern": "legal",
+        "commander": "legal"
+       }
+      }
+     }
+    ]
+   },
+   "expected": {
+    "pioneer": null,
+    "modern": null,
+    "legacy": null,
+    "vintage": null
+   }
+  }
+ ],
+ "flag": [
+  {
+   "scan": {
+    "id": 1,
+    "candidates": [
+     {
+      "id": "p-Thoughtseize",
+      "name": "Thoughtseize",
+      "set": "tst",
+      "collector_number": "1",
+      "popularity": {
+       "tier": "solid",
+       "label": "Popular",
+       "top_percent": 7.4,
+       "oracle_id": "00000000-0000-0000-0000-00000000000a",
+       "formats": {
+        "standard": "legal",
+        "pioneer": "legal",
+        "modern": "legal",
+        "legacy": "legal",
+        "vintage": "legal",
+        "pauper": "legal",
+        "premodern": "legal",
+        "commander": "legal"
+       }
+      }
+     },
+     {
+      "id": "p-Fatal Push",
+      "name": "Fatal Push",
+      "set": "tst",
+      "collector_number": "1",
+      "popularity": {
+       "tier": "solid",
+       "label": "Popular",
+       "top_percent": 7.4,
+       "oracle_id": "00000000-0000-0000-0000-00000000000b",
+       "formats": {
+        "standard": "legal",
+        "pioneer": "legal",
+        "modern": "legal",
+        "legacy": "legal",
+        "vintage": "legal",
+        "pauper": "legal",
+        "premodern": "legal",
+        "commander": "legal"
+       }
+      }
+     }
+    ]
+   },
+   "pack": false,
+   "expected": {
+    "id": 1,
+    "candidates": [
+     {
+      "id": "p-Thoughtseize",
+      "name": "Thoughtseize",
+      "set": "tst",
+      "collector_number": "1",
+      "popularity": {
+       "tier": "solid",
+       "label": "Popular",
+       "top_percent": 7.4,
+       "oracle_id": "00000000-0000-0000-0000-00000000000a",
+       "formats": {
+        "standard": "legal",
+        "pioneer": "legal",
+        "modern": "legal",
+        "legacy": "legal",
+        "vintage": "legal",
+        "pauper": "legal",
+        "premodern": "legal",
+        "commander": "legal"
+       }
+      }
+     },
+     {
+      "id": "p-Fatal Push",
+      "name": "Fatal Push",
+      "set": "tst",
+      "collector_number": "1",
+      "popularity": {
+       "tier": "solid",
+       "label": "Popular",
+       "top_percent": 7.4,
+       "oracle_id": "00000000-0000-0000-0000-00000000000b",
+       "formats": {
+        "standard": "legal",
+        "pioneer": "legal",
+        "modern": "legal",
+        "legacy": "legal",
+        "vintage": "legal",
+        "pauper": "legal",
+        "premodern": "legal",
+        "commander": "legal"
+       }
+      }
+     }
+    ]
+   }
+  },
+  {
+   "scan": {
+    "id": 1,
+    "candidates": [
+     {
+      "id": "p-Thoughtseize",
+      "name": "Thoughtseize",
+      "set": "tst",
+      "collector_number": "1",
+      "popularity": {
+       "tier": "solid",
+       "label": "Popular",
+       "top_percent": 7.4,
+       "oracle_id": "00000000-0000-0000-0000-00000000000a",
+       "formats": {
+        "standard": "legal",
+        "pioneer": "legal",
+        "modern": "legal",
+        "legacy": "legal",
+        "vintage": "legal",
+        "pauper": "legal",
+        "premodern": "legal",
+        "commander": "legal"
+       }
+      }
+     },
+     {
+      "id": "p-Fatal Push",
+      "name": "Fatal Push",
+      "set": "tst",
+      "collector_number": "1",
+      "popularity": {
+       "tier": "solid",
+       "label": "Popular",
+       "top_percent": 7.4,
+       "oracle_id": "00000000-0000-0000-0000-00000000000b",
+       "formats": {
+        "standard": "legal",
+        "pioneer": "legal",
+        "modern": "legal",
+        "legacy": "legal",
+        "vintage": "legal",
+        "pauper": "legal",
+        "premodern": "legal",
+        "commander": "legal"
+       }
+      }
+     }
+    ]
+   },
+   "pack": true,
+   "expected": {
+    "id": 1,
+    "candidates": [
+     {
+      "id": "p-Thoughtseize",
+      "name": "Thoughtseize",
+      "set": "tst",
+      "collector_number": "1",
+      "popularity": {
+       "tier": "solid",
+       "label": "Popular",
+       "top_percent": 7.4,
+       "oracle_id": "00000000-0000-0000-0000-00000000000a",
+       "formats": {
+        "standard": "legal",
+        "pioneer": "legal",
+        "modern": "legal",
+        "legacy": "legal",
+        "vintage": "legal",
+        "pauper": "legal",
+        "premodern": "legal",
+        "commander": "legal"
+       }
+      }
+     },
+     {
+      "id": "p-Fatal Push",
+      "name": "Fatal Push",
+      "set": "tst",
+      "collector_number": "1",
+      "popularity": {
+       "tier": "solid",
+       "label": "Popular",
+       "top_percent": 7.4,
+       "oracle_id": "00000000-0000-0000-0000-00000000000b",
+       "formats": {
+        "standard": "legal",
+        "pioneer": "legal",
+        "modern": "legal",
+        "legacy": "legal",
+        "vintage": "legal",
+        "pauper": "legal",
+        "premodern": "legal",
+        "commander": "legal"
+       }
+      }
+     }
+    ],
+    "play": {
+     "pioneer": {
+      "tier": "staple",
+      "bp": 1500,
+      "rank": 30
+     },
+     "modern": {
+      "tier": "staple",
+      "bp": 2689,
+      "rank": 9
+     },
+     "legacy": {
+      "tier": "staple",
+      "bp": 3100,
+      "rank": 4
+     },
+     "vintage": {
+      "tier": "unplayed"
+     }
+    }
+   }
+  },
+  {
+   "scan": {
+    "id": 2,
+    "candidates": [
+     {
+      "id": "p-Thoughtseize",
+      "name": "Thoughtseize",
+      "set": "tst",
+      "collector_number": "1",
+      "popularity": {
+       "tier": "solid",
+       "label": "Popular",
+       "top_percent": 7.4,
+       "oracle_id": "00000000-0000-0000-0000-00000000000a",
+       "formats": {
+        "standard": "legal",
+        "pioneer": "legal",
+        "modern": "legal",
+        "legacy": "legal",
+        "vintage": "legal",
+        "pauper": "legal",
+        "premodern": "legal",
+        "commander": "legal"
+       }
+      }
+     }
+    ],
+    "selection": {
+     "name": "Fatal Push",
+     "popularity": {
+      "tier": "solid",
+      "label": "Popular",
+      "top_percent": 7.4,
+      "oracle_id": "00000000-0000-0000-0000-00000000000b",
+      "formats": {
+       "standard": "legal",
+       "pioneer": "legal",
+       "modern": "legal",
+       "legacy": "legal",
+       "vintage": "legal",
+       "pauper": "legal",
+       "premodern": "legal",
+       "commander": "legal"
+      }
+     }
+    }
+   },
+   "pack": false,
+   "expected": {
+    "id": 2,
+    "candidates": [
+     {
+      "id": "p-Thoughtseize",
+      "name": "Thoughtseize",
+      "set": "tst",
+      "collector_number": "1",
+      "popularity": {
+       "tier": "solid",
+       "label": "Popular",
+       "top_percent": 7.4,
+       "oracle_id": "00000000-0000-0000-0000-00000000000a",
+       "formats": {
+        "standard": "legal",
+        "pioneer": "legal",
+        "modern": "legal",
+        "legacy": "legal",
+        "vintage": "legal",
+        "pauper": "legal",
+        "premodern": "legal",
+        "commander": "legal"
+       }
+      }
+     }
+    ],
+    "selection": {
+     "name": "Fatal Push",
+     "popularity": {
+      "tier": "solid",
+      "label": "Popular",
+      "top_percent": 7.4,
+      "oracle_id": "00000000-0000-0000-0000-00000000000b",
+      "formats": {
+       "standard": "legal",
+       "pioneer": "legal",
+       "modern": "legal",
+       "legacy": "legal",
+       "vintage": "legal",
+       "pauper": "legal",
+       "premodern": "legal",
+       "commander": "legal"
+      }
+     }
+    }
+   }
+  },
+  {
+   "scan": {
+    "id": 2,
+    "candidates": [
+     {
+      "id": "p-Thoughtseize",
+      "name": "Thoughtseize",
+      "set": "tst",
+      "collector_number": "1",
+      "popularity": {
+       "tier": "solid",
+       "label": "Popular",
+       "top_percent": 7.4,
+       "oracle_id": "00000000-0000-0000-0000-00000000000a",
+       "formats": {
+        "standard": "legal",
+        "pioneer": "legal",
+        "modern": "legal",
+        "legacy": "legal",
+        "vintage": "legal",
+        "pauper": "legal",
+        "premodern": "legal",
+        "commander": "legal"
+       }
+      }
+     }
+    ],
+    "selection": {
+     "name": "Fatal Push",
+     "popularity": {
+      "tier": "solid",
+      "label": "Popular",
+      "top_percent": 7.4,
+      "oracle_id": "00000000-0000-0000-0000-00000000000b",
+      "formats": {
+       "standard": "legal",
+       "pioneer": "legal",
+       "modern": "legal",
+       "legacy": "legal",
+       "vintage": "legal",
+       "pauper": "legal",
+       "premodern": "legal",
+       "commander": "legal"
+      }
+     }
+    }
+   },
+   "pack": true,
+   "expected": {
+    "id": 2,
+    "candidates": [
+     {
+      "id": "p-Thoughtseize",
+      "name": "Thoughtseize",
+      "set": "tst",
+      "collector_number": "1",
+      "popularity": {
+       "tier": "solid",
+       "label": "Popular",
+       "top_percent": 7.4,
+       "oracle_id": "00000000-0000-0000-0000-00000000000a",
+       "formats": {
+        "standard": "legal",
+        "pioneer": "legal",
+        "modern": "legal",
+        "legacy": "legal",
+        "vintage": "legal",
+        "pauper": "legal",
+        "premodern": "legal",
+        "commander": "legal"
+       }
+      }
+     }
+    ],
+    "selection": {
+     "name": "Fatal Push",
+     "popularity": {
+      "tier": "solid",
+      "label": "Popular",
+      "top_percent": 7.4,
+      "oracle_id": "00000000-0000-0000-0000-00000000000b",
+      "formats": {
+       "standard": "legal",
+       "pioneer": "legal",
+       "modern": "legal",
+       "legacy": "legal",
+       "vintage": "legal",
+       "pauper": "legal",
+       "premodern": "legal",
+       "commander": "legal"
+      }
+     }
+    },
+    "play": {
+     "pioneer": {
+      "tier": "unplayed"
+     },
+     "modern": {
+      "tier": "staple",
+      "bp": 1000,
+      "rank": 50
+     },
+     "legacy": {
+      "tier": "unplayed"
+     },
+     "vintage": {
+      "tier": "unplayed"
+     }
+    }
+   }
+  },
+  {
+   "scan": {
+    "id": 3,
+    "candidates": [
+     {
+      "id": "p-Thoughtseize",
+      "name": "Thoughtseize",
+      "set": "tst",
+      "collector_number": "1",
+      "popularity": {
+       "tier": "solid",
+       "label": "Popular",
+       "top_percent": 7.4,
+       "oracle_id": "00000000-0000-0000-0000-00000000000a",
+       "formats": {
+        "standard": "legal",
+        "pioneer": "legal",
+        "modern": "legal",
+        "legacy": "legal",
+        "vintage": "legal",
+        "pauper": "legal",
+        "premodern": "legal",
+        "commander": "legal"
+       }
+      }
+     }
+    ],
+    "selection": {
+     "name": "Fatal Push",
+     "popularity": null
+    }
+   },
+   "pack": false,
+   "expected": {
+    "id": 3,
+    "candidates": [
+     {
+      "id": "p-Thoughtseize",
+      "name": "Thoughtseize",
+      "set": "tst",
+      "collector_number": "1",
+      "popularity": {
+       "tier": "solid",
+       "label": "Popular",
+       "top_percent": 7.4,
+       "oracle_id": "00000000-0000-0000-0000-00000000000a",
+       "formats": {
+        "standard": "legal",
+        "pioneer": "legal",
+        "modern": "legal",
+        "legacy": "legal",
+        "vintage": "legal",
+        "pauper": "legal",
+        "premodern": "legal",
+        "commander": "legal"
+       }
+      }
+     }
+    ],
+    "selection": {
+     "name": "Fatal Push",
+     "popularity": null
+    }
+   }
+  },
+  {
+   "scan": {
+    "id": 3,
+    "candidates": [
+     {
+      "id": "p-Thoughtseize",
+      "name": "Thoughtseize",
+      "set": "tst",
+      "collector_number": "1",
+      "popularity": {
+       "tier": "solid",
+       "label": "Popular",
+       "top_percent": 7.4,
+       "oracle_id": "00000000-0000-0000-0000-00000000000a",
+       "formats": {
+        "standard": "legal",
+        "pioneer": "legal",
+        "modern": "legal",
+        "legacy": "legal",
+        "vintage": "legal",
+        "pauper": "legal",
+        "premodern": "legal",
+        "commander": "legal"
+       }
+      }
+     }
+    ],
+    "selection": {
+     "name": "Fatal Push",
+     "popularity": null
+    }
+   },
+   "pack": true,
+   "expected": {
+    "id": 3,
+    "candidates": [
+     {
+      "id": "p-Thoughtseize",
+      "name": "Thoughtseize",
+      "set": "tst",
+      "collector_number": "1",
+      "popularity": {
+       "tier": "solid",
+       "label": "Popular",
+       "top_percent": 7.4,
+       "oracle_id": "00000000-0000-0000-0000-00000000000a",
+       "formats": {
+        "standard": "legal",
+        "pioneer": "legal",
+        "modern": "legal",
+        "legacy": "legal",
+        "vintage": "legal",
+        "pauper": "legal",
+        "premodern": "legal",
+        "commander": "legal"
+       }
+      }
+     }
+    ],
+    "selection": {
+     "name": "Fatal Push",
+     "popularity": null
+    },
+    "play": {
+     "pioneer": {
+      "tier": "staple",
+      "bp": 1500,
+      "rank": 30
+     },
+     "modern": {
+      "tier": "staple",
+      "bp": 2689,
+      "rank": 9
+     },
+     "legacy": {
+      "tier": "staple",
+      "bp": 3100,
+      "rank": 4
+     },
+     "vintage": {
+      "tier": "unplayed"
+     }
+    }
+   }
+  },
+  {
+   "scan": {
+    "id": 6,
+    "candidates": []
+   },
+   "pack": false,
+   "expected": {
+    "id": 6,
+    "candidates": []
+   }
+  },
+  {
+   "scan": {
+    "id": 6,
+    "candidates": []
+   },
+   "pack": true,
+   "expected": {
+    "id": 6,
+    "candidates": [],
+    "play": {
+     "pioneer": null,
+     "modern": null,
+     "legacy": null,
+     "vintage": null
+    }
+   }
+  }
+ ],
+ "status": {
+  "none": {
+   "loaded": false
+  },
+  "pack": {
+   "loaded": true,
+   "as_of": "2026-11-10",
+   "window_days": 60,
+   "formats": {
+    "pioneer": {
+     "decks": 1437,
+     "events": 97,
+     "sources": {
+      "mtgo": {
+       "decks": 1437,
+       "events": 177,
+       "weighted": true
+      },
+      "paper": {
+       "decks": 130,
+       "events": 79,
+       "weighted": false
+      }
+     },
+     "played": 1
+    },
+    "modern": {
+     "decks": 16831,
+     "events": 256,
+     "sources": {
+      "mtgo": {
+       "decks": 6146,
+       "events": 177,
+       "weighted": true
+      },
+      "paper": {
+       "decks": 10685,
+       "events": 79,
+       "weighted": true
+      }
+     },
+     "played": 6
+    },
+    "legacy": {
+     "decks": 5768,
+     "events": 256,
+     "sources": {
+      "mtgo": {
+       "decks": 3038,
+       "events": 177,
+       "weighted": true
+      },
+      "paper": {
+       "decks": 2730,
+       "events": 79,
+       "weighted": true
+      }
+     },
+     "played": 3
+    },
+    "vintage": {
+     "decks": 2631,
+     "events": 256,
+     "sources": {
+      "mtgo": {
+       "decks": 1479,
+       "events": 177,
+       "weighted": true
+      },
+      "paper": {
+       "decks": 1152,
+       "events": 79,
+       "weighted": true
+      }
+     },
+     "played": 2
+    }
+   }
+  },
+  "pack2": {
+   "loaded": true,
+   "as_of": "2026-11-17",
+   "window_days": 60,
+   "formats": {
+    "modern": {
+     "decks": 17000,
+     "events": 256,
+     "sources": {
+      "mtgo": {
+       "decks": 6200,
+       "events": 177,
+       "weighted": true
+      },
+      "paper": {
+       "decks": 10800,
+       "events": 79,
+       "weighted": true
+      }
+     },
+     "played": 2
+    },
+    "premodern": {
+     "decks": 3289,
+     "events": 256,
+     "sources": {
+      "mtgo": {
+       "decks": 1419,
+       "events": 177,
+       "weighted": true
+      },
+      "paper": {
+       "decks": 1870,
+       "events": 79,
+       "weighted": true
+      }
+     },
+     "played": 1
+    }
+   }
+  }
+ },
+ "api": {
+  "seeds": [
+   {
+    "identified": true,
+    "card_read": {
+     "name": "Thoughtseize"
+    },
+    "confidence": {},
+    "candidates": [
+     {
+      "id": "p-Thoughtseize",
+      "name": "Thoughtseize",
+      "set": "tst",
+      "collector_number": "1",
+      "popularity": {
+       "tier": "solid",
+       "label": "Popular",
+       "top_percent": 7.4,
+       "oracle_id": "00000000-0000-0000-0000-00000000000a",
+       "formats": {
+        "standard": "legal",
+        "pioneer": "legal",
+        "modern": "legal",
+        "legacy": "legal",
+        "vintage": "legal",
+        "pauper": "legal",
+        "premodern": "legal",
+        "commander": "legal"
+       }
+      }
+     }
+    ]
+   },
+   {
+    "identified": true,
+    "card_read": {
+     "name": "Smothering Tithe"
+    },
+    "confidence": {},
+    "candidates": [
+     {
+      "id": "p-Smothering Tithe",
+      "name": "Smothering Tithe",
+      "set": "tst",
+      "collector_number": "1",
+      "popularity": {
+       "tier": "solid",
+       "label": "Popular",
+       "top_percent": 7.4,
+       "oracle_id": "00000000-0000-0000-0000-000000000010",
+       "formats": {
+        "standard": "legal",
+        "pioneer": "legal",
+        "modern": "legal",
+        "legacy": "legal",
+        "vintage": "legal",
+        "pauper": "legal",
+        "premodern": "legal",
+        "commander": "legal"
+       }
+      }
+     }
+    ]
+   },
+   {
+    "identified": true,
+    "card_read": {
+     "name": "Island"
+    },
+    "confidence": {},
+    "candidates": [
+     {
+      "id": "p-Island",
+      "name": "Island",
+      "set": "tst",
+      "collector_number": "1",
+      "popularity": {
+       "tier": "solid",
+       "label": "Popular",
+       "top_percent": 7.4,
+       "formats": {
+        "standard": "legal",
+        "pioneer": "legal",
+        "modern": "legal",
+        "legacy": "legal",
+        "vintage": "legal",
+        "pauper": "legal",
+        "premodern": "legal",
+        "commander": "legal"
+       }
+      }
+     }
+    ]
+   },
+   {
+    "identified": false,
+    "card_read": {
+     "name": ""
+    },
+    "confidence": {},
+    "candidates": [],
+    "error": "no card"
+   }
+  ],
+  "steps": [
+   {
+    "method": "GET",
+    "path": "/api/scans",
+    "body": null,
+    "status": 200,
+    "response": [
+     {
+      "id": 4,
+      "created_at": "T0004",
+      "updated_at": "T0004",
+      "status": "candidates",
+      "identified": false,
+      "error": "no card",
+      "card_read": {
+       "name": ""
+      },
+      "confidence": {},
+      "candidates": [],
+      "selection": null,
+      "f2f": null,
+      "included": true,
+      "flagged": false
+     },
+     {
+      "id": 3,
+      "created_at": "T0003",
+      "updated_at": "T0003",
+      "status": "candidates",
+      "identified": true,
+      "error": null,
+      "card_read": {
+       "name": "Island"
+      },
+      "confidence": {},
+      "candidates": [
+       {
+        "id": "p-Island",
+        "name": "Island",
+        "set": "tst",
+        "collector_number": "1",
+        "popularity": {
+         "tier": "solid",
+         "label": "Popular",
+         "top_percent": 7.4,
+         "formats": {
+          "standard": "legal",
+          "pioneer": "legal",
+          "modern": "legal",
+          "legacy": "legal",
+          "vintage": "legal",
+          "pauper": "legal",
+          "premodern": "legal",
+          "commander": "legal"
+         }
+        },
+        "other_art": false
+       }
+      ],
+      "selection": null,
+      "f2f": null,
+      "included": true,
+      "flagged": false
+     },
+     {
+      "id": 2,
+      "created_at": "T0002",
+      "updated_at": "T0002",
+      "status": "candidates",
+      "identified": true,
+      "error": null,
+      "card_read": {
+       "name": "Smothering Tithe"
+      },
+      "confidence": {},
+      "candidates": [
+       {
+        "id": "p-Smothering Tithe",
+        "name": "Smothering Tithe",
+        "set": "tst",
+        "collector_number": "1",
+        "popularity": {
+         "tier": "solid",
+         "label": "Popular",
+         "top_percent": 7.4,
+         "oracle_id": "00000000-0000-0000-0000-000000000010",
+         "formats": {
+          "standard": "legal",
+          "pioneer": "legal",
+          "modern": "legal",
+          "legacy": "legal",
+          "vintage": "legal",
+          "pauper": "legal",
+          "premodern": "legal",
+          "commander": "legal"
+         }
+        },
+        "other_art": false
+       }
+      ],
+      "selection": null,
+      "f2f": null,
+      "included": true,
+      "flagged": false
+     },
+     {
+      "id": 1,
+      "created_at": "T0001",
+      "updated_at": "T0001",
+      "status": "candidates",
+      "identified": true,
+      "error": null,
+      "card_read": {
+       "name": "Thoughtseize"
+      },
+      "confidence": {},
+      "candidates": [
+       {
+        "id": "p-Thoughtseize",
+        "name": "Thoughtseize",
+        "set": "tst",
+        "collector_number": "1",
+        "popularity": {
+         "tier": "solid",
+         "label": "Popular",
+         "top_percent": 7.4,
+         "oracle_id": "00000000-0000-0000-0000-00000000000a",
+         "formats": {
+          "standard": "legal",
+          "pioneer": "legal",
+          "modern": "legal",
+          "legacy": "legal",
+          "vintage": "legal",
+          "pauper": "legal",
+          "premodern": "legal",
+          "commander": "legal"
+         }
+        },
+        "other_art": false
+       }
+      ],
+      "selection": null,
+      "f2f": null,
+      "included": true,
+      "flagged": false
+     }
+    ]
+   },
+   {
+    "method": "GET",
+    "path": "/api/scans/1",
+    "body": null,
+    "status": 200,
+    "response": {
+     "id": 1,
+     "created_at": "T0001",
+     "updated_at": "T0001",
+     "status": "candidates",
+     "identified": true,
+     "error": null,
+     "card_read": {
+      "name": "Thoughtseize"
+     },
+     "confidence": {},
+     "candidates": [
+      {
+       "id": "p-Thoughtseize",
+       "name": "Thoughtseize",
+       "set": "tst",
+       "collector_number": "1",
+       "popularity": {
+        "tier": "solid",
+        "label": "Popular",
+        "top_percent": 7.4,
+        "oracle_id": "00000000-0000-0000-0000-00000000000a",
+        "formats": {
+         "standard": "legal",
+         "pioneer": "legal",
+         "modern": "legal",
+         "legacy": "legal",
+         "vintage": "legal",
+         "pauper": "legal",
+         "premodern": "legal",
+         "commander": "legal"
+        }
+       },
+       "other_art": false
+      }
+     ],
+     "selection": null,
+     "f2f": null,
+     "included": true,
+     "flagged": false
+    }
+   },
+   {
+    "method": "GET",
+    "path": "/api/play-data",
+    "body": null,
+    "status": 200,
+    "response": {
+     "loaded": false
+    }
+   },
+   {
+    "op": "data",
+    "text": "{\"ambiguous\":[\"lightning bolt\",\"pick your poison\"],\"as_of\":\"2026-11-10\",\"basic\":[\"00000000-0000-0000-0000-00000000000f\"],\"built_at\":\"2026-11-10T07:41:02Z\",\"formats\":{\"legacy\":{\"cards\":{\"00000000-0000-0000-0000-00000000000a\":[3100,4],\"00000000-0000-0000-0000-00000000000e\":[2200,15],\"00000000-0000-0000-0000-000000000011\":[450,80]},\"decks\":5768,\"events\":256,\"sources\":{\"mtgo\":{\"decks\":3038,\"events\":177,\"weighted\":true},\"paper\":{\"decks\":2730,\"events\":79,\"weighted\":true}}},\"modern\":{\"cards\":{\"00000000-0000-0000-0000-00000000000a\":[2689,9],\"00000000-0000-0000-0000-00000000000b\":[1000,50],\"00000000-0000-0000-0000-00000000000c\":[232,297],\"00000000-0000-0000-0000-00000000000d\":[178,325],\"00000000-0000-0000-0000-00000000000e\":[2560,12],\"00000000-0000-0000-0000-000000000011\":[1,2400]},\"decks\":16831,\"events\":256,\"sources\":{\"mtgo\":{\"decks\":6146,\"events\":177,\"weighted\":true},\"paper\":{\"decks\":10685,\"events\":79,\"weighted\":true}}},\"pioneer\":{\"cards\":{\"00000000-0000-0000-0000-00000000000a\":[1500,30]},\"decks\":1437,\"events\":97,\"sources\":{\"mtgo\":{\"decks\":1437,\"events\":177,\"weighted\":true},\"paper\":{\"decks\":130,\"events\":79,\"weighted\":false}}},\"vintage\":{\"cards\":{\"00000000-0000-0000-0000-000000000011\":[1200,30],\"00000000-0000-0000-0000-000000000012\":[9500,1]},\"decks\":2631,\"events\":256,\"sources\":{\"mtgo\":{\"decks\":1479,\"events\":177,\"weighted\":true},\"paper\":{\"decks\":1152,\"events\":79,\"weighted\":true}}}},\"kind\":\"cardscanner-play-data\",\"names\":{\"black lotus\":\"00000000-0000-0000-0000-000000000012\",\"fable of the mirror-breaker\":\"00000000-0000-0000-0000-00000000000c\",\"fable of the mirror-breaker // reflection of kiki-jiki\":\"00000000-0000-0000-0000-00000000000c\",\"fatal push\":\"00000000-0000-0000-0000-00000000000b\",\"island\":\"00000000-0000-0000-0000-00000000000f\",\"reflection of kiki-jiki\":\"00000000-0000-0000-0000-00000000000c\",\"superior spider-man\":\"00000000-0000-0000-0000-00000000000d\",\"thoughtseize\":\"00000000-0000-0000-0000-00000000000a\",\"æther vial\":\"00000000-0000-0000-0000-000000000011\"},\"skipped\":{\"standard\":{\"decks\":0,\"reason\":\"too few decks\"}},\"unmatched_entries\":23,\"unmatched_names\":22,\"version\":1,\"window_days\":60}\n"
+   },
+   {
+    "method": "GET",
+    "path": "/api/scans",
+    "body": null,
+    "status": 200,
+    "response": [
+     {
+      "id": 4,
+      "created_at": "T0004",
+      "updated_at": "T0004",
+      "status": "candidates",
+      "identified": false,
+      "error": "no card",
+      "card_read": {
+       "name": ""
+      },
+      "confidence": {},
+      "candidates": [],
+      "selection": null,
+      "f2f": null,
+      "included": true,
+      "flagged": false,
+      "play": {
+       "pioneer": null,
+       "modern": null,
+       "legacy": null,
+       "vintage": null
+      }
+     },
+     {
+      "id": 3,
+      "created_at": "T0003",
+      "updated_at": "T0003",
+      "status": "candidates",
+      "identified": true,
+      "error": null,
+      "card_read": {
+       "name": "Island"
+      },
+      "confidence": {},
+      "candidates": [
+       {
+        "id": "p-Island",
+        "name": "Island",
+        "set": "tst",
+        "collector_number": "1",
+        "popularity": {
+         "tier": "solid",
+         "label": "Popular",
+         "top_percent": 7.4,
+         "formats": {
+          "standard": "legal",
+          "pioneer": "legal",
+          "modern": "legal",
+          "legacy": "legal",
+          "vintage": "legal",
+          "pauper": "legal",
+          "premodern": "legal",
+          "commander": "legal"
+         }
+        },
+        "other_art": false
+       }
+      ],
+      "selection": null,
+      "f2f": null,
+      "included": true,
+      "flagged": false,
+      "play": {
+       "pioneer": {
+        "tier": "basic"
+       },
+       "modern": {
+        "tier": "basic"
+       },
+       "legacy": {
+        "tier": "basic"
+       },
+       "vintage": {
+        "tier": "basic"
+       }
+      }
+     },
+     {
+      "id": 2,
+      "created_at": "T0002",
+      "updated_at": "T0002",
+      "status": "candidates",
+      "identified": true,
+      "error": null,
+      "card_read": {
+       "name": "Smothering Tithe"
+      },
+      "confidence": {},
+      "candidates": [
+       {
+        "id": "p-Smothering Tithe",
+        "name": "Smothering Tithe",
+        "set": "tst",
+        "collector_number": "1",
+        "popularity": {
+         "tier": "solid",
+         "label": "Popular",
+         "top_percent": 7.4,
+         "oracle_id": "00000000-0000-0000-0000-000000000010",
+         "formats": {
+          "standard": "legal",
+          "pioneer": "legal",
+          "modern": "legal",
+          "legacy": "legal",
+          "vintage": "legal",
+          "pauper": "legal",
+          "premodern": "legal",
+          "commander": "legal"
+         }
+        },
+        "other_art": false
+       }
+      ],
+      "selection": null,
+      "f2f": null,
+      "included": true,
+      "flagged": false,
+      "play": {
+       "pioneer": {
+        "tier": "unplayed"
+       },
+       "modern": {
+        "tier": "unplayed"
+       },
+       "legacy": {
+        "tier": "unplayed"
+       },
+       "vintage": {
+        "tier": "unplayed"
+       }
+      }
+     },
+     {
+      "id": 1,
+      "created_at": "T0001",
+      "updated_at": "T0001",
+      "status": "candidates",
+      "identified": true,
+      "error": null,
+      "card_read": {
+       "name": "Thoughtseize"
+      },
+      "confidence": {},
+      "candidates": [
+       {
+        "id": "p-Thoughtseize",
+        "name": "Thoughtseize",
+        "set": "tst",
+        "collector_number": "1",
+        "popularity": {
+         "tier": "solid",
+         "label": "Popular",
+         "top_percent": 7.4,
+         "oracle_id": "00000000-0000-0000-0000-00000000000a",
+         "formats": {
+          "standard": "legal",
+          "pioneer": "legal",
+          "modern": "legal",
+          "legacy": "legal",
+          "vintage": "legal",
+          "pauper": "legal",
+          "premodern": "legal",
+          "commander": "legal"
+         }
+        },
+        "other_art": false
+       }
+      ],
+      "selection": null,
+      "f2f": null,
+      "included": true,
+      "flagged": false,
+      "play": {
+       "pioneer": {
+        "tier": "staple",
+        "bp": 1500,
+        "rank": 30
+       },
+       "modern": {
+        "tier": "staple",
+        "bp": 2689,
+        "rank": 9
+       },
+       "legacy": {
+        "tier": "staple",
+        "bp": 3100,
+        "rank": 4
+       },
+       "vintage": {
+        "tier": "unplayed"
+       }
+      }
+     }
+    ]
+   },
+   {
+    "method": "GET",
+    "path": "/api/scans/1",
+    "body": null,
+    "status": 200,
+    "response": {
+     "id": 1,
+     "created_at": "T0001",
+     "updated_at": "T0001",
+     "status": "candidates",
+     "identified": true,
+     "error": null,
+     "card_read": {
+      "name": "Thoughtseize"
+     },
+     "confidence": {},
+     "candidates": [
+      {
+       "id": "p-Thoughtseize",
+       "name": "Thoughtseize",
+       "set": "tst",
+       "collector_number": "1",
+       "popularity": {
+        "tier": "solid",
+        "label": "Popular",
+        "top_percent": 7.4,
+        "oracle_id": "00000000-0000-0000-0000-00000000000a",
+        "formats": {
+         "standard": "legal",
+         "pioneer": "legal",
+         "modern": "legal",
+         "legacy": "legal",
+         "vintage": "legal",
+         "pauper": "legal",
+         "premodern": "legal",
+         "commander": "legal"
+        }
+       },
+       "other_art": false
+      }
+     ],
+     "selection": null,
+     "f2f": null,
+     "included": true,
+     "flagged": false,
+     "play": {
+      "pioneer": {
+       "tier": "staple",
+       "bp": 1500,
+       "rank": 30
+      },
+      "modern": {
+       "tier": "staple",
+       "bp": 2689,
+       "rank": 9
+      },
+      "legacy": {
+       "tier": "staple",
+       "bp": 3100,
+       "rank": 4
+      },
+      "vintage": {
+       "tier": "unplayed"
+      }
+     }
+    }
+   },
+   {
+    "method": "GET",
+    "path": "/api/scans/4",
+    "body": null,
+    "status": 200,
+    "response": {
+     "id": 4,
+     "created_at": "T0004",
+     "updated_at": "T0004",
+     "status": "candidates",
+     "identified": false,
+     "error": "no card",
+     "card_read": {
+      "name": ""
+     },
+     "confidence": {},
+     "candidates": [],
+     "selection": null,
+     "f2f": null,
+     "included": true,
+     "flagged": false,
+     "play": {
+      "pioneer": null,
+      "modern": null,
+      "legacy": null,
+      "vintage": null
+     }
+    }
+   },
+   {
+    "method": "GET",
+    "path": "/api/scans/99",
+    "body": null,
+    "status": 404,
+    "response": {
+     "error": "not found"
+    }
+   },
+   {
+    "method": "GET",
+    "path": "/api/play-data",
+    "body": null,
+    "status": 200,
+    "response": {
+     "loaded": true,
+     "as_of": "2026-11-10",
+     "window_days": 60,
+     "formats": {
+      "pioneer": {
+       "decks": 1437,
+       "events": 97,
+       "sources": {
+        "mtgo": {
+         "decks": 1437,
+         "events": 177,
+         "weighted": true
+        },
+        "paper": {
+         "decks": 130,
+         "events": 79,
+         "weighted": false
+        }
+       },
+       "played": 1
+      },
+      "modern": {
+       "decks": 16831,
+       "events": 256,
+       "sources": {
+        "mtgo": {
+         "decks": 6146,
+         "events": 177,
+         "weighted": true
+        },
+        "paper": {
+         "decks": 10685,
+         "events": 79,
+         "weighted": true
+        }
+       },
+       "played": 6
+      },
+      "legacy": {
+       "decks": 5768,
+       "events": 256,
+       "sources": {
+        "mtgo": {
+         "decks": 3038,
+         "events": 177,
+         "weighted": true
+        },
+        "paper": {
+         "decks": 2730,
+         "events": 79,
+         "weighted": true
+        }
+       },
+       "played": 3
+      },
+      "vintage": {
+       "decks": 2631,
+       "events": 256,
+       "sources": {
+        "mtgo": {
+         "decks": 1479,
+         "events": 177,
+         "weighted": true
+        },
+        "paper": {
+         "decks": 1152,
+         "events": 79,
+         "weighted": true
+        }
+       },
+       "played": 2
+      }
+     }
+    }
+   },
+   {
+    "method": "POST",
+    "path": "/api/scans/2/select",
+    "body": {
+     "printing": {
+      "id": "p-Thoughtseize",
+      "name": "Thoughtseize",
+      "set": "tst",
+      "collector_number": "1",
+      "popularity": {
+       "tier": "solid",
+       "label": "Popular",
+       "top_percent": 7.4,
+       "oracle_id": "00000000-0000-0000-0000-00000000000a",
+       "formats": {
+        "standard": "legal",
+        "pioneer": "legal",
+        "modern": "legal",
+        "legacy": "legal",
+        "vintage": "legal",
+        "pauper": "legal",
+        "premodern": "legal",
+        "commander": "legal"
+       }
+      }
+     },
+     "condition": "NM",
+     "finish": "nonfoil",
+     "quantity": 1
+    },
+    "status": 200,
+    "response": {
+     "id": 2,
+     "created_at": "T0002",
+     "updated_at": "T0005",
+     "status": "selected",
+     "identified": true,
+     "error": null,
+     "card_read": {
+      "name": "Smothering Tithe"
+     },
+     "confidence": {},
+     "candidates": [
+      {
+       "id": "p-Smothering Tithe",
+       "name": "Smothering Tithe",
+       "set": "tst",
+       "collector_number": "1",
+       "popularity": {
+        "tier": "solid",
+        "label": "Popular",
+        "top_percent": 7.4,
+        "oracle_id": "00000000-0000-0000-0000-000000000010",
+        "formats": {
+         "standard": "legal",
+         "pioneer": "legal",
+         "modern": "legal",
+         "legacy": "legal",
+         "vintage": "legal",
+         "pauper": "legal",
+         "premodern": "legal",
+         "commander": "legal"
+        }
+       }
+      }
+     ],
+     "selection": {
+      "scryfall_id": "p-Thoughtseize",
+      "name": "Thoughtseize",
+      "set": "tst",
+      "set_name": "",
+      "collector_number": "1",
+      "condition": "NM",
+      "finish": "nonfoil",
+      "quantity": 1,
+      "foil": false,
+      "image_normal": "",
+      "popularity": {
+       "tier": "solid",
+       "label": "Popular",
+       "top_percent": 7.4,
+       "oracle_id": "00000000-0000-0000-0000-00000000000a",
+       "formats": {
+        "standard": "legal",
+        "pioneer": "legal",
+        "modern": "legal",
+        "legacy": "legal",
+        "vintage": "legal",
+        "pauper": "legal",
+        "premodern": "legal",
+        "commander": "legal"
+       }
+      }
+     },
+     "f2f": null,
+     "included": true,
+     "flagged": false
+    }
+   },
+   {
+    "method": "GET",
+    "path": "/api/scans/2",
+    "body": null,
+    "status": 200,
+    "response": {
+     "id": 2,
+     "created_at": "T0002",
+     "updated_at": "T0005",
+     "status": "selected",
+     "identified": true,
+     "error": null,
+     "card_read": {
+      "name": "Smothering Tithe"
+     },
+     "confidence": {},
+     "candidates": [
+      {
+       "id": "p-Smothering Tithe",
+       "name": "Smothering Tithe",
+       "set": "tst",
+       "collector_number": "1",
+       "popularity": {
+        "tier": "solid",
+        "label": "Popular",
+        "top_percent": 7.4,
+        "oracle_id": "00000000-0000-0000-0000-000000000010",
+        "formats": {
+         "standard": "legal",
+         "pioneer": "legal",
+         "modern": "legal",
+         "legacy": "legal",
+         "vintage": "legal",
+         "pauper": "legal",
+         "premodern": "legal",
+         "commander": "legal"
+        }
+       },
+       "other_art": false
+      }
+     ],
+     "selection": {
+      "scryfall_id": "p-Thoughtseize",
+      "name": "Thoughtseize",
+      "set": "tst",
+      "set_name": "",
+      "collector_number": "1",
+      "condition": "NM",
+      "finish": "nonfoil",
+      "quantity": 1,
+      "foil": false,
+      "image_normal": "",
+      "popularity": {
+       "tier": "solid",
+       "label": "Popular",
+       "top_percent": 7.4,
+       "oracle_id": "00000000-0000-0000-0000-00000000000a",
+       "formats": {
+        "standard": "legal",
+        "pioneer": "legal",
+        "modern": "legal",
+        "legacy": "legal",
+        "vintage": "legal",
+        "pauper": "legal",
+        "premodern": "legal",
+        "commander": "legal"
+       }
+      }
+     },
+     "f2f": null,
+     "included": true,
+     "flagged": false,
+     "play": {
+      "pioneer": {
+       "tier": "staple",
+       "bp": 1500,
+       "rank": 30
+      },
+      "modern": {
+       "tier": "staple",
+       "bp": 2689,
+       "rank": 9
+      },
+      "legacy": {
+       "tier": "staple",
+       "bp": 3100,
+       "rank": 4
+      },
+      "vintage": {
+       "tier": "unplayed"
+      }
+     }
+    }
+   },
+   {
+    "op": "data",
+    "text": "{\"ambiguous\":[\"lightning bolt\",\"pick your poison\"],\"as_of\":\"2026-11-17\",\"basic\":[\"00000000-0000-0000-0000-00000000000f\"],\"built_at\":\"2026-11-10T07:41:02Z\",\"formats\":{\"modern\":{\"cards\":{\"00000000-0000-0000-0000-00000000000a\":[2400,11],\"00000000-0000-0000-0000-000000000010\":[3,1900]},\"decks\":17000,\"events\":256,\"sources\":{\"mtgo\":{\"decks\":6200,\"events\":177,\"weighted\":true},\"paper\":{\"decks\":10800,\"events\":79,\"weighted\":true}}},\"premodern\":{\"cards\":{\"00000000-0000-0000-0000-00000000000e\":[5000,3]},\"decks\":3289,\"events\":256,\"sources\":{\"mtgo\":{\"decks\":1419,\"events\":177,\"weighted\":true},\"paper\":{\"decks\":1870,\"events\":79,\"weighted\":true}}}},\"kind\":\"cardscanner-play-data\",\"names\":{\"black lotus\":\"00000000-0000-0000-0000-000000000012\",\"fable of the mirror-breaker\":\"00000000-0000-0000-0000-00000000000c\",\"fable of the mirror-breaker // reflection of kiki-jiki\":\"00000000-0000-0000-0000-00000000000c\",\"fatal push\":\"00000000-0000-0000-0000-00000000000b\",\"island\":\"00000000-0000-0000-0000-00000000000f\",\"reflection of kiki-jiki\":\"00000000-0000-0000-0000-00000000000c\",\"superior spider-man\":\"00000000-0000-0000-0000-00000000000d\",\"thoughtseize\":\"00000000-0000-0000-0000-00000000000a\",\"æther vial\":\"00000000-0000-0000-0000-000000000011\"},\"skipped\":{\"standard\":{\"decks\":0,\"reason\":\"too few decks\"}},\"unmatched_entries\":23,\"unmatched_names\":22,\"version\":1,\"window_days\":60}\n"
+   },
+   {
+    "method": "GET",
+    "path": "/api/scans",
+    "body": null,
+    "status": 200,
+    "response": [
+     {
+      "id": 4,
+      "created_at": "T0004",
+      "updated_at": "T0004",
+      "status": "candidates",
+      "identified": false,
+      "error": "no card",
+      "card_read": {
+       "name": ""
+      },
+      "confidence": {},
+      "candidates": [],
+      "selection": null,
+      "f2f": null,
+      "included": true,
+      "flagged": false,
+      "play": {
+       "modern": null,
+       "premodern": null
+      }
+     },
+     {
+      "id": 3,
+      "created_at": "T0003",
+      "updated_at": "T0003",
+      "status": "candidates",
+      "identified": true,
+      "error": null,
+      "card_read": {
+       "name": "Island"
+      },
+      "confidence": {},
+      "candidates": [
+       {
+        "id": "p-Island",
+        "name": "Island",
+        "set": "tst",
+        "collector_number": "1",
+        "popularity": {
+         "tier": "solid",
+         "label": "Popular",
+         "top_percent": 7.4,
+         "formats": {
+          "standard": "legal",
+          "pioneer": "legal",
+          "modern": "legal",
+          "legacy": "legal",
+          "vintage": "legal",
+          "pauper": "legal",
+          "premodern": "legal",
+          "commander": "legal"
+         }
+        },
+        "other_art": false
+       }
+      ],
+      "selection": null,
+      "f2f": null,
+      "included": true,
+      "flagged": false,
+      "play": {
+       "modern": {
+        "tier": "basic"
+       },
+       "premodern": {
+        "tier": "basic"
+       }
+      }
+     },
+     {
+      "id": 2,
+      "created_at": "T0002",
+      "updated_at": "T0005",
+      "status": "selected",
+      "identified": true,
+      "error": null,
+      "card_read": {
+       "name": "Smothering Tithe"
+      },
+      "confidence": {},
+      "candidates": [
+       {
+        "id": "p-Smothering Tithe",
+        "name": "Smothering Tithe",
+        "set": "tst",
+        "collector_number": "1",
+        "popularity": {
+         "tier": "solid",
+         "label": "Popular",
+         "top_percent": 7.4,
+         "oracle_id": "00000000-0000-0000-0000-000000000010",
+         "formats": {
+          "standard": "legal",
+          "pioneer": "legal",
+          "modern": "legal",
+          "legacy": "legal",
+          "vintage": "legal",
+          "pauper": "legal",
+          "premodern": "legal",
+          "commander": "legal"
+         }
+        },
+        "other_art": false
+       }
+      ],
+      "selection": {
+       "scryfall_id": "p-Thoughtseize",
+       "name": "Thoughtseize",
+       "set": "tst",
+       "set_name": "",
+       "collector_number": "1",
+       "condition": "NM",
+       "finish": "nonfoil",
+       "quantity": 1,
+       "foil": false,
+       "image_normal": "",
+       "popularity": {
+        "tier": "solid",
+        "label": "Popular",
+        "top_percent": 7.4,
+        "oracle_id": "00000000-0000-0000-0000-00000000000a",
+        "formats": {
+         "standard": "legal",
+         "pioneer": "legal",
+         "modern": "legal",
+         "legacy": "legal",
+         "vintage": "legal",
+         "pauper": "legal",
+         "premodern": "legal",
+         "commander": "legal"
+        }
+       }
+      },
+      "f2f": null,
+      "included": true,
+      "flagged": false,
+      "play": {
+       "modern": {
+        "tier": "staple",
+        "bp": 2400,
+        "rank": 11
+       },
+       "premodern": {
+        "tier": "unplayed"
+       }
+      }
+     },
+     {
+      "id": 1,
+      "created_at": "T0001",
+      "updated_at": "T0001",
+      "status": "candidates",
+      "identified": true,
+      "error": null,
+      "card_read": {
+       "name": "Thoughtseize"
+      },
+      "confidence": {},
+      "candidates": [
+       {
+        "id": "p-Thoughtseize",
+        "name": "Thoughtseize",
+        "set": "tst",
+        "collector_number": "1",
+        "popularity": {
+         "tier": "solid",
+         "label": "Popular",
+         "top_percent": 7.4,
+         "oracle_id": "00000000-0000-0000-0000-00000000000a",
+         "formats": {
+          "standard": "legal",
+          "pioneer": "legal",
+          "modern": "legal",
+          "legacy": "legal",
+          "vintage": "legal",
+          "pauper": "legal",
+          "premodern": "legal",
+          "commander": "legal"
+         }
+        },
+        "other_art": false
+       }
+      ],
+      "selection": null,
+      "f2f": null,
+      "included": true,
+      "flagged": false,
+      "play": {
+       "modern": {
+        "tier": "staple",
+        "bp": 2400,
+        "rank": 11
+       },
+       "premodern": {
+        "tier": "unplayed"
+       }
+      }
+     }
+    ]
+   },
+   {
+    "method": "GET",
+    "path": "/api/play-data",
+    "body": null,
+    "status": 200,
+    "response": {
+     "loaded": true,
+     "as_of": "2026-11-17",
+     "window_days": 60,
+     "formats": {
+      "modern": {
+       "decks": 17000,
+       "events": 256,
+       "sources": {
+        "mtgo": {
+         "decks": 6200,
+         "events": 177,
+         "weighted": true
+        },
+        "paper": {
+         "decks": 10800,
+         "events": 79,
+         "weighted": true
+        }
+       },
+       "played": 2
+      },
+      "premodern": {
+       "decks": 3289,
+       "events": 256,
+       "sources": {
+        "mtgo": {
+         "decks": 1419,
+         "events": 177,
+         "weighted": true
+        },
+        "paper": {
+         "decks": 1870,
+         "events": 79,
+         "weighted": true
+        }
+       },
+       "played": 1
+      }
+     }
+    }
+   },
+   {
+    "op": "data",
+    "text": null
+   },
+   {
+    "method": "GET",
+    "path": "/api/scans/1",
+    "body": null,
+    "status": 200,
+    "response": {
+     "id": 1,
+     "created_at": "T0001",
+     "updated_at": "T0001",
+     "status": "candidates",
+     "identified": true,
+     "error": null,
+     "card_read": {
+      "name": "Thoughtseize"
+     },
+     "confidence": {},
+     "candidates": [
+      {
+       "id": "p-Thoughtseize",
+       "name": "Thoughtseize",
+       "set": "tst",
+       "collector_number": "1",
+       "popularity": {
+        "tier": "solid",
+        "label": "Popular",
+        "top_percent": 7.4,
+        "oracle_id": "00000000-0000-0000-0000-00000000000a",
+        "formats": {
+         "standard": "legal",
+         "pioneer": "legal",
+         "modern": "legal",
+         "legacy": "legal",
+         "vintage": "legal",
+         "pauper": "legal",
+         "premodern": "legal",
+         "commander": "legal"
+        }
+       },
+       "other_art": false
+      }
+     ],
+     "selection": null,
+     "f2f": null,
+     "included": true,
+     "flagged": false
+    }
+   },
+   {
+    "method": "GET",
+    "path": "/api/play-data",
+    "body": null,
+    "status": 200,
+    "response": {
+     "loaded": false
+    }
+   }
+  ]
+ }
+}

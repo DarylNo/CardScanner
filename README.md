@@ -118,7 +118,7 @@ photo so its card matches the printing's.
   (straightened, filling 95% of the picture); swipe a row to delete it (5 s
   Undo). **Filters → Bulk actions** has *Clear unpicked* and *Clear all*;
   **Settings → Scans → Delete all scans** does the same from the app.
-- **Filters:** a price band, a Commander popularity floor and a Modern floor,
+- **Filters:** a price band, a Commander popularity floor and a Played-in floor,
   combined by *match any* (default) or *match all*. They stay set when you
   leave and come back.
 - **Popularity** comes from EDHREC's Commander rank (free, from the same
@@ -126,43 +126,48 @@ photo so its card matches the printing's.
   0.49%* means it is in the top 0.49% of the cards EDHREC ranks. Cards EDHREC
   doesn't rank (basic lands, Commander-banned cards) show as *unranked*, not
   as unpopular. Format legality is shown too.
-- **Modern** — a separate chip, *Modern 27%*: the share of recent Modern
-  decks that run the card (see [Modern play data](#modern-play-data)).
+- **Play** — a separate chip, *Modern 27%*: the share of recent decks of the
+  card's best format that run it (see [Play data](#play-data)).
 
 **Pricing** runs by itself: whenever something is unpriced the phone checks
 Face to Face every few seconds, and sleeps when nothing is owed. Picked cards
 price their printing; unpicked ones price every printing that shares the
 scanned artwork.
 
-## Modern play data
+## Play data
 
 EDHREC's rank is about Commander, and Commander popularity says little about
-Modern: Thoughtseize is outside EDHREC's top 4,000 but in about a quarter of
-all Modern decks, while Smothering Tithe is a Commander staple no Modern deck
-plays. So Modern gets its own number: **the share of recent Modern decks that
-run at least one copy** (main deck or sideboard).
+how much a card is played in other formats: Thoughtseize is outside EDHREC's
+top 4,000 but in about a quarter of all Modern decks, while Smothering Tithe is
+a Commander staple no Modern deck plays. So every competitive format the data
+covers gets its own number: **the share of recent decks of that format that run
+at least one copy** (main deck or sideboard) — Standard, Pioneer, Modern,
+Legacy, Vintage, Pauper and Premodern.
 
-- **The chip** sits after the popularity pill on each scan: *Modern 27%* —
-  gold for a Modern staple (in 10% of decks or more), blue for a card played
-  in 2–10% of decks, grey below that. Cards no Modern deck plays, basic lands
-  and cards that aren't Modern-legal get no chip; the open card on the
-  computer spells it out ("Not played in Modern — legal, but in no deck in the
-  last 60 days").
-- **The Modern filter** keeps cards played at least that much in Modern
-  (staples only, 2% of decks or more, or any play). Like the other filters it
-  never hides a card it knows nothing about under *match any*, never hides a
-  Wanted card or a scan that needs checking, and "Exclude filtered" still only
-  drops cards whose price is known.
+- **The chip** sits after the popularity pill on each scan and shows the card's
+  best format: *Legacy 31% +2* means 31% of recent Legacy decks run it and two
+  more formats play it in 2% of decks or more. Gold for a staple (10% of decks
+  or more), blue for 2–10%, grey below that. Cards no deck plays, basic lands
+  and cards not legal anywhere get no chip. On the computer, hover the chip, or
+  open the card to see every format ("Played in: Legacy 31% · #4, Modern 27% ·
+  #9 … not played: Vintage").
+- **The Played-in filter** keeps cards played at least that much — staples
+  only, 2% of decks or more, or in any deck — in the card's best format or one
+  format you choose. Like the other filters it never hides a card it knows
+  nothing about under *match any*, never hides a Wanted card or a scan that
+  needs checking, and "Exclude filtered" still only drops cards whose price is
+  known.
 - **Where the numbers come from:** every week, CI reads the published
-  decklists of the last 60 days — MTGO Modern Challenges and Leagues (via
+  decklists of the last 60 days — MTGO Challenges and Leagues (via
   [modometa-mtgo-data](https://github.com/davidfischer/modometa-mtgo-data)) and
-  paper Modern events on Melee and Topdeck (via
+  paper events on Melee and Topdeck (via
   [MTG_decklistcache](https://github.com/fbettega/MTG_decklistcache)) — and
-  publishes one small file to the `modern-meta` release (about 17,000 decks;
-  MTGO and paper are weighted equally). The phone downloads it on first launch
-  and then weekly on Wi-Fi; no scan ever waits for it, and a new week's file
-  updates every scan already filed. Settings → *This phone's server* shows how
-  fresh it is.
+  publishes one file (about 1 MB) to the `play-data` release: about 45,000
+  decks, MTGO and paper weighted equally. A format with too few decks that week
+  is left out (Commander is never in it — EDHREC covers Commander). The phone
+  downloads the file on first launch and then weekly on Wi-Fi; no scan ever
+  waits for it, and a new week's file updates every scan already filed.
+  Settings → *This phone's server* shows how fresh it is.
 
 ## External card list
 
@@ -313,8 +318,8 @@ camera (Tray or Tap to scan) → flatten the card, with a margin
 ```
 
 The card database (`art-pack` release) is rebuilt weekly by CI from
-Scryfall's bulk data, and the Modern play data (`modern-meta` release) from
-the last 60 days of published Modern decklists.
+Scryfall's bulk data, and the play data (`play-data` release) from the
+last 60 days of published decklists in seven formats.
 
 ## Development
 

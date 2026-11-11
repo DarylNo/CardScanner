@@ -34,7 +34,7 @@ from fastapi.staticfiles import StaticFiles
 
 from mtg_card_scanner.artwork import flag_other_art
 from mtg_card_scanner.card_list import CardListSource, flag_list_tags
-from mtg_card_scanner.modern_meta import ModernMetaFile, flag_modern, pack_status
+from mtg_card_scanner.play_data import PlayDataFile, flag_play, pack_status
 from mtg_card_scanner.facetoface import F2FUnavailableError
 from server.export import (CSV_FIELDS, DEFAULT_LAYOUT, LayoutStore, build_csv,
                            build_mx_export, normalize_layout)
@@ -141,13 +141,13 @@ def _default_card_list() -> CardListSource:
     return src
 
 
-def _default_modern_meta() -> Optional[ModernMetaFile]:
-    """The Modern play data (modern_meta.py): off unless MODERN_META_FILE names
-    the file — `python -m mtg_card_scanner.modern_meta fetch` downloads the
-    published one. Never a default path: a test run must not pick up a file
-    that happens to sit in the user's cache."""
-    path = os.getenv("MODERN_META_FILE", "").strip()
-    return ModernMetaFile(Path(path)) if path else None
+def _default_play_data() -> Optional[PlayDataFile]:
+    """The play data (play_data.py): off unless PLAY_DATA_FILE names the file —
+    `python -m mtg_card_scanner.play_data fetch` downloads the published one.
+    Never a default path: a test run must not pick up a file that happens to
+    sit in the user's cache."""
+    path = os.getenv("PLAY_DATA_FILE", "").strip()
+    return PlayDataFile(Path(path)) if path else None
 
 
 def create_app(
@@ -157,7 +157,7 @@ def create_app(
     scan_images_dir: Optional[Path] = None,
     auto_sweep_interval: Optional[float] = 60.0,
     card_list: Optional[CardListSource] = None,
-    modern_meta: Optional[Any] = None,
+    play_data: Optional[Any] = None,
 ) -> FastAPI:
     app = FastAPI(title="MTG Card Scanner")
 
@@ -174,14 +174,14 @@ def create_app(
     if card_list is None:
         card_list = _default_card_list()
     app.state.card_list = card_list
-    # The Modern play data: anything with current() -> pack | None (a
-    # ModernMetaFile, or a test's fixed provider). None = off: no `modern` key.
-    if modern_meta is None:
-        modern_meta = _default_modern_meta()
-    app.state.modern_meta = modern_meta
+    # The play data: anything with current() -> pack | None (a PlayDataFile,
+    # or a test's fixed provider). None = off: no `play` key on any scan.
+    if play_data is None:
+        play_data = _default_play_data()
+    app.state.play_data = play_data
 
-    def modern_pack() -> Optional[dict[str, Any]]:
-        return modern_meta.current() if modern_meta is not None else None
+    def play_pack() -> Optional[dict[str, Any]]:
+        return play_data.current() if play_data is not None else None
 
     _pipeline: dict[str, Any] = {"instance": None}
 
@@ -1140,23 +1140,23 @@ def create_app(
         # pages fold those printings out of the picker and out of the
         # pending card's price range/filter, matching what the sweep prices.
         # list_tags likewise (card_list.py): a refreshed list re-tags every scan.
-        # `modern` likewise (modern_meta.py): a new week's data re-tags them all.
+        # `play` likewise (play_data.py): a new week's data re-tags them all.
         lst = card_list.current()
-        pack = modern_pack()
-        return [flag_modern(flag_list_tags(flag_other_art(s), lst), pack) for s in store.list_scans()]
+        pack = play_pack()
+        return [flag_play(flag_list_tags(flag_other_art(s), lst), pack) for s in store.list_scans()]
 
     @app.get("/api/scans/{scan_id}")
     def get_scan(scan_id: int):
         scan = store.get_scan(scan_id)
         if not scan:
             return JSONResponse({"error": "not found"}, status_code=404)
-        return flag_modern(flag_list_tags(flag_other_art(scan), card_list.current()), modern_pack())
+        return flag_play(flag_list_tags(flag_other_art(scan), card_list.current()), play_pack())
 
-    @app.get("/api/modern-meta")
-    def modern_meta_status():
-        # What the pages say about the data behind the Modern chip (as of,
-        # decks, sources). {"loaded": false} until a pack is there.
-        return pack_status(modern_pack())
+    @app.get("/api/play-data")
+    def play_data_status():
+        # What the pages say about the data behind the play chips (as of,
+        # decks per format, sources). {"loaded": false} until a file is there.
+        return pack_status(play_pack())
 
     def _apply_selection_core(scan_id: int, printing: dict, condition: str,
                               finish: str, quantity: int,
