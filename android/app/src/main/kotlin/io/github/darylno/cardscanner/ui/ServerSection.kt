@@ -26,9 +26,9 @@ import java.util.concurrent.Executors
  * Where a computer opens it (address + guest code), pairing a computer as
  * admin (one-time code + QR) and forgetting paired computers, whether
  * Share-code guests get full access (owner, 2026-11-05; on by default), the card
- * database (art pack) and the play data (1.1.20) with one check-now, and storage — scans, photo size, free
- * space; at 10,000 scans it turns into a warning (the owner's rule) but keeps
- * going.
+ * database (art pack) and the play data (1.1.20) with one check-now, and
+ * storage — scans, photo size, free space; at 10,000 scans it turns into a
+ * warning (the owner's rule) but keeps going.
  */
 class ServerSection(
     private val activity: Activity,
