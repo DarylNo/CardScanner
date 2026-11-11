@@ -14,7 +14,8 @@ Then the play data (1.1.20, desktop d60 / phone v61; CLAUDE.md → "Play data",
 `play` in every state:
   * the Commander pill's percentile ("★ Staple · top 0.49%", rank 1 → "top 0.01%",
     a rank past the reference's pool → "top 100%", never 101; none for Unranked or a
-    stub without top_percent) and fmtTop / fmtShare;
+    stub without top_percent) and fmtTop / fmtShare — a share never reads past its tier
+    (1.99 % is "1.9%", never "2%"), checked at every bp 1..10000;
   * the row's play chip: the best format, "+N" counting only 2 %+ formats, its tier
     colour, after the list tags; none when nothing is played / basics / null / absent;
   * the "Played in" floor with "Any format" and one format, in ANY and ALL (absent /
@@ -293,8 +294,23 @@ def play_checks(b, page):
     tops = pg.evaluate("[0.003, 0.489, 0.5, 0.56, 0.999, 4.4, 5.0, 9.96, 34.4, 99.6, 100, 101.3, 250].map(fmtTop)")
     check(tops == ["0.01", "0.49", "0.5", "0.56", "1", "4.4", "5", "10", "34", "100", "100", "100", "100"],
           f"fmtTop {tops}")
-    shares = pg.evaluate("[2689, 1000, 232, 178, 25, 1, 9500].map(fmtShare)")
-    check(shares == ["27%", "10%", "2.3%", "1.8%", "0.3%", "<0.1%", "95%"], f"fmtShare {shares}")
+    shares = pg.evaluate("[2689, 1000, 232, 178, 25, 1, 9500, 199, 195, 999, 994, 99, 96, 100, 200, 15, 10, 9]"
+                         ".map(fmtShare)")
+    check(shares == ["27%", "10%", "2.3%", "1.8%", "0.3%", "<0.1%", "95%", "1.9%", "1.9%", "9.9%", "9.9%",
+                     "1%", "1%", "1%", "2%", "0.2%", "0.1%", "<0.1%"], f"fmtShare {shares}")
+    # the share a chip prints never reads past the tier it is in (play_data.tier_for_bp: played
+    # from 200 bp, staple from 1000 — a 1.99 % card read "2%": dim, hidden by "2%+ of decks"),
+    # never ends ".0%", and is otherwise the nearest tenth (whole from 10 %)
+    bad = pg.evaluate("""(() => { const out = [];
+        for (let bp = 1; bp <= 10000; bp++) {
+          const s = fmtShare(bp), n = s === "<0.1%" ? 0 : parseFloat(s), pct = bp / 100;
+          const near = bp < 10 ? s === "<0.1%"
+                     : bp >= 1000 ? Math.abs(n - pct) <= 0.5 + 1e-9
+                     : n <= pct + 0.05 + 1e-9 && n >= pct - 0.1 - 1e-9;
+          if (!/^(<0\\.1|\\d+(\\.\\d)?)%$/.test(s) || /\\.0%$/.test(s) || !near
+              || (n >= 2) !== (bp >= 200) || (n >= 10) !== (bp >= 1000)) out.push(bp + ":" + s);
+        } return out.slice(0, 8); })()""")
+    check(not bad, f"fmtShare agrees with the tier at every bp 1..10000 (first wrong: {bad})")
     best = pg.evaluate("[37, 36, 29, 34, 33, 32, 28].map(i => (bestPlay(scans.find(s => s.id === i)) || {}).key || null)")
     check(best == ["legacy", "premodern", "pioneer", None, None, None, None], f"bestPlay {best}")
 
@@ -428,7 +444,7 @@ LAYOUT_SCANS = [
           play(modern=(2560, 12), legacy=(1200, 30), vintage=(150, 300), pauper=(3500, 3), premodern=(4200, 2)),
           1.00, tags=["hold me", "wanted"]),
     # ranked past the pool the reference measured (popularity.RANKED_CARD_COUNT 32,296 — Spinny Ride
-    # is 32,710: top_percent 101.3)
+    # is 32,710: top_percent 101.3), played in 1.99 % of Modern decks — fringe, under the 2 % floor
     pscan(50, "Spinny Ride", pop("fringe", "Fringe", 32710, 101.3), play(modern=(199, 400)), 1.00),
 ]
 
@@ -465,6 +481,12 @@ def row_layout(b):
     pill = next(p for p in by[50]["pills"] if "pop" in p["cls"])
     check(pill["text"] == "Fringe · top 100%" and "top 100% of Commander-played cards" in pill["title"],
           f"ranked past the pool: \"top 100%\", never 101 ({pill['text']!r} / {pill['title'][:70]!r})")
+    chip = next((p for p in by[50]["pills"] if "play" in p["cls"].split()), None)
+    check(chip and chip["text"] == "Modern 1.9%" and chip["cls"].split()[-1] == "fringe",
+          f"1.99 % of Modern decks reads \"1.9%\", fringe — not \"2%\" ({chip and (chip['text'], chip['cls'])})")
+    pg.locator("#playmin").select_option("played"); pg.wait_for_timeout(300)
+    shown = pg.evaluate("[...document.querySelectorAll('#list .row')].map(r => +r.dataset.id)")
+    check(50 not in shown and 51 in shown, f"…and the \"2%+ of decks\" floor hides it ({shown})")
     check(not errs, f"no page errors ({errs[:3]})")
     pg.evaluate("localStorage.clear()")
     ctx.close()

@@ -250,3 +250,14 @@ def test_the_pill_percentile_never_passes_100():
     for name in ("desktop.html", "phone.html"):
         page = (STATIC / name).read_text(encoding="utf-8")
         assert "if (n >= 10) return String(Math.round(Math.min(n, 100)));" in _fn(page, "fmtTop"), name
+
+
+def test_a_play_share_never_reads_past_its_tier():
+    """Review of desktop d60 / phone v61 (the shared block; driven at every bp 1..10000 by
+    scripts/check_price_filter_ui.py): a share is never rounded UP to a tier edge the card has
+    not reached (play_data.tier_for_bp: played from 200 bp, staple from 1000) — 1.99 % printed
+    "2%" while the tier was fringe (dim, hidden by the "2%+ of decks" floor), 9.99 % "10%" with
+    no ★, and 0.96 % "1.0%" beside 1 %'s "1%"."""
+    for name in ("desktop.html", "phone.html"):
+        page = (STATIC / name).read_text(encoding="utf-8")
+        assert "Math.min(Math.round(bp / 10), bp < 200 ? 19 : 99)" in _fn(page, "fmtShare"), name
