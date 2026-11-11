@@ -19,7 +19,7 @@ updated daily:
   is READ at build time in CI and only aggregate shares are published — no file
   of it is copied.  (Its own MTGO folder is not read; modometa is the MTGO source.)
 
-Decks in the 60 days to 2026-11-10 (MTGO · paper): Modern 6,146 · 10,685,
+Decks in the 60 days to 2026-11-10 (MTGO · paper): Modern 6,146 · 10,684,
 Pauper 3,196 · 5,079, Standard 2,849 · 3,877, Legacy 3,038 · 2,730, Premodern
 1,419 · 1,870, Vintage 1,479 · 1,152, Pioneer 1,437 · 130 (paper too thin to
 weigh: MTGO only).  Commander (391) and Duel Commander (66) are too thin and
@@ -31,11 +31,13 @@ A weekly CI job (.github/workflows/play-data.yml) reads the last
 reference server reads it from a file.  Per scan it costs NOTHING: no request,
 no added latency — a dictionary lookup at READ time.
 
-Measured on Modern's 60-day window (16,831 decks / 256 events):
+Measured on Modern's 60-day window (16,830 decks; the built file's tiers:
+87 staples ≥ 10 %, 224 played 2–10 %, 2,135 fringe):
 
-* tier counts barely move with the window (30 / 60 / 90 days: ≥10 % of decks
-  90 / 87 / 88 cards, ≥2 % 293 / 310 / 312) — shares are already normalised,
-  so the thresholds are absolute, not percentiles;
+* tier counts barely move with the window (the measurement script's float
+  shares, 30 / 60 / 90 days: ≥10 % of decks 90 / 87 / 88 cards, ≥2 % 293 / 310
+  / 312) — shares are already normalised, so the thresholds are absolute, not
+  percentiles;
 * MTGO and paper agree (top-100 Jaccard 0.83), and month to month the ranking
   is steady (top-100 Jaccard 0.72; 12 of 2,446 cards move two bands);
 * only ~2,450 of 23,012 Modern-legal cards appear in any deck — "in no deck"
